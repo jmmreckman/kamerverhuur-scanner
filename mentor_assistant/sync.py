@@ -35,21 +35,16 @@ def voer_sync_uit():
         print(f"FOUT bij database init: {e}")
         sys.exit(1)
 
-    # ── Stap 2: Outlook ──────────────────────────────────────────────────────
+    # ── Stap 2: Gmail (doorgestuurde werk-mails) ─────────────────────────────
     try:
-        from .connectors.outlook_teams import sync_outlook
-        sync_outlook()
+        from .connectors.gmail_imap import sync_gmail
+        sync_gmail()
     except Exception as e:
-        print(f"Outlook sync overgeslagen: {e}")
-        fouten.append(f"Outlook: {e}")
+        print(f"Gmail sync overgeslagen: {e}")
+        fouten.append(f"Gmail: {e}")
 
-    # ── Stap 3: Teams ─────────────────────────────────────────────────────────
-    try:
-        from .connectors.outlook_teams import sync_teams
-        sync_teams()
-    except Exception as e:
-        print(f"Teams sync overgeslagen: {e}")
-        fouten.append(f"Teams: {e}")
+    # ── Stap 3: Teams (overgeslagen — niet meer via Azure) ────────────────────
+    # Teams sync vereist Microsoft Graph API die niet beschikbaar is.
 
     # ── Stap 4: Magister ──────────────────────────────────────────────────────
     try:
@@ -112,7 +107,7 @@ def voer_sync_uit():
     # ── Stap 11: Verstuur briefing als e-mail ─────────────────────────────────
     if html:
         try:
-            from .connectors.outlook_teams import verstuur_briefing_email
+            from .connectors.gmail_imap import verstuur_briefing_email
             vandaag = datetime.now().strftime("%d-%m-%Y")
             dag = datetime.now().strftime("%A")
             verstuur_briefing_email(

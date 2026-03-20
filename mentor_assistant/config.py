@@ -40,17 +40,25 @@ CLAUDE_API_KEY = "JOUW_CLAUDE_API_KEY_HIER"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAP 3: Microsoft Azure App Registration (voor Outlook + Teams + Email)
+# STAP 3: Gmail (voor inlezen doorgestuurde mails + versturen briefing)
 #
-# Instructies: zie mentor_assistant/connectors/outlook_teams.py bovenaan
-#
-# LET OP: voeg ook Mail.Send toe aan de API permissions!
-# Nodig voor het versturen van de dagelijkse briefing naar jezelf.
+# Vereisten:
+#   1. Gmail account aangemaakt (bijv. jurian28@gmail.com)
+#   2. 2-stapsverificatie aan: myaccount.google.com → Beveiliging
+#   3. App-wachtwoord gegenereerd: myaccount.google.com/apppasswords
+#   4. Werk-Outlook stuurt mails door naar dit Gmail adres
 # ─────────────────────────────────────────────────────────────────────────────
 
-GRAPH_CLIENT_ID = "JOUW_AZURE_CLIENT_ID"
-GRAPH_CLIENT_SECRET = "JOUW_AZURE_CLIENT_SECRET"
-GRAPH_TENANT_ID = "JOUW_AZURE_TENANT_ID"   # of "common" als niet zeker
+GMAIL_EMAIL = "jurian28@gmail.com"
+GMAIL_APP_PASSWORD = "rqvx gfje zbzd xprr"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Microsoft Azure (niet meer nodig, bewaard voor referentie)
+# ─────────────────────────────────────────────────────────────────────────────
+
+GRAPH_CLIENT_ID = "NIET_GEBRUIKT"
+GRAPH_CLIENT_SECRET = "NIET_GEBRUIKT"
+GRAPH_TENANT_ID = "NIET_GEBRUIKT"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAP 4: Magister
