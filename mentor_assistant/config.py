@@ -62,11 +62,19 @@ GRAPH_TENANT_ID = "NIET_GEBRUIKT"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAP 4: Magister
+#
+# Geen apart wachtwoord nodig — Magister gebruikt je school Microsoft account.
+#
+# Eerste keer inloggen:
+#   python -m mentor_assistant.connectors.magister
+#   → Browser opent automatisch → log in met je rscollege.nl account
+#   → Token wordt opgeslagen, daarna volledig automatisch
+#
+# Token bestand: mentor_assistant/data/magister_token.json
 # ─────────────────────────────────────────────────────────────────────────────
 
 MAGISTER_SCHOOL_URL = "https://rscollege.magister.net"   # pas aan als nodig
-MAGISTER_USERNAME = MENTOR_EMAIL
-MAGISTER_PASSWORD = "JOUW_MAGISTER_WACHTWOORD"
+MAGISTER_USERNAME   = MENTOR_EMAIL                       # login_hint voor Microsoft SSO
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAP 5: Google Calendar
