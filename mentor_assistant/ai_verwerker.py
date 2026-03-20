@@ -1,22 +1,25 @@
 """
-AI verwerker: gebruikt Gemini API voor:
+AI verwerker: gebruikt Claude API (Anthropic) voor:
   1. Koppelen van berichten aan leerlingen
   2. Samenvatten van berichten en documenten
   3. Genereren van conceptreacties (in de schrijfstijl van de mentor)
   4. Extraheren van taken
   5. Genereren van de dagelijkse briefing
 
-Setup: zet GEMINI_API_KEY in config.py
-Gratis API key via: https://aistudio.google.com/app/apikey
+Claude is gekozen vanwege het grote contextvenster (200k tokens) —
+ideaal voor leerlingen met veel documenten en lange communicatiegeschiedenis.
+
+Setup: zet CLAUDE_API_KEY in config.py
+API key via: https://console.anthropic.com → API Keys → Create Key
 """
 import json
 import re
 import time
 from datetime import datetime
 
-import google.generativeai as genai
+import anthropic
 
-from .config import GEMINI_API_KEY, MENTOR_NAAM, MENTOR_SCHRIJFSTIJL
+from .config import CLAUDE_API_KEY, CLAUDE_MODEL, MENTOR_NAAM, MENTOR_SCHRIJFSTIJL
 from .database import (
     get_alle_leerlingen,
     get_connection,
@@ -27,35 +30,63 @@ from .database import (
     voeg_tijdlijn_toe,
 )
 
-# Initialiseer Gemini
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")  # snel en goedkoop
+# Initialiseer Claude client
+client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
 
-def _vraag_ai(prompt: str, max_pogingen: int = 3) -> str:
-    """Stuur een vraag naar Gemini met retry bij rate limit."""
+def _vraag_ai(prompt: str, max_tokens: int = 2048, max_pogingen: int = 3) -> str:
+    """Stuur een vraag naar Claude met retry bij rate limit."""
     for poging in range(max_pogingen):
         try:
-            response = model.generate_content(prompt)
-            return response.text.strip()
-        except Exception as e:
-            if "429" in str(e) or "quota" in str(e).lower():
-                wacht = 2 ** poging * 5
-                print(f"  Rate limit, wacht {wacht}s...")
+            message = client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+        except anthropic.RateLimitError:
+            wacht = 2 ** poging * 5
+            print(f"  Rate limit, wacht {wacht}s...")
+            time.sleep(wacht)
+        except anthropic.APIError as e:
+            if poging < max_pogingen - 1:
+                wacht = 2 ** poging * 3
+                print(f"  API fout ({e}), wacht {wacht}s...")
                 time.sleep(wacht)
             else:
                 raise
-    raise RuntimeError("Gemini API bereikbaar na meerdere pogingen.")
+    raise RuntimeError("Claude API niet bereikbaar na meerdere pogingen.")
 
 
-def _bouw_leerling_context(leerling_id: int) -> str:
-    """Bouw een contextuele samenvatting van een leerling voor de AI prompt."""
+def _bouw_leerling_context(leerling_id: int, tijdlijn_limit: int = 20) -> str:
+    """
+    Bouw een uitgebreide contextuele samenvatting van een leerling.
+    Bevat alle bekende info: contacten, documenten, tijdlijn.
+    Claude's grote contextvenster maakt het mogelijk om veel mee te sturen.
+    """
     conn = get_connection()
     leerling = conn.execute(
         "SELECT * FROM leerlingen WHERE id = ?", (leerling_id,)
     ).fetchone()
     contacten = get_contacten(leerling_id)
-    tijdlijn = get_tijdlijn(leerling_id, limit=10)
+    tijdlijn = get_tijdlijn(leerling_id, limit=tijdlijn_limit)
+
+    # Haal ook recente communicatie op
+    recente_comm = conn.execute("""
+        SELECT bron, richting, van_email, onderwerp, samenvatting, datum
+        FROM communicatie
+        WHERE leerling_id = ? AND samenvatting IS NOT NULL
+        ORDER BY datum DESC LIMIT 15
+    """, (leerling_id,)).fetchall()
+
+    # Haal documentsamenvattingen op
+    documenten = conn.execute("""
+        SELECT bestandsnaam, categorie, datum_document, samenvatting
+        FROM documenten
+        WHERE leerling_id = ? AND samenvatting IS NOT NULL
+        ORDER BY datum_document DESC LIMIT 10
+    """, (leerling_id,)).fetchall()
+
     conn.close()
 
     if not leerling:
@@ -65,19 +96,39 @@ def _bouw_leerling_context(leerling_id: int) -> str:
     ctx = f"LEERLING: {naam} | Klas: {leerling['klas']} | Leerjaar: {leerling['leerjaar']}\n"
 
     if leerling["notities"]:
-        ctx += f"Achtergrond: {leerling['notities']}\n"
+        ctx += f"Achtergrond/bijzonderheden: {leerling['notities']}\n"
 
     if contacten:
-        ctx += "Contacten:\n"
+        ctx += "\nContacten:\n"
         for c in contacten:
-            ctx += f"  - {c['rol']}: {c['voornaam']} {c['achternaam']} ({c['email'] or c['telefoon'] or 'geen contact'})\n"
+            email_tel = c['email'] or c['telefoon'] or 'geen contact'
+            org = f" ({c['organisatie']})" if c.get('organisatie') else ""
+            ctx += f"  - {c['rol']}: {c['voornaam']} {c['achternaam']} — {email_tel}{org}\n"
+            if c["notities"]:
+                ctx += f"    Notitie: {c['notities']}\n"
+
+    if documenten:
+        ctx += "\nDocumenten:\n"
+        for d in documenten:
+            ctx += f"  [{d['datum_document'] or '?'}] {d['bestandsnaam']}"
+            if d['categorie']:
+                ctx += f" ({d['categorie']})"
+            ctx += f"\n    {d['samenvatting']}\n"
+
+    if recente_comm:
+        ctx += "\nRecente communicatie:\n"
+        for c in recente_comm:
+            richting = "INKOMEND" if c['richting'] == 'inkomend' else "UITGAAND"
+            ctx += f"  [{c['datum'][:10]}] {richting} via {c['bron']}: {c['onderwerp'] or 'bericht'}\n"
+            if c['samenvatting']:
+                ctx += f"    {c['samenvatting']}\n"
 
     if tijdlijn:
-        ctx += "Recente tijdlijn:\n"
+        ctx += "\nChronologische tijdlijn:\n"
         for t in tijdlijn:
             ctx += f"  [{t['datum']}] {t['type'].upper()}: {t['titel']}\n"
             if t["beschrijving"]:
-                ctx += f"    {t['beschrijving'][:200]}\n"
+                ctx += f"    {t['beschrijving'][:300]}\n"
 
     return ctx
 
@@ -103,41 +154,41 @@ def koppel_berichten_aan_leerlingen():
         return
 
     leerling_lijst = _maak_leerling_naam_lijst()
+    if not leerling_lijst:
+        return
+
     print(f"AI: koppelen van {len(berichten)} bericht(en) aan leerlingen...")
 
     conn = get_connection()
 
     for bericht in berichten:
-        if not leerling_lijst:
-            break
-
-        prompt = f"""Je bent assistent van mentor {MENTOR_NAAM} op een voortgezet onderwijs school.
+        prompt = f"""Je bent assistent van mentor {MENTOR_NAAM} op een vrije school voor voortgezet onderwijs.
 
 Mentorleerlingen:
 {leerling_lijst}
 
 Bericht (van: {bericht['van_email'] or 'onbekend'}):
 Onderwerp: {bericht['onderwerp'] or '(geen)'}
-Inhoud: {(bericht['inhoud'] or '')[:1000]}
+Inhoud: {(bericht['inhoud'] or '')[:2000]}
 
 Opdracht: Is dit bericht gerelateerd aan één van bovenstaande leerlingen?
+Kijk naar namen, context, afzenders (ouders van leerlingen).
 Antwoord ALLEEN met JSON in dit formaat:
 {{"leerling_id": <getal of null>, "zekerheid": "<hoog/gemiddeld/laag>", "reden": "<korte uitleg>"}}"""
 
         try:
-            antwoord = _vraag_ai(prompt)
-            # Extraheer JSON uit het antwoord
+            antwoord = _vraag_ai(prompt, max_tokens=256)
             json_match = re.search(r'\{[^}]+\}', antwoord, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
                 leerling_id = data.get("leerling_id")
-                if leerling_id:
+                if leerling_id and data.get("zekerheid") != "laag":
                     conn.execute(
                         "UPDATE communicatie SET leerling_id = ? WHERE id = ?",
                         (leerling_id, bericht["id"])
                     )
         except Exception as e:
-            print(f"  ⚠ Koppeling bericht {bericht['id']}: {e}")
+            print(f"  Koppeling bericht {bericht['id']}: {e}")
 
     conn.commit()
     conn.close()
@@ -167,19 +218,22 @@ def verwerk_berichten_met_ai():
 
         prompt = f"""Je bent de AI-assistent van {MENTOR_NAAM}, mentor en docent op een vrije school voor voortgezet onderwijs.
 
-{f"Context over de betrokken leerling:{chr(10)}{leerling_context}" if leerling_context else ""}
+{f"VOLLEDIGE CONTEXT OVER DE BETROKKEN LEERLING:{chr(10)}{leerling_context}" if leerling_context else "Dit bericht is (nog) niet gekoppeld aan een leerling."}
 
 INKOMEND BERICHT:
 Van: {bericht['van_email'] or 'onbekend'}
 Onderwerp: {bericht['onderwerp'] or '(geen onderwerp)'}
 Datum: {bericht['datum']}
 Inhoud:
-{(bericht['inhoud'] or '')[:2000]}
+{(bericht['inhoud'] or '')[:4000]}
 
 Jouw taken:
 1. Geef een korte samenvatting (2-3 zinnen) van dit bericht.
-2. Bepaal of dit bericht een reactie vereist (ja/nee) en waarom.
-3. Als reactie vereist: schrijf een concept-antwoord in de schrijfstijl van {MENTOR_NAAM}.
+2. Bepaal of dit bericht een reactie van de mentor vereist (ja/nee) en waarom.
+3. Als reactie vereist: schrijf een compleet concept-antwoord in de schrijfstijl van {MENTOR_NAAM}.
+   Gebruik de leerlingcontext om een geïnformeerd, specifiek antwoord te geven —
+   verwijs naar eerdere stappen, lopende trajecten, en bekende afspraken.
+4. Als er een taak uit voortvloeit: beschrijf kort wat de mentor moet doen.
 
 SCHRIJFSTIJL:
 {MENTOR_SCHRIJFSTIJL}
@@ -189,11 +243,12 @@ Antwoord ALLEEN met JSON:
   "samenvatting": "...",
   "actie_vereist": true/false,
   "reden_actie": "...",
-  "concept_reactie": "..." of null
+  "concept_reactie": "..." of null,
+  "taak": "..." of null
 }}"""
 
         try:
-            antwoord = _vraag_ai(prompt)
+            antwoord = _vraag_ai(prompt, max_tokens=2048)
             json_match = re.search(r'\{[\s\S]+\}', antwoord)
             if json_match:
                 data = json.loads(json_match.group())
@@ -221,8 +276,16 @@ Antwoord ALLEEN met JSON:
                         beschrijving=data["samenvatting"],
                         communicatie_id=bericht["id"],
                     )
+
+                # Maak taak aan als die er is
+                if data.get("taak") and bericht["leerling_id"]:
+                    conn.execute("""
+                        INSERT INTO taken (leerling_id, titel, type, bron_communicatie_id)
+                        VALUES (?, ?, 'docent', ?)
+                    """, (bericht["leerling_id"], data["taak"], bericht["id"]))
+
         except Exception as e:
-            print(f"  ⚠ Verwerking bericht {bericht['id']}: {e}")
+            print(f"  Verwerking bericht {bericht['id']}: {e}")
             conn.execute(
                 "UPDATE communicatie SET verwerkt = 1 WHERE id = ?",
                 (bericht["id"],)
@@ -230,16 +293,19 @@ Antwoord ALLEEN met JSON:
 
     conn.commit()
     conn.close()
-    print("  → AI verwerking compleet.")
+    print("  AI verwerking compleet.")
 
 
 # ── Stap 3: documenten samenvatten ───────────────────────────────────────────
 
 def vat_documenten_samen():
-    """Genereer AI-samenvattingen voor documenten met geëxtraheerde tekst."""
+    """
+    Genereer AI-samenvattingen voor documenten met geëxtraheerde tekst.
+    Claude's 200k context maakt het mogelijk om zeer lange documenten te verwerken.
+    """
     conn = get_connection()
     docs = conn.execute("""
-        SELECT d.id, d.bestandsnaam, d.volledige_tekst, l.voornaam, l.achternaam
+        SELECT d.id, d.bestandsnaam, d.volledige_tekst, l.voornaam, l.achternaam, l.id as leerling_id
         FROM documenten d
         JOIN leerlingen l ON d.leerling_id = l.id
         WHERE d.volledige_tekst IS NOT NULL
@@ -256,25 +322,30 @@ def vat_documenten_samen():
     conn = get_connection()
 
     for doc in docs:
+        # Claude kan veel meer tekst aan — stuur tot 20k tekens
         prompt = f"""Samenvatten van een schooldocument voor mentor {MENTOR_NAAM}.
 
 Document: {doc['bestandsnaam']}
 Leerling: {doc['voornaam']} {doc['achternaam']}
 
 Tekst:
-{doc['volledige_tekst'][:4000]}
+{doc['volledige_tekst'][:20000]}
 
-Geef een bondige samenvatting (max 5 zinnen) van de belangrijkste punten.
-Wat is de kern? Welke acties of besluiten zijn er?"""
+Geef een bondige samenvatting (max 8 zinnen) van de belangrijkste punten.
+Benoem specifiek:
+- De kern/conclusie
+- Eventuele acties of besluiten
+- Opvolgpunten voor de mentor
+- Betrokken partijen"""
 
         try:
-            samenvatting = _vraag_ai(prompt)
+            samenvatting = _vraag_ai(prompt, max_tokens=1024)
             conn.execute(
                 "UPDATE documenten SET samenvatting = ? WHERE id = ?",
                 (samenvatting, doc["id"])
             )
         except Exception as e:
-            print(f"  ⚠ Samenvatting {doc['bestandsnaam']}: {e}")
+            print(f"  Samenvatting {doc['bestandsnaam']}: {e}")
 
     conn.commit()
     conn.close()
@@ -289,6 +360,8 @@ def genereer_dagelijkse_briefing() -> str:
     - Overzicht van nieuwe berichten met conceptreacties
     - Openstaande taken
     - Aandachtspunten per leerling
+
+    Retourneert de HTML string (wordt gemaild door sync.py).
     """
     from .connectors.google_calendar import get_agenda_vandaag
     from .reports.html_rapport import genereer_html_rapport
@@ -305,7 +378,7 @@ def genereer_dagelijkse_briefing() -> str:
         LEFT JOIN leerlingen l ON c.leerling_id = l.id
         WHERE c.verwerkt = 1
           AND date(c.datum) >= date('now', '-1 day')
-        ORDER BY c.datum DESC
+        ORDER BY c.actie_vereist DESC, c.datum DESC
     """).fetchall()
 
     # Open taken
@@ -324,25 +397,29 @@ def genereer_dagelijkse_briefing() -> str:
 
     agenda = get_agenda_vandaag()
 
-    # Laat AI een intro-samenvatting schrijven
+    # Laat Claude een intro-samenvatting schrijven
     bericht_overzicht = "\n".join(
-        f"- {b['bron']}: {b['onderwerp'] or 'bericht'} van {b['van_email'] or 'onbekend'}"
+        f"- [{b['bron']}] {b['onderwerp'] or 'bericht'} van {b['van_email'] or 'onbekend'}"
+        f" — {'ACTIE VEREIST' if b['actie_vereist'] else 'ter info'}"
         f" ({b['voornaam'] or '?'} {b['achternaam'] or ''})"
-        for b in berichten[:10]
+        for b in berichten[:15]
     )
 
-    dag_prompt = f"""Maak een korte dagopening (3-5 zinnen) voor mentor {MENTOR_NAAM}.
+    actie_berichten = sum(1 for b in berichten if b['actie_vereist'])
+
+    dag_prompt = f"""Maak een korte dagopening (4-6 zinnen) voor mentor {MENTOR_NAAM} op de vrije school.
 Vandaag: {datetime.now().strftime('%A %d %B %Y')}
 
 Agenda vandaag: {len(agenda)} item(s)
-Nieuwe berichten: {len(berichten)}
+Nieuwe berichten: {len(berichten)} (waarvan {actie_berichten} met actie vereist)
 {bericht_overzicht}
 Open taken: {len(taken)}
 
-Spreek de mentor direct aan, warm en concreet. Noem de highlights."""
+Schrijf een warme, bondige opening. Noem de highlights en prioriteiten.
+Als er dringende zaken zijn, benoem die eerst."""
 
     try:
-        dag_intro = _vraag_ai(dag_prompt)
+        dag_intro = _vraag_ai(dag_prompt, max_tokens=512)
     except Exception:
         dag_intro = f"Goedemorgen {MENTOR_NAAM}! Hier is je overzicht voor vandaag."
 
@@ -364,5 +441,5 @@ Spreek de mentor direct aan, warm en concreet. Noem de highlights."""
     conn.commit()
     conn.close()
 
-    print("  → Dagelijkse briefing gegenereerd.")
+    print("  Dagelijkse briefing gegenereerd.")
     return html

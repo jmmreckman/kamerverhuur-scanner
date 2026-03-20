@@ -8,7 +8,7 @@ Setup (eenmalig):
   4. Na aanmaken: noteer Application (client) ID en Directory (tenant) ID
   5. Certificates & secrets → New client secret → kopieer de waarde
   6. API permissions → Add permission → Microsoft Graph → Delegated:
-       Mail.Read, Mail.ReadWrite, Chat.Read, ChannelMessage.Read.All, Calendars.Read
+       Mail.Read, Mail.ReadWrite, Mail.Send, Chat.Read, ChannelMessage.Read.All, Calendars.Read
   7. Vul de waarden in in config.py
 
 Documentatie: https://learn.microsoft.com/en-us/graph/overview
@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from ..config import GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID
+from ..config import GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID, MENTOR_EMAIL
 from ..database import get_sync_status, sla_communicatie_op, update_sync_log
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -31,6 +31,7 @@ TOKEN_FILE = Path(__file__).parent.parent / "data" / "ms_token.json"
 SCOPE = " ".join([
     "Mail.Read",
     "Mail.ReadWrite",
+    "Mail.Send",
     "Chat.Read",
     "ChannelMessage.Read.All",
     "offline_access",
@@ -145,13 +146,57 @@ def _doe_oauth_flow() -> str:
     return token["access_token"]
 
 
-# ── Graph API hulpfunctie ────────────────────────────────────────────────────
+# ── Graph API hulpfuncties ───────────────────────────────────────────────────
 
 def _graph_get(url: str, params: dict = None) -> dict:
     headers = {"Authorization": f"Bearer {get_access_token()}"}
     resp = requests.get(url, headers=headers, params=params, timeout=30)
     resp.raise_for_status()
     return resp.json()
+
+
+def _graph_post(url: str, data: dict) -> dict:
+    headers = {
+        "Authorization": f"Bearer {get_access_token()}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(url, headers=headers, json=data, timeout=30)
+    resp.raise_for_status()
+    if resp.status_code == 202 or not resp.content:
+        return {}
+    return resp.json()
+
+
+# ── Email verzenden via Graph API ────────────────────────────────────────────
+
+def verstuur_briefing_email(onderwerp: str, html_body: str, aan_email: str = None):
+    """
+    Stuur de dagelijkse briefing als HTML e-mail naar de mentor.
+    Gebruikt Microsoft Graph Mail.Send permission.
+
+    Args:
+        onderwerp: Onderwerpregel van de mail
+        html_body: De volledige HTML briefing als body
+        aan_email: Ontvanger (standaard: MENTOR_EMAIL uit config)
+    """
+    aan = aan_email or MENTOR_EMAIL
+
+    mail_data = {
+        "message": {
+            "subject": onderwerp,
+            "body": {
+                "contentType": "HTML",
+                "content": html_body,
+            },
+            "toRecipients": [
+                {"emailAddress": {"address": aan}}
+            ],
+        },
+    }
+
+    print(f"  Briefing e-mail versturen naar {aan}...")
+    _graph_post(f"{GRAPH_BASE}/me/sendMail", mail_data)
+    print(f"  Briefing e-mail verstuurd.")
 
 
 # ── Outlook mails synchroniseren ─────────────────────────────────────────────

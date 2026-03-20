@@ -2,7 +2,10 @@
 
 Persoonlijk AI-systeem voor mentoren op het voortgezet onderwijs.
 Synchroniseert dagelijks Outlook, Teams, Magister en Google Calendar.
-Genereert elke ochtend een briefing met conceptreacties op binnenkomende berichten.
+Stuurt elke ochtend een briefing-email met AI-samenvattingen en conceptreacties.
+
+Gebruikt **Claude** (Anthropic) voor alle AI-verwerking — het 200k token
+contextvenster is ideaal voor leerlingen met veel documenten en communicatie.
 
 ---
 
@@ -15,8 +18,8 @@ Elke ochtend om 07:00 draait automatisch een script dat:
 3. **Magister** — haalt berichten, absenties en leerlingdocumenten op
 4. **Google Calendar** — haalt agenda van de komende 7 dagen op
 5. **PDF documenten** — extraheert tekst uit Magister-documenten
-6. **AI verwerking** — koppelt berichten aan leerlingen, vat samen, maakt conceptreacties
-7. **HTML briefing** — opent automatisch in browser
+6. **Claude AI** — koppelt berichten aan leerlingen, vat samen, schrijft conceptreacties
+7. **Briefing e-mail** — stuurt een overzichtelijke HTML mail naar je werkmail
 
 ---
 
@@ -45,12 +48,14 @@ MENTOR_EMAIL = "jan.dejong@rscollege.nl"
 MENTOR_SCHRIJFSTIJL = "Warm, direct, eerste naam ouder..."
 ```
 
-### Gemini API (gratis)
-1. Ga naar aistudio.google.com/app/apikey
-2. Log in met je Google account → klik "Create API key"
-3. Kopieer naar `config.py`: `GEMINI_API_KEY = "AIza..."`
+### Claude API
+De API is apart van je Claude Pro abonnement, maar heel betaalbaar (~5-20 cent per dag).
+1. Ga naar console.anthropic.com
+2. Maak account aan en voeg betaalmethode toe
+3. "API Keys" → "Create Key"
+4. Kopieer naar `config.py`: `CLAUDE_API_KEY = "sk-ant-..."`
 
-### Microsoft Azure (voor Outlook + Teams)
+### Microsoft Azure (voor Outlook + Teams + email versturen)
 
 > Tip: vraag je school-ICT om hulp als je hier niet uitkomt.
 
@@ -59,7 +64,7 @@ MENTOR_SCHRIJFSTIJL = "Warm, direct, eerste naam ouder..."
 3. Kopieer **Application (client) ID** en **Directory (tenant) ID**
 4. "Certificates & secrets" → "New client secret" → kopieer de **Value**
 5. "API permissions" → "Microsoft Graph" → "Delegated":
-   `Mail.Read`, `Mail.ReadWrite`, `Chat.Read`, `offline_access`
+   `Mail.Read`, `Mail.ReadWrite`, `Mail.Send`, `Chat.Read`, `offline_access`
 6. Vul in `config.py`:
 ```python
 GRAPH_CLIENT_ID     = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -86,9 +91,6 @@ MAGISTER_PASSWORD   = "jouwwachtwoord"
 
 ```python
 # Voer uit in Python console vanuit de projectmap
-import sys
-sys.path.insert(0, r"C:\MentorAssistent\kamerverhuur-scanner")
-
 from mentor_assistant.database import get_connection, init_database
 init_database()
 
@@ -130,14 +132,14 @@ kamerverhuur-scanner/
 │   ├── config.py              <- HIER jouw gegevens invullen
 │   ├── database.py
 │   ├── sync.py                <- Dagelijkse orchestrator
-│   ├── ai_verwerker.py        <- Gemini AI integratie
+│   ├── ai_verwerker.py        <- Claude AI integratie
 │   ├── connectors/
-│   │   ├── outlook_teams.py   <- Microsoft Graph
+│   │   ├── outlook_teams.py   <- Microsoft Graph + email verzenden
 │   │   ├── magister.py        <- Magister
 │   │   ├── google_calendar.py <- Google Calendar
 │   │   └── pdf_verwerker.py   <- PDF extractie
 │   ├── reports/
-│   │   └── html_rapport.py    <- HTML briefing
+│   │   └── html_rapport.py    <- HTML briefing generator
 │   └── data/                  <- lokaal, niet in git
 ├── installeer_windows.bat
 ├── start_sync.bat
@@ -152,7 +154,8 @@ kamerverhuur-scanner/
 | Probleem | Oplossing |
 |---------|-----------|
 | Outlook sync mislukt | Verwijder `data/ms_token.json` en probeer opnieuw |
+| Email versturen mislukt | Controleer dat `Mail.Send` permissie is toegevoegd in Azure |
 | Magister login mislukt | Controleer URL en wachtwoord in config.py |
 | Google Calendar mislukt | Verwijder `data/google_token.json` en run opnieuw |
-| Gemini fout | Controleer API key. Gratis quotum: 1500 req/dag |
-| Briefing opent niet | Open handmatig: `data/rapporten/briefing_DATUM.html` |
+| Claude fout | Controleer API key en saldo op console.anthropic.com |
+| Geen email ontvangen | Check spam/junk folder. Briefing staat ook lokaal in `data/rapporten/` |

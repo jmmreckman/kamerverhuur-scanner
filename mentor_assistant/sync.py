@@ -6,11 +6,11 @@ Voert alle stappen in volgorde uit:
   3. Sync Magister berichten + documenten
   4. Sync Google Calendar
   5. Extraheer PDF teksten
-  6. Koppel berichten aan leerlingen (AI)
+  6. Koppel berichten aan leerlingen (Claude AI)
   7. Verwerk berichten met AI (samenvatten + conceptreacties)
-  8. Vat documenten samen (AI)
+  8. Vat documenten samen (Claude AI)
   9. Genereer dagelijkse HTML briefing
- 10. Open briefing in browser
+ 10. Verstuur briefing als e-mail via Outlook
 
 Draaien: python -m mentor_assistant.sync
 Of automatisch via Windows Task Scheduler (zie installatie.bat)
@@ -20,7 +20,7 @@ import traceback
 from datetime import datetime
 
 
-def voer_sync_uit(open_browser: bool = True):
+def voer_sync_uit():
     print(f"\n{'='*60}")
     print(f"  Mentor AI Assistent — Sync gestart: {datetime.now().strftime('%d-%m-%Y %H:%M')}")
     print(f"{'='*60}\n")
@@ -40,7 +40,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .connectors.outlook_teams import sync_outlook
         sync_outlook()
     except Exception as e:
-        print(f"⚠ Outlook sync overgeslagen: {e}")
+        print(f"Outlook sync overgeslagen: {e}")
         fouten.append(f"Outlook: {e}")
 
     # ── Stap 3: Teams ─────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .connectors.outlook_teams import sync_teams
         sync_teams()
     except Exception as e:
-        print(f"⚠ Teams sync overgeslagen: {e}")
+        print(f"Teams sync overgeslagen: {e}")
         fouten.append(f"Teams: {e}")
 
     # ── Stap 4: Magister ──────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .connectors.magister import sync_magister
         sync_magister()
     except Exception as e:
-        print(f"⚠ Magister sync overgeslagen: {e}")
+        print(f"Magister sync overgeslagen: {e}")
         fouten.append(f"Magister: {e}")
 
     # ── Stap 5: Google Calendar ───────────────────────────────────────────────
@@ -64,7 +64,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .connectors.google_calendar import sync_google_calendar
         sync_google_calendar()
     except Exception as e:
-        print(f"⚠ Google Calendar sync overgeslagen: {e}")
+        print(f"Google Calendar sync overgeslagen: {e}")
         fouten.append(f"Google Calendar: {e}")
 
     # ── Stap 6: PDF teksten extraheren ────────────────────────────────────────
@@ -72,7 +72,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .connectors.pdf_verwerker import verwerk_onverwerkte_pdfs
         verwerk_onverwerkte_pdfs()
     except Exception as e:
-        print(f"⚠ PDF verwerking overgeslagen: {e}")
+        print(f"PDF verwerking overgeslagen: {e}")
         fouten.append(f"PDF: {e}")
 
     # ── Stap 7: AI – koppel berichten aan leerlingen ──────────────────────────
@@ -80,7 +80,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .ai_verwerker import koppel_berichten_aan_leerlingen
         koppel_berichten_aan_leerlingen()
     except Exception as e:
-        print(f"⚠ AI koppeling overgeslagen: {e}")
+        print(f"AI koppeling overgeslagen: {e}")
         fouten.append(f"AI koppeling: {e}")
 
     # ── Stap 8: AI – berichten verwerken ──────────────────────────────────────
@@ -88,7 +88,7 @@ def voer_sync_uit(open_browser: bool = True):
         from .ai_verwerker import verwerk_berichten_met_ai
         verwerk_berichten_met_ai()
     except Exception as e:
-        print(f"⚠ AI berichtverwerking overgeslagen: {e}")
+        print(f"AI berichtverwerking overgeslagen: {e}")
         fouten.append(f"AI berichten: {e}")
 
     # ── Stap 9: AI – documenten samenvatten ───────────────────────────────────
@@ -96,25 +96,43 @@ def voer_sync_uit(open_browser: bool = True):
         from .ai_verwerker import vat_documenten_samen
         vat_documenten_samen()
     except Exception as e:
-        print(f"⚠ Documentsamenvatting overgeslagen: {e}")
+        print(f"Documentsamenvatting overgeslagen: {e}")
         fouten.append(f"AI documenten: {e}")
 
     # ── Stap 10: Dagelijkse briefing genereren ────────────────────────────────
+    html = None
     try:
         from .ai_verwerker import genereer_dagelijkse_briefing
-        genereer_dagelijkse_briefing()
+        html = genereer_dagelijkse_briefing()
     except Exception as e:
-        print(f"⚠ Briefing genereren mislukt: {e}")
+        print(f"Briefing genereren mislukt: {e}")
         traceback.print_exc()
         fouten.append(f"Briefing: {e}")
 
-    # ── Stap 11: Open in browser ──────────────────────────────────────────────
-    if open_browser:
+    # ── Stap 11: Verstuur briefing als e-mail ─────────────────────────────────
+    if html:
         try:
-            from .reports.html_rapport import open_in_browser
-            open_in_browser()
+            from .connectors.outlook_teams import verstuur_briefing_email
+            vandaag = datetime.now().strftime("%d-%m-%Y")
+            dag = datetime.now().strftime("%A")
+            verstuur_briefing_email(
+                onderwerp=f"Mentor Briefing {dag} {vandaag}",
+                html_body=html,
+            )
         except Exception as e:
-            print(f"⚠ Browser openen mislukt: {e}")
+            print(f"Briefing e-mail versturen mislukt: {e}")
+            traceback.print_exc()
+            fouten.append(f"Email: {e}")
+
+            # Fallback: sla op als lokaal bestand
+            try:
+                from .reports.html_rapport import RAPPORT_DIR
+                RAPPORT_DIR.mkdir(parents=True, exist_ok=True)
+                pad = RAPPORT_DIR / f"briefing_{datetime.now().strftime('%Y-%m-%d')}.html"
+                pad.write_text(html, encoding="utf-8")
+                print(f"  Briefing opgeslagen als: {pad}")
+            except Exception:
+                pass
 
     # ── Samenvatting ─────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
@@ -123,7 +141,7 @@ def voer_sync_uit(open_browser: bool = True):
         for f in fouten:
             print(f"    - {f}")
     else:
-        print("  Sync succesvol afgerond!")
+        print("  Sync succesvol afgerond! Briefing gemaild.")
     print(f"  Tijd: {datetime.now().strftime('%H:%M:%S')}")
     print(f"{'='*60}\n")
 

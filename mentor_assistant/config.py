@@ -23,14 +23,29 @@ Handtekening: [MENTOR_NAAM], mentor [KLAS] en docent RS College
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAP 2: Gemini API (gratis via https://aistudio.google.com/app/apikey)
+# STAP 2: Claude API (via https://console.anthropic.com)
+#
+# Je Claude Pro abonnement geeft GEEN API toegang.
+# API is apart betaald, maar heel betaalbaar:
+#   - Claude Sonnet: ~$3 per miljoen input tokens
+#   - Dagelijkse sync kost ~$0.05-0.20 per dag afhankelijk van hoeveel data
+#
+# Maak een API key aan via: console.anthropic.com → API Keys → Create Key
 # ─────────────────────────────────────────────────────────────────────────────
 
-GEMINI_API_KEY = "JOUW_GEMINI_API_KEY_HIER"
+CLAUDE_API_KEY = "JOUW_CLAUDE_API_KEY_HIER"
+
+# Model keuze: claude-sonnet-4-6 is beste balans prijs/kwaliteit.
+# Voor extra complexe taken kun je claude-opus-4-6 gebruiken (duurder).
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAP 3: Microsoft Azure App Registration (voor Outlook + Teams)
+# STAP 3: Microsoft Azure App Registration (voor Outlook + Teams + Email)
+#
 # Instructies: zie mentor_assistant/connectors/outlook_teams.py bovenaan
+#
+# LET OP: voeg ook Mail.Send toe aan de API permissions!
+# Nodig voor het versturen van de dagelijkse briefing naar jezelf.
 # ─────────────────────────────────────────────────────────────────────────────
 
 GRAPH_CLIENT_ID = "JOUW_AZURE_CLIENT_ID"

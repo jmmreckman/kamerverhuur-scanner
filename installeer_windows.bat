@@ -21,7 +21,7 @@ if errorlevel 1 (
 )
 
 echo  [1/4] Python dependencies installeren...
-pip install requests google-generativeai google-auth-oauthlib google-api-python-client pdfplumber pymupdf schedule >installatie_log.txt 2>&1
+pip install anthropic requests google-auth-oauthlib google-api-python-client pdfplumber pymupdf >installatie_log.txt 2>&1
 if errorlevel 1 (
     echo  FOUT bij installeren. Zie installatie_log.txt
     pause
