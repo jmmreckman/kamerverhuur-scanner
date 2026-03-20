@@ -1,0 +1,18 @@
+# Persoonlijke data en tokens — nooit committen
+mentor_assistant/data/
+installatie_log.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Editor
+.vscode/
+.idea/
+*.swp
