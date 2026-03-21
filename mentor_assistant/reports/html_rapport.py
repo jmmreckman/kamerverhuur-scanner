@@ -232,7 +232,7 @@ def _berichten_html(berichten: list) -> str:
         return '<div class="geen-items">Geen nieuwe berichten</div>'
 
     html = ""
-    for b in berichten:
+    for b in [dict(r) if not isinstance(r, dict) else r for r in berichten]:
         bron = b["bron"]
         leerling_naam = ""
         if b.get("voornaam"):
