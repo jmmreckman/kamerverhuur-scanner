@@ -1,6 +1,7 @@
 # Persoonlijke data en tokens — nooit committen
 mentor_assistant/data/
 installatie_log.txt
+.env
 
 # Python
 __pycache__/
