@@ -9,8 +9,8 @@ STAP 1 t/m 5 moeten ingevuld zijn voordat je het systeem kunt draaien.
 # STAP 1: Persoonlijke gegevens
 # ─────────────────────────────────────────────────────────────────────────────
 
-MENTOR_NAAM = "jouw voornaam"   # bijv. "Jan"
-MENTOR_EMAIL = "jouw.naam@rscollege.nl"
+MENTOR_NAAM = "Jurian"
+MENTOR_EMAIL = "jmreckman@rscollege.nl"
 
 # Beschrijf jouw schrijfstijl in emails naar ouders.
 # Hoe meer detail, hoe beter de AI-conceptmails worden.
