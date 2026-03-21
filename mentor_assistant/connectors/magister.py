@@ -45,9 +45,9 @@ TOKEN_ENDPOINT    = f"{ACCOUNTS_BASE}/connect/token"
 
 # M6LOAPP is de publieke Magister app-client (geen secret nodig, ondersteunt PKCE)
 MAGISTER_CLIENT_ID = "M6LOAPP"
-MAGISTER_SCOPES    = "openid profile offline_access"
+MAGISTER_SCOPES    = "openid profile email offline_access"
 REDIRECT_PORT      = 8765
-REDIRECT_URI       = "m6loapp://oauth/callback"
+REDIRECT_URI       = "m6loapp://oauth2redirect/"
 
 TOKEN_PAD = Path(__file__).parent.parent / "data" / "magister_token.json"
 DOCS_DIR  = Path(__file__).parent.parent / "data" / "magister_docs"
@@ -155,15 +155,17 @@ def login_magister() -> dict:
     challenge  = _pkce_challenge(verifier)
     state      = secrets.token_urlsafe(16)
 
+    nonce = secrets.token_urlsafe(16)
     params = {
         "client_id":             MAGISTER_CLIENT_ID,
-        "response_type":         "code",
+        "response_type":         "id_token code",
         "scope":                 MAGISTER_SCOPES,
         "redirect_uri":          REDIRECT_URI,
         "code_challenge":        challenge,
         "code_challenge_method": "S256",
         "state":                 state,
-        "login_hint":            MAGISTER_USERNAME,  # triggert direct Microsoft SSO
+        "nonce":                 nonce,
+        "login_hint":            MAGISTER_USERNAME,
     }
     auth_url = f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
@@ -175,12 +177,16 @@ def login_magister() -> dict:
 
     webbrowser.open(auth_url)
     callback_url = input("  Plak hier de volledige m6loapp://... URL: ").strip()
-    params = parse_qs(urlparse(callback_url).query)
-    if "error" in params:
-        raise RuntimeError(f"OAuth fout: {params.get('error_description', params['error'])[0]}")
-    if "code" not in params:
+    parsed = urlparse(callback_url)
+    # Magister geeft de code terug in het fragment (#) of de query string
+    fragment_params = parse_qs(parsed.fragment)
+    query_params = parse_qs(parsed.query)
+    cb_params = {**query_params, **fragment_params}
+    if "error" in cb_params:
+        raise RuntimeError(f"OAuth fout: {cb_params.get('error_description', cb_params['error'])[0]}")
+    if "code" not in cb_params:
         raise RuntimeError("Geen autorisatiecode gevonden in de URL.")
-    code = params["code"][0]
+    code = cb_params["code"][0]
 
     # Wissel code in voor token
     resp = requests.post(TOKEN_ENDPOINT, data={
