@@ -73,7 +73,7 @@ GRAPH_TENANT_ID = "NIET_GEBRUIKT"
 # Token bestand: mentor_assistant/data/magister_token.json
 # ─────────────────────────────────────────────────────────────────────────────
 
-MAGISTER_SCHOOL_URL = "https://rscollege.magister.net"   # pas aan als nodig
+MAGISTER_SCHOOL_URL = "https://vsvonh.magister.net"
 MAGISTER_USERNAME   = MENTOR_EMAIL                       # login_hint voor Microsoft SSO
 
 # ─────────────────────────────────────────────────────────────────────────────
