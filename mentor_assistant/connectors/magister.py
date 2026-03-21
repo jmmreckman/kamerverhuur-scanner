@@ -336,7 +336,9 @@ class MagisterClient:
 
     def get_berichten(self, map_naam: str = "inbox", limiet: int = 20) -> list[dict]:
         berichten = self._get(f"/api/berichten?map={map_naam}&top={limiet}")
-        return berichten.get("items", berichten) if isinstance(berichten, dict) else berichten
+        if isinstance(berichten, dict):
+            berichten = berichten.get("items") or berichten.get("Items") or []
+        return berichten if isinstance(berichten, list) else []
 
     def get_bericht_detail(self, bericht_id: int) -> dict:
         return self._get(f"/api/berichten/{bericht_id}")
