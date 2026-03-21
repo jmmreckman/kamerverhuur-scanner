@@ -47,7 +47,7 @@ TOKEN_ENDPOINT    = f"{ACCOUNTS_BASE}/connect/token"
 MAGISTER_CLIENT_ID = "M6LOAPP"
 MAGISTER_SCOPES    = "openid profile offline_access"
 REDIRECT_PORT      = 8765
-REDIRECT_URI       = f"http://localhost:{REDIRECT_PORT}"
+REDIRECT_URI       = "m6loapp://oauth/callback"
 
 TOKEN_PAD = Path(__file__).parent.parent / "data" / "magister_token.json"
 DOCS_DIR  = Path(__file__).parent.parent / "data" / "magister_docs"
@@ -169,10 +169,18 @@ def login_magister() -> dict:
 
     print(f"\nMagister OAuth login:")
     print(f"  Browser opent automatisch. Log in met je {MAGISTER_USERNAME} account.")
-    print(f"  Wacht niet en sluit de browser pas NADAT je de 'Ingelogd!' pagina ziet.\n")
+    print(f"  Na het inloggen probeert de browser een 'm6loapp://...' pagina te openen.")
+    print(f"  Die pagina kan niet worden geopend — dat is normaal.")
+    print(f"  Kopieer dan de volledige URL uit de adresbalk en plak hem hieronder.\n")
 
     webbrowser.open(auth_url)
-    code = _wacht_op_callback()
+    callback_url = input("  Plak hier de volledige m6loapp://... URL: ").strip()
+    params = parse_qs(urlparse(callback_url).query)
+    if "error" in params:
+        raise RuntimeError(f"OAuth fout: {params.get('error_description', params['error'])[0]}")
+    if "code" not in params:
+        raise RuntimeError("Geen autorisatiecode gevonden in de URL.")
+    code = params["code"][0]
 
     # Wissel code in voor token
     resp = requests.post(TOKEN_ENDPOINT, data={
