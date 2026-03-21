@@ -166,6 +166,7 @@ def login_magister() -> dict:
         "state":                 state,
         "nonce":                 nonce,
         "login_hint":            MAGISTER_USERNAME,
+        "response_mode":         "fragment",
     }
     auth_url = f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
