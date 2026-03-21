@@ -25,6 +25,8 @@ import json
 import os
 import re
 import secrets
+import sys
+import tempfile
 import threading
 import time
 import webbrowser
@@ -144,6 +146,57 @@ def _ververs_token(token: dict) -> dict:
     return nieuw
 
 
+# ── Windows protocol handler voor m6loapp:// ──────────────────────────────────
+
+_CALLBACK_FILE = Path(tempfile.gettempdir()) / "magister_oauth_callback.txt"
+_HANDLER_SCRIPT = TOKEN_PAD.parent / "_m6loapp_handler.py"
+
+
+def _registreer_protocol_handler() -> bool:
+    """Registreer m6loapp:// protocol handler in Windows registry (eenmalig)."""
+    try:
+        import winreg
+    except ImportError:
+        return False  # Niet op Windows
+
+    _HANDLER_SCRIPT.parent.mkdir(parents=True, exist_ok=True)
+    _HANDLER_SCRIPT.write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        f"Path(r'{_CALLBACK_FILE}').write_text(sys.argv[1] if len(sys.argv) > 1 else '')\n"
+    )
+
+    python_exe = sys.executable
+    cmd = f'"{python_exe}" "{_HANDLER_SCRIPT}" "%1"'
+
+    try:
+        k = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Classes\m6loapp")
+        winreg.SetValueEx(k, "", 0, winreg.REG_SZ, "URL:m6loapp Protocol")
+        winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
+        winreg.CloseKey(k)
+
+        k2 = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Classes\m6loapp\shell\open\command")
+        winreg.SetValueEx(k2, "", 0, winreg.REG_SZ, cmd)
+        winreg.CloseKey(k2)
+        return True
+    except Exception as e:
+        print(f"  Registry registratie mislukt: {e}")
+        return False
+
+
+def _wacht_op_protocol_callback(timeout: int = 180) -> str:
+    """Wacht tot Windows de m6loapp:// URL heeft opgevangen en in het bestand heeft gezet."""
+    _CALLBACK_FILE.unlink(missing_ok=True)
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _CALLBACK_FILE.exists():
+            url = _CALLBACK_FILE.read_text().strip()
+            _CALLBACK_FILE.unlink(missing_ok=True)
+            return url
+        time.sleep(0.5)
+    raise TimeoutError("Geen inlog ontvangen binnen 3 minuten.")
+
+
 # ── Volledige OAuth PKCE login ─────────────────────────────────────────────────
 
 def login_magister() -> dict:
@@ -170,16 +223,24 @@ def login_magister() -> dict:
     }
     auth_url = f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
+    handler_actief = _registreer_protocol_handler()
+
     print(f"\nMagister OAuth login:")
     print(f"  Browser opent automatisch. Log in met je {MAGISTER_USERNAME} account.")
-    print(f"  Na het inloggen probeert de browser een 'm6loapp://...' pagina te openen.")
-    print(f"  Die pagina kan niet worden geopend — dat is normaal.")
-    print(f"  Kopieer dan de volledige URL uit de adresbalk en plak hem hieronder.\n")
+    if handler_actief:
+        print(f"  Na het inloggen wordt de sessie automatisch doorgegeven — je hoeft niets te kopiëren.\n")
+    else:
+        print(f"  Na het inloggen: kopieer de m6loapp://... URL uit de adresbalk en plak hem hieronder.\n")
 
     webbrowser.open(auth_url)
-    callback_url = input("  Plak hier de volledige m6loapp://... URL: ").strip()
+
+    if handler_actief:
+        print("  Wachten op inlog... (maximaal 3 minuten)")
+        callback_url = _wacht_op_protocol_callback()
+    else:
+        callback_url = input("  Plak hier de volledige m6loapp://... URL: ").strip()
+
     parsed = urlparse(callback_url)
-    # Magister geeft de code terug in het fragment (#) of de query string
     fragment_params = parse_qs(parsed.fragment)
     query_params = parse_qs(parsed.query)
     cb_params = {**query_params, **fragment_params}
