@@ -34,5 +34,5 @@ Register-ScheduledTask `
 
 Write-Host ""
 Write-Host "Taak aangemaakt! De sync draait nu elke ochtend om 06:00."
-Write-Host "Controleren: open Taakplanner → Taakplannerbibliotheek → 'MentorHulp - Dagelijkse sync'"
+Write-Host "Controleren: open Taakplanner > Taakplannerbibliotheek > 'MentorHulp - Dagelijkse sync'"
 Write-Host ""
