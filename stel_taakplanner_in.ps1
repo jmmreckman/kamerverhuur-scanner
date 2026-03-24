@@ -1,6 +1,6 @@
 # Stel_taakplanner_in.ps1
-# Voer dit éénmalig uit als Administrator om de dagelijkse sync in te plannen.
-# Rechtsklik het bestand → "Uitvoeren met PowerShell" (als administrator)
+# Voer dit eenmalig uit als Administrator om de dagelijkse sync in te plannen.
+# Rechtsklik het bestand, kies "Als administrator uitvoeren"
 
 $projectmap = Split-Path -Parent $MyInvocation.MyCommand.Path
 $batBestand = Join-Path $projectmap "start_sync.bat"
@@ -28,11 +28,11 @@ Register-ScheduledTask `
     -Action $actie `
     -Trigger $trigger `
     -Settings $instellingen `
-    -Description "Dagelijkse AI-briefing voor Jurian — leest Gmail, Magister en Google Calendar uit en stuurt samenvatting." `
+    -Description "Dagelijkse AI-briefing voor Jurian" `
     -RunLevel Highest `
     -Force
 
 Write-Host ""
 Write-Host "Taak aangemaakt! De sync draait nu elke ochtend om 06:00."
-Write-Host "Controleren: open Taakplanner, dan Taakplannerbibliotheek, dan 'MentorHulp - Dagelijkse sync'"
+Write-Host "Controleren: open Taakplanner, dan Taakplannerbibliotheek"
 Write-Host ""
