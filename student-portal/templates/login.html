@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mentorlessen – Inloggen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .kaart {
+    background: white;
+    border-radius: 16px;
+    padding: 40px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .logo { text-align: center; margin-bottom: 28px; }
+  .logo h1 { font-size: 1.6rem; color: #1a73e8; font-weight: 700; }
+  .logo p { color: #666; font-size: 0.95rem; margin-top: 6px; }
+  label { display: block; font-weight: 600; color: #333; margin-bottom: 6px; font-size: 0.95rem; }
+  select, input[type="text"], input[type="password"] {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
+    margin-bottom: 18px;
+  }
+  select:focus, input:focus { outline: none; border-color: #1a73e8; }
+  .pin-veld { display: none; }
+  .pin-veld.zichtbaar { display: block; }
+  button {
+    width: 100%;
+    padding: 13px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  button:hover { background: #1557b0; }
+  .fout { background: #fde8e8; color: #c62828; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+  .docent-link { text-align: center; margin-top: 20px; font-size: 0.85rem; }
+  .docent-link a { color: #888; text-decoration: none; }
+  .docent-link a:hover { color: #1a73e8; }
+</style>
+</head>
+<body>
+<div class="kaart">
+  <div class="logo">
+    <h1>📚 Mentorlessen</h1>
+    <p>Kies jouw naam om in te loggen</p>
+  </div>
+  {% if fout %}
+  <div class="fout">{{ fout }}</div>
+  {% endif %}
+  <form method="POST" action="/inloggen">
+    <label for="leerling_id">Jouw naam:</label>
+    <select name="leerling_id" id="leerling_id" required onchange="checkPin(this)">
+      <option value="">— Kies jouw naam —</option>
+      {% for l in leerlingen %}
+      <option value="{{ l.id }}" data-heeft-pin="{{ 'ja' if l.pin else 'nee' }}">
+        {{ l.naam }}
+      </option>
+      {% endfor %}
+    </select>
+    <div class="pin-veld" id="pinVeld">
+      <label for="pin">PIN-code:</label>
+      <input type="password" name="pin" id="pin" placeholder="Vul je PIN in" maxlength="10" autocomplete="current-password">
+    </div>
+    <button type="submit">Inloggen →</button>
+  </form>
+  <div class="docent-link"><a href="/docent">Docent-pagina</a></div>
+</div>
+<script>
+function checkPin(select) {
+  const opt = select.options[select.selectedIndex];
+  const heeftPin = opt.getAttribute('data-heeft-pin') === 'ja';
+  document.getElementById('pinVeld').classList.toggle('zichtbaar', heeftPin);
+}
+</script>
+</body>
+</html>

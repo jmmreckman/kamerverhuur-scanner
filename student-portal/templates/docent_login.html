@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docent – Inloggen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #34a853 0%, #1e7e34 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .kaart { background: white; border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .logo { text-align: center; margin-bottom: 28px; }
+  .logo h1 { font-size: 1.5rem; color: #34a853; }
+  .logo p { color: #666; font-size: 0.9rem; margin-top: 6px; }
+  label { display: block; font-weight: 600; color: #333; margin-bottom: 6px; }
+  input[type="password"] { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1rem; margin-bottom: 18px; }
+  input:focus { outline: none; border-color: #34a853; }
+  button { width: 100%; padding: 13px; background: #34a853; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+  button:hover { background: #2d9248; }
+  .fout { background: #fde8e8; color: #c62828; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 0.9rem; }
+  .terug { text-align: center; margin-top: 16px; }
+  .terug a { color: #888; font-size: 0.85rem; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="kaart">
+  <div class="logo">
+    <h1>🎓 Docent-pagina</h1>
+    <p>Log in om leerlingen en antwoorden te beheren</p>
+  </div>
+  {% if fout %}<div class="fout">{{ fout }}</div>{% endif %}
+  <form method="POST">
+    <label>Wachtwoord:</label>
+    <input type="password" name="wachtwoord" autofocus placeholder="Docent-wachtwoord">
+    <button type="submit">Inloggen →</button>
+  </form>
+  <div class="terug"><a href="/">← Terug naar leerlingen-login</a></div>
+</div>
+</body>
+</html>

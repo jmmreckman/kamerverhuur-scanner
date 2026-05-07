@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docent-overzicht – Mentorlessen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; }
+  header { background: #34a853; color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.2rem; }
+  header a { color: rgba(255,255,255,0.85); text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; }
+  header a:hover { background: rgba(255,255,255,0.15); }
+  main { max-width: 1300px; margin: 28px auto; padding: 0 20px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 0; }
+  .tab { padding: 11px 22px; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: 600; font-size: 0.9rem; background: #dde4ee; color: #555; border: none; }
+  .tab.actief { background: white; color: #34a853; box-shadow: 0 -2px 0 #34a853; }
+  .tab-inhoud { display: none; background: white; border-radius: 0 12px 12px 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); padding: 24px; }
+  .tab-inhoud.actief { display: block; }
+  .voortgang-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .leerling-kaartje { border: 2px solid #e8f0fe; border-radius: 10px; padding: 16px 18px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+  .leerling-kaartje:hover { border-color: #34a853; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .leerling-naam { font-weight: 700; font-size: 1rem; color: #222; margin-bottom: 6px; }
+  .voortgang-balk-wrap { background: #f0f0f0; border-radius: 99px; height: 10px; margin: 8px 0; overflow: hidden; }
+  .voortgang-balk { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #34a853, #1e7e34); }
+  .voortgang-tekst { font-size: 0.82rem; color: #666; display: flex; justify-content: space-between; }
+  .voortgang-tekst .pct { font-weight: 700; color: #34a853; }
+  .laatste-les { font-size: 0.78rem; color: #999; margin-top: 4px; }
+  .badge-klaar { font-size: 0.75rem; background: #e6f4ea; color: #1e7e34; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .badge-bezig { font-size: 0.75rem; background: #fff8e1; color: #f57c00; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .badge-start { font-size: 0.75rem; background: #f5f5f5; color: #888; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+  .detail-panel { display: none; margin-top: 20px; border: 2px solid #34a853; border-radius: 12px; overflow: hidden; }
+  .detail-header { background: #34a853; color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .detail-header h3 { font-size: 1rem; }
+  .detail-sluit { background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
+  .detail-lessen { padding: 16px 20px; }
+  .detail-les-rij { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .detail-les-rij:last-child { border-bottom: none; }
+  .detail-les-status { font-size: 1rem; flex-shrink: 0; margin-top: 2px; }
+  .detail-les-info { flex: 1; }
+  .detail-les-naam { font-size: 0.9rem; font-weight: 600; color: #222; }
+  .detail-les-tijd { font-size: 0.78rem; color: #999; margin-top: 2px; }
+  .detail-les-preview { font-size: 0.82rem; color: #555; margin-top: 6px; background: #f8f9fa; padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; max-height: 80px; overflow: hidden; position: relative; }
+  .detail-les-preview::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 24px; background: linear-gradient(transparent, #f8f9fa); }
+  .tabel-wrapper { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { background: #f8f9fa; padding: 10px 8px; text-align: center; font-weight: 700; color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+  th:first-child { text-align: left; padding-left: 14px; }
+  td { padding: 8px; border-bottom: 1px solid #f0f0f0; text-align: center; }
+  td:first-child { text-align: left; padding-left: 14px; font-weight: 600; }
+  tr:hover td { background: #f8fffe; }
+  .vinkje { cursor: pointer; font-size: 1rem; }
+  .vinkje.ja { color: #34a853; }
+  .vinkje.nee { color: #e0e0e0; }
+  .antwoord-panel { margin-top: 16px; border-top: 2px solid #e8f0fe; padding-top: 16px; display: none; }
+  .antwoord-panel h3 { color: #1a73e8; margin-bottom: 10px; font-size: 0.95rem; }
+  .antwoord-tekst { background: #f8f9fa; border-radius: 8px; padding: 14px; white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; min-height: 60px; color: #333; }
+  .antwoord-meta { font-size: 0.78rem; color: #888; margin-top: 6px; }
+  .leerling-rij { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .leerling-rij:last-child { border-bottom: none; }
+  .leerling-rij input[type="text"] { padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 0.9rem; }
+  .naam-input { flex: 1; }
+  .pin-input { width: 90px; font-family: monospace; }
+  .leerling-rij input:focus { outline: none; border-color: #34a853; }
+  .opslaan-btn { padding: 7px 14px; background: #34a853; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+  .opslaan-btn:hover { background: #2d9248; }
+  .succesbericht { color: #34a853; font-size: 0.8rem; }
+  .nieuw-knop { margin-top: 16px; padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+  .sectie-titel { font-weight: 700; color: #333; margin-bottom: 14px; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎓 Docent-overzicht – Mentorlessen</h1>
+  <div>
+    <a href="/">Leerlingen-pagina</a>
+    <a href="/docent/uitloggen">Uitloggen</a>
+  </div>
+</header>
+<main>
+  <div class="tabs">
+    <button class="tab actief" onclick="toonTab('voortgang', this)">📈 Voortgang per leerling</button>
+    <button class="tab" onclick="toonTab('tabel', this)">📊 Overzicht tabel</button>
+    <button class="tab" onclick="toonTab('leerlingen', this)">👥 Leerlingen beheren</button>
+  </div>
+
+  <div id="tab-voortgang" class="tab-inhoud actief">
+    <div class="voortgang-grid">
+      {% for leerling in leerlingen %}
+      {% set gedaan = [] %}
+      {% for les in lessen %}
+        {% set a = antwoord_map.get((leerling.id, les.bestand)) %}
+        {% if a and a.inhoud %}{% set _ = gedaan.append(1) %}{% endif %}
+      {% endfor %}
+      {% set pct = (gedaan | length * 100 // lessen | length) %}
+      {% set laatste = [] %}
+      {% for les in lessen %}
+        {% set a = antwoord_map.get((leerling.id, les.bestand)) %}
+        {% if a and a.inhoud %}{% set _ = laatste.append(a.tijd) %}{% endif %}
+      {% endfor %}
+      <div class="leerling-kaartje" onclick="toonDetail({{ leerling.id }}, {{ leerling.naam | tojson }})">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="leerling-naam">{{ leerling.naam }}</div>
+          {% if pct == 100 %}<span class="badge-klaar">✅ Klaar</span>
+          {% elif pct > 0 %}<span class="badge-bezig">📝 Bezig</span>
+          {% else %}<span class="badge-start">⬜ Niet gestart</span>{% endif %}
+        </div>
+        <div class="voortgang-balk-wrap"><div class="voortgang-balk" style="width:{{ pct }}%"></div></div>
+        <div class="voortgang-tekst">
+          <span>{{ gedaan | length }} / {{ lessen | length }} lessen</span>
+          <span class="pct">{{ pct }}%</span>
+        </div>
+        {% if laatste %}
+        <div class="laatste-les">Laatste activiteit: {{ laatste | sort | last | truncate(16, True, '') }}</div>
+        {% else %}
+        <div class="laatste-les">Nog niets ingevuld</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-header">
+        <h3 id="detailNaam"></h3>
+        <button class="detail-sluit" onclick="sluitDetail()">&#x2715;</button>
+      </div>
+      <div class="detail-lessen" id="detailLessen"></div>
+    </div>
+  </div>
+
+  <div id="tab-tabel" class="tab-inhoud">
+    <div class="tabel-wrapper">
+      <table>
+        <thead><tr>
+          <th>Leerling</th>
+          {% for les in lessen %}<th title="{{ les.titel }}">L{{ loop.index }}</th>{% endfor %}
+          <th>Totaal</th>
+        </tr></thead>
+        <tbody>
+          {% for leerling in leerlingen %}
+          {% set gedaan_count = [] %}
+          <tr>
+            <td>{{ leerling.naam }}</td>
+            {% for les in lessen %}
+            {% set a = antwoord_map.get((leerling.id, les.bestand)) %}
+            {% if a and a.inhoud %}{% set _ = gedaan_count.append(1) %}{% endif %}
+            <td class="vinkje {% if a and a.inhoud %}ja{% else %}nee{% endif %}"
+                onclick="toonAntwoord({{ leerling.id }}, {{ les.bestand | tojson }}, {{ leerling.naam | tojson }}, {{ les.titel | tojson }})"
+                title="{% if a and a.inhoud %}Bekijk antwoord{% else %}Niet ingevuld{% endif %}">
+              {% if a and a.inhoud %}✅{% else %}○{% endif %}
+            </td>
+            {% endfor %}
+            <td style="font-weight:700;color:#34a853">{{ gedaan_count | length }}/{{ lessen | length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:0.78rem;color:#888;margin-top:8px">Klik op ✅ om het antwoord te lezen.</p>
+    <div class="antwoord-panel" id="antwoordPanel">
+      <h3 id="antwoordTitel"></h3>
+      <div class="antwoord-tekst" id="antwoordTekst"></div>
+      <div class="antwoord-meta" id="antwoordMeta"></div>
+    </div>
+  </div>
+
+  <div id="tab-leerlingen" class="tab-inhoud">
+    <p class="sectie-titel">Leerlingnamen en PIN-codes aanpassen (laat PIN leeg = geen pincode nodig)</p>
+    {% for l in leerlingen %}
+    <div class="leerling-rij">
+      <input type="text" class="naam-input" value="{{ l.naam }}" id="naam-{{ l.id }}">
+      <input type="text" class="pin-input" value="{{ l.pin or '' }}" id="pin-{{ l.id }}" placeholder="PIN">
+      <button class="opslaan-btn" onclick="slaLeerlingOp({{ l.id }})">Opslaan</button>
+      <span class="succesbericht" id="ok-{{ l.id }}"></span>
+    </div>
+    {% endfor %}
+    <button class="nieuw-knop" onclick="voegLeerlingToe()">+ Nieuwe leerling</button>
+  </div>
+</main>
+<script>
+const lessenData = [
+  {% for les in lessen %}{ bestand: {{ les.bestand | tojson }}, titel: {{ les.titel | tojson }} },{% endfor %}
+];
+const antwoordMap = {
+  {% for leerling in leerlingen %}{% for les in lessen %}{% set a = antwoord_map.get((leerling.id, les.bestand)) %}{% if a %}"{{ leerling.id }}_{{ les.bestand }}": { inhoud: {{ (a.inhoud or '') | tojson }}, tijd: {{ (a.tijd or '') | tojson }} },{% endif %}{% endfor %}{% endfor %}
+};
+function toonTab(id, knop) {
+  document.querySelectorAll('.tab-inhoud').forEach(t => t.classList.remove('actief'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('actief'));
+  document.getElementById('tab-' + id).classList.add('actief');
+  knop.classList.add('actief');
+}
+function toonDetail(leerlingId, naam) {
+  document.getElementById('detailNaam').textContent = naam + ' – alle lessen';
+  const container = document.getElementById('detailLessen');
+  container.innerHTML = '';
+  lessenData.forEach((les, i) => {
+    const key = leerlingId + '_' + les.bestand;
+    const a = antwoordMap[key];
+    const heeftAntwoord = a && a.inhoud && a.inhoud.trim();
+    const rij = document.createElement('div');
+    rij.className = 'detail-les-rij';
+    rij.innerHTML = `<div class="detail-les-status">${heeftAntwoord ? '✅' : '○'}</div><div class="detail-les-info"><div class="detail-les-naam">Les ${i+1}: ${les.titel}</div>${heeftAntwoord ? `<div class="detail-les-tijd">Opgeslagen: ${a.tijd.substring(0,16)}</div><div class="detail-les-preview">${escapeHtml(a.inhoud)}</div>` : '<div class="detail-les-tijd">Nog niet ingevuld</div>'}</div>`;
+    container.appendChild(rij);
+  });
+  const panel = document.getElementById('detailPanel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+function sluitDetail() { document.getElementById('detailPanel').style.display = 'none'; }
+function escapeHtml(str) { return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+async function toonAntwoord(leerlingId, bestand, naam, titel) {
+  const panel = document.getElementById('antwoordPanel');
+  document.getElementById('antwoordTitel').textContent = naam + ' – ' + titel;
+  document.getElementById('antwoordTekst').textContent = 'Laden...';
+  document.getElementById('antwoordMeta').textContent = '';
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  const resp = await fetch('/docent/antwoord/' + leerlingId + '/' + encodeURIComponent(bestand));
+  const data = await resp.json();
+  document.getElementById('antwoordTekst').textContent = data.inhoud || '(Geen antwoord ingevuld)';
+  document.getElementById('antwoordMeta').textContent = data.tijd ? 'Opgeslagen: ' + data.tijd : '';
+}
+async function slaLeerlingOp(id) {
+  const naam = document.getElementById('naam-' + id).value.trim();
+  const pin = document.getElementById('pin-' + id).value.trim();
+  await fetch('/docent/leerling-opslaan', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({actie: 'naam_wijzigen', id, naam}) });
+  await fetch('/docent/leerling-opslaan', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({actie: 'pin_wijzigen', id, pin}) });
+  const ok = document.getElementById('ok-' + id);
+  ok.textContent = '✅ Opgeslagen';
+  setTimeout(() => ok.textContent = '', 2000);
+}
+async function voegLeerlingToe() {
+  const naam = prompt('Naam van nieuwe leerling:');
+  if (!naam || !naam.trim()) return;
+  await fetch('/docent/leerling-opslaan', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({actie: 'toevoegen', naam: naam.trim()}) });
+  location.reload();
+}
+</script>
+</body>
+</html>

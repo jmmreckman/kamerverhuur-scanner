@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ les.titel }} – Mentorlessen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #1a73e8; color: white; padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+  header h2 { font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-links { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .header-links a { color: rgba(255,255,255,0.85); text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; white-space: nowrap; }
+  .header-links a:hover { background: rgba(255,255,255,0.15); }
+  .opslaan-balk { background: white; padding: 10px 20px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid #e0e0e0; flex-shrink: 0; }
+  .opslaan-balk span { font-size: 0.85rem; color: #666; flex: 1; }
+  #statusMelding { font-size: 0.85rem; }
+  #statusMelding.opgeslagen { color: #34a853; }
+  #statusMelding.fout { color: #d93025; }
+  .opslaan-knop { background: #34a853; color: white; border: none; padding: 9px 20px; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .opslaan-knop:hover { background: #2d9248; }
+  .opslaan-knop:disabled { background: #aaa; cursor: default; }
+  .inhoud { flex: 1; display: flex; overflow: hidden; }
+  .pdf-kant { flex: 1; display: flex; flex-direction: column; border-right: 3px solid #1a73e8; min-width: 0; }
+  .pdf-kant iframe { flex: 1; border: none; width: 100%; }
+  .antwoord-kant { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; background: white; }
+  .antwoord-header { padding: 14px 18px; background: #e8f0fe; border-bottom: 1px solid #c5d9fb; font-weight: 700; color: #1a73e8; font-size: 0.95rem; }
+  .antwoord-header p { font-size: 0.8rem; color: #555; font-weight: normal; margin-top: 4px; }
+  textarea { flex: 1; border: none; padding: 16px 18px; font-family: 'Segoe UI', Arial, sans-serif; font-size: 0.95rem; line-height: 1.6; resize: none; color: #222; }
+  textarea:focus { outline: none; }
+  textarea::placeholder { color: #bbb; }
+  @media (max-width: 700px) {
+    .inhoud { flex-direction: column; }
+    .pdf-kant { border-right: none; border-bottom: 3px solid #1a73e8; height: 50vh; }
+    .antwoord-kant { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h2>📄 {{ les.titel }}</h2>
+  <div class="header-links">
+    <span style="color:rgba(255,255,255,0.7);font-size:0.85rem">{{ naam }}</span>
+    <a href="/dashboard">← Alle lessen</a>
+    <a href="/uitloggen">Uitloggen</a>
+  </div>
+</header>
+<div class="opslaan-balk">
+  <span>Vul je antwoorden in het blauwe vak rechts in. Klik daarna op <strong>Opslaan</strong>.</span>
+  <span id="statusMelding"></span>
+  <button class="opslaan-knop" id="opslaanKnop" onclick="opslaan()">💾 Opslaan</button>
+</div>
+<div class="inhoud">
+  <div class="pdf-kant">
+    <iframe src="/werkblad/{{ les.bestand | urlencode }}#toolbar=1&navpanes=0" title="{{ les.titel }}" allow="fullscreen"></iframe>
+  </div>
+  <div class="antwoord-kant">
+    <div class="antwoord-header">
+      ✏️ Mijn antwoorden
+      <p>Schrijf hier je antwoorden op de opdrachten. Je kunt ook links en notities hier plakken.</p>
+    </div>
+    <textarea id="antwoordVeld" placeholder="Schrijf hier je antwoorden...&#10;&#10;Opdracht A:&#10;&#10;Opdracht B:&#10;&#10;Opdracht C:">{{ antwoorden }}</textarea>
+  </div>
+</div>
+<script>
+const bestand = {{ les.bestand | tojson }};
+let opgeslagenInhoud = document.getElementById('antwoordVeld').value;
+async function opslaan() {
+  const knop = document.getElementById('opslaanKnop');
+  const status = document.getElementById('statusMelding');
+  const inhoud = document.getElementById('antwoordVeld').value;
+  knop.disabled = true;
+  knop.textContent = 'Bezig...';
+  try {
+    const resp = await fetch('/opslaan/' + encodeURIComponent(bestand), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({inhoud})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      opgeslagenInhoud = inhoud;
+      status.textContent = '✅ Opgeslagen op ' + data.tijd;
+      status.className = 'opgeslagen';
+    } else {
+      status.textContent = '❌ Fout bij opslaan';
+      status.className = 'fout';
+    }
+  } catch(e) {
+    status.textContent = '❌ Geen verbinding';
+    status.className = 'fout';
+  }
+  knop.disabled = false;
+  knop.textContent = '💾 Opslaan';
+}
+window.addEventListener('beforeunload', (e) => {
+  if (document.getElementById('antwoordVeld').value !== opgeslagenInhoud) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+setInterval(() => {
+  const inhoud = document.getElementById('antwoordVeld').value;
+  if (inhoud !== opgeslagenInhoud && inhoud.trim()) opslaan();
+}, 120000);
+</script>
+</body>
+</html>
