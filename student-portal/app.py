@@ -9,7 +9,7 @@ app.secret_key = "mentorles-portal-geheim-2024"
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "portal.db")
 WERKBLADEN_DIR = os.path.join(os.path.dirname(__file__), "werkbladen")
-DOCENT_WACHTWOORD = "docent123"  # Verander dit in iets sterkers!
+DOCENT_WACHTWOORD = "docent123"
 
 
 def get_db():
@@ -38,8 +38,6 @@ def init_db():
         );
     """)
     conn.commit()
-
-    # Voeg standaard leerlingen toe als de tabel leeg is
     cursor = conn.execute("SELECT COUNT(*) FROM leerlingen")
     if cursor.fetchone()[0] == 0:
         leerlingen_met_pin = [
@@ -85,8 +83,6 @@ def get_werkbladen():
     return lessen
 
 
-# ---------- Inloggen ----------
-
 @app.route("/")
 def index():
     if "leerling_id" in session:
@@ -131,8 +127,6 @@ def uitloggen():
     session.clear()
     return redirect(url_for("index"))
 
-
-# ---------- Leerling dashboard ----------
 
 @app.route("/dashboard")
 def dashboard():
@@ -199,8 +193,6 @@ def werkblad(bestand):
     return send_from_directory(WERKBLADEN_DIR, os.path.basename(bestand))
 
 
-# ---------- Docent-overzicht ----------
-
 @app.route("/docent", methods=["GET", "POST"])
 def docent():
     if not session.get("docent"):
@@ -211,7 +203,6 @@ def docent():
             else:
                 return render_template("docent_login.html", fout="Verkeerd wachtwoord")
         return render_template("docent_login.html", fout=None)
-
     conn = get_db()
     leerlingen = conn.execute("SELECT id, naam, pin FROM leerlingen ORDER BY naam").fetchall()
     lessen = get_werkbladen()
@@ -219,14 +210,12 @@ def docent():
         "SELECT leerling_id, les_bestand, inhoud, bijgewerkt_op FROM antwoorden"
     ).fetchall()
     conn.close()
-
     antwoord_map = {}
     for a in alle_antwoorden:
         antwoord_map[(a["leerling_id"], a["les_bestand"])] = {
             "inhoud": a["inhoud"],
             "tijd": a["bijgewerkt_op"]
         }
-
     return render_template("docent.html", leerlingen=leerlingen, lessen=lessen,
                            antwoord_map=antwoord_map)
 
@@ -274,6 +263,27 @@ def docent_antwoord(leerling_id, bestand):
 def docent_uitloggen():
     session.pop("docent", None)
     return redirect(url_for("docent"))
+
+
+@app.route("/export")
+def export():
+    if not session.get("docent"):
+        return redirect(url_for("docent"))
+    conn = get_db()
+    leerlingen = conn.execute("SELECT id, naam FROM leerlingen ORDER BY naam").fetchall()
+    lessen = get_werkbladen()
+    alle_antwoorden = conn.execute(
+        "SELECT leerling_id, les_bestand, inhoud, bijgewerkt_op FROM antwoorden ORDER BY bijgewerkt_op"
+    ).fetchall()
+    conn.close()
+    antwoord_map = {}
+    for a in alle_antwoorden:
+        antwoord_map[(a["leerling_id"], a["les_bestand"])] = {
+            "inhoud": a["inhoud"],
+            "tijd": a["bijgewerkt_op"]
+        }
+    return render_template("export.html", leerlingen=leerlingen, lessen=lessen,
+                           antwoord_map=antwoord_map)
 
 
 if __name__ == "__main__":

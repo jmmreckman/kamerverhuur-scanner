@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Export – Mentorlessen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f7fa; }
+  header { background: #34a853; color: white; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 1.1rem; }
+  header a { color: rgba(255,255,255,0.85); text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; }
+  header a:hover { background: rgba(255,255,255,0.15); }
+  main { max-width: 900px; margin: 24px auto; padding: 0 20px 40px; }
+  .uitleg { background: #e8f0fe; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; font-size: 0.9rem; color: #333; line-height: 1.6; }
+  .uitleg strong { color: #1a73e8; }
+  .filter-balk { background: white; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .filter-balk label { font-weight: 600; font-size: 0.9rem; color: #333; }
+  .filter-balk select { padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.9rem; min-width: 200px; }
+  .filter-balk select:focus { outline: none; border-color: #34a853; }
+  .kopieer-knop { padding: 9px 20px; background: #34a853; color: white; border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; margin-left: auto; }
+  .kopieer-knop:hover { background: #2d9248; }
+  .kopieer-bevestiging { font-size: 0.82rem; color: #34a853; display: none; }
+  #exportTekst { background: white; border-radius: 10px; padding: 20px 24px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); white-space: pre-wrap; font-family: 'Segoe UI', Arial, sans-serif; font-size: 0.88rem; line-height: 1.7; color: #222; min-height: 200px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#x1F4CB; Export – antwoorden voor analyse</h1>
+  <div>
+    <a href="/docent">← Docent-pagina</a>
+    <a href="/docent/uitloggen">Uitloggen</a>
+  </div>
+</header>
+<main>
+  <div class="uitleg">
+    <strong>Hoe gebruik je dit?</strong><br>
+    1. Kies hieronder welke les je wilt analyseren (of alle lessen).<br>
+    2. Klik op <strong>Kopieer alles</strong>.<br>
+    3. Open <strong>claude.ai</strong> in een nieuw tabblad, plak de tekst en stel je vraag.<br>
+    Bijvoorbeeld: <em>"Analyseer hoe de leerlingen les 1 hebben gemaakt. Wat valt op? Wie heeft moeite?"</em>
+  </div>
+  <div class="filter-balk">
+    <label>Toon les:</label>
+    <select id="lesFilter" onchange="updateExport()">
+      <option value="alle">— Alle lessen —</option>
+      {% for les in lessen %}
+      <option value="{{ les.bestand }}">Les {{ loop.index }}: {{ les.titel }}</option>
+      {% endfor %}
+    </select>
+    <button class="kopieer-knop" onclick="kopieer()">&#x1F4CB; Kopieer alles</button>
+    <span class="kopieer-bevestiging" id="kopieerBevestiging">✅ Gekopieerd!</span>
+  </div>
+  <div id="exportTekst"></div>
+</main>
+<script>
+const leerlingen = [
+  {% for l in leerlingen %}
+  { id: {{ l.id }}, naam: {{ l.naam | tojson }} },
+  {% endfor %}
+];
+const lessen = [
+  {% for les in lessen %}
+  { bestand: {{ les.bestand | tojson }}, titel: {{ les.titel | tojson }}, nr: {{ loop.index }} },
+  {% endfor %}
+];
+const antwoordMap = {
+  {% for l in leerlingen %}
+  {% for les in lessen %}
+  {% set a = antwoord_map.get((l.id, les.bestand)) %}
+  {% if a and a.inhoud %}
+  "{{ l.id }}_{{ les.bestand }}": { inhoud: {{ a.inhoud | tojson }}, tijd: {{ a.tijd | tojson }} },
+  {% endif %}
+  {% endfor %}
+  {% endfor %}
+};
+function updateExport() {
+  const filter = document.getElementById('lesFilter').value;
+  const geselecteerdeLessen = filter === 'alle' ? lessen : lessen.filter(l => l.bestand === filter);
+  let tekst = '';
+  const nu = new Date().toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
+  tekst += `MENTORLESSEN – EXPORT ANTWOORDEN\n`;
+  tekst += `Gegenereerd op: ${nu}\n`;
+  tekst += `${'='.repeat(50)}\n\n`;
+  if (filter !== 'alle') {
+    const les = geselecteerdeLessen[0];
+    tekst += `LES ${les.nr}: ${les.titel.toUpperCase()}\n`;
+    tekst += `${'-'.repeat(40)}\n\n`;
+    let aantalIngevuld = 0;
+    leerlingen.forEach(l => {
+      const key = `${l.id}_${les.bestand}`;
+      const a = antwoordMap[key];
+      if (a && a.inhoud.trim()) {
+        aantalIngevuld++;
+        tekst += `LEERLING: ${l.naam}\n`;
+        tekst += `Opgeslagen: ${a.tijd}\n`;
+        tekst += `Antwoord:\n${a.inhoud.trim()}\n\n`;
+        tekst += `${'-'.repeat(30)}\n\n`;
+      } else {
+        tekst += `LEERLING: ${l.naam}\n(niet ingevuld)\n\n`;
+        tekst += `${'-'.repeat(30)}\n\n`;
+      }
+    });
+    tekst += `\nSAMENVATTING: ${aantalIngevuld} van de ${leerlingen.length} leerlingen hebben deze les ingevuld.\n`;
+  } else {
+    leerlingen.forEach(l => {
+      tekst += `LEERLING: ${l.naam.toUpperCase()}\n`;
+      tekst += `${'='.repeat(30)}\n`;
+      let aantalGedaan = 0;
+      lessen.forEach(les => {
+        const key = `${l.id}_${les.bestand}`;
+        const a = antwoordMap[key];
+        if (a && a.inhoud.trim()) {
+          aantalGedaan++;
+          tekst += `\nLes ${les.nr}: ${les.titel}\n`;
+          tekst += `Opgeslagen: ${a.tijd}\n`;
+          tekst += `${a.inhoud.trim()}\n`;
+        }
+      });
+      if (aantalGedaan === 0) tekst += `(nog geen lessen ingevuld)\n`;
+      else tekst += `\n→ ${aantalGedaan}/${lessen.length} lessen ingevuld\n`;
+      tekst += `\n${'='.repeat(30)}\n\n`;
+    });
+  }
+  document.getElementById('exportTekst').textContent = tekst;
+}
+async function kopieer() {
+  const tekst = document.getElementById('exportTekst').textContent;
+  await navigator.clipboard.writeText(tekst);
+  const bevestiging = document.getElementById('kopieerBevestiging');
+  bevestiging.style.display = 'inline';
+  setTimeout(() => bevestiging.style.display = 'none', 2500);
+}
+updateExport();
+</script>
+</body>
+</html>
