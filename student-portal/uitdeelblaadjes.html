@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Uitdeelblaadjes Mentorlessen</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #eee; }
+
+  .pagina {
+    width: 210mm;
+    min-height: 148mm;
+    background: white;
+    margin: 20px auto;
+    padding: 20mm 18mm 16mm 18mm;
+    page-break-after: always;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  @media print {
+    body { background: white; }
+    .pagina {
+      margin: 0;
+      box-shadow: none;
+      border-radius: 0;
+      page-break-after: always;
+    }
+    .print-knop { display: none; }
+  }
+
+  .print-knop {
+    display: block;
+    margin: 20px auto;
+    padding: 12px 32px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    width: fit-content;
+  }
+
+  .school { font-size: 0.75rem; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .naam { font-size: 2rem; font-weight: 800; color: #1a73e8; margin-bottom: 4px; }
+  .ondertitel { font-size: 0.9rem; color: #555; margin-bottom: 16px; }
+
+  hr { border: none; border-top: 2px solid #e8f0fe; margin-bottom: 16px; }
+
+  .stappen { margin-bottom: 16px; }
+  .stap { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  .stap-nr {
+    background: #1a73e8; color: white; width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+  }
+  .stap-tekst { font-size: 0.88rem; color: #333; line-height: 1.5; }
+  .stap-tekst strong { color: #111; }
+
+  .gegevens-box {
+    background: #f0f7ff; border: 2px solid #1a73e8; border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 14px;
+  }
+  .gegevens-box .rij {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 0; border-bottom: 1px solid #d0e4fb; font-size: 0.88rem;
+  }
+  .gegevens-box .rij:last-child { border-bottom: none; }
+  .gegevens-box .rij .label { color: #555; }
+  .gegevens-box .rij .waarde { font-weight: 700; color: #1a73e8; font-family: monospace; font-size: 1rem; letter-spacing: 1px; }
+  .gegevens-box .rij .waarde.pin { font-size: 1.4rem; color: #d93025; }
+
+  .gast-box {
+    background: #fff8e1; border: 1.5px solid #f9a825; border-radius: 8px;
+    padding: 10px 14px; font-size: 0.78rem; color: #555; line-height: 1.5;
+  }
+  .gast-box .gast-titel { font-weight: 700; color: #f57c00; margin-bottom: 4px; font-size: 0.8rem; }
+
+  .tip { font-size: 0.78rem; color: #888; margin-top: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<button class="print-knop" onclick="window.print()">&#x1F5A8;&#xFE0F; Alles afdrukken (18 blaadjes)</button>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Aiden!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Aiden</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">2824</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Aiden</strong>) uit de lijst en vul jouw PIN-code in: <strong>2824</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Amayah!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Amayah</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">1409</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Amayah</strong>) uit de lijst en vul jouw PIN-code in: <strong>1409</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Anna!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Anna</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">5506</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Anna</strong>) uit de lijst en vul jouw PIN-code in: <strong>5506</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Eline!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Eline</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">5012</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Eline</strong>) uit de lijst en vul jouw PIN-code in: <strong>5012</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Emily!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Emily</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">4657</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Emily</strong>) uit de lijst en vul jouw PIN-code in: <strong>4657</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Felina!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Felina</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">3286</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Felina</strong>) uit de lijst en vul jouw PIN-code in: <strong>3286</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Fiene!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Fiene</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">2679</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Fiene</strong>) uit de lijst en vul jouw PIN-code in: <strong>2679</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Fiene Marie!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Fiene Marie</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">9935</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Fiene Marie</strong>) uit de lijst en vul jouw PIN-code in: <strong>9935</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Jeremy!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Jeremy</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">2424</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Jeremy</strong>) uit de lijst en vul jouw PIN-code in: <strong>2424</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Lauren!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Lauren</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">7912</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Lauren</strong>) uit de lijst en vul jouw PIN-code in: <strong>7912</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Liv!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Liv</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">1520</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Liv</strong>) uit de lijst en vul jouw PIN-code in: <strong>1520</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Lorenzo!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Lorenzo</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">1488</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Lorenzo</strong>) uit de lijst en vul jouw PIN-code in: <strong>1488</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Lou!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Lou</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">2535</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Lou</strong>) uit de lijst en vul jouw PIN-code in: <strong>2535</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Luuk!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Luuk</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">4582</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Luuk</strong>) uit de lijst en vul jouw PIN-code in: <strong>4582</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Magali!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Magali</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">4811</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Magali</strong>) uit de lijst en vul jouw PIN-code in: <strong>4811</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Nai!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Nai</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">9279</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Nai</strong>) uit de lijst en vul jouw PIN-code in: <strong>9279</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Reva!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Reva</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">1434</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Reva</strong>) uit de lijst en vul jouw PIN-code in: <strong>1434</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+<div class="pagina">
+  <div class="school">Mentorlessen &ndash; RSCollege</div>
+  <div class="naam">Hallo Thije!</div>
+  <div class="ondertitel">Hier zijn jouw persoonlijke inloggegevens voor de mentorlessen.</div>
+  <hr>
+  <div class="gegevens-box">
+    <div class="rij"><span class="label">&#x1F310; Webadres</span><span class="waarde">babied-untwist-outpost.ngrok-free.dev</span></div>
+    <div class="rij"><span class="label">&#x1F464; Jouw naam</span><span class="waarde">Thije</span></div>
+    <div class="rij"><span class="label">&#x1F511; PIN-code</span><span class="waarde pin">4257</span></div>
+  </div>
+  <div class="stappen">
+    <div class="stap"><div class="stap-nr">1</div><div class="stap-tekst">Open de browser (Edge of Chrome) op je laptop en typ het webadres hierboven in de adresbalk.</div></div>
+    <div class="stap"><div class="stap-nr">2</div><div class="stap-tekst">Klik op <strong>&ldquo;Visit Site&rdquo;</strong> als er een waarschuwingspagina verschijnt.</div></div>
+    <div class="stap"><div class="stap-nr">3</div><div class="stap-tekst">Kies jouw naam (<strong>Thije</strong>) uit de lijst en vul jouw PIN-code in: <strong>4257</strong></div></div>
+    <div class="stap"><div class="stap-nr">4</div><div class="stap-tekst">Klik op de les van vandaag, lees de PDF links en schrijf je antwoorden rechts in het tekstvak.</div></div>
+    <div class="stap"><div class="stap-nr">5</div><div class="stap-tekst">Klik aan het einde van de les op de groene knop <strong>&#x1F4BE; Opslaan</strong>. Je werk wordt bewaard!</div></div>
+  </div>
+  <div class="gast-box">
+    <div class="gast-titel">&#x26A0;&#xFE0F; Alleen als inloggen op je eigen account niet werkt:</div>
+    <strong>E-mail:</strong> gast@rscollege.nl &nbsp;|&nbsp; <strong>Wachtwoord:</strong> G@st@RSC!
+  </div>
+  <div class="tip">&#x1F4A1; Je antwoorden worden automatisch bewaard op de pc van je mentor. De volgende les kun je gewoon verdergaan waar je gebleven was.</div>
+</div>
+
+</body>
+</html>
