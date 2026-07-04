@@ -148,6 +148,14 @@ async function loadCompare() {
 
   heading.textContent = `Vandaag (${data.today.date}): ${data.today.weight} kg`;
 
+  const streakEl = document.getElementById("compare-streak");
+  if (data.last_lighter_or_equal) {
+    const l = data.last_lighter_or_equal;
+    streakEl.textContent = `Je was voor het laatst zo licht (of lichter) op ${l.date} (${l.weight} kg) — dat is ${l.days_ago} dagen geleden.`;
+  } else {
+    streakEl.textContent = "Dit is het laagste gewicht dat je ooit gemeten hebt sinds het begin van je data!";
+  }
+
   if (data.comparisons.length === 0) {
     const row = document.createElement("tr");
     row.innerHTML = `<td colspan="4">Nog geen data van andere jaren op deze datum.</td>`;

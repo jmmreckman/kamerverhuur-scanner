@@ -116,3 +116,11 @@ th, td {
 
 td.lighter { color: #4caf50; }
 td.heavier { color: #e05252; }
+
+#compare-streak {
+  font-size: 0.95rem;
+  background: #262c36;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.75rem;
+}

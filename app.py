@@ -99,4 +99,21 @@ def compare(target: str | None = None):
             }
         )
     results.sort(key=lambda r: r["year"])
-    return {"today": current, "target_date": target_date.isoformat(), "comparisons": results}
+
+    last_lighter = db.get_last_date_at_or_below(current["weight"], target_date)
+    if last_lighter:
+        days_ago = (target_date - date.fromisoformat(last_lighter["date"])).days
+        last_lighter_or_equal = {
+            "date": last_lighter["date"],
+            "weight": last_lighter["weight"],
+            "days_ago": days_ago,
+        }
+    else:
+        last_lighter_or_equal = None
+
+    return {
+        "today": current,
+        "target_date": target_date.isoformat(),
+        "comparisons": results,
+        "last_lighter_or_equal": last_lighter_or_equal,
+    }

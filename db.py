@@ -130,6 +130,20 @@ def get_weight_for_date(target: date) -> dict | None:
     return None
 
 
+def get_last_date_at_or_below(weight: float, before: date) -> dict | None:
+    """Meest recente dag vóór `before` waarop het gewicht `weight` of lager was."""
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT date, weight FROM daily_weights WHERE date < ? AND weight <= ? "
+        "ORDER BY date DESC LIMIT 1",
+        (before.isoformat(), weight),
+    ).fetchone()
+    conn.close()
+    if row:
+        return {"date": row["date"], "weight": row["weight"]}
+    return None
+
+
 def get_years_with_data() -> list[int]:
     conn = get_connection()
     rows = conn.execute(
