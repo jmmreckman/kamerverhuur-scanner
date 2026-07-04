@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gewicht Tracker</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>Gewicht Tracker</h1>
+
+    <section class="entry-card">
+      <form id="weight-form">
+        <label>
+          Datum
+          <input type="date" id="entry-date" required>
+        </label>
+        <label>
+          Gewicht (kg)
+          <input type="number" id="entry-weight" step="0.1" min="1" max="400" required>
+        </label>
+        <button type="submit">Opslaan</button>
+      </form>
+      <p id="save-status" class="status"></p>
+    </section>
+
+    <section class="buttons">
+      <button data-view="all">Totaalgrafiek 2013-nu</button>
+      <button data-view="yearly">Per kalenderjaar</button>
+      <button data-view="compare">Vergelijk vandaag</button>
+    </section>
+
+    <section id="view-all" class="view hidden">
+      <canvas id="chart-all"></canvas>
+    </section>
+
+    <section id="view-yearly" class="view hidden">
+      <canvas id="chart-yearly"></canvas>
+    </section>
+
+    <section id="view-compare" class="view hidden">
+      <h2 id="compare-heading"></h2>
+      <table id="compare-table">
+        <thead>
+          <tr><th>Jaar</th><th>Datum</th><th>Gewicht</th><th>Verschil</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="/static/chart.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
