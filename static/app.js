@@ -32,6 +32,7 @@ const views = {
   all: document.getElementById("view-all"),
   yearly: document.getElementById("view-yearly"),
   compare: document.getElementById("view-compare"),
+  averages: document.getElementById("view-averages"),
 };
 let activeView = null;
 let chartAll = null;
@@ -52,6 +53,7 @@ function refreshActiveView() {
   if (activeView === "all") loadChartAll();
   if (activeView === "yearly") loadChartYearly();
   if (activeView === "compare") loadCompare();
+  if (activeView === "averages") loadAverages();
 }
 
 const YEAR_COLORS = (year, allYears) => {
@@ -96,6 +98,12 @@ async function loadChartYearly() {
   const years = Object.keys(seriesByYear).map(Number).sort((a, b) => a - b);
   const ctx = document.getElementById("chart-yearly");
   if (chartYearly) chartYearly.destroy();
+
+  const allWeights = years.flatMap((year) => seriesByYear[year].map((p) => p.weight));
+  const dataMin = Math.min(...allWeights);
+  const dataMax = Math.max(...allWeights);
+  const padding = Math.max((dataMax - dataMin) * 0.05, 0.5);
+
   chartYearly = new Chart(ctx, {
     type: "line",
     data: {
@@ -111,6 +119,7 @@ async function loadChartYearly() {
     },
     options: {
       animation: false,
+      maintainAspectRatio: false,
       scales: {
         x: {
           type: "linear",
@@ -122,7 +131,11 @@ async function loadChartYearly() {
           },
           grid: { color: "#2a2f38" },
         },
-        y: { grid: { color: "#2a2f38" } },
+        y: {
+          min: Math.floor(dataMin - padding),
+          max: Math.ceil(dataMax + padding),
+          grid: { color: "#2a2f38" },
+        },
       },
       plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } },
     },
@@ -176,6 +189,31 @@ async function loadCompare() {
       <td>${c.year}</td>
       <td>${c.date}${c.is_estimate ? " (geschat)" : ""}</td>
       <td>${c.weight} kg</td>
+      <td class="${cellClass}">${diffLabel}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+async function loadAverages() {
+  const data = await (await fetch("/api/averages")).json();
+  const tbody = document.querySelector("#averages-table tbody");
+  tbody.innerHTML = "";
+
+  if (!data.today) return;
+
+  data.periods.forEach((p) => {
+    const row = document.createElement("tr");
+    const lighterNu = p.diff < 0;
+    const diffLabel = p.diff < 0
+      ? `${Math.abs(p.diff)} kg lichter nu`
+      : p.diff > 0
+      ? `${Math.abs(p.diff)} kg zwaarder nu`
+      : "gelijk";
+    const cellClass = lighterNu ? "lighter" : p.diff > 0 ? "heavier" : "";
+    row.innerHTML = `
+      <td>${p.label}</td>
+      <td>${p.average} kg</td>
       <td class="${cellClass}">${diffLabel}</td>
     `;
     tbody.appendChild(row);

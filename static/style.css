@@ -78,7 +78,7 @@ button:active {
 }
 
 .buttons button {
-  flex: 1 1 30%;
+  flex: 1 1 45%;
   background: #262c36;
   border-color: #333a45;
 }
@@ -100,6 +100,16 @@ button:active {
 
 canvas {
   max-width: 100%;
+}
+
+.chart-tall {
+  position: relative;
+  height: 75vh;
+}
+
+.chart-tall canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 table {

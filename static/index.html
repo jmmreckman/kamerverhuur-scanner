@@ -29,6 +29,7 @@
       <button data-view="all">Totaalgrafiek 2013-nu</button>
       <button data-view="yearly">Per kalenderjaar</button>
       <button data-view="compare">Vergelijk vandaag</button>
+      <button data-view="averages">Gemiddeldes</button>
     </section>
 
     <section id="view-all" class="view hidden">
@@ -36,7 +37,7 @@
     </section>
 
     <section id="view-yearly" class="view hidden">
-      <canvas id="chart-yearly"></canvas>
+      <div class="chart-tall"><canvas id="chart-yearly"></canvas></div>
     </section>
 
     <section id="view-compare" class="view hidden">
@@ -45,6 +46,15 @@
       <table id="compare-table">
         <thead>
           <tr><th>Jaar</th><th>Datum</th><th>Gewicht</th><th>Verschil</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="view-averages" class="view hidden">
+      <table id="averages-table">
+        <thead>
+          <tr><th>Periode</th><th>Gemiddelde</th><th>Verschil t.o.v. nu</th></tr>
         </thead>
         <tbody></tbody>
       </table>

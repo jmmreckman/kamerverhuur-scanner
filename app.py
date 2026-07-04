@@ -4,7 +4,7 @@ Draait lokaal op je thuisnetwerk. Start met run.bat (Windows) of
 `uvicorn app:app --host 0.0.0.0 --port 8420`, en open dan vanaf je
 telefoon (zelfde wifi) http://<ip-van-deze-pc>:8420
 """
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -117,3 +117,31 @@ def compare(target: str | None = None):
         "comparisons": results,
         "last_lighter_or_equal": last_lighter_or_equal,
     }
+
+
+@app.get("/api/averages")
+def averages(target: str | None = None):
+    target_date = date.fromisoformat(target) if target else date.today()
+    current = db.get_weight_for_date(target_date)
+    if not current:
+        raise HTTPException(status_code=404, detail="Nog geen data")
+
+    earliest = db.get_earliest_date()
+    periods = [
+        ("afgelopen jaar", timedelta(days=365)),
+        ("afgelopen 3 jaar", timedelta(days=3 * 365)),
+        ("afgelopen 5 jaar", timedelta(days=5 * 365)),
+    ]
+
+    result = []
+    for label, span in periods:
+        start = max(earliest, target_date - span)
+        avg = db.get_average_weight(start, target_date)
+        if avg is None:
+            continue
+        result.append({"label": label, "average": avg, "diff": round(current["weight"] - avg, 2)})
+
+    all_time_avg = db.get_average_weight(earliest, target_date)
+    result.append({"label": "all-time", "average": all_time_avg, "diff": round(current["weight"] - all_time_avg, 2)})
+
+    return {"today": current, "periods": result}

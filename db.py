@@ -144,6 +144,27 @@ def get_last_date_at_or_below(weight: float, before: date) -> dict | None:
     return None
 
 
+def get_average_weight(start: date, end: date) -> float | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT AVG(weight) AS avg_weight FROM daily_weights WHERE date BETWEEN ? AND ?",
+        (start.isoformat(), end.isoformat()),
+    ).fetchone()
+    conn.close()
+    if row["avg_weight"] is None:
+        return None
+    return round(row["avg_weight"], 2)
+
+
+def get_earliest_date() -> date | None:
+    conn = get_connection()
+    row = conn.execute("SELECT MIN(date) AS d FROM daily_weights").fetchone()
+    conn.close()
+    if row["d"] is None:
+        return None
+    return date.fromisoformat(row["d"])
+
+
 def get_years_with_data() -> list[int]:
     conn = get_connection()
     rows = conn.execute(
