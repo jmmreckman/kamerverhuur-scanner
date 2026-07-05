@@ -4,7 +4,7 @@ import email
 import imaplib
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from email.header import decode_header
 from email.message import Message
 
@@ -45,6 +45,11 @@ class FundaListing:
     postcode: str | None
     woonplaats: str | None
     prijs: int | None = None
+    # Alleen gezet door de handmatige tekstdump-parser, die soms een "Sinds X
+    # weken/maanden" of exacte datum bij een woning kan lezen. Zo niet: None, en dan
+    # gebruikt de pipeline gewoon vandaag als eerst_gezien (net als bij nieuwe
+    # woningen uit de dagelijkse e-mail-alert, die altijd echt nieuw zijn).
+    eerst_gezien_override: date | None = None
 
     @property
     def adres_bekend(self) -> bool:

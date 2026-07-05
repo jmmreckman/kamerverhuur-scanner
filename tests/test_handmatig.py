@@ -1,3 +1,5 @@
+from datetime import date
+
 from rotterdam_scanner.handmatig import (
     HandmatigeRegelError,
     parse_bestand,
@@ -124,3 +126,44 @@ def test_parse_bestand_valt_terug_op_simpel_formaat():
 def test_parse_regels_dedupliceert_op_object_id():
     listings, _ = parse_regels(["3073KJ 47A", "3073kj 47a"])
     assert len(listings) == 1
+
+
+def test_parse_funda_tekstdump_herkent_sinds_weken():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\n163 m²\nSinds 2 weken\n"
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    assert listings[0].eerst_gezien_override == date(2026, 6, 21)
+
+
+def test_parse_funda_tekstdump_herkent_sinds_maanden():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\nSinds 3 maanden\n"
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    assert listings[0].eerst_gezien_override == date(2026, 4, 6)
+
+
+def test_parse_funda_tekstdump_herkent_exacte_datum_in_het_verleden():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\nVrijdag 3 juli\n"
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    assert listings[0].eerst_gezien_override == date(2026, 7, 3)
+
+
+def test_parse_funda_tekstdump_exacte_datum_in_de_toekomst_wordt_vorig_jaar():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\nMaandag 10 augustus\n"
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    assert listings[0].eerst_gezien_override == date(2025, 8, 10)
+
+
+def test_parse_funda_tekstdump_zonder_datumaanduiding_geeft_geen_override():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\nNieuw\n"
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    assert listings[0].eerst_gezien_override is None
+
+
+def test_parse_funda_tekstdump_datum_loopt_niet_over_naar_volgende_woning():
+    tekst = (
+        "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\n"
+        "Jan Pettersonstraat 15\n3077 MN Rotterdam\n€ 625.000 k.k.\nSinds 2 weken\n"
+    )
+    listings, _ = parse_funda_tekstdump(tekst, vandaag=date(2026, 7, 5))
+    by_id = {l.object_id: l for l in listings}
+    assert by_id["3078CN-44"].eerst_gezien_override is None
+    assert by_id["3077MN-15"].eerst_gezien_override == date(2026, 6, 21)

@@ -25,13 +25,19 @@ class RunResult:
 
 def _process_new_listing(listing: FundaListing, config: Config, today: date) -> ListingState:
     today_iso = today.isoformat()
+    # Alleen de handmatige tekstdump-parser kan hier een echte "sinds wanneer"-datum
+    # aanleveren (bijv. uit "Sinds 3 maanden"); anders is vandaag prima, dat is ook wat
+    # er voor een echt nieuwe woning uit de dagelijkse e-mail-alert hoort te staan. Dit
+    # is los van laatst_gezien (altijd vandaag) waar de 30-dagen-expiry op afgaat, dus
+    # een oude datum hier leidt niet tot meteen verlopen.
+    eerst_gezien_iso = (listing.eerst_gezien_override or today).isoformat()
 
     if not listing.adres_bekend:
         return ListingState(
             object_id=listing.object_id,
             url=listing.url,
             weergavenaam=listing.weergavenaam,
-            eerst_gezien=today_iso,
+            eerst_gezien=eerst_gezien_iso,
             laatst_gezien=today_iso,
             status="onbekend_adres",
             afvalreden="Kon postcode/huisnummer niet uit de e-mailtekst herleiden.",
@@ -44,7 +50,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             object_id=listing.object_id,
             url=listing.url,
             weergavenaam=listing.weergavenaam,
-            eerst_gezien=today_iso,
+            eerst_gezien=eerst_gezien_iso,
             laatst_gezien=today_iso,
             status="onbekend_adres",
             afvalreden=f"Geocoding mislukt: {exc}",
@@ -55,7 +61,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             object_id=listing.object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
-            eerst_gezien=today_iso,
+            eerst_gezien=eerst_gezien_iso,
             laatst_gezien=today_iso,
             status="afgevallen",
             straatnaam=geo.straatnaam,
@@ -69,7 +75,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             object_id=listing.object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
-            eerst_gezien=today_iso,
+            eerst_gezien=eerst_gezien_iso,
             laatst_gezien=today_iso,
             status="afgevallen",
             straatnaam=geo.straatnaam,
@@ -100,7 +106,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             object_id=listing.object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
-            eerst_gezien=today_iso,
+            eerst_gezien=eerst_gezien_iso,
             laatst_gezien=today_iso,
             status="afgevallen",
             straatnaam=geo.straatnaam,
@@ -119,7 +125,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         object_id=listing.object_id,
         url=listing.url,
         weergavenaam=geo.weergavenaam,
-        eerst_gezien=today_iso,
+        eerst_gezien=eerst_gezien_iso,
         laatst_gezien=today_iso,
         status="actief",
         straatnaam=geo.straatnaam,

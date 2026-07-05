@@ -235,6 +235,15 @@ Vanaf het moment dat een huis verwerkt is staat het in `state.json` en loopt het
 automatisch mee in elke volgende dagelijkse run (30-dagen-expiry, verwijder-link,
 alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen).
 
+**"Dagen bekend" bij de inhaalslag:** funda toont op de zoekresultatenpagina vaak
+"Sinds X weken/maanden" of een exacte datum bij een woning — de tekstdump-parser
+herkent dat en gebruikt het als startpunt voor de "dagen bekend"-teller, in plaats
+van gewoon "vandaag" voor alles. Staat er geen datum-aanduiding bij een huis, dan
+wordt het toch "vandaag" (dag 1 van 30). Dit heeft geen invloed op de 30-dagen-expiry
+zelf — die kijkt naar wanneer dit systeem een huis voor het laatst zag, niet naar hoe
+oud de advertentie is — dus een huis dat al een jaar te koop staat valt niet meteen
+weg omdat de datum ver in het verleden ligt.
+
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
 - **Adressen/coördinaten/wijk**: PDOK Locatieserver (`api.pdok.nl`) — landelijke,
