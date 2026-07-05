@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, timedelta
+from urllib.parse import quote_plus
 
 from .funda_mail import FundaListing
 
@@ -13,6 +14,16 @@ _REGEL_RE = re.compile(
     r"^(?P<postcode>\d{4}\s?[A-Za-z]{2})\s+(?P<huisnummer>\d+)-?(?P<toevoeging>[A-Za-z0-9]*)"
     r"(?:\s+(?P<url>\S+))?\s*$"
 )
+
+
+def _fallback_zoeklink(*adresdelen: str) -> str:
+    """Zoeklink voor als er geen echte funda-link bekend is (handmatige invoer zonder
+    link erbij). Funda's eigen postcode-zoek-URL (?selected_area=["postcode"]) is
+    ongedocumenteerd en blijkt in de praktijk vaak geen resultaten te geven; een
+    zoekopdracht is robuuster en laat bovendien meteen zien als de woning niet meer
+    op funda staat."""
+    query = " ".join(deel for deel in adresdelen if deel) + " funda"
+    return f"https://www.google.com/search?q={quote_plus(query)}"
 
 
 class HandmatigeRegelError(ValueError):
@@ -31,7 +42,7 @@ def parse_regel(regel: str) -> FundaListing:
     postcode = match.group("postcode").replace(" ", "").upper()
     huisnummer = match.group("huisnummer")
     toevoeging = (match.group("toevoeging") or "").upper()
-    url = match.group("url") or f"https://www.funda.nl/zoeken/koop/?selected_area=%5B%22{postcode}%22%5D"
+    url = match.group("url") or _fallback_zoeklink(postcode, f"{huisnummer}{toevoeging}")
 
     return FundaListing(
         object_id=f"{postcode}-{huisnummer}{toevoeging}",
@@ -145,10 +156,13 @@ def parse_funda_tekstdump(tekst: str, vandaag: date | None = None) -> tuple[list
                 break
 
         object_id = f"{postcode}-{huisnummer}{toevoeging}"
+        straatnaam = adres_match.group("straat").strip()
         listings[object_id] = FundaListing(
             object_id=object_id,
-            url=f"https://www.funda.nl/zoeken/koop/?selected_area=%5B%22{postcode}%22%5D",
-            straatnaam=adres_match.group("straat").strip(),
+            url=_fallback_zoeklink(
+                straatnaam, f"{huisnummer}{toevoeging}", postcode, postcode_match.group("plaats").strip()
+            ),
+            straatnaam=straatnaam,
             huisnummer=huisnummer,
             toevoeging=toevoeging,
             postcode=postcode,

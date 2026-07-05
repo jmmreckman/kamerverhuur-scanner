@@ -171,7 +171,10 @@ van de officiële BAG-oppervlakte. Elke rij toont:
   - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
     Open de link en zoek (Ctrl+F) op "zelfbewoning".
 - **Acties**:
-  - **Bekijk op funda →** — directe link naar de advertentie.
+  - **Bekijk advertentie →** — directe link naar de advertentie. Bij woningen uit de
+    dagelijkse Funda-mail is dit een echte link naar de advertentie zelf; bij handmatig
+    toegevoegde adressen zonder link is het een zoeklink (Google) op basis van het adres,
+    omdat Funda's eigen postcode-zoek-URL ongedocumenteerd en onbetrouwbaar bleek.
   - **Verwijderen** — opent een kant-en-klare e-mail naar je scanner-mailbox met als
     onderwerp "Verwijder <postcode-huisnummer>" (bijv. "Verwijder 3073KJ-47A"). Gewoon
     versturen (niets aanpassen); bij de volgende dagelijkse run wordt het huis eruit

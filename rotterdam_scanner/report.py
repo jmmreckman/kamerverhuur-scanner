@@ -48,7 +48,7 @@ def _verwijder_mailto(scanner_email: str, object_id: str) -> str:
 def _acties_html(item: ListingState, scanner_email: str) -> str:
     verwijder_url = _verwijder_mailto(scanner_email, item.object_id)
     return (
-        f'<span class="actie"><a href="{escape(item.url)}">Bekijk op funda &rarr;</a></span><br>'
+        f'<span class="actie"><a href="{escape(item.url)}">Bekijk advertentie &rarr;</a></span><br>'
         f'<span class="actie actie-verwijder"><a href="{escape(verwijder_url)}">Verwijderen</a></span>'
     )
 

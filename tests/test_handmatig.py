@@ -15,7 +15,8 @@ def test_parse_regel_met_toevoeging_en_zonder_link():
     assert listing.huisnummer == "47"
     assert listing.toevoeging == "A"
     assert listing.object_id == "3073KJ-47A"
-    assert listing.url.startswith("https://www.funda.nl/")
+    assert listing.url.startswith("https://www.google.com/search?q=")
+    assert "3073KJ" in listing.url and "47A" in listing.url
 
 
 def test_parse_regel_met_koppelteken_geeft_zelfde_resultaat_als_zonder():
