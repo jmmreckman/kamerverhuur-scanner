@@ -49,3 +49,32 @@ def test_dagen_bekend_berekent_verschil_met_eerst_gezien(tmp_path):
     store = StateStore(tmp_path / "state.json")
     store.upsert(_listing(eerst="2026-07-01"))
     assert store.dagen_bekend("1", today=date(2026, 7, 5)) == 4
+
+
+def test_prijs_per_m2_berekening():
+    item = _listing()
+    item.prijs = 300_000
+    item.bag_oppervlakte = 100
+    assert item.prijs_per_m2 == 3000.0
+
+
+def test_prijs_per_m2_none_zonder_prijs_of_oppervlakte():
+    item = _listing()
+    assert item.prijs_per_m2 is None
+    item.prijs = 300_000
+    assert item.prijs_per_m2 is None
+    item.prijs = None
+    item.bag_oppervlakte = 100
+    assert item.prijs_per_m2 is None
+
+
+def test_prijs_per_m2_overleeft_json_persistentie(tmp_path):
+    store = StateStore(tmp_path / "state.json")
+    item = _listing()
+    item.prijs = 300_000
+    item.bag_oppervlakte = 100
+    store.upsert(item)
+    store.save()
+
+    herladen = StateStore(tmp_path / "state.json")
+    assert herladen.get("1").prijs_per_m2 == 3000.0

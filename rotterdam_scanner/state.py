@@ -20,8 +20,15 @@ class ListingState:
     afvalreden: str | None = None
     woz_check_nodig: bool = False
     woz_check_url: str | None = None
-    prijs_tekst: str | None = None
     opmerking: str | None = None
+    prijs: int | None = None
+    bag_oppervlakte: int | None = None
+
+    @property
+    def prijs_per_m2(self) -> float | None:
+        if self.prijs is None or not self.bag_oppervlakte:
+            return None
+        return self.prijs / self.bag_oppervlakte
 
 
 class StateStore:

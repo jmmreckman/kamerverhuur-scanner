@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from .bag import fetch_bag_oppervlakte
 from .config import Config
-from .funda_mail import FundaListing, fetch_recent_funda_listings
+from .funda_mail import FundaListing, fetch_recent_funda_mail_scan
 from .geocode import GeocodeError, geocode_address
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .opkoop import check_opkoopbescherming
@@ -17,8 +18,13 @@ class RunResult:
     nieuw_actief: list[ListingState] = field(default_factory=list)
     nieuw_afgevallen: list[ListingState] = field(default_factory=list)
     nieuw_onbekend_adres: list[ListingState] = field(default_factory=list)
+    niet_meer_te_koop: list[ListingState] = field(default_factory=list)
     alle_actief: list[ListingState] = field(default_factory=list)
     fouten: list[str] = field(default_factory=list)
+
+
+def _status_afvalreden(status: str) -> str:
+    return f"Niet meer (zonder meer) te koop op funda — status: {status}."
 
 
 def _process_new_listing(listing: FundaListing, config: Config, today: date) -> ListingState:
@@ -107,6 +113,12 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             afvalreden=opkoop.toelichting,
         )
 
+    try:
+        bag_oppervlakte = fetch_bag_oppervlakte(geo.adresseerbaarobject_id)
+    except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
+        bag_oppervlakte = None
+        opmerking = (opmerking + " " if opmerking else "") + f"BAG-oppervlakte kon niet opgehaald worden ({exc})."
+
     return ListingState(
         object_id=listing.object_id,
         url=listing.url,
@@ -120,24 +132,40 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         woz_check_nodig=opkoop.woz_check_nodig,
         woz_check_url=opkoop.woz_check_url,
         opmerking=opmerking,
+        prijs=listing.prijs,
+        bag_oppervlakte=bag_oppervlakte,
     )
 
 
 def run(config: Config, today: date | None = None) -> RunResult:
     today = today or date.today()
+    today_iso = today.isoformat()
     state = StateStore(config.state_path)
     result = RunResult()
 
     try:
-        listings = fetch_recent_funda_listings(config)
+        scan = fetch_recent_funda_mail_scan(config)
     except Exception as exc:  # noqa: BLE001 - we willen dit altijd rapporteren, nooit stil laten falen
         result.fouten.append(f"Kon Funda-alertmail niet uitlezen: {exc}")
-        listings = []
+        scan = None
+
+    listings = scan.listings if scan else []
+    status_updates = scan.status_updates if scan else {}
+
+    # Eerst bestaande, al bekende woningen bijwerken (incl. "niet meer te koop"-signalen).
+    for existing in state.all():
+        status = status_updates.get(existing.object_id)
+        if status and existing.status == "actief":
+            existing.status = "afgevallen"
+            existing.afvalreden = _status_afvalreden(status)
+            existing.laatst_gezien = today_iso
+            state.upsert(existing)
+            result.niet_meer_te_koop.append(existing)
 
     for listing in listings:
         existing = state.get(listing.object_id)
         if existing is not None:
-            existing.laatst_gezien = today.isoformat()
+            existing.laatst_gezien = today_iso
             state.upsert(existing)
             continue
 
@@ -146,6 +174,11 @@ def run(config: Config, today: date | None = None) -> RunResult:
         except Exception as exc:  # noqa: BLE001
             result.fouten.append(f"Fout bij verwerken van {listing.url}: {exc}")
             continue
+
+        status = status_updates.get(listing.object_id)
+        if status and processed.status == "actief":
+            processed.status = "afgevallen"
+            processed.afvalreden = _status_afvalreden(status)
 
         state.upsert(processed)
         if processed.status == "actief":
@@ -158,9 +191,14 @@ def run(config: Config, today: date | None = None) -> RunResult:
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 
+    def _sorteersleutel(item: ListingState) -> tuple[int, float]:
+        prijs_per_m2 = item.prijs_per_m2
+        if prijs_per_m2 is None:
+            return (1, 0.0)
+        return (0, prijs_per_m2)
+
     result.alle_actief = sorted(
         (item for item in state.all() if item.status == "actief"),
-        key=lambda item: item.eerst_gezien,
-        reverse=True,
+        key=_sorteersleutel,
     )
     return result

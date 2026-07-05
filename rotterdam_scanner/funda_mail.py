@@ -3,7 +3,7 @@ from __future__ import annotations
 import email
 import imaplib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from email.message import Message
 
@@ -22,6 +22,20 @@ _HUISNUMMER_SUFFIX = re.compile(r"^(?P<straat>[a-z0-9-]+?)-(?P<huisnummer>\d+[a-
 
 _FUNDA_URL_ZOEKER = re.compile(r'href=["\']?(https://www\.funda\.nl/[^"\'\s>]+)', re.IGNORECASE)
 
+# Best-effort: prijs en status staan ergens in de opmaak rond de link van een woning in
+# de e-mail. We zoeken in een venster van tekst na elke link. Dit is layout-afhankelijk
+# en dus kwetsbaarder dan de URL-parsing hierboven — zie tools/test_email_parsing.py om
+# dit te controleren/bij te stellen zodra er een echte alertmail binnen is.
+_ZOEKVENSTER_LENGTE = 600
+_TAG_RE = re.compile(r"<[^>]+>")
+_PRIJS_RE = re.compile(r"€\s?([\d]{2,3}(?:[.,]\d{3})*)")
+_STATUS_TREFWOORDEN = {
+    "verkocht onder voorbehoud": "verkocht onder voorbehoud",
+    "onder bod": "onder bod",
+    "in onderhandeling": "in onderhandeling",
+    "verkocht": "verkocht",
+}
+
 
 @dataclass(frozen=True)
 class FundaListing:
@@ -30,10 +44,17 @@ class FundaListing:
     woonplaats: str
     straatnaam: str | None
     huisnummer: str | None
+    prijs: int | None = None
 
     @property
     def adres_bekend(self) -> bool:
         return self.straatnaam is not None and self.huisnummer is not None
+
+
+@dataclass
+class FundaMailScan:
+    listings: list[FundaListing] = field(default_factory=list)
+    status_updates: dict[str, str] = field(default_factory=dict)  # object_id -> status-trefwoord
 
 
 def parse_funda_link(url: str) -> FundaListing | None:
@@ -58,13 +79,65 @@ def parse_funda_link(url: str) -> FundaListing | None:
     )
 
 
-def extract_listings_from_email_body(body: str) -> list[FundaListing]:
+def _extract_prijs(venster: str) -> int | None:
+    match = _PRIJS_RE.search(venster)
+    if not match:
+        return None
+    cijfers = re.sub(r"[.,]", "", match.group(1))
+    try:
+        return int(cijfers)
+    except ValueError:
+        return None
+
+
+def _extract_status(venster: str) -> str | None:
+    venster_lower = venster.lower()
+    for trefwoord, label in _STATUS_TREFWOORDEN.items():
+        if trefwoord in venster_lower:
+            return label
+    return None
+
+
+def scan_email_body(body: str) -> FundaMailScan:
     listings: dict[str, FundaListing] = {}
-    for raw_url in _FUNDA_URL_ZOEKER.findall(body):
+    status_updates: dict[str, str] = {}
+
+    matches = list(_FUNDA_URL_ZOEKER.finditer(body))
+    for i, match in enumerate(matches):
+        raw_url = match.group(1)
         listing = parse_funda_link(raw_url)
-        if listing is not None:
-            listings[listing.object_id] = listing
-    return list(listings.values())
+        if listing is None:
+            continue
+
+        # Begrens het zoekvenster tot waar de eerstvolgende woning-link begint, anders
+        # kan de prijs/status van het volgende huis per ongeluk aan dit huis toegeschreven
+        # worden in compacte lay-outs met meerdere huizen vlak na elkaar.
+        volgende_start = matches[i + 1].start() if i + 1 < len(matches) else len(body)
+        venster_eind = min(match.end() + _ZOEKVENSTER_LENGTE, volgende_start)
+        venster = _TAG_RE.sub(" ", body[match.end() : venster_eind])
+
+        status = _extract_status(venster)
+        if status is not None:
+            status_updates[listing.object_id] = status
+            continue  # een afgevallen woning hoeft niet als "nieuw" meegenomen te worden
+
+        prijs = _extract_prijs(venster)
+        if prijs is not None and listing.object_id not in listings:
+            listing = FundaListing(
+                object_id=listing.object_id,
+                url=listing.url,
+                woonplaats=listing.woonplaats,
+                straatnaam=listing.straatnaam,
+                huisnummer=listing.huisnummer,
+                prijs=prijs,
+            )
+        listings[listing.object_id] = listing
+
+    return FundaMailScan(listings=list(listings.values()), status_updates=status_updates)
+
+
+def extract_listings_from_email_body(body: str) -> list[FundaListing]:
+    return scan_email_body(body).listings
 
 
 def _get_body(msg: Message) -> str:
@@ -89,7 +162,7 @@ def _get_body(msg: Message) -> str:
     return payload.decode(charset, errors="replace")
 
 
-def fetch_recent_funda_listings(config: Config, lookback_days: int = 3) -> list[FundaListing]:
+def fetch_recent_funda_mail_scan(config: Config, lookback_days: int = 3) -> FundaMailScan:
     with imaplib.IMAP4_SSL(config.imap_host) as imap:
         imap.login(config.gmail_address, config.gmail_app_password)
         imap.select(config.funda_mail_folder)
@@ -100,7 +173,8 @@ def fetch_recent_funda_listings(config: Config, lookback_days: int = 3) -> list[
             raise RuntimeError(f"IMAP-zoekopdracht mislukt: {status}")
 
         message_ids = data[0].split()
-        all_listings: dict[str, FundaListing] = {}
+        alle_listings: dict[str, FundaListing] = {}
+        alle_status_updates: dict[str, str] = {}
         for msg_id in message_ids:
             status, msg_data = imap.fetch(msg_id, "(RFC822)")
             if status != "OK" or not msg_data or msg_data[0] is None:
@@ -108,7 +182,15 @@ def fetch_recent_funda_listings(config: Config, lookback_days: int = 3) -> list[
             raw_email = msg_data[0][1]
             msg = email.message_from_bytes(raw_email)
             body = _get_body(msg)
-            for listing in extract_listings_from_email_body(body):
-                all_listings[listing.object_id] = listing
+            scan = scan_email_body(body)
+            for listing in scan.listings:
+                if listing.object_id in alle_listings and listing.prijs is None:
+                    continue  # niet een eerder gevonden prijs overschrijven met "onbekend"
+                alle_listings[listing.object_id] = listing
+            alle_status_updates.update(scan.status_updates)
 
-        return list(all_listings.values())
+        return FundaMailScan(listings=list(alle_listings.values()), status_updates=alle_status_updates)
+
+
+def fetch_recent_funda_listings(config: Config, lookback_days: int = 3) -> list[FundaListing]:
+    return fetch_recent_funda_mail_scan(config, lookback_days).listings
