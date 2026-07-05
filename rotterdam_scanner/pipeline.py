@@ -146,6 +146,9 @@ def _sorteersleutel(item: ListingState) -> tuple[int, float]:
     return (0, prijs_per_m2)
 
 
+_HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
+
+
 def _verwerk_listings(
     listings: list[FundaListing],
     te_verwijderen_ids: set[str],
@@ -153,20 +156,25 @@ def _verwerk_listings(
     today: date,
     state: StateStore,
     result: RunResult,
+    forceer_herprocessen: bool = False,
 ) -> None:
     today_iso = today.isoformat()
 
     for existing in state.all():
         if existing.object_id in te_verwijderen_ids and existing.status == "actief":
             existing.status = "afgevallen"
-            existing.afvalreden = "Handmatig verwijderd via de verwijder-link in het rapport."
+            existing.afvalreden = _HANDMATIG_VERWIJDERD_REDEN
             existing.laatst_gezien = today_iso
             state.upsert(existing)
             result.handmatig_verwijderd.append(existing)
 
     for listing in listings:
         existing = state.get(listing.object_id)
-        if existing is not None:
+        # Een handmatig verwijderde woning nooit opnieuw laten opduiken, ook niet bij
+        # forceer_herprocessen (dat is bedoeld om verouderde check-uitkomsten te
+        # corrigeren, niet om verwijder-verzoeken van de gebruiker ongedaan te maken).
+        handmatig_verwijderd = existing is not None and existing.afvalreden == _HANDMATIG_VERWIJDERD_REDEN
+        if existing is not None and (not forceer_herprocessen or handmatig_verwijderd):
             existing.laatst_gezien = today_iso
             existing.url = listing.url
             if listing.prijs is not None:
@@ -182,7 +190,7 @@ def _verwerk_listings(
 
         if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
-            processed.afvalreden = "Handmatig verwijderd via de verwijder-link in het rapport."
+            processed.afvalreden = _HANDMATIG_VERWIJDERD_REDEN
 
         state.upsert(processed)
         if processed.status == "actief":
@@ -226,12 +234,21 @@ def run(config: Config, today: date | None = None) -> RunResult:
     return result
 
 
-def run_handmatig(config: Config, listings: list[FundaListing], today: date | None = None) -> RunResult:
+def run_handmatig(
+    config: Config,
+    listings: list[FundaListing],
+    today: date | None = None,
+    forceer_herprocessen: bool = False,
+) -> RunResult:
     """Verwerkt een handmatig aangeleverde lijst adressen (zie handmatig_toevoegen.py)
     via dezelfde checks en dezelfde state.json als de dagelijkse run, zodat ze vanaf nu
-    ook meelopen in toekomstige dagrapporten."""
+    ook meelopen in toekomstige dagrapporten.
+
+    forceer_herprocessen=True laat ook adressen die al in state.json staan opnieuw door
+    alle checks lopen (behalve handmatig verwijderde), voor het geval een eerdere
+    check-uitkomst gecorrigeerd moet worden (bijv. na een bugfix)."""
     today = today or date.today()
     state = StateStore(config.state_path)
     result = RunResult()
-    _verwerk_listings(listings, set(), config, today, state, result)
+    _verwerk_listings(listings, set(), config, today, state, result, forceer_herprocessen=forceer_herprocessen)
     return result

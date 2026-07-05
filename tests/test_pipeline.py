@@ -366,3 +366,53 @@ def test_run_handmatig_woningen_blijven_staan_voor_volgende_dagelijkse_run(tmp_p
     geocode_mock.assert_not_called()
     assert len(result_dag.alle_actief) == 1
     assert result_dag.alle_actief[0].eerst_gezien == "2026-07-01"
+
+
+def test_run_handmatig_slaat_bekend_adres_standaard_over_ook_na_gewijzigde_check(tmp_path):
+    config = _config(tmp_path)
+    p1, p2, p3, p4 = _patch_geo_checks()
+    with p1, p2, p3, p4:
+        pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
+
+    # Zonder forceer_herprocessen telt een gewijzigde check-uitkomst niet mee voor een
+    # adres dat al bekend is -- alleen url/prijs worden ververst.
+    p1, p2, p3, p4 = _patch_geo_checks(nulquotum=True)
+    with p1, p2, p3, p4:
+        result = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 2))
+    assert len(result.alle_actief) == 1
+
+
+def test_run_handmatig_forceer_herprocessen_corrigeert_bestaand_adres(tmp_path):
+    config = _config(tmp_path)
+    p1, p2, p3, p4 = _patch_geo_checks()
+    with p1, p2, p3, p4:
+        pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
+
+    p1, p2, p3, p4 = _patch_geo_checks(nulquotum=True)
+    with p1, p2, p3, p4:
+        result = pipeline.run_handmatig(
+            config, [_listing()], today=date(2026, 7, 2), forceer_herprocessen=True
+        )
+    assert len(result.alle_actief) == 0
+    assert len(result.nieuw_afgevallen) == 1
+
+
+def test_run_handmatig_forceer_herprocessen_laat_handmatig_verwijderde_woning_met_rust(tmp_path):
+    config = _config(tmp_path)
+    p1, p2, p3, p4 = _patch_geo_checks()
+    with p1, p2, p3, p4:
+        pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
+
+    with patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value={"3000AA-1"}), patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ):
+        result_dag = pipeline.run(config, today=date(2026, 7, 2))
+    assert len(result_dag.handmatig_verwijderd) == 1
+    assert result_dag.alle_actief == []
+
+    p1, p2, p3, p4 = _patch_geo_checks()
+    with p1, p2, p3, p4:
+        result = pipeline.run_handmatig(
+            config, [_listing()], today=date(2026, 7, 3), forceer_herprocessen=True
+        )
+    assert result.alle_actief == []

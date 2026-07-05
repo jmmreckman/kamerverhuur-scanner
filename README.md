@@ -216,8 +216,9 @@ Twee bestandsformaten worden automatisch herkend (je hoeft niet aan te geven wel
 3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/
 ```
 
-De funda-link is optioneel (zonder link krijg je in het rapport een algemene
-funda-zoeklink voor die postcode). Regels die met `#` beginnen worden overgeslagen.
+De funda-link is optioneel (zonder link krijg je in het rapport een zoeklink op basis
+van het adres — Funda's eigen postcode-zoek-URL bleek onbetrouwbaar). Regels die met
+`#` beginnen worden overgeslagen.
 
 **2. Een ruwe kopieer-plak van een funda-zoekresultatenpagina** — selecteer in je
 browser de hele resultatenlijst (Ctrl+A op de pagina, of sleep-selecteren), kopieer
@@ -236,7 +237,17 @@ honderd adressen. Dat is prima voor een eenmalige inhaalslag; laat het gewoon dr
 
 Vanaf het moment dat een huis verwerkt is staat het in `state.json` en loopt het
 automatisch mee in elke volgende dagelijkse run (30-dagen-expiry, verwijder-link,
-alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen).
+alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen). Een adres dat al
+eerder verwerkt is, wordt bij een volgende run alleen ververst (url/prijs) en niet
+opnieuw door de checks gehaald — voeg `--herprocessen` toe om dat wel te doen (bijv.
+na een bugfix in een van de checks):
+
+```powershell
+venv\Scripts\python handmatig_toevoegen.py adressen.txt --herprocessen
+```
+
+Handmatig verwijderde adressen (via de verwijder-link) worden hierbij nooit opnieuw
+actief, ook niet als de checks ze nu zouden goedkeuren.
 
 **"Dagen bekend" bij de inhaalslag:** funda toont op de zoekresultatenpagina vaak
 "Sinds X weken/maanden" of een exacte datum bij een woning — de tekstdump-parser

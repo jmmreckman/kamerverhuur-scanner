@@ -4,7 +4,13 @@ checks als de dagelijkse run. De adressen blijven daarna in state.json staan en 
 dus automatisch mee in alle volgende dagrapporten.
 
 Gebruik:
-    python handmatig_toevoegen.py pad/naar/adressen.txt
+    python handmatig_toevoegen.py pad/naar/adressen.txt [--herprocessen]
+
+--herprocessen laat ook adressen die al eerder verwerkt zijn opnieuw door alle checks
+lopen (geocoding, geo-checks, opkoopbescherming/WOZ, BAG), in plaats van ze over te
+slaan. Gebruik dit na een bugfix in een van de checks, om oude foute uitkomsten in
+state.json te corrigeren. Handmatig verwijderde adressen worden hierbij nooit
+opnieuw actief.
 
 Twee bestandsformaten worden automatisch herkend:
 
@@ -35,7 +41,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger("kamerverhuur_scanner.handmatig")
 
 
-def main(bestandspad: str) -> int:
+def main(bestandspad: str, forceer_herprocessen: bool = False) -> int:
     today = date.today()
     tekst = Path(bestandspad).read_text(encoding="utf-8")
     listings, parse_fouten = parse_bestand(tekst)
@@ -54,7 +60,7 @@ def main(bestandspad: str) -> int:
         return 1
 
     logger.info("Verwerk %d handmatig aangeleverd adres(sen)...", len(listings))
-    result = pipeline.run_handmatig(config, listings, today=today)
+    result = pipeline.run_handmatig(config, listings, today=today, forceer_herprocessen=forceer_herprocessen)
     result.fouten = parse_fouten + result.fouten
 
     for fout in result.fouten:
@@ -84,7 +90,11 @@ def main(bestandspad: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Gebruik: python handmatig_toevoegen.py pad/naar/adressen.txt")
+    argumenten = sys.argv[1:]
+    forceer_herprocessen = "--herprocessen" in argumenten
+    bestandspaden = [a for a in argumenten if a != "--herprocessen"]
+
+    if len(bestandspaden) != 1:
+        print("Gebruik: python handmatig_toevoegen.py pad/naar/adressen.txt [--herprocessen]")
         sys.exit(1)
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(bestandspaden[0], forceer_herprocessen))
