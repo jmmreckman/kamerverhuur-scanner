@@ -6,12 +6,18 @@ dus automatisch mee in alle volgende dagrapporten.
 Gebruik:
     python handmatig_toevoegen.py pad/naar/adressen.txt
 
-Bestandsformaat: één adres per regel, "POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]",
-bijv.:
-    3073KJ 47A
-    3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/
+Twee bestandsformaten worden automatisch herkend:
 
-Regels die met # beginnen of leeg zijn worden overgeslagen.
+1. Eén adres per regel, "POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]", bijv.:
+       3073KJ 47A
+       3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/
+   Regels die met # beginnen of leeg zijn worden overgeslagen.
+
+2. Een ruwe kopieer-plak van een funda-zoekresultatenpagina (selecteer de hele
+   resultatenlijst in je browser, kopieer, plak in een tekstbestand) -- adres,
+   postcode/plaats, prijs, oppervlaktes, makelaar etc. allemaal op eigen regels.
+   Geen scraping: jij bekijkt en kopieert de pagina zelf, dit leest alleen de
+   geplakte tekst uit.
 """
 from __future__ import annotations
 
@@ -22,7 +28,7 @@ from pathlib import Path
 
 from rotterdam_scanner import pipeline, report
 from rotterdam_scanner.config import load_config
-from rotterdam_scanner.handmatig import parse_regels
+from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.mailer import send_report
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -31,8 +37,8 @@ logger = logging.getLogger("kamerverhuur_scanner.handmatig")
 
 def main(bestandspad: str) -> int:
     today = date.today()
-    regels = Path(bestandspad).read_text(encoding="utf-8").splitlines()
-    listings, parse_fouten = parse_regels(regels)
+    tekst = Path(bestandspad).read_text(encoding="utf-8")
+    listings, parse_fouten = parse_bestand(tekst)
 
     for fout in parse_fouten:
         logger.warning(fout)

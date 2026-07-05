@@ -72,7 +72,12 @@ def geocode_by_postcode(postcode: str, huisnummer: str, toevoeging: str = "") ->
     (elke combinatie hoort bij precies één adres in Nederland) en dus betrouwbaarder dan
     zoeken op straatnaam, waar gelijkende straatnamen in andere wijken toe kunnen leiden."""
     postcode_kaal = postcode.replace(" ", "").upper()
-    query = f"{postcode_kaal} {huisnummer}{toevoeging}"
+    # Een koppelteken tussen huisnummer en toevoeging is nodig voor PDOK om ze correct
+    # uit elkaar te houden -- zonder koppelteken matcht een toevoeging die met een cijfer
+    # begint (bijv. "02L" bij een portiekwoning) soms stilzwijgend het verkeerde adres in
+    # plaats van een fout te geven.
+    huisnummer_volledig = f"{huisnummer}-{toevoeging}" if toevoeging else huisnummer
+    query = f"{postcode_kaal} {huisnummer_volledig}"
     doc = _zoek_pdok_adres(query, [f"postcode:{postcode_kaal}"])
     return _doc_naar_resultaat(doc, query)
 

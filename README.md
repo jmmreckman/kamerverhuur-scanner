@@ -204,7 +204,9 @@ notepad adressen.txt
 venv\Scripts\python handmatig_toevoegen.py adressen.txt
 ```
 
-Eén adres per regel: `POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]`, bijvoorbeeld:
+Twee bestandsformaten worden automatisch herkend (je hoeft niet aan te geven welke):
+
+**1. Eén adres per regel** — `POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]`:
 
 ```
 3073KJ 47A
@@ -214,11 +216,24 @@ Eén adres per regel: `POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]`, bijvoorbee
 De funda-link is optioneel (zonder link krijg je in het rapport een algemene
 funda-zoeklink voor die postcode). Regels die met `#` beginnen worden overgeslagen.
 
-Eenmalig je hele huidige achterstand inhalen kan door zelf even door de huidige
-funda-zoekresultaten voor Rotterdam te bladeren en de postcode+huisnummer van elk
-interessant huis in dit bestand te zetten. Vanaf dat moment staan ze in `state.json`
-en lopen ze automatisch mee in elke volgende dagelijkse run (30-dagen-expiry,
-verwijder-link, alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen).
+**2. Een ruwe kopieer-plak van een funda-zoekresultatenpagina** — selecteer in je
+browser de hele resultatenlijst (Ctrl+A op de pagina, of sleep-selecteren), kopieer
+(Ctrl+C), en plak in een tekstbestand. Dat levert rommelige tekst op (adres, postcode,
+prijs, oppervlaktes, kamers, energielabel, makelaarsnaam, badges als "Blikvanger" of
+"Nieuw" — allemaal op losse regels, met een wisselend aantal regels per woning) maar
+dat hoeft niet netter: het script herkent adres, postcode/plaats en vraagprijs
+er zelf automatisch uit, en negeert de rest. Dit is de snelste manier om in één keer
+een groot deel van het huidige aanbod te verwerken. Nogmaals: dit is geen scraping —
+jij bekijkt en kopieert de pagina zelf in je eigen browser, het script leest alleen de
+tekst die je al hebt gekopieerd.
+
+Bij grote bestanden (honderden adressen) duurt het verwerken een tijdje (elk adres
+kost een paar seconden aan controles) — reken op zo'n 15-20 minuten voor een paar
+honderd adressen. Dat is prima voor een eenmalige inhaalslag; laat het gewoon draaien.
+
+Vanaf het moment dat een huis verwerkt is staat het in `state.json` en loopt het
+automatisch mee in elke volgende dagelijkse run (30-dagen-expiry, verwijder-link,
+alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen).
 
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
@@ -284,10 +299,17 @@ verwijder-link, alles hetzelfde als voor huizen die via de e-mail-alert binnenko
   onderwerp naar je eigen scanner-mailbox); er zit geen afzender-verificatie op, wat
   bij een privé-mailbox die alleen jij en dit systeem gebruiken een verwaarloosbaar
   risico is (in het ergste geval verdwijnt een huis onterecht, wat je zelf opmerkt).
-- Geocoding via PDOK werkt op basis van postcode + huisnummer, rechtstreeks uit de
-  Funda-mail-tekst gehaald; bij zeer ongebruikelijke huisnummer-schrijfwijzen
-  (bijv. combinaties van letters én cijfers als toevoeging) kan dit misgaan. Ook dan:
-  geen crash, wel een duidelijke melding in het rapport.
+- Geocoding via PDOK werkt op basis van postcode + huisnummer(+toevoeging), rechtstreeks
+  uit de Funda-mail-tekst of het handmatige adressenbestand gehaald (huisnummer en
+  toevoeging worden met een koppelteken samengevoegd in de zoekopdracht, bijv.
+  "184-02L" — nodig omdat PDOK toevoegingen die met een cijfer beginnen zonder dat
+  koppelteken soms stilzwijgend fout matcht). Bij zeer ongebruikelijke
+  huisnummer-schrijfwijzen kan het alsnog misgaan. Ook dan: geen crash, wel een
+  duidelijke melding in het rapport.
+- De tekstdump-parser voor `handmatig_toevoegen.py` herkent adressen aan de hand van
+  de postcode-regel (heel herkenbaar patroon) en pakt de regel erboven als adres —
+  getest tegen een echte kopieer-plak van 410 funda-resultaten zonder fouten, maar
+  blijft, net als de e-mail-parser, afhankelijk van hoe funda haar pagina's opbouwt.
 - De "dagen bekend"-teller is gebaseerd op wanneer dit systeem het huis zag, niet
   op een officiële funda-datum.
 - **De WOZ-waarde-endpoint is niet als publieke developer-API gedocumenteerd** — het

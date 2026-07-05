@@ -1,4 +1,10 @@
-from rotterdam_scanner.handmatig import HandmatigeRegelError, parse_regel, parse_regels
+from rotterdam_scanner.handmatig import (
+    HandmatigeRegelError,
+    parse_bestand,
+    parse_funda_tekstdump,
+    parse_regel,
+    parse_regels,
+)
 
 
 def test_parse_regel_met_toevoeging_en_zonder_link():
@@ -8,6 +14,14 @@ def test_parse_regel_met_toevoeging_en_zonder_link():
     assert listing.toevoeging == "A"
     assert listing.object_id == "3073KJ-47A"
     assert listing.url.startswith("https://www.funda.nl/")
+
+
+def test_parse_regel_met_koppelteken_geeft_zelfde_resultaat_als_zonder():
+    met_koppelteken = parse_regel("3073KJ 47-A")
+    zonder_koppelteken = parse_regel("3073KJ 47A")
+    assert met_koppelteken.huisnummer == zonder_koppelteken.huisnummer == "47"
+    assert met_koppelteken.toevoeging == zonder_koppelteken.toevoeging == "A"
+    assert met_koppelteken.object_id == zonder_koppelteken.object_id
 
 
 def test_parse_regel_zonder_toevoeging_met_link():
@@ -42,6 +56,69 @@ def test_parse_regels_verzamelt_fouten_zonder_te_stoppen():
     assert len(listings) == 2
     assert len(fouten) == 1
     assert "Regel 2" in fouten[0]
+
+
+_VOORBEELD_KAART = """
+Hillevliet 47-A
+3073 KJ Rotterdam
+€ 260.000 k.k.
+97 m²
+3
+E
+
+Groene Hilledijk 378-B
+3075 ED Rotterdam
+€ 400.000 k.k.
+124 m²
+3
+C
+"""
+
+
+def test_parse_funda_tekstdump_herkent_adres_postcode_en_prijs():
+    listings, fouten = parse_funda_tekstdump(_VOORBEELD_KAART)
+    assert fouten == []
+    by_id = {l.object_id: l for l in listings}
+    assert by_id["3073KJ-47A"].straatnaam == "Hillevliet"
+    assert by_id["3073KJ-47A"].huisnummer == "47"
+    assert by_id["3073KJ-47A"].toevoeging == "A"
+    assert by_id["3073KJ-47A"].woonplaats == "Rotterdam"
+    assert by_id["3073KJ-47A"].prijs == 260000
+    assert by_id["3075ED-378B"].prijs == 400000
+
+
+def test_parse_funda_tekstdump_werkt_zonder_lege_regel_tussen_woningen():
+    tekst = (
+        "Vredehagen 44  \n3078 CN Rotterdam\n€ 635.000 k.k.\n163 m²\n4\nA\n"
+        "Jan Pettersonstraat 15  \n3077 MN Rotterdam\n€ 625.000 k.k.\n187 m²\n3\nA\n"
+    )
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert {l.object_id for l in listings} == {"3078CN-44", "3077MN-15"}
+
+
+def test_parse_funda_tekstdump_negeert_niet_adresachtige_tekst():
+    listings, fouten = parse_funda_tekstdump("Zomaar wat tekst zonder postcodes.\nNog een regel.")
+    assert listings == []
+    assert fouten == []
+
+
+def test_parse_funda_tekstdump_meldt_postcode_zonder_herkenbaar_adres():
+    listings, fouten = parse_funda_tekstdump("Blikvanger\n3073 KJ Rotterdam\n€ 260.000 k.k.\n")
+    assert listings == []
+    assert len(fouten) == 1
+
+
+def test_parse_bestand_herkent_tekstdump_automatisch():
+    listings, fouten = parse_bestand(_VOORBEELD_KAART)
+    assert len(listings) == 2
+    assert fouten == []
+
+
+def test_parse_bestand_valt_terug_op_simpel_formaat():
+    listings, fouten = parse_bestand("3073KJ 47A\n3078CN 44\n")
+    assert len(listings) == 2
+    assert fouten == []
 
 
 def test_parse_regels_dedupliceert_op_object_id():
