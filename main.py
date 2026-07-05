@@ -39,8 +39,8 @@ def main() -> int:
         logger.warning(fout)
 
     subject = f"Kamerverhuur-scanner Rotterdam — {len(result.alle_actief)} openstaande kansen ({today.strftime('%d-%m-%Y')})"
-    html_body = report.build_html_report(result, today)
-    text_body = report.build_text_report(result, today)
+    html_body = report.build_html_report(result, today, config.gmail_address, config.listing_expiry_days)
+    text_body = report.build_text_report(result, today, config.gmail_address)
 
     try:
         send_report(config, subject, html_body, text_body)

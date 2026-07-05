@@ -5,7 +5,7 @@ from datetime import date
 
 from .bag import fetch_bag_oppervlakte
 from .config import Config
-from .funda_mail import FundaListing, fetch_recent_funda_mail_scan
+from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_address
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .opkoop import check_opkoopbescherming
@@ -18,13 +18,9 @@ class RunResult:
     nieuw_actief: list[ListingState] = field(default_factory=list)
     nieuw_afgevallen: list[ListingState] = field(default_factory=list)
     nieuw_onbekend_adres: list[ListingState] = field(default_factory=list)
-    niet_meer_te_koop: list[ListingState] = field(default_factory=list)
+    handmatig_verwijderd: list[ListingState] = field(default_factory=list)
     alle_actief: list[ListingState] = field(default_factory=list)
     fouten: list[str] = field(default_factory=list)
-
-
-def _status_afvalreden(status: str) -> str:
-    return f"Niet meer (zonder meer) te koop op funda — status: {status}."
 
 
 def _process_new_listing(listing: FundaListing, config: Config, today: date) -> ListingState:
@@ -150,17 +146,20 @@ def run(config: Config, today: date | None = None) -> RunResult:
         scan = None
 
     listings = scan.listings if scan else []
-    status_updates = scan.status_updates if scan else {}
 
-    # Eerst bestaande, al bekende woningen bijwerken (incl. "niet meer te koop"-signalen).
+    try:
+        te_verwijderen_ids = fetch_verwijder_commandos(config)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon verwijder-commando's niet uitlezen: {exc}")
+        te_verwijderen_ids = set()
+
     for existing in state.all():
-        status = status_updates.get(existing.object_id)
-        if status and existing.status == "actief":
+        if existing.object_id in te_verwijderen_ids and existing.status == "actief":
             existing.status = "afgevallen"
-            existing.afvalreden = _status_afvalreden(status)
+            existing.afvalreden = "Handmatig verwijderd via de verwijder-link in het rapport."
             existing.laatst_gezien = today_iso
             state.upsert(existing)
-            result.niet_meer_te_koop.append(existing)
+            result.handmatig_verwijderd.append(existing)
 
     for listing in listings:
         existing = state.get(listing.object_id)
@@ -175,10 +174,9 @@ def run(config: Config, today: date | None = None) -> RunResult:
             result.fouten.append(f"Fout bij verwerken van {listing.url}: {exc}")
             continue
 
-        status = status_updates.get(listing.object_id)
-        if status and processed.status == "actief":
+        if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
-            processed.afvalreden = _status_afvalreden(status)
+            processed.afvalreden = "Handmatig verwijderd via de verwijder-link in het rapport."
 
         state.upsert(processed)
         if processed.status == "actief":

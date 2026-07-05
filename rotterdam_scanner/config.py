@@ -46,7 +46,7 @@ def load_config(env_path: Path | None = None) -> Config:
         gmail_app_password=gmail_app_password,
         report_to=report_to,
         funda_mail_folder=os.environ.get("FUNDA_MAIL_FOLDER", "INBOX"),
-        listing_expiry_days=int(os.environ.get("LISTING_EXPIRY_DAYS", "60")),
+        listing_expiry_days=int(os.environ.get("LISTING_EXPIRY_DAYS", "30")),
         opkoopbescherming_woz_grens=int(os.environ.get("OPKOOPBESCHERMING_WOZ_GRENS", "470000")),
         woz_api_key=os.environ.get("WOZ_API_KEY") or None,
     )

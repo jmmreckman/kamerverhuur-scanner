@@ -1,10 +1,18 @@
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from rotterdam_scanner import pipeline
 from rotterdam_scanner.config import Config
 from rotterdam_scanner.funda_mail import FundaListing, FundaMailScan
 from rotterdam_scanner.geocode import GeocodeError, GeocodeResult
+
+
+@pytest.fixture(autouse=True)
+def _geen_verwijder_commandos_tenzij_expliciet_gemockt():
+    with patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value=set()):
+        yield
 
 
 def _config(tmp_path, **overrides):
@@ -208,7 +216,7 @@ def test_run_meldt_fout_bij_kapotte_mailbox_zonder_te_crashen(tmp_path):
     assert "IMAP kapot" in result.fouten[0]
 
 
-def test_run_haalt_bestaande_actieve_woning_weg_bij_status_update(tmp_path):
+def test_run_haalt_bestaande_actieve_woning_weg_bij_verwijder_commando(tmp_path):
     config = _config(tmp_path)
     p1, p2, p3, p4 = _patch_geo_checks()
 
@@ -221,28 +229,38 @@ def test_run_haalt_bestaande_actieve_woning_weg_bij_status_update(tmp_path):
 
     with patch(
         "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
-        return_value=FundaMailScan(listings=[], status_updates={"1": "onder bod"}),
-    ):
+        return_value=FundaMailScan(listings=[]),
+    ), patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value={"1"}):
         result_dag2 = pipeline.run(config, today=date(2026, 7, 2))
 
     assert len(result_dag2.alle_actief) == 0
-    assert len(result_dag2.niet_meer_te_koop) == 1
-    assert "onder bod" in result_dag2.niet_meer_te_koop[0].afvalreden
+    assert len(result_dag2.handmatig_verwijderd) == 1
+    assert "Handmatig verwijderd" in result_dag2.handmatig_verwijderd[0].afvalreden
 
 
-def test_run_nieuwe_listing_met_meteen_status_update_wordt_niet_actief(tmp_path):
+def test_run_nieuwe_listing_met_meteen_verwijder_commando_wordt_niet_actief(tmp_path):
     config = _config(tmp_path)
     p1, p2, p3, p4 = _patch_geo_checks()
 
     with patch(
         "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
-        return_value=FundaMailScan(listings=[_listing("1")], status_updates={"1": "verkocht"}),
-    ), p1, p2, p3, p4:
+        return_value=FundaMailScan(listings=[_listing("1")]),
+    ), patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value={"1"}), p1, p2, p3, p4:
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     assert len(result.alle_actief) == 0
     assert len(result.nieuw_actief) == 0
-    assert any("verkocht" in item.afvalreden for item in result.nieuw_afgevallen)
+    assert any("Handmatig verwijderd" in item.afvalreden for item in result.nieuw_afgevallen)
+
+
+def test_run_meldt_fout_bij_kapotte_verwijder_commando_scan_zonder_te_crashen(tmp_path):
+    config = _config(tmp_path)
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", side_effect=RuntimeError("IMAP kapot")):
+        result = pipeline.run(config, today=date(2026, 7, 5))
+    assert result.fouten
+    assert "IMAP kapot" in result.fouten[0]
 
 
 def test_run_sorteert_openstaande_kansen_op_prijs_per_m2(tmp_path):

@@ -23,31 +23,30 @@ Elke ochtend om 09:00:
 5. Sorteert de openstaande kansen op **vraagprijs per m²** (op basis van die
    BAG-oppervlakte), niet op datum — hoe lang een huis al bekend is staat er sowieso
    al apart bij.
-6. Haalt woningen die **niet meer gewoon te koop staan** (onder bod, verkocht, in
-   onderhandeling) automatisch uit de lijst — zie de kanttekening hieronder, dit
-   vereist wel één kleine, eenmalige handeling per huis van jouw kant.
-7. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
+6. Houdt een huis maximaal **30 dagen** (`LISTING_EXPIRY_DAYS`) op de lijst en haalt
+   het er daarna automatisch af. Er wordt niet gecheckt of een huis inmiddels
+   verkocht/onder bod is (zie kanttekening hieronder) — je ziet zelf aan de
+   "dagen bekend"-teller hoe vers een huis nog is.
+7. Geeft je in het rapport per huis een **directe link naar funda** en een
+   **verwijder-link** waarmee je een huis met één muisklik + versturen zelf uit de
+   lijst haalt (bijv. omdat het toch niet voldoet, of gewoon niet interessant is).
+8. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
    - **Zelfbewoningsplicht in de advertentietekst** — funda blokkeert geautomatiseerd
      bezoek aan advertentiepagina's (Akamai bot-detectie + verplichte CAPTCHA), dus dit
      vraagt het rapport je de advertentietekst zelf even (10 sec) door te lezen. Dit
      staat bij elk overgebleven huis, maar dat zijn er dankzij de eerdere checks nog
      maar een handjevol per dag.
-8. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
+9. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
    kansen, hoe lang ze al bekend zijn, en welke (weinige) handmatige check nog nodig is.
 
-**Over "niet meer te koop" (onder bod/verkocht):** funda's dagelijkse zoekopdracht-
-alert meldt alleen NIEUWE woningen, nooit dat een eerder geziene woning van status is
-veranderd — dat is inherent aan hoe die functie werkt, ongeacht wie hem bouwt. Funda
-heeft daarnaast wél een aparte, officiële functie die dit oplost: de
-["favorieten-e-mail"](https://www.funda.nl/meer-weten/producten-en-diensten/nieuw/nieuwe-favorieten-e-mail/) —
-maximaal één e-mail per dag met alle wijzigingen (status, prijs) van woningen die je
-zelf als favoriet hebt gemarkeerd. Dit programma leest ook die e-mail mee en haalt een
-huis automatisch uit "Openstaande kansen" zodra hij "onder bod", "verkocht" of "in
-onderhandeling" meldt. De enige eis: **markeer nieuwe kandidaten in het rapport zelf
-even als favoriet op funda.nl** (één klik) — daarna is het weer volledig automatisch
-voor dat huis. Doe je dat niet, dan blijft het huis gewoon (tot max. 60 dagen) in de
-lijst staan totdat het vanzelf verloopt. Zie ook "Bekende beperkingen" hieronder: de
-tekstherkenning hiervoor is best-effort, net als bij de prijsherkenning.
+**Over "verkocht"/"onder bod":** funda's dagelijkse zoekopdracht-alert meldt alleen
+NIEUWE woningen, nooit dat een eerder geziene woning van status is veranderd. Funda
+heeft daar wel een aparte functie voor (de "favorieten-e-mail", met per-huis
+favoriet-markeren), maar dat vereist een handmatige klik per huis op funda.nl zelf —
+bewust niet gekozen, want dat schaalt niet als je dagelijks meerdere kandidaten
+krijgt. In plaats daarvan: een huis blijft gewoon (tot max. 30 dagen) op de lijst
+staan, en jij gebruikt de "dagen bekend"-teller en je eigen inschatting om te bepalen
+of iets nog vers genoeg is, of klikt het er zelf uit met de verwijder-link.
 
 **Waarom niet alles automatisch?** Funda draait achter actieve bot-detectie (Akamai +
 verplichte Google reCAPTCHA) en verbiedt geautomatiseerd bezoek in de voorwaarden. Dit
@@ -158,36 +157,39 @@ Verwijderen/opnieuw instellen kan met `scripts\verwijder_taakplanner.ps1`.
 "Openstaande kansen" is gesorteerd op **vraagprijs per m² (laagste eerst)**, op basis
 van de officiële BAG-oppervlakte. Elke rij toont:
 
-- **Adres + link** naar de funda-advertentie.
-- **Wijk**.
-- **Vraagprijs**, **Oppervlakte** (`... m² (BAG)`, dus de officiële maat, niet de
-  advertentietekst) en **€/m²** — als de prijs een keer niet herkend kon worden uit
-  de alertmail, staat het huis onderaan (zie "Bekende beperkingen").
+- **Adres, wijk, vraagprijs, oppervlakte** (`... m² (BAG)`, de officiële maat, niet de
+  advertentietekst) **en €/m²** — als de prijs een keer niet herkend kon worden uit de
+  alertmail, staat het huis onderaan (zie "Bekende beperkingen").
 - **Dagen bekend** — dagen sinds dit systeem het huis voor het eerst zag via je
   Funda-alertmail. In de praktijk vrijwel altijd gelijk aan de echte
-  "in verkoop sinds"-datum (funda's alert gaat elke nacht uit), maar geen
-  harde garantie.
+  "in verkoop sinds"-datum (funda's alert gaat elke nacht uit), maar geen harde
+  garantie. Gebruik dit als indicatie: hoe langer een huis erop staat zonder dat jij
+  het verwijderd hebt, hoe groter de kans dat het (bijna) verkocht is.
 - **Badges** met wat je zelf nog moet checken:
   - `check WOZ-waarde` — verschijnt normaal NIET meer: met een `WOZ_API_KEY` wordt dit
     automatisch gecheckt (boven de grens, standaard €470.000 en aanpasbaar via
     `OPKOOPBESCHERMING_WOZ_GRENS`, valt het huis niet af, en zie je die badge dus
     niet). De badge duikt alleen op als de WOZ-opvraging een keer mislukte — kijk dan
     naar de opmerking eronder voor de reden.
-  - `markeer favoriet op funda` — alleen bij huizen die vandaag voor het eerst in de
-    lijst staan. Eén klik op funda.nl, en daarna detecteert het systeem automatisch
-    als het huis onder bod of verkocht gaat (zie hierboven).
   - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
     Open de link en zoek (Ctrl+F) op "zelfbewoning".
+- **Acties**:
+  - **Bekijk op funda →** — directe link naar de advertentie.
+  - **Verwijderen** — opent een kant-en-klare e-mail naar je scanner-mailbox met als
+    onderwerp "Verwijder <nummer>". Gewoon versturen (niets aanpassen); bij de
+    volgende dagelijkse run wordt het huis eruit gehaald en verschijnt het onder
+    "Handmatig verwijderd" in plaats van "Openstaande kansen".
 
 Huizen die automatisch afvielen op het nul-quotumgebied of de 50-meter-check
 verdwijnen niet stil: ze staan (voor de dag waarop ze gevonden zijn) in de sectie
 "Vandaag afgevallen op geo-checks", met reden — zo kun je fouten in de checks zelf
-opmerken. Huizen die via de favorieten-e-mail als onder bod/verkocht/in onderhandeling
-gedetecteerd zijn, staan apart in "Niet meer te koop".
+opmerken.
 
-Een huis verdwijnt automatisch uit "Openstaande kansen" als het 60 dagen
-(`LISTING_EXPIRY_DAYS`) niet meer in een nieuwe alertmail is opgedoken — na twee
-maanden is een woning ofwel verkocht, ofwel niet meer actueel genoeg.
+Een huis verdwijnt automatisch uit "Openstaande kansen" als het 30 dagen
+(`LISTING_EXPIRY_DAYS`) niet meer in een nieuwe alertmail is opgedoken, of eerder als
+jij het zelf met de verwijder-link weghaalt. Er is bewust geen automatische
+verkocht/onder-bod-detectie (zie hierboven) — dat is een bewuste keuze om geen
+handmatige klik per huis op funda.nl nodig te hebben.
 
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
@@ -214,9 +216,10 @@ maanden is een woning ofwel verkocht, ofwel niet meer actueel genoeg.
   landelijke basisregistratie, geen API-key nodig, bevraagd op het BAG-verblijfsobject-ID
   (uit de PDOK-geocode). Dit is de "echte" maat, die geregeld afwijkt van wat in een
   advertentie staat.
-- **Vraagprijs en status (onder bod/verkocht)**: uit de opmaak van je eigen
-  Funda-mails (de nieuwe-woningen-alert resp. de favorieten-e-mail), geen scraping.
+- **Vraagprijs**: uit de opmaak van je eigen Funda-alertmail, geen scraping.
 - **Funda-listings**: je eigen Funda-alertmail, geen scraping.
+- **Verwijder-commando's**: mails die jijzelf (via de verwijder-link in het rapport)
+  naar je scanner-mailbox stuurt, met "Verwijder <nummer>" in het onderwerp.
 
 ## Bekende beperkingen
 
@@ -225,15 +228,19 @@ maanden is een woning ofwel verkocht, ofwel niet meer actueel genoeg.
   parser huizen missen — dit crasht niet, maar zulke huizen belanden dan in
   "Kon niet automatisch verwerkt worden" met de kale link, zodat je ze zelf nog
   ziet.
-- **Prijs- en statusherkenning zijn kwetsbaarder dan de rest.** Adres/object-ID komen
-  rechtstreeks uit de funda-URL (stabiel), maar prijs en status ("onder bod" e.d.)
-  worden gezocht in de tekst rond elke link in de e-mail — dat is afhankelijk van
-  funda's actuele e-mail-opmaak. Werkt dit een keer niet goed, gebruik dan
-  `tools/test_email_parsing.py` tegen een opgeslagen `.eml` om te zien wat er wel/niet
-  herkend wordt, en stel zo nodig de patronen in `rotterdam_scanner/funda_mail.py` bij.
-- De "niet meer te koop"-detectie werkt alleen voor huizen die je zelf als favoriet
-  hebt gemarkeerd op funda.nl — zonder die klik blijft een verkocht huis gewoon
-  (tijdelijk) in de lijst staan.
+- **Prijsherkenning is kwetsbaarder dan de rest.** Adres/object-ID komen rechtstreeks
+  uit de funda-URL (stabiel), maar de prijs wordt gezocht in de tekst rond elke link
+  in de e-mail — dat is afhankelijk van funda's actuele e-mail-opmaak. Werkt dit een
+  keer niet goed, gebruik dan `tools/test_email_parsing.py` tegen een opgeslagen
+  `.eml` om te zien wat er wel/niet herkend wordt, en stel zo nodig de patronen in
+  `rotterdam_scanner/funda_mail.py` bij.
+- **Geen automatische verkocht/onder-bod-detectie** (bewuste keuze, zie hierboven) —
+  een verkocht huis blijft tot max. 30 dagen op de lijst staan tenzij je het zelf met
+  de verwijder-link weghaalt.
+- De verwijder-link werkt met een simpel patroon (mail met "Verwijder <nummer>" in het
+  onderwerp naar je eigen scanner-mailbox); er zit geen afzender-verificatie op, wat
+  bij een privé-mailbox die alleen jij en dit systeem gebruiken een verwaarloosbaar
+  risico is (in het ergste geval verdwijnt een huis onterecht, wat je zelf opmerkt).
 - Geocoding via PDOK werkt op basis van straatnaam + huisnummer; bij zeer
   ongebruikelijke schrijfwijzen kan dit misgaan. Ook dan: geen crash, wel een
   duidelijke melding in het rapport.
