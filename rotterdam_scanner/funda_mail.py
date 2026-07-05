@@ -5,119 +5,136 @@ import imaplib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from email.message import Message
 from email.header import decode_header
+from email.message import Message
 
 from .config import Config
 
-# Funda-detail-URL's komen in twee bekende vormen voor. We ondersteunen beide, en
-# als een link geen van beide patronen matcht, laten we hem niet stilzwijgend vallen:
-# de aanroepende code kan dan alsnog de kale URL tonen voor handmatige controle.
-_URL_PATTERN_NIEUW = re.compile(
-    r"https://www\.funda\.nl/detail/koop/(?P<woonplaats>[a-z0-9-]+)/huis-(?P<slug>[a-z0-9-]+)/(?P<object_id>\d+)/?"
+# Funda's e-mails wikkelen elke link (ook de woning-links) in een Iterable-
+# clicktracking-URL (links.funda.nl/s/c/...); die bevat geen herleidbare
+# adres-/object-informatie en is zelf ook niet zomaar te volgen (403 op
+# niet-browserverkeer -- daar gaan we dus niet aan zitten). We halen adres,
+# postcode/plaats en prijs daarom uit de zichtbare tekst rond elke link, en
+# gebruiken de link zelf alleen als kant-en-klare klik-URL voor het rapport.
+_LISTING_LINK_RE = re.compile(
+    r'<a\s+[^>]*href="(?P<url>https?://[^"]+)"[^>]*>\s*<span[^>]*>(?P<adres>[^<]+)</span>\s*</a>',
+    re.IGNORECASE,
 )
-_URL_PATTERN_OUD = re.compile(
-    r"https://www\.funda\.nl/koop/(?P<woonplaats>[a-z0-9-]+)/huis-(?P<object_id>\d+)-(?P<slug>[a-z0-9-]+)/?"
-)
-_HUISNUMMER_SUFFIX = re.compile(r"^(?P<straat>[a-z0-9-]+?)-(?P<huisnummer>\d+[a-z]?(?:-\d+)?)$")
-
-_FUNDA_URL_ZOEKER = re.compile(r'href=["\']?(https://www\.funda\.nl/[^"\'\s>]+)', re.IGNORECASE)
-
-# Best-effort: de prijs staat ergens in de opmaak rond de link van een woning in de
-# e-mail. We zoeken in een venster van tekst na elke link, begrensd door de eerst-
-# volgende woning-link (anders kan de prijs van het volgende huis hieraan toegeschreven
-# worden). Dit is layout-afhankelijk en dus kwetsbaarder dan de URL-parsing hierboven —
-# zie tools/test_email_parsing.py om dit te controleren/bij te stellen.
-_ZOEKVENSTER_LENGTE = 600
-_TAG_RE = re.compile(r"<[^>]+>")
+_ADRES_SPLITS_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)\s*(?P<toevoeging>[A-Za-z]?(?:-\d+)?)\s*$")
+_POSTCODE_PLAATS_RE = re.compile(r"(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)")
 _PRIJS_RE = re.compile(r"€\s?([\d]{2,3}(?:[.,]\d{3})*)")
+_BEKIJK_ALLE_RE = re.compile(r"Bekijk alle (\d+) woning", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+# Ruim bemeten venster: in een echte funda-mail zit de prijs ~500 tekens (ruwe HTML)
+# na de adres-link. Begrensd door de eerstvolgende woning-link, dus dit loopt nooit
+# over naar het volgende huis.
+_ZOEKVENSTER_LENGTE = 2000
 
 VERWIJDER_ONDERWERP_PREFIX = "Verwijder"
-_VERWIJDER_ONDERWERP_RE = re.compile(r"verwijder\s+(\d+)", re.IGNORECASE)
+_VERWIJDER_ONDERWERP_RE = re.compile(r"verwijder\s+([0-9a-z\-]+)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class FundaListing:
     object_id: str
     url: str
-    woonplaats: str
     straatnaam: str | None
     huisnummer: str | None
+    toevoeging: str
+    postcode: str | None
+    woonplaats: str | None
     prijs: int | None = None
 
     @property
     def adres_bekend(self) -> bool:
-        return self.straatnaam is not None and self.huisnummer is not None
+        return self.postcode is not None and self.huisnummer is not None
+
+    @property
+    def weergavenaam(self) -> str:
+        if self.straatnaam and self.huisnummer:
+            adres = f"{self.straatnaam} {self.huisnummer}{self.toevoeging}"
+            if self.postcode and self.woonplaats:
+                return f"{adres}, {self.postcode} {self.woonplaats}"
+            return adres
+        return self.url
 
 
 @dataclass
 class FundaMailScan:
     listings: list[FundaListing] = field(default_factory=list)
+    waarschuwingen: list[str] = field(default_factory=list)
 
 
-def parse_funda_link(url: str) -> FundaListing | None:
-    match = _URL_PATTERN_NIEUW.match(url) or _URL_PATTERN_OUD.match(url)
+def _split_adres(adres_tekst: str) -> tuple[str | None, str | None, str]:
+    match = _ADRES_SPLITS_RE.match(adres_tekst.strip())
     if not match:
-        return None
-
-    groups = match.groupdict()
-    slug_match = _HUISNUMMER_SUFFIX.match(groups["slug"])
-    straatnaam = None
-    huisnummer = None
-    if slug_match:
-        straatnaam = slug_match.group("straat").replace("-", " ").strip().title()
-        huisnummer = slug_match.group("huisnummer")
-
-    return FundaListing(
-        object_id=groups["object_id"],
-        url=url,
-        woonplaats=groups["woonplaats"].replace("-", " ").title(),
-        straatnaam=straatnaam,
-        huisnummer=huisnummer,
+        return None, None, ""
+    return (
+        match.group("straat").strip(),
+        match.group("huisnummer"),
+        match.group("toevoeging").strip().upper(),
     )
 
 
-def _extract_prijs(venster: str) -> int | None:
-    match = _PRIJS_RE.search(venster)
-    if not match:
+def _maak_object_id(postcode: str | None, huisnummer: str | None, toevoeging: str) -> str | None:
+    if not postcode or not huisnummer:
         return None
-    cijfers = re.sub(r"[.,]", "", match.group(1))
-    try:
-        return int(cijfers)
-    except ValueError:
-        return None
+    return f"{postcode.replace(' ', '').upper()}-{huisnummer}{toevoeging}"
 
 
 def scan_email_body(body: str) -> FundaMailScan:
     listings: dict[str, FundaListing] = {}
+    onherkend_urls: list[str] = []
 
-    matches = list(_FUNDA_URL_ZOEKER.finditer(body))
+    matches = [m for m in _LISTING_LINK_RE.finditer(body) if re.search(r"\d", m.group("adres"))]
     for i, match in enumerate(matches):
-        raw_url = match.group(1)
-        listing = parse_funda_link(raw_url)
-        if listing is None:
-            continue
+        url = match.group("url")
+        straatnaam, huisnummer, toevoeging = _split_adres(match.group("adres"))
 
-        # Begrens het zoekvenster tot waar de eerstvolgende woning-link begint, anders
-        # kan de prijs van het volgende huis per ongeluk aan dit huis toegeschreven
-        # worden in compacte lay-outs met meerdere huizen vlak na elkaar.
         volgende_start = matches[i + 1].start() if i + 1 < len(matches) else len(body)
         venster_eind = min(match.end() + _ZOEKVENSTER_LENGTE, volgende_start)
         venster = _TAG_RE.sub(" ", body[match.end() : venster_eind])
 
-        prijs = _extract_prijs(venster)
-        if prijs is not None and listing.object_id not in listings:
-            listing = FundaListing(
-                object_id=listing.object_id,
-                url=listing.url,
-                woonplaats=listing.woonplaats,
-                straatnaam=listing.straatnaam,
-                huisnummer=listing.huisnummer,
-                prijs=prijs,
-            )
-        listings[listing.object_id] = listing
+        postcode_match = _POSTCODE_PLAATS_RE.search(venster)
+        postcode = postcode_match.group("postcode").replace(" ", "") if postcode_match else None
+        woonplaats = postcode_match.group("plaats").strip() if postcode_match else None
 
-    return FundaMailScan(listings=list(listings.values()))
+        prijs_match = _PRIJS_RE.search(venster)
+        prijs = int(re.sub(r"[.,]", "", prijs_match.group(1))) if prijs_match else None
+
+        object_id = _maak_object_id(postcode, huisnummer, toevoeging)
+        if object_id is None:
+            onherkend_urls.append(url)
+            continue
+
+        if object_id in listings and listings[object_id].prijs is not None:
+            continue  # niet een eerder gevonden prijs overschrijven met "onbekend"
+
+        listings[object_id] = FundaListing(
+            object_id=object_id,
+            url=url,
+            straatnaam=straatnaam,
+            huisnummer=huisnummer,
+            toevoeging=toevoeging,
+            postcode=postcode,
+            woonplaats=woonplaats,
+            prijs=prijs,
+        )
+
+    waarschuwingen = []
+    aangekondigd = sum(int(n) for n in _BEKIJK_ALLE_RE.findall(body))
+    if aangekondigd and len(listings) < aangekondigd:
+        waarschuwingen.append(
+            f"Funda-mail kondigt in totaal {aangekondigd} woning(en) aan via 'Bekijk alle...'-knoppen, "
+            f"maar er konden er maar {len(listings)} individueel herkend worden. Mogelijk toont funda "
+            "meer dan de standaard 2 woningen per zoekopdracht niet los in de mail -- check je "
+            "Funda-account handmatig voor deze dag, of splits je zoekopdracht in kleinere stukken."
+        )
+    for url in onherkend_urls:
+        waarschuwingen.append(f"Kon adres niet herleiden uit e-mailtekst voor link: {url}")
+
+    return FundaMailScan(listings=list(listings.values()), waarschuwingen=waarschuwingen)
 
 
 def extract_listings_from_email_body(body: str) -> list[FundaListing]:
@@ -158,6 +175,7 @@ def fetch_recent_funda_mail_scan(config: Config, lookback_days: int = 3) -> Fund
 
         message_ids = data[0].split()
         alle_listings: dict[str, FundaListing] = {}
+        alle_waarschuwingen: list[str] = []
         for msg_id in message_ids:
             status, msg_data = imap.fetch(msg_id, "(RFC822)")
             if status != "OK" or not msg_data or msg_data[0] is None:
@@ -170,8 +188,9 @@ def fetch_recent_funda_mail_scan(config: Config, lookback_days: int = 3) -> Fund
                 if listing.object_id in alle_listings and listing.prijs is None:
                     continue  # niet een eerder gevonden prijs overschrijven met "onbekend"
                 alle_listings[listing.object_id] = listing
+            alle_waarschuwingen.extend(scan.waarschuwingen)
 
-        return FundaMailScan(listings=list(alle_listings.values()))
+        return FundaMailScan(listings=list(alle_listings.values()), waarschuwingen=alle_waarschuwingen)
 
 
 def fetch_recent_funda_listings(config: Config, lookback_days: int = 3) -> list[FundaListing]:
@@ -214,6 +233,6 @@ def fetch_verwijder_commandos(config: Config) -> set[str]:
             )
             match = _VERWIJDER_ONDERWERP_RE.search(subject)
             if match:
-                object_ids.add(match.group(1))
+                object_ids.add(match.group(1).upper())
 
         return object_ids

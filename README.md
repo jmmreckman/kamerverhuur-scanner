@@ -9,8 +9,12 @@ doorstaan.
 Elke ochtend om 09:00:
 
 1. Leest de nieuwe Funda-listings uit je dagelijkse Funda-zoekopdracht-alert
-   (via e-mail, zie hieronder — **geen scraping**, funda blokkeert dat actief).
-2. Zoekt elk adres op via de landelijke PDOK-adressenservice (coördinaten + wijk/buurt).
+   (via e-mail, zie hieronder — **geen scraping**, funda blokkeert dat actief). Adres,
+   postcode en prijs worden uit de zichtbare tekst van de mail gehaald (funda's links
+   zijn zelf ondoorzichtige clicktracking-URL's zonder bruikbare informatie erin).
+2. Zoekt elk adres op via de landelijke PDOK-adressenservice op basis van
+   **postcode + huisnummer** (coördinaten + wijk/buurt) — dat is ondubbelzinnig, elke
+   combinatie hoort bij precies één adres in Nederland.
 3. Checkt automatisch:
    - **Nul-quotumgebied** — via de officiële GIS-kaartlaag van de gemeente Rotterdam.
    - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem.
@@ -169,9 +173,10 @@ van de officiële BAG-oppervlakte. Elke rij toont:
 - **Acties**:
   - **Bekijk op funda →** — directe link naar de advertentie.
   - **Verwijderen** — opent een kant-en-klare e-mail naar je scanner-mailbox met als
-    onderwerp "Verwijder <nummer>". Gewoon versturen (niets aanpassen); bij de
-    volgende dagelijkse run wordt het huis eruit gehaald en verschijnt het onder
-    "Handmatig verwijderd" in plaats van "Openstaande kansen".
+    onderwerp "Verwijder <postcode-huisnummer>" (bijv. "Verwijder 3073KJ-47A"). Gewoon
+    versturen (niets aanpassen); bij de volgende dagelijkse run wordt het huis eruit
+    gehaald en verschijnt het onder "Handmatig verwijderd" in plaats van
+    "Openstaande kansen".
 
 Huizen die automatisch afvielen op het nul-quotumgebied of de 50-meter-check
 verdwijnen niet stil: ze staan (voor de dag waarop ze gevonden zijn) in de sectie
@@ -187,7 +192,8 @@ handmatige klik per huis op funda.nl nodig te hebben.
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
 - **Adressen/coördinaten/wijk**: PDOK Locatieserver (`api.pdok.nl`) — landelijke,
-  publieke, voor geautomatiseerd gebruik bedoelde overheids-API.
+  publieke, voor geautomatiseerd gebruik bedoelde overheids-API. Bevraagd op
+  postcode + huisnummer (uit de Funda-mail-tekst), niet op straatnaam.
 - **Nul-quotumgebieden & kamerverhuurvergunningen (50m)**: de publieke ArcGIS
   Online-kaartlagen achter de officiële Rotterdam-kaart
   (https://experience.arcgis.com/experience/90c482180dbd4ab7ac0040c746ed80f5).
@@ -211,34 +217,46 @@ handmatige klik per huis op funda.nl nodig te hebben.
   landelijke basisregistratie, geen API-key nodig, bevraagd op het BAG-verblijfsobject-ID
   (uit de PDOK-geocode). Dit is de "echte" maat, die geregeld afwijkt van wat in een
   advertentie staat.
-- **Vraagprijs**: uit de opmaak van je eigen Funda-alertmail, geen scraping.
-- **Funda-listings**: je eigen Funda-alertmail, geen scraping.
+- **Adres/postcode/prijs/Funda-listings**: uit de zichtbare tekst van je eigen
+  Funda-alertmail, geen scraping. Funda's links zelf zijn clicktracking-URL's
+  (`links.funda.nl`, via Iterable) zonder herleidbare informatie — die gebruiken we
+  alleen als kant-en-klare klik-link in het rapport, niet om data uit te halen.
 - **Verwijder-commando's**: mails die jijzelf (via de verwijder-link in het rapport)
-  naar je scanner-mailbox stuurt, met "Verwijder <nummer>" in het onderwerp.
+  naar je scanner-mailbox stuurt, met "Verwijder <postcode-huisnummer>" in het
+  onderwerp.
 
 ## Bekende beperkingen
 
-- Adresherkenning uit de funda-alertmail is gebaseerd op het huidige
-  funda-URL-patroon. Als funda haar e-maillay-out drastisch verandert, kan de
-  parser huizen missen — dit crasht niet, maar zulke huizen belanden dan in
-  "Kon niet automatisch verwerkt worden" met de kale link, zodat je ze zelf nog
-  ziet.
-- **Prijsherkenning is kwetsbaarder dan de rest.** Adres/object-ID komen rechtstreeks
-  uit de funda-URL (stabiel), maar de prijs wordt gezocht in de tekst rond elke link
-  in de e-mail — dat is afhankelijk van funda's actuele e-mail-opmaak. Werkt dit een
-  keer niet goed, gebruik dan `tools/test_email_parsing.py` tegen een opgeslagen
-  `.eml` om te zien wat er wel/niet herkend wordt, en stel zo nodig de patronen in
+- **Adres- en prijsherkenning zijn afhankelijk van funda's huidige e-mail-opmaak.**
+  Funda's links zijn clicktracking-URL's zonder bruikbare informatie, dus adres,
+  postcode en prijs worden uit de zichtbare tekst rond elke woning-link gehaald
+  (getest tegen een echte alertmail, zie `tests/test_funda_mail.py`). Verandert
+  funda die opmaak drastisch, dan kan de parser huizen missen of prijzen niet
+  herkennen — dit crasht niet: onherkende adressen belanden in "Kon niet automatisch
+  verwerkt worden" met de kale link, en er komt een waarschuwing in het rapport als
+  het aantal herkende woningen niet overeenkomt met wat funda's "Bekijk alle N
+  woningen"-knoppen aankondigen. Werkt de herkenning een keer niet goed, gebruik dan
+  `tools/test_email_parsing.py` tegen een opgeslagen `.eml` om te zien wat er
+  wel/niet herkend wordt, en stel zo nodig de patronen in
   `rotterdam_scanner/funda_mail.py` bij.
+- **Als funda op één dag meer nieuwe woningen vindt dan er individueel in de mail
+  passen** (de mail toont blijkbaar niet altijd alles los, met een "Bekijk alle N
+  woningen"-knop voor de rest — dat leidt naar een zoekresultatenpagina die we niet
+  kunnen openen), mist het systeem die extra woningen. Het rapport waarschuwt hierover
+  als het detecteerbaar is. Voorkomen: zet liever een paar smallere zoekopdrachten op
+  dan één hele brede, zodat je zelden meer dan een paar nieuwe woningen per opdracht
+  per dag hebt.
 - **Geen automatische verkocht/onder-bod-detectie** (bewuste keuze, zie hierboven) —
   een verkocht huis blijft tot max. 30 dagen op de lijst staan tenzij je het zelf met
   de verwijder-link weghaalt.
-- De verwijder-link werkt met een simpel patroon (mail met "Verwijder <nummer>" in het
+- De verwijder-link werkt met een simpel patroon (mail met "Verwijder <id>" in het
   onderwerp naar je eigen scanner-mailbox); er zit geen afzender-verificatie op, wat
   bij een privé-mailbox die alleen jij en dit systeem gebruiken een verwaarloosbaar
   risico is (in het ergste geval verdwijnt een huis onterecht, wat je zelf opmerkt).
-- Geocoding via PDOK werkt op basis van straatnaam + huisnummer; bij zeer
-  ongebruikelijke schrijfwijzen kan dit misgaan. Ook dan: geen crash, wel een
-  duidelijke melding in het rapport.
+- Geocoding via PDOK werkt op basis van postcode + huisnummer, rechtstreeks uit de
+  Funda-mail-tekst gehaald; bij zeer ongebruikelijke huisnummer-schrijfwijzen
+  (bijv. combinaties van letters én cijfers als toevoeging) kan dit misgaan. Ook dan:
+  geen crash, wel een duidelijke melding in het rapport.
 - De "dagen bekend"-teller is gebaseerd op wanneer dit systeem het huis zag, niet
   op een officiële funda-datum.
 - **De WOZ-waarde-endpoint is niet als publieke developer-API gedocumenteerd** — het

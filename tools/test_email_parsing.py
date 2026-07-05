@@ -1,15 +1,16 @@
 """Hulpmiddel om de Funda-alertmail-parser te testen tegen een echt voorbeeld.
 
 Gebruik:
-  1. Sla een ontvangen Funda-mail (nieuwe-woningen-alert of favorieten-update) op
-     als .eml-bestand (in Gmail: rechtsboven op de mail > "Bericht downloaden").
+  1. Sla een ontvangen Funda-alertmail op als .eml-bestand (in Gmail: rechtsboven
+     op de mail > "Bericht downloaden").
   2. Draai: python tools/test_email_parsing.py pad/naar/alert.eml
 
-Dit toont welke woningen, prijzen en status-updates (onder bod/verkocht) de parser
-eruit haalt, zodat je vóór de eerste automatische run kunt checken of de herkenning
-klopt. Prijs- en statusherkenning zijn best-effort (ze zoeken tekst in de buurt van
-elke woning-link) en dus kwetsbaarder dan de adresherkenning zelf — klopt er iets
-niet, pas dan de patronen in rotterdam_scanner/funda_mail.py aan.
+Dit toont welke woningen en prijzen de parser eruit haalt, zodat je vóór de eerste
+automatische run kunt checken of de herkenning klopt. Adres/postcode/prijs worden uit
+de zichtbare tekst rond elke woning-link gehaald (funda's links zijn zelf ondoorzichtige
+clicktracking-URL's zonder bruikbare informatie) — kwetsbaarder dan een simpele
+URL-parse, dus klopt er iets niet, pas dan de patronen in
+rotterdam_scanner/funda_mail.py aan.
 """
 from __future__ import annotations
 
@@ -28,26 +29,25 @@ def main(eml_path: str) -> int:
     body = _get_body(msg)
     scan = scan_email_body(body)
 
-    if not scan.listings and not scan.status_updates:
+    if not scan.listings:
         print("Geen funda-woninglinks gevonden in dit bestand.")
-        return 1
-
-    if scan.listings:
+    else:
         print(f"{len(scan.listings)} woning(en) gevonden:\n")
         for listing in scan.listings:
             if listing.adres_bekend:
-                print(f"- {listing.straatnaam} {listing.huisnummer}, {listing.woonplaats}")
+                print(f"- {listing.weergavenaam}")
             else:
                 print(f"- (adres niet herkend) {listing.url}")
             prijs_tekst = f"€{listing.prijs:,}".replace(",", ".") if listing.prijs else "(prijs niet herkend)"
-            print(f"    object_id={listing.object_id}  prijs={prijs_tekst}  url={listing.url}")
+            print(f"    object_id={listing.object_id}  prijs={prijs_tekst}")
+            print(f"    url={listing.url}")
 
-    if scan.status_updates:
-        print(f"\n{len(scan.status_updates)} status-update(s) gevonden (bijv. onder bod/verkocht):")
-        for object_id, status in scan.status_updates.items():
-            print(f"- object_id={object_id}: {status}")
+    if scan.waarschuwingen:
+        print("\nWaarschuwingen:")
+        for w in scan.waarschuwingen:
+            print(f"- {w}")
 
-    return 0
+    return 0 if scan.listings else 1
 
 
 if __name__ == "__main__":

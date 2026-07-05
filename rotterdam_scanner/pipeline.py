@@ -6,7 +6,7 @@ from datetime import date
 from .bag import fetch_bag_oppervlakte
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
-from .geocode import GeocodeError, geocode_address
+from .geocode import GeocodeError, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
@@ -30,20 +30,20 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         return ListingState(
             object_id=listing.object_id,
             url=listing.url,
-            weergavenaam=listing.url,
+            weergavenaam=listing.weergavenaam,
             eerst_gezien=today_iso,
             laatst_gezien=today_iso,
             status="onbekend_adres",
-            afvalreden="Kon adres niet uit de funda-link herleiden.",
+            afvalreden="Kon postcode/huisnummer niet uit de e-mailtekst herleiden.",
         )
 
     try:
-        geo = geocode_address(listing.straatnaam, listing.huisnummer, listing.woonplaats)
+        geo = geocode_by_postcode(listing.postcode, listing.huisnummer, listing.toevoeging)
     except GeocodeError as exc:
         return ListingState(
             object_id=listing.object_id,
             url=listing.url,
-            weergavenaam=f"{listing.straatnaam} {listing.huisnummer}, {listing.woonplaats}",
+            weergavenaam=listing.weergavenaam,
             eerst_gezien=today_iso,
             laatst_gezien=today_iso,
             status="onbekend_adres",
@@ -146,6 +146,8 @@ def run(config: Config, today: date | None = None) -> RunResult:
         scan = None
 
     listings = scan.listings if scan else []
+    if scan:
+        result.fouten.extend(scan.waarschuwingen)
 
     try:
         te_verwijderen_ids = fetch_verwijder_commandos(config)
