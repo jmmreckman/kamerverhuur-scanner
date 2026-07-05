@@ -335,3 +335,34 @@ def test_run_zet_woningen_zonder_prijs_achteraan_de_sortering(tmp_path):
 
     volgorde = [item.object_id for item in result.alle_actief]
     assert volgorde == ["met_prijs", "zonder_prijs"]
+
+
+def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_path):
+    config = _config(tmp_path)
+    p1, p2, p3, p4 = _patch_geo_checks()
+
+    with patch("rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan") as mail_mock, p1, p2, p3, p4:
+        result = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
+
+    mail_mock.assert_not_called()
+    assert len(result.nieuw_actief) == 1
+    assert len(result.alle_actief) == 1
+
+
+def test_run_handmatig_woningen_blijven_staan_voor_volgende_dagelijkse_run(tmp_path):
+    config = _config(tmp_path)
+    p1, p2, p3, p4 = _patch_geo_checks()
+
+    with p1, p2, p3, p4:
+        result_handmatig = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
+    assert len(result_handmatig.alle_actief) == 1
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
+        return_value=FundaMailScan(listings=[]),
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode") as geocode_mock:
+        result_dag = pipeline.run(config, today=date(2026, 7, 2))
+
+    geocode_mock.assert_not_called()
+    assert len(result_dag.alle_actief) == 1
+    assert result_dag.alle_actief[0].eerst_gezien == "2026-07-01"

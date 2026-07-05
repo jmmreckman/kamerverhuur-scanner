@@ -189,6 +189,37 @@ jij het zelf met de verwijder-link weghaalt. Er is bewust geen automatische
 verkocht/onder-bod-detectie (zie hierboven) — dat is een bewuste keuze om geen
 handmatige klik per huis op funda.nl nodig te hebben.
 
+## Achterstand inhalen / zelf gevonden huizen toevoegen
+
+De dagelijkse Funda-alert meldt alleen NIEUWE woningen vanaf het moment dat je de
+zoekopdracht instelt — huizen die al langer te koop stonden, of huizen die je zelf
+tegenkomt tijdens het bladeren op funda.nl, komen er niet vanzelf in. Daarvoor is er
+`handmatig_toevoegen.py`: je zet zelf (handmatig, gewoon browsend — geen scraping)
+adressen in een tekstbestand, en het script haalt ze door dezelfde checks als de
+dagelijkse run en stuurt er direct een rapport-mail van.
+
+```powershell
+copy adressen.voorbeeld.txt adressen.txt
+notepad adressen.txt
+venv\Scripts\python handmatig_toevoegen.py adressen.txt
+```
+
+Eén adres per regel: `POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]`, bijvoorbeeld:
+
+```
+3073KJ 47A
+3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/
+```
+
+De funda-link is optioneel (zonder link krijg je in het rapport een algemene
+funda-zoeklink voor die postcode). Regels die met `#` beginnen worden overgeslagen.
+
+Eenmalig je hele huidige achterstand inhalen kan door zelf even door de huidige
+funda-zoekresultaten voor Rotterdam te bladeren en de postcode+huisnummer van elk
+interessant huis in dit bestand te zetten. Vanaf dat moment staan ze in `state.json`
+en lopen ze automatisch mee in elke volgende dagelijkse run (30-dagen-expiry,
+verwijder-link, alles hetzelfde als voor huizen die via de e-mail-alert binnenkomen).
+
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
 - **Adressen/coördinaten/wijk**: PDOK Locatieserver (`api.pdok.nl`) — landelijke,

@@ -1,0 +1,11 @@
+# Voorbeeldbestand voor handmatig_toevoegen.py.
+# Kopieer dit bestand (of maak je eigen) en vul aan met adressen die je zelf op
+# funda.nl bent tegengekomen. Eén adres per regel:
+#   POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]
+# De funda-link is optioneel maar wel handig (zonder link krijg je een algemene
+# funda-zoeklink voor die postcode terug in het rapport).
+#
+# Regels die met # beginnen worden overgeslagen.
+
+3073KJ 47A
+3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/

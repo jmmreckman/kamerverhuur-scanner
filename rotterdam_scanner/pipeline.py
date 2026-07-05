@@ -133,27 +133,22 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
     )
 
 
-def run(config: Config, today: date | None = None) -> RunResult:
-    today = today or date.today()
+def _sorteersleutel(item: ListingState) -> tuple[int, float]:
+    prijs_per_m2 = item.prijs_per_m2
+    if prijs_per_m2 is None:
+        return (1, 0.0)
+    return (0, prijs_per_m2)
+
+
+def _verwerk_listings(
+    listings: list[FundaListing],
+    te_verwijderen_ids: set[str],
+    config: Config,
+    today: date,
+    state: StateStore,
+    result: RunResult,
+) -> None:
     today_iso = today.isoformat()
-    state = StateStore(config.state_path)
-    result = RunResult()
-
-    try:
-        scan = fetch_recent_funda_mail_scan(config)
-    except Exception as exc:  # noqa: BLE001 - we willen dit altijd rapporteren, nooit stil laten falen
-        result.fouten.append(f"Kon Funda-alertmail niet uitlezen: {exc}")
-        scan = None
-
-    listings = scan.listings if scan else []
-    if scan:
-        result.fouten.extend(scan.waarschuwingen)
-
-    try:
-        te_verwijderen_ids = fetch_verwijder_commandos(config)
-    except Exception as exc:  # noqa: BLE001
-        result.fouten.append(f"Kon verwijder-commando's niet uitlezen: {exc}")
-        te_verwijderen_ids = set()
 
     for existing in state.all():
         if existing.object_id in te_verwijderen_ids and existing.status == "actief":
@@ -191,14 +186,43 @@ def run(config: Config, today: date | None = None) -> RunResult:
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 
-    def _sorteersleutel(item: ListingState) -> tuple[int, float]:
-        prijs_per_m2 = item.prijs_per_m2
-        if prijs_per_m2 is None:
-            return (1, 0.0)
-        return (0, prijs_per_m2)
-
     result.alle_actief = sorted(
         (item for item in state.all() if item.status == "actief"),
         key=_sorteersleutel,
     )
+
+
+def run(config: Config, today: date | None = None) -> RunResult:
+    today = today or date.today()
+    state = StateStore(config.state_path)
+    result = RunResult()
+
+    try:
+        scan = fetch_recent_funda_mail_scan(config)
+    except Exception as exc:  # noqa: BLE001 - we willen dit altijd rapporteren, nooit stil laten falen
+        result.fouten.append(f"Kon Funda-alertmail niet uitlezen: {exc}")
+        scan = None
+
+    listings = scan.listings if scan else []
+    if scan:
+        result.fouten.extend(scan.waarschuwingen)
+
+    try:
+        te_verwijderen_ids = fetch_verwijder_commandos(config)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon verwijder-commando's niet uitlezen: {exc}")
+        te_verwijderen_ids = set()
+
+    _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
+    return result
+
+
+def run_handmatig(config: Config, listings: list[FundaListing], today: date | None = None) -> RunResult:
+    """Verwerkt een handmatig aangeleverde lijst adressen (zie handmatig_toevoegen.py)
+    via dezelfde checks en dezelfde state.json als de dagelijkse run, zodat ze vanaf nu
+    ook meelopen in toekomstige dagrapporten."""
+    today = today or date.today()
+    state = StateStore(config.state_path)
+    result = RunResult()
+    _verwerk_listings(listings, set(), config, today, state, result)
     return result
