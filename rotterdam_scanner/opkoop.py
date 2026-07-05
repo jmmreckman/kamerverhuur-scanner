@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Bron: https://www.rotterdam.nl/opkoopbescherming (geraadpleegd juli 2026).
+# Bron: https://www.rotterdam.nl/opkoopbescherming (geraadpleegd juli 2026). Rotterdam.nl
+# schrijft samengestelde buurtnamen met een koppelteken ("Oud-Charlois"), maar de
+# buurtnaam die we via PDOK/CBS binnenkrijgen gebruikt een spatie ("Oud Charlois") --
+# vandaar dat we bij het vergelijken koppeltekens en spaties gelijkstellen (zie
+# _normaliseer), in plaats van hier exact PDOK's schrijfwijze te moeten volgen.
 # Check deze lijst en de WOZ-grens af en toe tegen de website, de gemeente kan dit
 # beleid aanpassen of uitbreiden naar meer wijken.
 BESCHERMDE_WIJKEN = {
@@ -24,6 +28,13 @@ BESCHERMDE_WIJKEN = {
     "tarwewijk",
 }
 
+
+def _normaliseer(naam: str) -> str:
+    return naam.strip().lower().replace("-", " ")
+
+
+_BESCHERMDE_WIJKEN_GENORMALISEERD = {_normaliseer(w) for w in BESCHERMDE_WIJKEN}
+
 WOZ_WAARDELOKET_URL = "https://www.wozwaardeloket.nl/"
 
 
@@ -39,7 +50,7 @@ class OpkoopResultaat:
 def check_opkoopbescherming(
     wijknaam: str, woz_grens: int, woz_waarde: int | None = None
 ) -> OpkoopResultaat:
-    if wijknaam.strip().lower() not in BESCHERMDE_WIJKEN:
+    if _normaliseer(wijknaam) not in _BESCHERMDE_WIJKEN_GENORMALISEERD:
         return OpkoopResultaat(
             in_beschermde_wijk=False,
             valt_af=False,

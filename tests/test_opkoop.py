@@ -49,3 +49,12 @@ def test_woz_waarde_wordt_genegeerd_buiten_beschermde_wijk():
     result = check_opkoopbescherming("Rotterdam Centrum", 470_000, woz_waarde=100)
     assert result.in_beschermde_wijk is False
     assert result.valt_af is False
+
+
+def test_wijknaam_met_spatie_matcht_lijst_met_koppelteken():
+    # PDOK/CBS levert buurtnamen met een spatie ("Oud Charlois"), terwijl de lijst
+    # Rotterdam.nl's schrijfwijze met koppelteken aanhoudt ("oud-charlois"). Deze moeten
+    # als hetzelfde herkend worden.
+    for wijknaam in ("Oud Charlois", "Groot IJsselmonde", "Hillegersberg Zuid", "Kralingen Oost", "Kralingen West", "Oud Mathenesse"):
+        result = check_opkoopbescherming(wijknaam, 470_000)
+        assert result.in_beschermde_wijk is True, wijknaam
