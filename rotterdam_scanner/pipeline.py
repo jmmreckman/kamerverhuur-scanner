@@ -168,6 +168,9 @@ def _verwerk_listings(
         existing = state.get(listing.object_id)
         if existing is not None:
             existing.laatst_gezien = today_iso
+            existing.url = listing.url
+            if listing.prijs is not None:
+                existing.prijs = listing.prijs
             state.upsert(existing)
             continue
 
