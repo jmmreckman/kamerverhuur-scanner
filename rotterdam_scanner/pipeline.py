@@ -81,15 +81,15 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
     opkoop = check_opkoopbescherming(geo.rotterdam_wijk, config.opkoopbescherming_woz_grens)
     opmerking = None
 
-    if opkoop.in_beschermde_wijk and config.woz_api_key:
+    if opkoop.in_beschermde_wijk:
         try:
-            woz = meest_recente_woz_waarde(geo.nummeraanduiding_id, config.woz_api_key)
+            woz = meest_recente_woz_waarde(geo.nummeraanduiding_id)
         except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
             woz = None
             opmerking = f"WOZ-waarde kon niet automatisch opgehaald worden ({exc}); handmatig checken."
         else:
             if woz is None:
-                opmerking = "WOZ-API had geen waarde voor dit adres; handmatig checken."
+                opmerking = "Geen publieke WOZ-waarde gevonden voor dit adres; handmatig checken."
             else:
                 opkoop = check_opkoopbescherming(
                     geo.rotterdam_wijk, config.opkoopbescherming_woz_grens, woz_waarde=woz.bedrag

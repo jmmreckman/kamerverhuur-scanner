@@ -16,8 +16,9 @@ Elke ochtend om 09:00:
    - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem.
    - **Opkoopbescherming (wijk + WOZ-waarde)** — vergelijkt de buurt met de 16 wijken
      waar opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming) én haalt voor
-     die huizen automatisch de WOZ-waarde op via een betaalde WOZ-API (zie stap 3
-     hieronder). Dit is dus volledig automatisch, geen dagelijkse handmatige lijst.
+     die huizen automatisch en **gratis** de WOZ-waarde op bij de officiële
+     WOZ-waardeloket-API van het Kadaster (geen account, geen kosten). Dit is dus
+     volledig automatisch, geen dagelijkse handmatige lijst.
 4. Haalt de **officiële oppervlakte** van het BAG (Basisregistratie Adressen en
    Gebouwen) op — publieke landelijke data, vaak nauwkeuriger dan de advertentietekst.
 5. Sorteert de openstaande kansen op **vraagprijs per m²** (op basis van die
@@ -51,12 +52,15 @@ of iets nog vers genoeg is, of klikt het er zelf uit met de verwijder-link.
 **Waarom niet alles automatisch?** Funda draait achter actieve bot-detectie (Akamai +
 verplichte Google reCAPTCHA) en verbiedt geautomatiseerd bezoek in de voorwaarden. Dit
 programma omzeilt dat bewust niet — dat zou dagelijks CAPTCHA's moeten kraken en je
-account/IP kunnen laten blokkeren. Voor de WOZ-waarde bestaat wél een legitiem
-alternatief: wozwaardeloket.nl zelf blokkeert geautomatiseerde bevragingen, maar er
-zijn commerciële partijen (zoals woz-api.nl) die WOZ-data via een normale, betaalde
-API aanbieden — geen scraping, gewoon een leverancier inhuren. Dat gebruikt dit
-programma voor de opkoopbescherming-check. Alleen de zelfbewoningsplicht-tekstcheck
-blijft (noodgedwongen) een korte handmatige stap.
+account/IP kunnen laten blokkeren. De WOZ-waarde is een ander verhaal: sinds de Wet
+WOZ in 2022 is aangepast, is de WOZ-waarde van woningen wettelijk openbare informatie,
+en het Kadaster ontsluit die zelf gratis via wozwaardeloket.nl. Dit programma bevraagt
+dezelfde achterliggende API die die website gebruikt, één adres tegelijk — net als een
+mens die het adres intypt, alleen dan geautomatiseerd voor de paar huizen per dag die
+in een opkoopbeschermde wijk liggen. Geen key, geen kosten, geen bot-omzeiling nodig
+(dit endpoint gaf gewoon nette JSON terug, geen CAPTCHA — het is alleen niet als
+officiële developer-API gedocumenteerd, zie "Bekende beperkingen"). Alleen de
+zelfbewoningsplicht-tekstcheck blijft (noodgedwongen) een korte handmatige stap.
 
 ## Eenmalige installatie
 
@@ -92,16 +96,6 @@ Google-account > Beveiliging > App-wachtwoorden, en maak een appwachtwoord aan
 alleen rechtstreeks in `.env` in op de zolder-pc zelf (stap 4). Dat bestand verlaat
 die machine nooit en staat in `.gitignore`.
 
-### 3b. WOZ-API-key aanmaken (voor de automatische opkoopbescherming-check)
-
-Registreer een gratis account op [woz-api.nl](https://woz-api.nl/Identity/Account/Register)
-en maak een API-key aan. Kosten zijn ordegrootte €0,58–0,71 per uniek adres dat je
-opvraagt (zie [woz-api.nl/woz-api-prijs](https://woz-api.nl/woz-api-prijs)) — omdat
-alleen huizen in een opkoopbeschermde wijk gecheckt worden, en elk adres maar één
-keer (het resultaat wordt lokaal onthouden), blijft dit in de praktijk een paar euro
-per maand. Zonder deze key blijft het programma gewoon werken, maar valt het voor
-die huizen terug op een handmatige "check WOZ-waarde"-melding in het rapport.
-
 ### 4. Project installeren op de zolder-pc
 
 ```powershell
@@ -117,7 +111,6 @@ Vul in `.env` in:
 - `SCANNER_GMAIL_ADDRESS` — het nieuwe Gmail-adres.
 - `SCANNER_GMAIL_APP_PASSWORD` — het appwachtwoord uit stap 3.
 - `REPORT_TO_ADDRESS` — `jmmreckman@gmail.com` (staat al goed als default).
-- `WOZ_API_KEY` — de key uit stap 3b (laat leeg om de handmatige WOZ-fallback te gebruiken).
 
 ### 5. Eerst handmatig testen
 
@@ -166,11 +159,11 @@ van de officiële BAG-oppervlakte. Elke rij toont:
   garantie. Gebruik dit als indicatie: hoe langer een huis erop staat zonder dat jij
   het verwijderd hebt, hoe groter de kans dat het (bijna) verkocht is.
 - **Badges** met wat je zelf nog moet checken:
-  - `check WOZ-waarde` — verschijnt normaal NIET meer: met een `WOZ_API_KEY` wordt dit
-    automatisch gecheckt (boven de grens, standaard €470.000 en aanpasbaar via
-    `OPKOOPBESCHERMING_WOZ_GRENS`, valt het huis niet af, en zie je die badge dus
-    niet). De badge duikt alleen op als de WOZ-opvraging een keer mislukte — kijk dan
-    naar de opmerking eronder voor de reden.
+  - `check WOZ-waarde` — verschijnt normaal NIET: de WOZ-waarde wordt automatisch en
+    gratis gecheckt (boven de grens, standaard €470.000 en aanpasbaar via
+    `OPKOOPBESCHERMING_WOZ_GRENS`, valt het huis niet af). De badge duikt alleen op
+    als de opvraging een keer mislukte of geen data teruggaf — kijk dan naar de
+    opmerking eronder voor de reden.
   - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
     Open de link en zoek (Ctrl+F) op "zelfbewoning".
 - **Acties**:
@@ -206,11 +199,13 @@ handmatige klik per huis op funda.nl nodig te hebben.
   rotterdam.nl/opkoopbescherming. Dit is beleid, geen live dataset — check die
   pagina af en toe en pas `rotterdam_scanner/opkoop.py` / `.env` aan als de
   gemeente dit wijzigt.
-- **WOZ-waarde per adres**: [woz-api.nl](https://woz-api.nl/) — een commerciële,
-  betaalde API met normale API-key-authenticatie (geen scraping). Bevraagd op
+- **WOZ-waarde per adres**: de gratis, officiële WOZ-waardeloket-API van het Kadaster
+  (`api.kadaster.nl/lvwoz`) — dezelfde die wozwaardeloket.nl zelf gebruikt, WOZ-waarden
+  van woningen zijn sinds 2022 wettelijk openbare informatie. Bevraagd op
   BAG-nummeraanduiding-ID (uit de PDOK-geocode), niet op vrije tekst, dus
   ondubbelzinnig. Elk adres wordt maar één keer bevraagd (het resultaat blijft in
-  `data/state.json` staan); zonder `WOZ_API_KEY` valt dit terug op een handmatige
+  `data/state.json` staan); geeft de opvraging een keer geen data (storing, of een
+  niet-woonfunctie zonder openbare WOZ-waarde), dan valt dit terug op een handmatige
   melding in het rapport.
 - **Officiële oppervlakte**: de publieke PDOK BAG-WFS (`service.pdok.nl/lv/bag`) —
   landelijke basisregistratie, geen API-key nodig, bevraagd op het BAG-verblijfsobject-ID
@@ -246,6 +241,13 @@ handmatige klik per huis op funda.nl nodig te hebben.
   duidelijke melding in het rapport.
 - De "dagen bekend"-teller is gebaseerd op wanneer dit systeem het huis zag, niet
   op een officiële funda-datum.
+- **De WOZ-waarde-endpoint is niet als publieke developer-API gedocumenteerd** — het
+  is teruggevonden in de broncode van wozwaardeloket.nl zelf, niet iets met een
+  stabiliteitsgarantie van het Kadaster. Hij werkt betrouwbaar en geeft nette
+  foutcodes (geen bot-geweer), maar kan in theorie ooit veranderen. Gaat dat gebeuren,
+  dan valt de opkoopbescherming-check automatisch terug op de handmatige
+  "check WOZ-waarde"-melding in het rapport (geen crash) — check in dat geval
+  `rotterdam_scanner/woz.py`.
 
 ## Ontwikkelen / tests
 

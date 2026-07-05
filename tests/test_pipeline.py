@@ -133,10 +133,6 @@ def test_bag_fout_geeft_opmerking_maar_geen_crash(tmp_path):
     assert "BAG plat" in result.opmerking
 
 
-def _config_met_woz_key(tmp_path):
-    return _config(tmp_path, woz_api_key="test-key")
-
-
 def test_woz_api_onder_grens_laat_huis_automatisch_afvallen(tmp_path):
     from rotterdam_scanner.woz import WozWaarde
 
@@ -146,7 +142,7 @@ def test_woz_api_onder_grens_laat_huis_automatisch_afvallen(tmp_path):
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
         return_value=WozWaarde(peildatum="2025-01-01", bedrag=300_000),
     ):
-        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
 
     assert result.status == "afgevallen"
     assert "WOZ-waarde" in result.afvalreden
@@ -160,7 +156,7 @@ def test_woz_api_boven_grens_laat_huis_actief_zonder_handmatige_vlag(tmp_path):
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
         return_value=WozWaarde(peildatum="2025-01-01", bedrag=600_000),
     ):
-        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
 
     assert result.status == "actief"
     assert result.woz_check_nodig is False
@@ -173,7 +169,7 @@ def test_woz_api_fout_valt_terug_op_handmatige_vlag_met_opmerking(tmp_path):
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde", side_effect=RuntimeError("API plat")
     ):
-        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
 
     assert result.status == "actief"
     assert result.woz_check_nodig is True

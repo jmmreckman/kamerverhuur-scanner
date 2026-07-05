@@ -17,7 +17,6 @@ class Config:
     funda_mail_folder: str
     listing_expiry_days: int
     opkoopbescherming_woz_grens: int
-    woz_api_key: str | None = None
     state_path: Path = field(default_factory=lambda: BASE_DIR / "data" / "state.json")
 
     @property
@@ -48,7 +47,6 @@ def load_config(env_path: Path | None = None) -> Config:
         funda_mail_folder=os.environ.get("FUNDA_MAIL_FOLDER", "INBOX"),
         listing_expiry_days=int(os.environ.get("LISTING_EXPIRY_DAYS", "30")),
         opkoopbescherming_woz_grens=int(os.environ.get("OPKOOPBESCHERMING_WOZ_GRENS", "470000")),
-        woz_api_key=os.environ.get("WOZ_API_KEY") or None,
     )
 
 
