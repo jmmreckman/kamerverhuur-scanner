@@ -14,26 +14,28 @@ Elke ochtend om 09:00:
 3. Checkt automatisch:
    - **Nul-quotumgebied** — via de officiële GIS-kaartlaag van de gemeente Rotterdam.
    - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem.
-   - **Opkoopbescherming (wijk-deel)** — vergelijkt de buurt met de 16 wijken waar
-     opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming).
+   - **Opkoopbescherming (wijk + WOZ-waarde)** — vergelijkt de buurt met de 16 wijken
+     waar opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming) én haalt voor
+     die huizen automatisch de WOZ-waarde op via een betaalde WOZ-API (zie stap 3
+     hieronder). Dit is dus volledig automatisch, geen dagelijkse handmatige lijst.
 4. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
-   - **WOZ-waarde** — alleen relevant voor huizen in een beschermde wijk. WOZ-waardeloket.nl
-     blokkeert geautomatiseerde bevragingen, dus dit vraagt het rapport je met één klik
-     handmatig te checken.
    - **Zelfbewoningsplicht in de advertentietekst** — funda blokkeert geautomatiseerd
      bezoek aan advertentiepagina's (Akamai bot-detectie + verplichte CAPTCHA), dus dit
-     vraagt het rapport je de advertentietekst zelf even (10 sec) door te lezen.
+     vraagt het rapport je de advertentietekst zelf even (10 sec) door te lezen. Dit
+     staat bij elk overgebleven huis, maar dat zijn er dankzij de eerdere checks nog
+     maar een handjevol per dag.
 5. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
-   kansen, hoe lang ze al bekend zijn, en welke handmatige checks nog nodig zijn.
+   kansen, hoe lang ze al bekend zijn, en welke (weinige) handmatige check nog nodig is.
 
-**Waarom niet alles automatisch?** Funda en WOZ-waardeloket draaien beide achter
-actieve bot-detectie (Akamai + Google reCAPTCHA, resp. een API die stilzwijgend lege
-resultaten teruggeeft aan niet-browserverkeer) en verbieden geautomatiseerd bezoek in
-hun voorwaarden. Dit programma omzeilt dat bewust niet — dat zou dagelijks CAPTCHA's
-moeten kraken en je account/IP kunnen laten blokkeren. In plaats daarvan gebruikt het
-alleen legitieme, publieke bronnen (PDOK, de open GIS-kaartlagen van de gemeente
-Rotterdam, je eigen Funda-alertmail) en houdt het de paar keer dat je zelf iets moet
-natrekken tot een minimum.
+**Waarom niet alles automatisch?** Funda draait achter actieve bot-detectie (Akamai +
+verplichte Google reCAPTCHA) en verbiedt geautomatiseerd bezoek in de voorwaarden. Dit
+programma omzeilt dat bewust niet — dat zou dagelijks CAPTCHA's moeten kraken en je
+account/IP kunnen laten blokkeren. Voor de WOZ-waarde bestaat wél een legitiem
+alternatief: wozwaardeloket.nl zelf blokkeert geautomatiseerde bevragingen, maar er
+zijn commerciële partijen (zoals woz-api.nl) die WOZ-data via een normale, betaalde
+API aanbieden — geen scraping, gewoon een leverancier inhuren. Dat gebruikt dit
+programma voor de opkoopbescherming-check. Alleen de zelfbewoningsplicht-tekstcheck
+blijft (noodgedwongen) een korte handmatige stap.
 
 ## Eenmalige installatie
 
@@ -65,6 +67,20 @@ Google-account > Beveiliging > App-wachtwoorden, en maak een appwachtwoord aan
 (bijv. voor "Mail"). Zorg ook dat IMAP aanstaat in Gmail-instellingen
 (Instellingen > Doorsturen en POP/IMAP > IMAP inschakelen).
 
+**Belangrijk:** plak dit wachtwoord nergens in een chatgesprek of e-mail — vul het
+alleen rechtstreeks in `.env` in op de zolder-pc zelf (stap 4). Dat bestand verlaat
+die machine nooit en staat in `.gitignore`.
+
+### 3b. WOZ-API-key aanmaken (voor de automatische opkoopbescherming-check)
+
+Registreer een gratis account op [woz-api.nl](https://woz-api.nl/Identity/Account/Register)
+en maak een API-key aan. Kosten zijn ordegrootte €0,58–0,71 per uniek adres dat je
+opvraagt (zie [woz-api.nl/woz-api-prijs](https://woz-api.nl/woz-api-prijs)) — omdat
+alleen huizen in een opkoopbeschermde wijk gecheckt worden, en elk adres maar één
+keer (het resultaat wordt lokaal onthouden), blijft dit in de praktijk een paar euro
+per maand. Zonder deze key blijft het programma gewoon werken, maar valt het voor
+die huizen terug op een handmatige "check WOZ-waarde"-melding in het rapport.
+
 ### 4. Project installeren op de zolder-pc
 
 ```powershell
@@ -80,6 +96,7 @@ Vul in `.env` in:
 - `SCANNER_GMAIL_ADDRESS` — het nieuwe Gmail-adres.
 - `SCANNER_GMAIL_APP_PASSWORD` — het appwachtwoord uit stap 3.
 - `REPORT_TO_ADDRESS` — `jmmreckman@gmail.com` (staat al goed als default).
+- `WOZ_API_KEY` — de key uit stap 3b (laat leeg om de handmatige WOZ-fallback te gebruiken).
 
 ### 5. Eerst handmatig testen
 
@@ -125,9 +142,11 @@ Elke rij in "Openstaande kansen" toont:
   "in verkoop sinds"-datum (funda's alert gaat elke nacht uit), maar geen
   harde garantie.
 - **Badges** met wat je zelf nog moet checken:
-  - `check WOZ-waarde` — alleen als het huis in een opkoopbeschermde wijk ligt.
-    Boven de grens (standaard €470.000, aanpasbaar via `OPKOOPBESCHERMING_WOZ_GRENS`
-    in `.env`) valt het huis **niet** af.
+  - `check WOZ-waarde` — verschijnt normaal NIET meer: met een `WOZ_API_KEY` wordt dit
+    automatisch gecheckt (boven de grens, standaard €470.000 en aanpasbaar via
+    `OPKOOPBESCHERMING_WOZ_GRENS`, valt het huis niet af, en zie je die badge dus
+    niet). De badge duikt alleen op als de WOZ-opvraging een keer mislukte — kijk dan
+    naar de opmerking eronder voor de reden.
   - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
     Open de link en zoek (Ctrl+F) op "zelfbewoning".
 
@@ -155,8 +174,12 @@ maanden is een woning ofwel verkocht, ofwel niet meer actueel genoeg.
   rotterdam.nl/opkoopbescherming. Dit is beleid, geen live dataset — check die
   pagina af en toe en pas `rotterdam_scanner/opkoop.py` / `.env` aan als de
   gemeente dit wijzigt.
-- **WOZ-waarde per adres**: geen automatische bron beschikbaar (zie hierboven) —
-  bewust een handmatige stap.
+- **WOZ-waarde per adres**: [woz-api.nl](https://woz-api.nl/) — een commerciële,
+  betaalde API met normale API-key-authenticatie (geen scraping). Bevraagd op
+  BAG-nummeraanduiding-ID (uit de PDOK-geocode), niet op vrije tekst, dus
+  ondubbelzinnig. Elk adres wordt maar één keer bevraagd (het resultaat blijft in
+  `data/state.json` staan); zonder `WOZ_API_KEY` valt dit terug op een handmatige
+  melding in het rapport.
 - **Funda-listings**: je eigen Funda-alertmail, geen scraping.
 
 ## Bekende beperkingen

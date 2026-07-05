@@ -25,3 +25,27 @@ def test_grens_wordt_correct_getoond_met_duizendtal_punt():
     result = check_opkoopbescherming("Bloemhof", 470_000)
     assert "€470.000" in result.toelichting
     assert ". anders" not in result.toelichting
+
+
+def test_woz_waarde_onder_grens_laat_huis_afvallen():
+    result = check_opkoopbescherming("Bloemhof", 470_000, woz_waarde=300_000)
+    assert result.valt_af is True
+    assert result.woz_check_nodig is False
+    assert result.woz_check_url is None
+
+
+def test_woz_waarde_op_grens_laat_huis_ook_afvallen():
+    result = check_opkoopbescherming("Bloemhof", 470_000, woz_waarde=470_000)
+    assert result.valt_af is True
+
+
+def test_woz_waarde_boven_grens_laat_huis_niet_afvallen():
+    result = check_opkoopbescherming("Bloemhof", 470_000, woz_waarde=600_000)
+    assert result.valt_af is False
+    assert result.woz_check_nodig is False
+
+
+def test_woz_waarde_wordt_genegeerd_buiten_beschermde_wijk():
+    result = check_opkoopbescherming("Rotterdam Centrum", 470_000, woz_waarde=100)
+    assert result.in_beschermde_wijk is False
+    assert result.valt_af is False

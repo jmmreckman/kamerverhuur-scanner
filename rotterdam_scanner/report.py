@@ -35,12 +35,14 @@ def _row(item: ListingState, today: date) -> str:
         badges.append('<span class="badge badge-check">check WOZ-waarde</span>')
     badges.append('<span class="badge badge-check">check zelfbewoningsplicht</span>')
 
+    opmerking_html = f'<br><span class="small">{escape(item.opmerking)}</span>' if item.opmerking else ""
+
     return f"""
     <tr>
       <td><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
       <td>{escape(item.wijknaam or '-')}</td>
       <td>{dagen} dag{'en' if dagen != 1 else ''}</td>
-      <td>{' '.join(badges)}</td>
+      <td>{' '.join(badges)}{opmerking_html}</td>
     </tr>
     """
 
@@ -77,10 +79,11 @@ def build_html_report(result: RunResult, today: date) -> str:
 
   <h2>Openstaande kansen ({len(result.alle_actief)})</h2>
   <p class="small">
-    Deze huizen zijn NIET afgevallen op nul-quotumgebied of de 50-meter kamerverhuurvergunning-check.
+    Deze huizen zijn NIET afgevallen op nul-quotumgebied, de 50-meter kamerverhuurvergunning-check of
+    (waar van toepassing) de automatische WOZ-check voor opkoopbescherming.
     "Dagen bekend" = dagen sinds dit systeem het huis voor het eerst zag in je Funda-alertmail (meestal
     gelijk aan de echte Funda-plaatsingsdatum, maar niet gegarandeerd exact).
-    Elk huis heeft nog handmatige checks nodig — zie badges.
+    Alleen "check zelfbewoningsplicht" is altijd nog een korte handmatige stap — zie badges.
   </p>
   <table>
     <tr><th>Adres</th><th>Wijk</th><th>Dagen bekend</th><th>Nog te checken</th></tr>
@@ -103,11 +106,11 @@ def build_html_report(result: RunResult, today: date) -> str:
   {fouten_html}
 
   <p class="small" style="margin-top:32px;">
-    Herinnering: "check WOZ-waarde" betekent opzoeken op
-    <a href="https://www.wozwaardeloket.nl/">wozwaardeloket.nl</a> — bij een WOZ-waarde
-    boven de opkoopbeschermingsgrens valt het huis NIET af. "check zelfbewoningsplicht" betekent
-    kort de advertentietekst op funda doorlezen op dat woord (dit kan niet automatisch, funda blokkeert
-    geautomatiseerd bezoek).
+    Herinnering: de WOZ-waarde wordt normaal automatisch opgehaald (via de WOZ-API) en huizen
+    boven de opkoopbeschermingsgrens vallen dan al niet meer af — de badge "check WOZ-waarde"
+    verschijnt alleen als dat een keer niet is gelukt (zie eventuele opmerking bij het huis).
+    "check zelfbewoningsplicht" staat er altijd bij: dit kan niet automatisch, funda blokkeert
+    geautomatiseerd bezoek aan advertentiepagina's, dus lees de tekst zelf even door op dat woord.
   </p>
 </body>
 </html>
@@ -125,6 +128,8 @@ def build_text_report(result: RunResult, today: date) -> str:
         extra.append("check zelfbewoningsplicht")
         lines.append(f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend) {item.url}")
         lines.append(f"    nog te checken: {', '.join(extra)}")
+        if item.opmerking:
+            lines.append(f"    let op: {item.opmerking}")
     if not result.alle_actief:
         lines.append("  (geen)")
 

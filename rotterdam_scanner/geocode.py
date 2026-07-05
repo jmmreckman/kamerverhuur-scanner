@@ -29,6 +29,7 @@ class GeocodeResult:
     cbs_wijknaam: str
     rd_x: float
     rd_y: float
+    nummeraanduiding_id: str
 
 
 def geocode_address(straat: str, huisnummer: str, woonplaats: str = "Rotterdam") -> GeocodeResult:
@@ -59,4 +60,5 @@ def geocode_address(straat: str, huisnummer: str, woonplaats: str = "Rotterdam")
         cbs_wijknaam=doc.get("wijknaam", ""),
         rd_x=float(rd_match.group(1)),
         rd_y=float(rd_match.group(2)),
+        nummeraanduiding_id=doc.get("nummeraanduiding_id", ""),
     )

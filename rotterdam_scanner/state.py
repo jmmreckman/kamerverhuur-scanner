@@ -21,6 +21,7 @@ class ListingState:
     woz_check_nodig: bool = False
     woz_check_url: str | None = None
     prijs_tekst: str | None = None
+    opmerking: str | None = None
 
 
 class StateStore:

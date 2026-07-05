@@ -40,6 +40,7 @@ def _geo(wijk="Rotterdam Centrum"):
         cbs_wijknaam="Rotterdam Centrum",
         rd_x=90000.0,
         rd_y=435000.0,
+        nummeraanduiding_id="0599200000239721",
     )
 
 
@@ -91,6 +92,63 @@ def test_huis_buiten_beschermde_wijk_heeft_geen_woz_vlag(tmp_path):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.woz_check_nodig is False
+
+
+def _config_met_woz_key(tmp_path):
+    return Config(
+        gmail_address="scanner@example.com",
+        gmail_app_password="dummy",
+        report_to=["jmmreckman@example.com"],
+        funda_mail_folder="INBOX",
+        listing_expiry_days=60,
+        opkoopbescherming_woz_grens=470_000,
+        woz_api_key="test-key",
+        state_path=tmp_path / "state.json",
+    )
+
+
+def test_woz_api_onder_grens_laat_huis_automatisch_afvallen(tmp_path):
+    from rotterdam_scanner.woz import WozWaarde
+
+    with patch("rotterdam_scanner.pipeline.geocode_address", return_value=_geo(wijk="Middelland")), patch(
+        "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
+    ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
+        "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
+        return_value=WozWaarde(peildatum="2025-01-01", bedrag=300_000),
+    ):
+        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+
+    assert result.status == "afgevallen"
+    assert "WOZ-waarde" in result.afvalreden
+
+
+def test_woz_api_boven_grens_laat_huis_actief_zonder_handmatige_vlag(tmp_path):
+    from rotterdam_scanner.woz import WozWaarde
+
+    with patch("rotterdam_scanner.pipeline.geocode_address", return_value=_geo(wijk="Middelland")), patch(
+        "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
+    ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
+        "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
+        return_value=WozWaarde(peildatum="2025-01-01", bedrag=600_000),
+    ):
+        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+
+    assert result.status == "actief"
+    assert result.woz_check_nodig is False
+    assert result.opmerking is None
+
+
+def test_woz_api_fout_valt_terug_op_handmatige_vlag_met_opmerking(tmp_path):
+    with patch("rotterdam_scanner.pipeline.geocode_address", return_value=_geo(wijk="Middelland")), patch(
+        "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
+    ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
+        "rotterdam_scanner.pipeline.meest_recente_woz_waarde", side_effect=RuntimeError("API plat")
+    ):
+        result = pipeline._process_new_listing(_listing(), _config_met_woz_key(tmp_path), date(2026, 7, 5))
+
+    assert result.status == "actief"
+    assert result.woz_check_nodig is True
+    assert "API plat" in result.opmerking
 
 
 def test_run_verwerkt_alleen_nieuwe_listings_en_update_laatst_gezien(tmp_path):

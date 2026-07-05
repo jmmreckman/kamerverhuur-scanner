@@ -30,13 +30,15 @@ WOZ_WAARDELOKET_URL = "https://www.wozwaardeloket.nl/"
 @dataclass(frozen=True)
 class OpkoopResultaat:
     in_beschermde_wijk: bool
-    valt_af: bool | None  # None = nog onbekend, WOZ-waarde moet handmatig gecheckt worden
+    valt_af: bool | None  # None = nog onbekend, WOZ-waarde moet (handmatig) gecheckt worden
     woz_check_nodig: bool
     woz_check_url: str | None
     toelichting: str
 
 
-def check_opkoopbescherming(wijknaam: str, woz_grens: int) -> OpkoopResultaat:
+def check_opkoopbescherming(
+    wijknaam: str, woz_grens: int, woz_waarde: int | None = None
+) -> OpkoopResultaat:
     if wijknaam.strip().lower() not in BESCHERMDE_WIJKEN:
         return OpkoopResultaat(
             in_beschermde_wijk=False,
@@ -47,6 +49,28 @@ def check_opkoopbescherming(wijknaam: str, woz_grens: int) -> OpkoopResultaat:
         )
 
     woz_grens_tekst = f"{woz_grens:,}".replace(",", ".")
+
+    if woz_waarde is not None:
+        valt_af = woz_waarde <= woz_grens
+        woz_waarde_tekst = f"{woz_waarde:,}".replace(",", ".")
+        if valt_af:
+            conclusie = (
+                f"WOZ-waarde €{woz_waarde_tekst} zit op of onder de grens van €{woz_grens_tekst} "
+                "-> opkoopbescherming is van toepassing, huis valt af."
+            )
+        else:
+            conclusie = (
+                f"WOZ-waarde €{woz_waarde_tekst} zit boven de grens van €{woz_grens_tekst} "
+                "-> opkoopbescherming is niet van toepassing, huis valt NIET af."
+            )
+        return OpkoopResultaat(
+            in_beschermde_wijk=True,
+            valt_af=valt_af,
+            woz_check_nodig=False,
+            woz_check_url=None,
+            toelichting=f"'{wijknaam}' valt onder de opkoopbescherming. {conclusie}",
+        )
+
     return OpkoopResultaat(
         in_beschermde_wijk=True,
         valt_af=None,

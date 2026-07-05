@@ -9,6 +9,7 @@ from .geocode import GeocodeError, geocode_address
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
+from .woz import meest_recente_woz_waarde
 
 
 @dataclass
@@ -76,6 +77,35 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         )
 
     opkoop = check_opkoopbescherming(geo.rotterdam_wijk, config.opkoopbescherming_woz_grens)
+    opmerking = None
+
+    if opkoop.in_beschermde_wijk and config.woz_api_key:
+        try:
+            woz = meest_recente_woz_waarde(geo.nummeraanduiding_id, config.woz_api_key)
+        except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
+            woz = None
+            opmerking = f"WOZ-waarde kon niet automatisch opgehaald worden ({exc}); handmatig checken."
+        else:
+            if woz is None:
+                opmerking = "WOZ-API had geen waarde voor dit adres; handmatig checken."
+            else:
+                opkoop = check_opkoopbescherming(
+                    geo.rotterdam_wijk, config.opkoopbescherming_woz_grens, woz_waarde=woz.bedrag
+                )
+
+    if opkoop.valt_af:
+        return ListingState(
+            object_id=listing.object_id,
+            url=listing.url,
+            weergavenaam=geo.weergavenaam,
+            eerst_gezien=today_iso,
+            laatst_gezien=today_iso,
+            status="afgevallen",
+            straatnaam=geo.straatnaam,
+            huisnummer=geo.huisnummer,
+            wijknaam=geo.rotterdam_wijk,
+            afvalreden=opkoop.toelichting,
+        )
 
     return ListingState(
         object_id=listing.object_id,
@@ -89,6 +119,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         wijknaam=geo.rotterdam_wijk,
         woz_check_nodig=opkoop.woz_check_nodig,
         woz_check_url=opkoop.woz_check_url,
+        opmerking=opmerking,
     )
 
 
