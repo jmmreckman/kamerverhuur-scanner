@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from .bag import fetch_bag_oppervlakte
+from .bag import fetch_bag_gegevens
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
+from .monumenten import bepaal_huurprijsopslag_signalen
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
 from .woz import meest_recente_woz_waarde
@@ -116,10 +117,20 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         )
 
     try:
-        bag_oppervlakte = fetch_bag_oppervlakte(geo.adresseerbaarobject_id)
+        bag = fetch_bag_gegevens(geo.adresseerbaarobject_id)
     except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
-        bag_oppervlakte = None
-        opmerking = (opmerking + " " if opmerking else "") + f"BAG-oppervlakte kon niet opgehaald worden ({exc})."
+        bag = None
+        opmerking = (opmerking + " " if opmerking else "") + f"BAG-gegevens konden niet opgehaald worden ({exc})."
+    bag_oppervlakte = bag.oppervlakte if bag else None
+    bouwjaar = bag.bouwjaar if bag else None
+
+    try:
+        huurprijsopslag_signalen = bepaal_huurprijsopslag_signalen(geo.rd_x, geo.rd_y, bouwjaar)
+    except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
+        huurprijsopslag_signalen = []
+        opmerking = (
+            opmerking + " " if opmerking else ""
+        ) + f"Monumenten-/opslagcheck kon niet uitgevoerd worden ({exc})."
 
     return ListingState(
         object_id=listing.object_id,
@@ -136,6 +147,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         opmerking=opmerking,
         prijs=listing.prijs,
         bag_oppervlakte=bag_oppervlakte,
+        huurprijsopslag_signalen=huurprijsopslag_signalen,
     )
 
 

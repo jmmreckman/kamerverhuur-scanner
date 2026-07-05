@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from rotterdam_scanner.bag import fetch_bag_oppervlakte
+from rotterdam_scanner.bag import fetch_bag_gegevens
 
 
 def _mock_response(payload):
@@ -10,18 +10,20 @@ def _mock_response(payload):
     return mock
 
 
-def test_fetch_bag_oppervlakte_geeft_waarde_terug():
-    payload = {"features": [{"properties": {"oppervlakte": 92}}]}
+def test_fetch_bag_gegevens_geeft_oppervlakte_en_bouwjaar_terug():
+    payload = {"features": [{"properties": {"oppervlakte": 92, "bouwjaar": 1930}}]}
     with patch("rotterdam_scanner.bag.requests.get", return_value=_mock_response(payload)):
-        assert fetch_bag_oppervlakte("0599010000238777") == 92
+        gegevens = fetch_bag_gegevens("0599010000238777")
+    assert gegevens.oppervlakte == 92
+    assert gegevens.bouwjaar == 1930
 
 
-def test_fetch_bag_oppervlakte_geeft_none_zonder_features():
+def test_fetch_bag_gegevens_geeft_none_zonder_features():
     with patch("rotterdam_scanner.bag.requests.get", return_value=_mock_response({"features": []})):
-        assert fetch_bag_oppervlakte("0599010000238777") is None
+        assert fetch_bag_gegevens("0599010000238777") is None
 
 
-def test_fetch_bag_oppervlakte_geeft_none_bij_leeg_id_zonder_netwerkcall():
+def test_fetch_bag_gegevens_geeft_none_bij_leeg_id_zonder_netwerkcall():
     with patch("rotterdam_scanner.bag.requests.get") as mock_get:
-        assert fetch_bag_oppervlakte("") is None
+        assert fetch_bag_gegevens("") is None
     mock_get.assert_not_called()

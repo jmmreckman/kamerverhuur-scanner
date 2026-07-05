@@ -23,6 +23,7 @@ class ListingState:
     opmerking: str | None = None
     prijs: int | None = None
     bag_oppervlakte: int | None = None
+    huurprijsopslag_signalen: list[str] = field(default_factory=list)
 
     @property
     def prijs_per_m2(self) -> float | None:

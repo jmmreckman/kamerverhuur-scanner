@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from rotterdam_scanner import pipeline
+from rotterdam_scanner.bag import BagGegevens
 from rotterdam_scanner.config import Config
 from rotterdam_scanner.funda_mail import FundaListing, FundaMailScan
 from rotterdam_scanner.geocode import GeocodeError, GeocodeResult
@@ -70,12 +71,16 @@ def _geo(wijk="Rotterdam Centrum"):
     )
 
 
-def _patch_geo_checks(wijk="Rotterdam Centrum", nulquotum=False, binnen_50m=False, oppervlakte=100):
+def _patch_geo_checks(wijk="Rotterdam Centrum", nulquotum=False, binnen_50m=False, oppervlakte=100, bouwjaar=None):
     return (
         patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo(wijk=wijk)),
         patch("rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=nulquotum),
         patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=binnen_50m),
-        patch("rotterdam_scanner.pipeline.fetch_bag_oppervlakte", return_value=oppervlakte),
+        patch(
+            "rotterdam_scanner.pipeline.fetch_bag_gegevens",
+            return_value=BagGegevens(oppervlakte=oppervlakte, bouwjaar=bouwjaar),
+        ),
+        patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]),
     )
 
 
@@ -92,24 +97,24 @@ def test_geocode_fout_geeft_onbekend_adres(tmp_path):
 
 
 def test_nulquotum_laat_huis_afvallen(tmp_path):
-    p1, p2, p3, p4 = _patch_geo_checks(nulquotum=True)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(nulquotum=True)
+    with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "afgevallen"
     assert "nul-quotumgebied" in result.afvalreden
 
 
 def test_50m_vergunning_laat_huis_afvallen(tmp_path):
-    p1, p2, p3, p4 = _patch_geo_checks(binnen_50m=True)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(binnen_50m=True)
+    with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "afgevallen"
     assert "50 meter" in result.afvalreden
 
 
 def test_huis_dat_alle_geo_checks_doorstaat_wordt_actief_met_woz_vlag(tmp_path):
-    p1, p2, p3, p4 = _patch_geo_checks(wijk="Middelland")
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Middelland")
+    with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.woz_check_nodig is True
@@ -117,16 +122,16 @@ def test_huis_dat_alle_geo_checks_doorstaat_wordt_actief_met_woz_vlag(tmp_path):
 
 
 def test_huis_buiten_beschermde_wijk_heeft_geen_woz_vlag(tmp_path):
-    p1, p2, p3, p4 = _patch_geo_checks(wijk="Rotterdam Centrum")
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum")
+    with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.woz_check_nodig is False
 
 
 def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):
-    p1, p2, p3, p4 = _patch_geo_checks(wijk="Rotterdam Centrum", oppervlakte=80)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum", oppervlakte=80)
+    with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(_listing(prijs=320_000), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.bag_oppervlakte == 80
@@ -134,12 +139,34 @@ def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):
     assert result.prijs_per_m2 == 4000.0
 
 
+def test_huurprijsopslag_signalen_worden_meegenomen_op_actieve_woning(tmp_path):
+    p1, p2, p3, p4, _ = _patch_geo_checks(wijk="Rotterdam Centrum", bouwjaar=1918)
+    with p1, p2, p3, p4, patch(
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=["Mogelijk rijksmonument (35%)"]
+    ) as signalen_mock:
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "actief"
+    assert result.huurprijsopslag_signalen == ["Mogelijk rijksmonument (35%)"]
+    signalen_mock.assert_called_once_with(90000.0, 435000.0, 1918)
+
+
+def test_monumentencheck_fout_geeft_opmerking_maar_geen_crash(tmp_path):
+    p1, p2, p3, p4, _ = _patch_geo_checks(wijk="Rotterdam Centrum")
+    with p1, p2, p3, p4, patch(
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", side_effect=RuntimeError("RCE plat")
+    ):
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "actief"
+    assert result.huurprijsopslag_signalen == []
+    assert "RCE plat" in result.opmerking
+
+
 def test_bag_fout_geeft_opmerking_maar_geen_crash(tmp_path):
     with patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo()), patch(
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
-        "rotterdam_scanner.pipeline.fetch_bag_oppervlakte", side_effect=RuntimeError("BAG plat")
-    ):
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", side_effect=RuntimeError("BAG plat")
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.bag_oppervlakte is None
@@ -164,8 +191,8 @@ def test_woz_api_onder_grens_laat_huis_automatisch_afvallen(tmp_path):
 def test_woz_api_boven_grens_laat_huis_actief_zonder_handmatige_vlag(tmp_path):
     from rotterdam_scanner.woz import WozWaarde
 
-    p1, p2, p3, p4 = _patch_geo_checks(wijk="Middelland")
-    with p1, p2, p3, p4, patch(
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Middelland")
+    with p1, p2, p3, p4, p5, patch(
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
         return_value=WozWaarde(peildatum="2025-01-01", bedrag=600_000),
     ):
@@ -181,6 +208,8 @@ def test_woz_api_fout_valt_terug_op_handmatige_vlag_met_opmerking(tmp_path):
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde", side_effect=RuntimeError("API plat")
+    ), patch("rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=None), patch(
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]
     ):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
 
@@ -192,11 +221,11 @@ def test_woz_api_fout_valt_terug_op_handmatige_vlag_met_opmerking(tmp_path):
 def test_run_verwerkt_alleen_nieuwe_listings_en_update_laatst_gezien(tmp_path):
     config = _config(tmp_path)
 
-    p1, p2, p3, p4 = _patch_geo_checks()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
     with patch(
         "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
         return_value=FundaMailScan(listings=[_listing()]),
-    ), p1, p2, p3, p4:
+    ), p1, p2, p3, p4, p5:
         result_dag1 = pipeline.run(config, today=date(2026, 7, 1))
 
     assert len(result_dag1.nieuw_actief) == 1
@@ -237,12 +266,12 @@ def test_run_geeft_scan_waarschuwingen_door(tmp_path):
 
 def test_run_haalt_bestaande_actieve_woning_weg_bij_verwijder_commando(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
 
     with patch(
         "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
         return_value=FundaMailScan(listings=[_listing()]),
-    ), p1, p2, p3, p4:
+    ), p1, p2, p3, p4, p5:
         result_dag1 = pipeline.run(config, today=date(2026, 7, 1))
     assert len(result_dag1.alle_actief) == 1
     object_id = result_dag1.alle_actief[0].object_id
@@ -260,7 +289,7 @@ def test_run_haalt_bestaande_actieve_woning_weg_bij_verwijder_commando(tmp_path)
 
 def test_run_nieuwe_listing_met_meteen_verwijder_commando_wordt_niet_actief(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
     listing = _listing()
 
     with patch(
@@ -268,7 +297,7 @@ def test_run_nieuwe_listing_met_meteen_verwijder_commando_wordt_niet_actief(tmp_
         return_value=FundaMailScan(listings=[listing]),
     ), patch(
         "rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value={listing.object_id}
-    ), p1, p2, p3, p4:
+    ), p1, p2, p3, p4, p5:
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     assert len(result.alle_actief) == 0
@@ -292,8 +321,8 @@ def test_run_sorteert_openstaande_kansen_op_prijs_per_m2(tmp_path):
     def geocode_side_effect(postcode, huisnummer, toevoeging=""):
         return _geo(wijk="Rotterdam Centrum")
 
-    def oppervlakte_side_effect(_id):
-        return 100
+    def bag_side_effect(_id):
+        return BagGegevens(oppervlakte=100, bouwjaar=None)
 
     with patch(
         "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
@@ -307,8 +336,8 @@ def test_run_sorteert_openstaande_kansen_op_prijs_per_m2(tmp_path):
     ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", side_effect=geocode_side_effect), patch(
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
-        "rotterdam_scanner.pipeline.fetch_bag_oppervlakte", side_effect=oppervlakte_side_effect
-    ):
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", side_effect=bag_side_effect
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     volgorde = [item.object_id for item in result.alle_actief]
@@ -329,8 +358,8 @@ def test_run_zet_woningen_zonder_prijs_achteraan_de_sortering(tmp_path):
     ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo()), patch(
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
-        "rotterdam_scanner.pipeline.fetch_bag_oppervlakte", return_value=100
-    ):
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=100, bouwjaar=None)
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     volgorde = [item.object_id for item in result.alle_actief]
@@ -339,9 +368,9 @@ def test_run_zet_woningen_zonder_prijs_achteraan_de_sortering(tmp_path):
 
 def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
 
-    with patch("rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan") as mail_mock, p1, p2, p3, p4:
+    with patch("rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan") as mail_mock, p1, p2, p3, p4, p5:
         result = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
 
     mail_mock.assert_not_called()
@@ -351,9 +380,9 @@ def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_p
 
 def test_run_handmatig_woningen_blijven_staan_voor_volgende_dagelijkse_run(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
 
-    with p1, p2, p3, p4:
+    with p1, p2, p3, p4, p5:
         result_handmatig = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
     assert len(result_handmatig.alle_actief) == 1
 
@@ -370,26 +399,26 @@ def test_run_handmatig_woningen_blijven_staan_voor_volgende_dagelijkse_run(tmp_p
 
 def test_run_handmatig_slaat_bekend_adres_standaard_over_ook_na_gewijzigde_check(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
         pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
 
     # Zonder forceer_herprocessen telt een gewijzigde check-uitkomst niet mee voor een
     # adres dat al bekend is -- alleen url/prijs worden ververst.
-    p1, p2, p3, p4 = _patch_geo_checks(nulquotum=True)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(nulquotum=True)
+    with p1, p2, p3, p4, p5:
         result = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 2))
     assert len(result.alle_actief) == 1
 
 
 def test_run_handmatig_forceer_herprocessen_corrigeert_bestaand_adres(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
         pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
 
-    p1, p2, p3, p4 = _patch_geo_checks(nulquotum=True)
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks(nulquotum=True)
+    with p1, p2, p3, p4, p5:
         result = pipeline.run_handmatig(
             config, [_listing()], today=date(2026, 7, 2), forceer_herprocessen=True
         )
@@ -399,8 +428,8 @@ def test_run_handmatig_forceer_herprocessen_corrigeert_bestaand_adres(tmp_path):
 
 def test_run_handmatig_forceer_herprocessen_laat_handmatig_verwijderde_woning_met_rust(tmp_path):
     config = _config(tmp_path)
-    p1, p2, p3, p4 = _patch_geo_checks()
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
         pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 1))
 
     with patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value={"3000AA-1"}), patch(
@@ -410,8 +439,8 @@ def test_run_handmatig_forceer_herprocessen_laat_handmatig_verwijderde_woning_me
     assert len(result_dag.handmatig_verwijderd) == 1
     assert result_dag.alle_actief == []
 
-    p1, p2, p3, p4 = _patch_geo_checks()
-    with p1, p2, p3, p4:
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
         result = pipeline.run_handmatig(
             config, [_listing()], today=date(2026, 7, 3), forceer_herprocessen=True
         )

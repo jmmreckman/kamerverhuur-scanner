@@ -66,6 +66,10 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
     opmerking_html = f'<br><span class="small">{escape(item.opmerking)}</span>' if item.opmerking else ""
     oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "onbekend"
     prijs_per_m2_tekst = _euro(item.prijs_per_m2) + "/m²" if item.prijs_per_m2 else "-"
+    opslag_html = (
+        "<br>".join(f'<span class="small">{escape(s)}</span>' for s in item.huurprijsopslag_signalen)
+        or '<span class="small">geen gevonden</span>'
+    )
 
     return f"""
     <tr>
@@ -76,6 +80,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
       <td>{prijs_per_m2_tekst}</td>
       <td>{dagen} dag{'en' if dagen != 1 else ''}</td>
       <td>{' '.join(badges)}{opmerking_html}</td>
+      <td>{opslag_html}</td>
       <td>{_acties_html(item, scanner_email)}</td>
     </tr>
     """
@@ -126,9 +131,9 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
   <table>
     <tr>
       <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
-      <th>Dagen bekend</th><th>Nog te checken</th><th>Acties</th>
+      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
     </tr>
-    {actieve_rows or '<tr><td colspan="8">Geen openstaande kansen.</td></tr>'}
+    {actieve_rows or '<tr><td colspan="9">Geen openstaande kansen.</td></tr>'}
   </table>
 
   <h2>Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
@@ -162,6 +167,17 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     rest — klopt een prijs een keer niet, meld dat dan even. "Verwijderen" opent een kant-en-klare
     e-mail; gewoon versturen (niet aanpassen) en het huis is er de volgende run uit.
   </p>
+  <p class="small">
+    "Mogelijke huurprijsopslag" checkt automatisch op rijksmonument en rijksbeschermd
+    stads-/dorpsgezicht (officiële Rijksdienst-data) en nieuwbouwopslag (BAG-bouwjaar) — deze zijn
+    betrouwbaar maar altijd met "mogelijk" gemarkeerd omdat de exacte toepassing van de opslag
+    (bijv. niet ook al een andere monumentenopslag) je zelf moet checken. Gemeentelijk monument wordt
+    ook gecheckt, maar op basis van een door een derde gepubliceerde lijst uit 2021 — dus minder
+    zeker, altijd verifiëren op monumentenregister.rotterdam.nl. Provinciaal monument (ook 15%) wordt
+    niet automatisch gecheckt (geen bevraagbare open data beschikbaar, en komt in Rotterdam vrijwel
+    nooit voor) — check dit zelf als het voor jouw pand relevant lijkt. "geen gevonden" betekent dus
+    niet dat er zeker geen opslag mogelijk is, alleen dat de automatische checks niets vonden.
+  </p>
 </body>
 </html>
 """
@@ -183,6 +199,10 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
         lines.append(f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}")
         lines.append(f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}")
         lines.append(f"    nog te checken: {', '.join(extra)}")
+        if item.huurprijsopslag_signalen:
+            lines.append("    mogelijke huurprijsopslag:")
+            for signaal in item.huurprijsopslag_signalen:
+                lines.append(f"      - {signaal}")
         if item.opmerking:
             lines.append(f"    let op: {item.opmerking}")
     if not result.alle_actief:

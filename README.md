@@ -35,14 +35,19 @@ Elke ochtend om 09:00:
 7. Geeft je in het rapport per huis een **directe link naar funda** en een
    **verwijder-link** waarmee je een huis met één muisklik + versturen zelf uit de
    lijst haalt (bijv. omdat het toch niet voldoet, of gewoon niet interessant is).
-8. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
+8. Checkt automatisch op mogelijke **huurprijsopslagen** (WWS-puntensysteem) die de
+   taxatiewaarde/huurprijs flink kunnen beïnvloeden — zie "Mogelijke huurprijsopslag"
+   verderop in dit document voor de details en betrouwbaarheid per categorie.
+9. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
    - **Zelfbewoningsplicht in de advertentietekst** — funda blokkeert geautomatiseerd
      bezoek aan advertentiepagina's (Akamai bot-detectie + verplichte CAPTCHA), dus dit
      vraagt het rapport je de advertentietekst zelf even (10 sec) door te lezen. Dit
      staat bij elk overgebleven huis, maar dat zijn er dankzij de eerdere checks nog
      maar een handjevol per dag.
-9. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
-   kansen, hoe lang ze al bekend zijn, en welke (weinige) handmatige check nog nodig is.
+   - **Provinciaal monument** (15% huurprijsopslag) — geen bevraagbare open data
+     gevonden bij de provincie; komt in Rotterdam bovendien vrijwel nooit voor.
+10. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
+    kansen, hoe lang ze al bekend zijn, en welke (weinige) handmatige check nog nodig is.
 
 **Over "verkocht"/"onder bod":** funda's dagelijkse zoekopdracht-alert meldt alleen
 NIEUWE woningen, nooit dat een eerder geziene woning van status is veranderd. Funda
@@ -170,6 +175,31 @@ van de officiële BAG-oppervlakte. Elke rij toont:
     opmerking eronder voor de reden.
   - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
     Open de link en zoek (Ctrl+F) op "zelfbewoning".
+- **Mogelijke huurprijsopslag** — automatische check op signalen die de WWS-huurprijs
+  (en daarmee de taxatiewaarde) flink kunnen beïnvloeden:
+  - **Rijksmonument (35%)** en **rijksbeschermd stads-/dorpsgezicht (5%, alleen als het
+    pand van vóór 1965 is en geen andere monumentenopslag krijgt)** — via de officiële,
+    gratis kaartendata van de Rijksdienst voor het Cultureel Erfgoed (RCE). Betrouwbaar,
+    maar altijd gemarkeerd als "mogelijk": rijksmonument-posities zijn soms niet
+    pixel-precies, dus verifieer altijd via de meegestuurde link naar het officiële
+    monumentenregister voordat je erop rekent.
+  - **Nieuwbouwopslag (10%)** — op basis van het officiële BAG-bouwjaar (opgeleverd na
+    1 juli 2024). Betrouwbaar qua bouwjaar zelf; of de opslag ook echt van toepassing is
+    (reguliere, niet-monumentale middenhuur, bouw gestart vóór 2028) moet je zelf
+    beoordelen.
+  - **Gemeentelijk monument (15%)** — Rotterdam heeft geen bevraagbare open data voor
+    zijn eigen monumentenregister (het is een interactieve webapplicatie zonder
+    open-data-koppeling), dus dit gebruikt een door een derde gepubliceerde kopie van
+    een Rotterdamse monumentenlijst uit 2021. **Minder betrouwbaar** dan de andere
+    checks — mogelijk verouderd of onvolledig. Áltijd verifiëren op
+    [monumentenregister.rotterdam.nl](https://monumentenregister.rotterdam.nl/) voordat
+    je hierop rekent.
+  - **Provinciaal monument (15%)** — wordt niet automatisch gecheckt: de provincie
+    ontsluit dit alleen als kaartplaatje (WMS), niet als bevraagbare data, en dit komt
+    in Rotterdam vrijwel nooit voor. Check dit zelf als het relevant lijkt.
+  - Staat er niets bij een huis, dan betekent dat alleen dat de automatische checks
+    niets vonden — geen garantie dat er zeker geen opslag van toepassing is (met name
+    voor gemeentelijk/provinciaal monument).
 - **Acties**:
   - **Bekijk advertentie →** — directe link naar de advertentie. Bij woningen uit de
     dagelijkse Funda-mail is dit een echte link naar de advertentie zelf; bij handmatig
@@ -293,6 +323,21 @@ weg omdat de datum ver in het verleden ligt.
 - **Verwijder-commando's**: mails die jijzelf (via de verwijder-link in het rapport)
   naar je scanner-mailbox stuurt, met "Verwijder <postcode-huisnummer>" in het
   onderwerp.
+- **Rijksmonumenten & rijksbeschermde stads-/dorpsgezichten**: de gratis, publieke
+  WFS-kaartendata van de Rijksdienst voor het Cultureel Erfgoed
+  (`services.rce.geovoorziening.nl/rce/wfs`) — officiële landelijke overheidsdata,
+  bevraagd op coördinaat (rijksmonument-puntlocaties met een kleine zoekstraal, want
+  die zijn soms niet pixel-precies; beschermde-stadsgezicht-gebieden met een exacte
+  polygon-intersectie).
+- **Bouwjaar** (voor nieuwbouwopslag en de bouwjaar-voorwaarde bij beschermd
+  stadsgezicht): dezelfde publieke PDOK BAG-WFS-opvraging als de oppervlakte, geen
+  extra netwerkcall nodig.
+- **Gemeentelijke monumenten (Rotterdam)**: geen officiële bevraagbare bron gevonden
+  (monumentenregister.rotterdam.nl is een interactieve webapplicatie zonder
+  open-data-koppeling) — dit gebruikt een door een derde op ArcGIS Online gepubliceerde
+  kopie van een Rotterdamse monumentenlijst uit 2021. Minder betrouwbaar dan de andere
+  databronnen in dit project; altijd als "mogelijk" gepresenteerd met een link naar het
+  officiële register om zelf te verifiëren.
 
 ## Bekende beperkingen
 
