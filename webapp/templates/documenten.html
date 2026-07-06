@@ -4,6 +4,12 @@
 <h1>Documenten</h1>
 <p class="muted">Gedeelde Drive-map met puntentellingen, huurcontracten e.d.</p>
 
+{% if bestanden is none %}
+<div class="card">
+  <p>Deze pagina is nog niet ingesteld. Zet <code>GOOGLE_DRIVE_FOLDER_ID</code> in je <code>.env</code>
+     bestand om de gedeelde Drive-map te koppelen (zie README).</p>
+</div>
+{% else %}
 <div class="card">
   <form method="post" action="{{ url_for('documenten_upload') }}" enctype="multipart/form-data">
     <label>Nieuw bestand uploaden
@@ -29,4 +35,5 @@
   <p class="muted">Nog geen bestanden in deze map.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

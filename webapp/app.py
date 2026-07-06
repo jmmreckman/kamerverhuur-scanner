@@ -199,12 +199,17 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/documenten")
     @login_required
     def documenten():
+        if not config.google_drive_folder_id:
+            return render_template("documenten.html", bestanden=None)
         drive = DriveClient(config)
         return render_template("documenten.html", bestanden=drive.list_bestanden())
 
     @app.route("/documenten/upload", methods=["POST"])
     @login_required
     def documenten_upload():
+        if not config.google_drive_folder_id:
+            flash("Documenten zijn nog niet ingesteld (GOOGLE_DRIVE_FOLDER_ID ontbreekt in .env).")
+            return redirect(url_for("documenten"))
         bestand = request.files.get("bestand")
         if bestand and bestand.filename:
             drive = DriveClient(config)
