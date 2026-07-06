@@ -1,0 +1,12 @@
+# Eén blok per pand/domein. Caddy regelt automatisch een gratis HTTPS-certificaat
+# (Let's Encrypt) zodra het domein naar het IP-adres van deze server wijst.
+#
+# Nieuw pand toevoegen: kopieer een blok, pas het domein en de containernaam aan.
+
+mahoniestraat15.nl {
+    reverse_proxy mahoniestraat:8000
+}
+
+# pand2.nl {
+#     reverse_proxy pand2:8000
+# }

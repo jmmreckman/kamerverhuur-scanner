@@ -146,38 +146,29 @@ Ga naar `http://127.0.0.1:5000`, log in, en test de knoppen (begin met "Betaling
 controleren"). Los eventuele fouten op (meestal een verkeerde sheet-naam, IBAN, of ontbrekende
 sheet-toegang) voordat je gaat hosten.
 
-## Stap 6: hosting (aanbevolen: Render, betaald, geen zolder-pc nodig)
+## Stap 6: hosting op een eigen VPS (Docker Compose + Caddy)
 
-Zelf een pc thuis altijd laten aanstaan is gratis, maar betekent poorten openzetten in je router,
-een oplossing voor je (waarschijnlijk wisselende) thuis-IP, en dat de site plat gaat als je pc of
-internet even wegvalt. Voor een paar euro per maand is een VPS/PaaS stabieler en simpeler te
-beheren. Render.com is een prettige optie omdat het rechtstreeks vanaf GitHub deployt via de
-meegeleverde `Dockerfile`, zonder dat je zelf een server hoeft te beheren.
+Gekozen aanpak: één goedkope VPS (bv. Hetzner, ~€5/maand) die alle panden host, elk in een eigen
+Docker-container, achter een gedeelde [Caddy](https://caddyserver.com/)-reverse-proxy die
+automatisch gratis HTTPS-certificaten regelt per domein. Alle configuratie hiervoor staat in de
+map `deploy/`:
 
-1. Maak een account op [render.com](https://render.com), koppel je GitHub-repo.
-2. **New > Web Service**, kies deze repo. Render herkent de `Dockerfile` automatisch.
-3. Voeg een **Persistent Disk** toe (bijv. 1 GB, mount path `/app/data`) - hierop bewaar je de
-   bestanden die niet in git staan: `google-service-account.json`, `bunq_production.conf`,
-   `users.json`, `laatste_resultaat.json`, en de map `gegenereerde_contracten/`.
-4. Zet de environment variables (Render dashboard > Environment) zoals in `.env.example`, maar
-   met paden die naar de disk wijzen, bijvoorbeeld:
-   ```
-   GOOGLE_SERVICE_ACCOUNT_FILE=/app/data/google-service-account.json
-   BUNQ_CONF_FILE=/app/data/bunq_production.conf
-   USERS_FILE=/app/data/users.json
-   ```
-5. Na de eerste deploy: open een shell op de service (Render dashboard > Shell) en upload/plak de
-   inhoud van je `google-service-account.json` naar `/app/data/google-service-account.json`, en
-   draai daar `python scripts/setup_bunq.py` en `python scripts/create_user.py <naam>` (met de
-   env-variabelen die al door Render zijn ingesteld).
-6. Render geeft je een `https://...onrender.com` URL - deel die met Justin, samen met zijn
-   gebruikersnaam/wachtwoord.
+- `deploy/docker-compose.yml` - één blok per pand (nu alleen "mahoniestraat")
+- `deploy/Caddyfile` - één domein-blok per pand
+- `deploy/mahoniestraat.env.example` - kopieer naar `mahoniestraat.env` en vul in
+- `deploy/setup-vps.sh` - eenmalig script dat Docker installeert, automatische
+  beveiligingsupdates inschakelt en de firewall instelt
 
-Andere prima alternatieven: Railway.app (vergelijkbaar met Render) of een goedkope VPS bij
-Hetzner (~€4/maand) met de `Dockerfile` en een reverse proxy (bijv. Caddy) voor gratis HTTPS -
-dat laatste vraagt wel wat meer zelf-beheer (patches, herstarten na een reboot).
+Een nieuw pand toevoegen (later): kopieer een blok in `docker-compose.yml` en `Caddyfile`, maak
+een nieuw `.env`-bestand, en draai `docker compose up -d --build` - de rest van de code is
+identiek voor elk pand.
 
-### Lokaal met Docker testen
+Waarom een VPS in plaats van een beheerde dienst (Render/Railway)? Bij meerdere panden scheelt dit
+flink in kosten (~€5/maand totaal voor alle panden samen, in plaats van betalen per pand), en je
+hebt volledige vrijheid. Het `setup-vps.sh`-script zorgt dat het dagelijkse onderhoud minimaal
+blijft (automatische beveiligingsupdates, containers herstarten zichzelf bij een crash).
+
+### Lokaal met Docker testen (los van de VPS)
 
 ```bash
 docker build -t kamerverhuur-scanner .

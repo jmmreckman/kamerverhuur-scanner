@@ -13,3 +13,7 @@ users.json
 laatste_resultaat.json
 gegenereerde_contracten/
 gegenereerde_advertenties/
+
+# deployment (VPS) - secrets en per-pand data, nooit committen
+deploy/*.env
+deploy/data/
