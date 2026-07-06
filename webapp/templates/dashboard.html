@@ -14,6 +14,7 @@
 <div class="card">
   <h2>Actuele stand</h2>
   <p><strong>{{ resultaten|length - problemen|length }}</strong> van <strong>{{ resultaten|length }}</strong> kamers in orde.</p>
+  <p><strong>Totaal:</strong> {{ totalen.ontvangen|eur }} ontvangen van {{ totalen.verwacht|eur }} verwacht per maand.</p>
   <p class="muted">Laatst gecontroleerd op {{ cache["gecontroleerd_op"] }}.</p>
   {% if cache["niet_gekoppelde_betalingen"] %}
   <p class="muted">{{ cache["niet_gekoppelde_betalingen"] }} inkomende betaling(en) konden niet gekoppeld worden - zie de betalingenpagina.</p>

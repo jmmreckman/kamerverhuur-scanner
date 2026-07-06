@@ -11,8 +11,20 @@
     <label>Naam huurder (leeg = kamer staat leeg)
       <input type="text" name="naam" value="{{ kamer.naam if kamer else '' }}">
     </label>
-    <label>Huurprijs per maand (EUR)
+    <label>Kale huurprijs per maand (EUR, optioneel)
+      <input type="text" name="kale_huurprijs" value="{{ kamer.kale_huurprijs|eur if kamer and kamer.kale_huurprijs is not none else '' }}">
+    </label>
+    <label>Servicekosten per maand (EUR, optioneel)
+      <input type="text" name="servicekosten" value="{{ kamer.servicekosten|eur if kamer and kamer.servicekosten is not none else '' }}">
+    </label>
+    <label>Totale huur per maand (EUR) - dit bedrag moet via bunq binnenkomen
       <input type="text" name="verwacht_bedrag" value="{{ kamer.verwacht_bedrag|eur if kamer else '' }}" required>
+    </label>
+    <label>Contract einddatum (of bijv. "onbepaalde tijd")
+      <input type="text" name="contract_einddatum" value="{{ kamer.contract_einddatum or '' if kamer else '' }}">
+    </label>
+    <label>Opmerking
+      <input type="text" name="opmerking" value="{{ kamer.opmerking or '' if kamer else '' }}">
     </label>
     <label>IBAN (optioneel, meest betrouwbare matching)
       <input type="text" name="iban" value="{{ kamer.iban or '' if kamer else '' }}">

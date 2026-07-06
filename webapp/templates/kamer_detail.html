@@ -6,7 +6,13 @@
 <div class="card">
   {% if kamer.naam %}
     <p><strong>Huurder:</strong> {{ kamer.naam }}</p>
-    <p><strong>Huurprijs:</strong> {{ kamer.verwacht_bedrag|eur }} / maand</p>
+    <p><strong>Totale huur:</strong> {{ kamer.verwacht_bedrag|eur }} / maand
+      {% if kamer.kale_huurprijs is not none and kamer.servicekosten is not none %}
+        <span class="muted">(kaal {{ kamer.kale_huurprijs|eur }} + servicekosten {{ kamer.servicekosten|eur }})</span>
+      {% endif %}
+    </p>
+    {% if kamer.contract_einddatum %}<p><strong>Contract einddatum:</strong> {{ kamer.contract_einddatum }}</p>{% endif %}
+    {% if kamer.opmerking %}<p><strong>Opmerking:</strong> {{ kamer.opmerking }}</p>{% endif %}
     {% if kamer.iban %}<p><strong>IBAN:</strong> {{ kamer.iban }}</p>{% endif %}
     {% if cache_status %}
       <p><strong>Laatste controle:</strong>

@@ -19,9 +19,13 @@ class Tenant:
     row_index: int  # rijnummer in de Google Sheet (voor terugschrijven)
     naam: str  # leeg = kamer staat leeg (geen huurder)
     kamer: str
-    verwacht_bedrag: Decimal
+    verwacht_bedrag: Decimal  # totale huur (kale huur + servicekosten) - dit moet binnenkomen
     iban: str | None = None
     zoekwoord: str | None = None
+    kale_huurprijs: Decimal | None = None
+    servicekosten: Decimal | None = None
+    contract_einddatum: str | None = None  # vrije tekst: kan een datum zijn of "onbepaalde tijd"
+    opmerking: str | None = None
 
 
 @dataclass(frozen=True)

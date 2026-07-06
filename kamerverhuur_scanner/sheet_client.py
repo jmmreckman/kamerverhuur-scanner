@@ -1,11 +1,16 @@
 """Lezen en terugschrijven van de kamers/huurdersgegevens in Google Sheets.
 
-Verwachte kolomindeling op het hoofdtabblad (rij 1 = koprij, data vanaf rij 2):
+Kolomindeling op het hoofdtabblad (rij 1 = koprij, data vanaf rij 2), aangesloten
+op de bestaande huuradministratie-sheet:
 
-    A Naam | B Kamer | C Verwacht bedrag | D IBAN (optioneel) |
-    E Zoekwoord (optioneel) | F Status | G Ontvangen bedrag | H Laatst gecontroleerd
+    A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur |
+    F Contract einddatum | G Opmerking | H IBAN (nieuw, optioneel) |
+    I Zoekwoord (nieuw, optioneel) | J Status (auto) | K Ontvangen bedrag (auto) |
+    L Laatst gecontroleerd (auto)
 
-Een rij met een lege naam maar een ingevulde kamer betekent: kamer staat leeg.
+"Totale huur" (kolom E) is het bedrag dat via bunq moet binnenkomen. Een rij met
+een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
+waarvan de Kamer-kolom "totalen"/"totaal" is (de somrij onderaan) wordt genegeerd.
 
 Daarnaast is er een "Historie" tabblad (wordt aangemaakt als het nog niet bestaat)
 met kolommen: Datum | Kamer | Huurder | Verwacht | Ontvangen | Status - elke
@@ -22,18 +27,27 @@ from .config import Config
 from .models import HistorieRegel, Status, Tenant, TenantResult
 from .utils import parse_bedrag
 
-COL_NAAM = 1
-COL_KAMER = 2
-COL_VERWACHT = 3
-COL_IBAN = 4
-COL_ZOEKWOORD = 5
-COL_STATUS = 6
-COL_ONTVANGEN = 7
-COL_LAATST_GECONTROLEERD = 8
+COL_KAMER = 1
+COL_NAAM = 2
+COL_KALE_HUURPRIJS = 3
+COL_SERVICEKOSTEN = 4
+COL_VERWACHT = 5
+COL_CONTRACT_EINDDATUM = 6
+COL_OPMERKING = 7
+COL_IBAN = 8
+COL_ZOEKWOORD = 9
+COL_STATUS = 10
+COL_ONTVANGEN = 11
+COL_LAATST_GECONTROLEERD = 12
 
 HEADER_ROW = 1
+_SOMRIJ_LABELS = {"totalen", "totaal"}
 
 _HISTORIE_HEADER = ["Datum", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status"]
+
+
+def _optioneel(waarde: str) -> str | None:
+    return waarde.strip() or None
 
 
 class SheetClient:
@@ -44,15 +58,15 @@ class SheetClient:
         self._worksheet = self._spreadsheet.worksheet(config.google_sheet_worksheet)
 
     def get_kamers(self) -> list[Tenant]:
-        """Geeft alle kamers terug, inclusief leegstaande (lege naam, wel een kamernummer)."""
+        """Geeft alle kamers terug, inclusief leegstaande (lege huurder, wel een kamernaam)."""
         rows = self._worksheet.get_all_values()
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
             row = row + [""] * (COL_LAATST_GECONTROLEERD - len(row))
             kamer = row[COL_KAMER - 1].strip()
-            if not kamer:
-                continue  # lege rij overslaan
+            if not kamer or kamer.lower() in _SOMRIJ_LABELS:
+                continue  # lege rij of somrij ("Totalen") overslaan
             kamers.append(
                 Tenant(
                     row_index=row_index,
@@ -60,7 +74,11 @@ class SheetClient:
                     kamer=kamer,
                     verwacht_bedrag=parse_bedrag(row[COL_VERWACHT - 1]),
                     iban=(row[COL_IBAN - 1].strip().replace(" ", "").upper() or None),
-                    zoekwoord=(row[COL_ZOEKWOORD - 1].strip() or None),
+                    zoekwoord=_optioneel(row[COL_ZOEKWOORD - 1]),
+                    kale_huurprijs=parse_bedrag(row[COL_KALE_HUURPRIJS - 1]) if row[COL_KALE_HUURPRIJS - 1].strip() else None,
+                    servicekosten=parse_bedrag(row[COL_SERVICEKOSTEN - 1]) if row[COL_SERVICEKOSTEN - 1].strip() else None,
+                    contract_einddatum=_optioneel(row[COL_CONTRACT_EINDDATUM - 1]),
+                    opmerking=_optioneel(row[COL_OPMERKING - 1]),
                 )
             )
         return kamers
@@ -77,14 +95,22 @@ class SheetClient:
         verwacht_bedrag: Decimal,
         iban: str | None,
         zoekwoord: str | None,
+        kale_huurprijs: Decimal | None = None,
+        servicekosten: Decimal | None = None,
+        contract_einddatum: str | None = None,
+        opmerking: str | None = None,
     ) -> None:
         updates = [
-            {"range": self._a1(row_index, COL_NAAM), "values": [[naam]]},
             {"range": self._a1(row_index, COL_KAMER), "values": [[kamer]]},
+            {"range": self._a1(row_index, COL_NAAM), "values": [[naam]]},
+            {"range": self._a1(row_index, COL_KALE_HUURPRIJS), "values": [[self._bedrag_of_leeg(kale_huurprijs)]]},
+            {"range": self._a1(row_index, COL_SERVICEKOSTEN), "values": [[self._bedrag_of_leeg(servicekosten)]]},
             {
                 "range": self._a1(row_index, COL_VERWACHT),
                 "values": [[f"{verwacht_bedrag:.2f}".replace(".", ",")]],
             },
+            {"range": self._a1(row_index, COL_CONTRACT_EINDDATUM), "values": [[contract_einddatum or ""]]},
+            {"range": self._a1(row_index, COL_OPMERKING), "values": [[opmerking or ""]]},
             {"range": self._a1(row_index, COL_IBAN), "values": [[iban or ""]]},
             {"range": self._a1(row_index, COL_ZOEKWOORD), "values": [[zoekwoord or ""]]},
         ]
@@ -97,8 +123,25 @@ class SheetClient:
         verwacht_bedrag: Decimal,
         iban: str | None,
         zoekwoord: str | None,
+        kale_huurprijs: Decimal | None = None,
+        servicekosten: Decimal | None = None,
+        contract_einddatum: str | None = None,
+        opmerking: str | None = None,
     ) -> None:
-        row = [naam, kamer, f"{verwacht_bedrag:.2f}".replace(".", ","), iban or "", zoekwoord or "", "", "", ""]
+        row = [
+            kamer,
+            naam,
+            self._bedrag_of_leeg(kale_huurprijs),
+            self._bedrag_of_leeg(servicekosten),
+            f"{verwacht_bedrag:.2f}".replace(".", ","),
+            contract_einddatum or "",
+            opmerking or "",
+            iban or "",
+            zoekwoord or "",
+            "",
+            "",
+            "",
+        ]
         self._worksheet.append_row(row, value_input_option="USER_ENTERED")
 
     def write_results(self, results: list[TenantResult]) -> None:
@@ -163,6 +206,10 @@ class SheetClient:
             )
             ws.append_row(_HISTORIE_HEADER, value_input_option="USER_ENTERED")
             return ws
+
+    @staticmethod
+    def _bedrag_of_leeg(bedrag: Decimal | None) -> str:
+        return f"{bedrag:.2f}".replace(".", ",") if bedrag is not None else ""
 
     def _a1(self, row: int, col: int) -> str:
         return gspread.utils.rowcol_to_a1(row, col)

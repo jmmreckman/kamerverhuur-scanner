@@ -30,20 +30,23 @@ zodat jullie er allebei bij kunnen zonder dat er iets lokaal hoeft te draaien.
 
 ## Verwachte kolomindeling in de Google Sheet
 
-Tabblad `Mahoniestraat` (of de naam die je in `GOOGLE_SHEET_WORKSHEET` zet), rij 1 = koppen,
-data vanaf rij 2, één rij per kamer:
+Aangesloten op de bestaande huuradministratie-sheet. Tabblad `Mahoniestraat` (of de naam die je
+in `GOOGLE_SHEET_WORKSHEET` zet), rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 
-| A Naam | B Kamer | C Verwacht bedrag | D IBAN (optioneel) | E Zoekwoord (optioneel) | F Status | G Ontvangen bedrag | H Laatst gecontroleerd |
-|---|---|---|---|---|---|---|---|
-| Jan de Vries | 1 | 650,00 | NL91ABNA0417164300 | | | | |
-| | 2 | 625,00 | | | | | |
+| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | |
 
-- Kolom **A t/m E** vul jij/Justin in en passen jullie zelf aan.
-- Kolom **F, G, H** worden door "Nu controleren" overschreven.
-- Een lege **Naam** met een ingevulde **Kamer** betekent: kamer staat leeg. Die kamer blijft
-  gewoon zichtbaar in het Kamers-overzicht (met een "Advertentie plaatsen"-knop).
-- **IBAN** is de betrouwbaarste matching-methode; zonder IBAN wordt gematcht op **Zoekwoord**
-  of anders op de naam van de huurder.
+- Kolom **A t/m G** zijn je bestaande kolommen, die pas je zelf aan (of via de site, zie hieronder).
+- Kolom **H en I** (IBAN, Zoekwoord) zijn nieuw - voeg deze koppen toe. Beide zijn optioneel: zonder
+  IBAN/Zoekwoord matcht de site op de naam van de huurder.
+- Kolom **J, K, L** (Status, Ontvangen bedrag, Laatst gecontroleerd) zijn ook nieuw - voeg de koppen
+  toe, de site vult de inhoud zelf.
+- **Totale huur** (kolom E) is het bedrag dat de site verwacht via bunq binnen te zien komen (kale
+  huur + servicekosten).
+- Een lege **Huurder** met een ingevulde **Kamer** betekent: kamer staat leeg.
+- Een **somrij** onderaan (Kamer-kolom = "Totalen" of "Totaal") wordt door de site automatisch
+  genegeerd - die mag gewoon blijven staan, het dashboard toont ook een eigen totaaloverzicht.
 
 Er wordt automatisch een tweede tabblad **Historie** aangemaakt (naam instelbaar via
 `GOOGLE_SHEET_HISTORY_WORKSHEET`) waar elke "Nu controleren"-run een rij per kamer aan toevoegt.
@@ -56,10 +59,12 @@ Dat voedt de betaalgeschiedenis en betrouwbaarheidsscore op de kamerpagina's.
 - Een bunq-rekening (of rekeningen) en de bunq-app (voor de API key).
 - Betaalde hosting (aanbevolen, zie verderop) - geen Gmail/e-mail meer nodig.
 
-## Stap 1: Google Sheet aanmaken
+## Stap 1: Google Sheet voorbereiden
 
-Maak een Google Sheet met een tabblad `Mahoniestraat` en de kolommen hierboven, met de 6 kamers.
-Onthoud het **sheet ID** uit de URL:
+Gebruik je bestaande huuradministratie-sheet. Hernoem het tabblad naar `Mahoniestraat` (of zet de
+juiste naam in `GOOGLE_SHEET_WORKSHEET`), en voeg de vijf nieuwe kolomkoppen toe (H t/m L) zoals
+hierboven beschreven: IBAN, Zoekwoord, Status, Ontvangen bedrag, Laatst gecontroleerd. Onthoud het
+**sheet ID** uit de URL:
 
 ```
 https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit

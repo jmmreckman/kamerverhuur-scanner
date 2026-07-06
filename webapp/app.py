@@ -84,7 +84,13 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def dashboard():
         cache = state.load()
-        return render_template("dashboard.html", cache=cache)
+        totalen = None
+        if cache:
+            totalen = {
+                "verwacht": sum(Decimal(r["verwacht_bedrag"]) for r in cache["resultaten"]),
+                "ontvangen": sum(Decimal(r["ontvangen_bedrag"]) for r in cache["resultaten"]),
+            }
+        return render_template("dashboard.html", cache=cache, totalen=totalen)
 
     @app.route("/huurders")
     @login_required
@@ -95,12 +101,18 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template("huurders.html", kamers=kamers, sheet_url=sheet_url)
 
     def _kamer_form_naar_velden(form) -> dict:
+        kale_huurprijs = form.get("kale_huurprijs", "").strip()
+        servicekosten = form.get("servicekosten", "").strip()
         return {
             "naam": form.get("naam", "").strip(),
             "kamer": form.get("kamer", "").strip(),
             "verwacht_bedrag": parse_bedrag(form.get("verwacht_bedrag", "0")),
             "iban": form.get("iban", "").strip().replace(" ", "").upper() or None,
             "zoekwoord": form.get("zoekwoord", "").strip() or None,
+            "kale_huurprijs": parse_bedrag(kale_huurprijs) if kale_huurprijs else None,
+            "servicekosten": parse_bedrag(servicekosten) if servicekosten else None,
+            "contract_einddatum": form.get("contract_einddatum", "").strip() or None,
+            "opmerking": form.get("opmerking", "").strip() or None,
         }
 
     @app.route("/huurders/nieuw", methods=["GET", "POST"])
