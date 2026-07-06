@@ -25,14 +25,14 @@ class Config:
     google_sheet_id: str
     google_service_account_file: str
     google_sheet_worksheet: str
+    history_worksheet: str
 
     bunq_conf_file: str
     bunq_environment: str
     bunq_api_key: str | None
 
-    gmail_address: str
-    gmail_app_password: str
-    email_to: str
+    users_file: str
+    flask_secret_key: str
 
     bedrag_tolerantie: Decimal
 
@@ -41,12 +41,12 @@ class Config:
         return Config(
             google_sheet_id=_require("GOOGLE_SHEET_ID"),
             google_service_account_file=_require("GOOGLE_SERVICE_ACCOUNT_FILE"),
-            google_sheet_worksheet=os.environ.get("GOOGLE_SHEET_WORKSHEET", "Huurders").strip(),
+            google_sheet_worksheet=os.environ.get("GOOGLE_SHEET_WORKSHEET", "Mahoniestraat").strip(),
+            history_worksheet=os.environ.get("GOOGLE_SHEET_HISTORY_WORKSHEET", "Historie").strip(),
             bunq_conf_file=_require("BUNQ_CONF_FILE"),
             bunq_environment=os.environ.get("BUNQ_ENVIRONMENT", "PRODUCTION").strip().upper(),
             bunq_api_key=os.environ.get("BUNQ_API_KEY", "").strip() or None,
-            gmail_address=_require("GMAIL_ADDRESS"),
-            gmail_app_password=_require("GMAIL_APP_PASSWORD"),
-            email_to=_require("EMAIL_TO"),
+            users_file=os.environ.get("USERS_FILE", "users.json").strip(),
+            flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),
         )

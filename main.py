@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Command-line entrypoint voor de kamerverhuur-scanner.
+"""Command-line hulpmiddel om de betaalcontrole te testen zonder de website te starten.
+
+De echte controle draait normaal via de "Check betalingen"-knop op de site
+(webapp/app.py) - dit script is vooral handig om je bunq/Sheets-koppeling
+vanaf de command line te testen.
 
 Gebruik:
-    python main.py             # controleert de huur, schrijft de sheet bij en mailt het rapport
-    python main.py --dry-run   # print het rapport alleen op het scherm, wijzigt niets
+    python main.py             # controleert de huur en schrijft sheet + geschiedenis bij
+    python main.py --dry-run   # print het resultaat alleen op het scherm, wijzigt niets
 """
 from __future__ import annotations
 
@@ -14,15 +18,15 @@ import sys
 from dotenv import load_dotenv
 
 from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.runner import run
+from kamerverhuur_scanner.runner import run_check
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Controleert of de huur van alle huurders is binnengekomen.")
+    parser = argparse.ArgumentParser(description="Controleert of de huur van alle kamers is binnengekomen.")
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Toon het rapport alleen op het scherm; verstuur geen e-mail en schrijf niets naar de sheet.",
+        help="Toon het resultaat alleen op het scherm; schrijf niets naar de sheet of geschiedenis.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Uitgebreide logging.")
     args = parser.parse_args()
@@ -41,10 +45,17 @@ def main() -> int:
         return 1
 
     try:
-        run(config, dry_run=args.dry_run)
-    except Exception as exc:  # bovenste laag: nette foutmelding i.p.v. crash in een cronjob
+        _tenants, results, unmatched = run_check(config, dry_run=args.dry_run)
+    except Exception as exc:
         logging.getLogger(__name__).error("Huurcontrole mislukt: %s", exc, exc_info=args.verbose)
         return 1
+
+    for r in results:
+        print(f"{r.tenant.kamer:>6} | {r.tenant.naam:<25} | {r.status.value:<22} | ontvangen {r.ontvangen_bedrag:.2f}")
+    if unmatched:
+        print(f"\n{len(unmatched)} niet-gekoppelde inkomende betaling(en):")
+        for p in unmatched:
+            print(f"  {p.datum:%d-%m-%Y} | {p.tegenpartij_naam} | {p.bedrag:.2f} | {p.omschrijving}")
 
     return 0
 

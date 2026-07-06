@@ -1,0 +1,3 @@
+{
+  "_opmerking": "Dit is een voorbeeld. Maak echte gebruikers aan met 'python scripts/create_user.py <gebruikersnaam>' - dat schrijft naar users.json (niet dit bestand)."
+}

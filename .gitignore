@@ -9,3 +9,7 @@ venv/
 google-service-account.json
 bunq_production.conf
 bunq_sandbox.conf
+users.json
+laatste_resultaat.json
+gegenereerde_contracten/
+gegenereerde_advertenties/

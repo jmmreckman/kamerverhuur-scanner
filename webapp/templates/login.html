@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Inloggen - Mahoniestraat 15{% endblock %}
+{% block content %}
+<div class="login-page card">
+  <h1>Inloggen</h1>
+  <form method="post">
+    <label>Gebruikersnaam
+      <input type="text" name="username" autofocus required>
+    </label>
+    <label>Wachtwoord
+      <input type="password" name="password" required>
+    </label>
+    <button class="btn" type="submit">Inloggen</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+*.conf
+google-service-account.json
+users.json
+laatste_resultaat.json
+gegenereerde_contracten/
+.git/

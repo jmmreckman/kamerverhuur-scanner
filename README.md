@@ -1,48 +1,61 @@
 # kamerverhuur-scanner
 
-Controleert automatisch of de huur van je studentenkamers is binnengekomen en
-of het bedrag klopt, door je bunq-rekening te vergelijken met een Google Sheet
-met huurdersgegevens. Stuurt daarna een rapportage per e-mail (via Gmail) en
-werkt de sheet bij met de status per huurder.
+Website voor het beheer van Mahoniestraat 15 (6 kamers, gedeeld met Justin):
+controleert of de huur via bunq is binnengekomen, houdt een betaalgeschiedenis
+per kamer bij, en helpt bij het genereren van huurcontracten en advertentieteksten.
 
-Bedoeld om een paar keer per maand via een cronjob te draaien op je eigen pc
-(bijvoorbeeld op de 1e, 3e en 5e van de maand).
+Login-beveiligd (alleen jij en Justin), bedoeld om op betaalde hosting te draaien
+zodat jullie er allebei bij kunnen zonder dat er iets lokaal hoeft te draaien.
 
-## Wat het script doet
+## Features
 
-1. Leest de huurderslijst (naam, kamer, verwacht bedrag, IBAN/zoekwoord) uit een Google Sheet.
-2. Haalt via de bunq API alle inkomende betalingen van deze maand op.
-3. Koppelt elke betaling aan de juiste huurder (op IBAN, of anders op naam/zoekwoord).
-4. Bepaalt per huurder de status: **Betaald** / **Te weinig ontvangen** / **Te veel ontvangen** / **Nog niet ontvangen**.
-5. Schrijft die status + het ontvangen bedrag terug in de sheet.
-6. Mailt een overzicht naar jezelf, met de aandachtspunten bovenaan.
+- **Dashboard** - overzicht van de laatste betaalcontrole: hoeveel kamers in orde zijn en welke niet.
+- **Kamers** - overzicht van alle 6 kamers, klik door naar een kamer voor huurder, huurprijs,
+  contract(en), betaalgeschiedenis en een betrouwbaarheidsscore (% van de controles op tijd/correct betaald).
+- **Huurders** - leest de kamer-/huurdersgegevens uit een Google Sheet (die blijft de bewerkbare bron).
+- **Betalingen** - knop "Nu controleren": haalt inkomende betalingen van bunq op, koppelt ze aan de
+  huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij. Er wordt niets automatisch
+  op de achtergrond gecontroleerd en er wordt geen e-mail verstuurd - alles gebeurt on-demand via de site.
+- **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-huurcontract
+  (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is een voorbeeldsjabloon, geen
+  juridisch gecontroleerd contract - zie de waarschuwing verderop.
+- **Advertentie plaatsen** - genereert een kant-en-klare titel/beschrijving per kamer om te
+  plakken op Kamernet. Er is geen publieke Kamernet-API voor individuele verhuurders (alleen een
+  zakelijke XML-feed voor makelaars/vastgoedbeheerders via een sales-contact) - vandaar geen
+  automatische plaatsing.
 
 ## Verwachte kolomindeling in de Google Sheet
 
-Tabblad (standaard genaamd `Huurders`), rij 1 = koppen, data vanaf rij 2:
+Tabblad `Mahoniestraat` (of de naam die je in `GOOGLE_SHEET_WORKSHEET` zet), rij 1 = koppen,
+data vanaf rij 2, één rij per kamer:
 
 | A Naam | B Kamer | C Verwacht bedrag | D IBAN (optioneel) | E Zoekwoord (optioneel) | F Status | G Ontvangen bedrag | H Laatst gecontroleerd |
 |---|---|---|---|---|---|---|---|
 | Jan de Vries | 1 | 650,00 | NL91ABNA0417164300 | | | | |
-| Fatima El Idrissi | 2 | 625,00 | | kamer2 | | | |
+| | 2 | 625,00 | | | | | |
 
-- Kolom **A t/m E** vul jij in en pas je zelf aan (namen, kamers, bedragen).
-- Kolom **F, G, H** worden door het script overschreven bij elke run — daar hoef je niets in te typen.
-- **IBAN** is de betrouwbaarste matching-methode: als die is ingevuld, wordt er alleen op IBAN gematcht.
-- Zonder IBAN wordt gematcht op **Zoekwoord** (bijv. een vaste omschrijving die de huurder gebruikt) of anders op de **naam** van de huurder (met een fallback op de achternaam, voor het geval de bank een afgekorte naam toont).
-- 15 rijen invullen is genoeg, maar het werkt met elk aantal.
+- Kolom **A t/m E** vul jij/Justin in en passen jullie zelf aan.
+- Kolom **F, G, H** worden door "Nu controleren" overschreven.
+- Een lege **Naam** met een ingevulde **Kamer** betekent: kamer staat leeg. Die kamer blijft
+  gewoon zichtbaar in het Kamers-overzicht (met een "Advertentie plaatsen"-knop).
+- **IBAN** is de betrouwbaarste matching-methode; zonder IBAN wordt gematcht op **Zoekwoord**
+  of anders op de naam van de huurder.
+
+Er wordt automatisch een tweede tabblad **Historie** aangemaakt (naam instelbaar via
+`GOOGLE_SHEET_HISTORY_WORKSHEET`) waar elke "Nu controleren"-run een rij per kamer aan toevoegt.
+Dat voedt de betaalgeschiedenis en betrouwbaarheidsscore op de kamerpagina's.
 
 ## Vereisten
 
-- Python 3.10 of hoger op de pc waar je het script draait (je "zolder-pc").
+- Python 3.10+ (lokaal testen) of Docker (voor hosting).
 - Een Google-account met een Google Sheet.
-- Een bunq-rekening en de bunq-app (voor de API key).
-- Een Gmail-adres met een **app-wachtwoord** (heb je al).
+- Een bunq-rekening (of rekeningen) en de bunq-app (voor de API key).
+- Betaalde hosting (aanbevolen, zie verderop) - geen Gmail/e-mail meer nodig.
 
 ## Stap 1: Google Sheet aanmaken
 
-Maak een nieuwe Google Sheet aan met een tabblad `Huurders` en de kolommen hierboven.
-Onthoud het **sheet ID**: het stuk uit de URL tussen `/d/` en `/edit`:
+Maak een Google Sheet met een tabblad `Mahoniestraat` en de kolommen hierboven, met de 6 kamers.
+Onthoud het **sheet ID** uit de URL:
 
 ```
 https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
@@ -51,51 +64,48 @@ https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
 ## Stap 2: Google service account aanmaken (voor API-toegang)
 
 1. Ga naar [Google Cloud Console](https://console.cloud.google.com/) en maak een (nieuw) project.
-2. Ga naar **APIs & Services > Library**, zoek **Google Sheets API** en klik op **Enable**.
-3. Ga naar **APIs & Services > Credentials > Create Credentials > Service account**.
-   Geef 'm een naam (bijv. "kamerverhuur-scanner") en klik 'm af (rollen zijn niet nodig).
-4. Open het aangemaakte service account, ga naar het tabblad **Keys > Add Key > Create new key**, kies **JSON**.
-   Er wordt een JSON-bestand gedownload.
-5. Hernoem dit bestand naar `google-service-account.json` en zet het in de projectmap
-   (of een ander pad, dan pas je `GOOGLE_SERVICE_ACCOUNT_FILE` in `.env` aan).
-   **Dit bestand nooit committen** — het staat al in `.gitignore`.
-6. Open het JSON-bestand en kopieer het `client_email` adres (iets als
-   `kamerverhuur-scanner@jouwproject.iam.gserviceaccount.com`).
-7. Open je Google Sheet, klik **Delen**, en deel de sheet met dat e-mailadres als **Bewerker**.
-   Zonder deze stap kan het script de sheet niet lezen of bijwerken.
+2. **APIs & Services > Library**, zoek **Google Sheets API**, klik **Enable**.
+3. **APIs & Services > Credentials > Create Credentials > Service account**. Naam bijv.
+   "kamerverhuur-scanner". Rollen zijn niet nodig.
+4. Open het service account, tabblad **Keys > Add Key > Create new key**, kies **JSON**. Er wordt
+   een JSON-bestand gedownload.
+5. Hernoem dit naar `google-service-account.json`, zet het in de projectmap. **Nooit committen**
+   (staat in `.gitignore`).
+6. Kopieer het `client_email` adres uit het JSON-bestand.
+7. Deel de Google Sheet (knop **Delen**) met dat e-mailadres als **Bewerker**.
 
 ## Stap 3: bunq API key aanmaken
 
-1. Open de bunq-app > **Profiel > Instellingen > Developers/API keys** (of vergelijkbaar) > nieuwe API key aanmaken.
-2. Kies bij de IP-restrictie **"Alle IP-adressen toestaan"**, tenzij je thuis een vast IP-adres hebt.
-   De meeste consumentenverbindingen hebben een wisselend IP; met een vaste IP-restrictie loop je het risico dat de cronjob stuk gaat als je IP verandert. De extra beveiliging is beperkt, omdat de key pas echt bruikbaar wordt in combinatie met de privésleutel die hieronder lokaal wordt aangemaakt.
-3. Wijs de key binnen 4 uur toe (anders vervalt hij), en kopieer de key-waarde.
-4. Zet die waarde in je `.env` bestand als `BUNQ_API_KEY` (zie Stap 5).
-5. Draai daarna **eenmalig**:
+1. bunq-app > API key aanmaken (Profiel > Instellingen > Developers/API keys).
+2. IP-restrictie: kies **"Alle IP-adressen toestaan"**, tenzij je hosting een vast IP-adres heeft
+   (bij de meeste VPS/PaaS-providers is dat wel het geval - controleer dit bij je provider).
+3. Wijs de key binnen 4 uur toe en kopieer de waarde.
+4. Zet die waarde tijdelijk in `.env` als `BUNQ_API_KEY` en draai eenmalig:
 
    ```bash
    python scripts/setup_bunq.py
    ```
 
-   Dit registreert je pc als "device" bij bunq en slaat de sessie + het bijbehorende
-   sleutelpaar lokaal op in het bestand uit `BUNQ_CONF_FILE` (standaard `bunq_production.conf`).
-   Dit hoef je niet te herhalen bij elke run — alleen als je dit bestand kwijtraakt
-   of de koppeling bij bunq intrekt. **Committen mag niet** (staat in `.gitignore`).
+   Dit registreert dit apparaat bij bunq en slaat de sessie op in het bestand uit `BUNQ_CONF_FILE`
+   (`bunq_production.conf`). Dit bestand moet naar je hostingomgeving mee (zie Stap 6) - **nooit
+   committen**.
 
-> **Let op:** bunq heeft de officiële Python SDK (`bunq_sdk`, gebruikt in dit project) gemarkeerd
-> als niet langer actief onderhouden. Hij werkt op dit moment nog prima voor dit doel, maar mocht
-> bunq de API ooit op een incompatibele manier wijzigen, dan kan `scripts/setup_bunq.py` of
-> `kamerverhuur_scanner/bunq_client.py` aangepast moeten worden. Zie https://doc.bunq.com voor de actuele documentatie.
+> bunq heeft de officiële Python SDK (`bunq_sdk`, gebruikt in dit project) gemarkeerd als niet
+> langer actief onderhouden. Hij werkt op dit moment nog goed; zie https://doc.bunq.com als bunq
+> ooit iets incompatibels wijzigt.
 
-## Stap 4: Gmail app-wachtwoord
+## Stap 4: gebruikers aanmaken (login voor jou en Justin)
 
-Je hebt al een Gmail-adres met app-wachtwoord. Zet in `.env`:
+```bash
+python scripts/create_user.py jouw_gebruikersnaam
+python scripts/create_user.py justin
+```
 
-- `GMAIL_ADDRESS` — het Gmail-adres waarmee verstuurd wordt.
-- `GMAIL_APP_PASSWORD` — het app-wachtwoord (16 tekens, zonder spaties).
-- `EMAIL_TO` — het adres waar de rapportage naartoe moet (mag hetzelfde zijn).
+Dit vraagt een wachtwoord (niet zichtbaar tijdens typen) en slaat het gehasht op in `users.json`
+(**nooit committen**). Zet ook een willekeurige lange random string in `.env` als
+`FLASK_SECRET_KEY` (bijv. met `python -c "import secrets; print(secrets.token_hex(32))"`).
 
-## Stap 5: installeren
+## Stap 5: lokaal testen
 
 ```bash
 git clone <deze-repo>
@@ -105,75 +115,90 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# vul .env in met een editor (sheet ID, bunq key, gmail app-wachtwoord, etc.)
+# vul .env in (sheet ID, bunq, FLASK_SECRET_KEY, etc.)
 
-python scripts/setup_bunq.py     # eenmalig, zie Stap 3
+python scripts/setup_bunq.py
+python scripts/create_user.py jouw_gebruikersnaam
+
+python -m webapp.app
 ```
 
-## Stap 6: testen
+Ga naar `http://127.0.0.1:5000`, log in, en test de knoppen (begin met "Betalingen > Nu
+controleren"). Los eventuele fouten op (meestal een verkeerde sheet-naam, IBAN, of ontbrekende
+sheet-toegang) voordat je gaat hosten.
 
-Draai eerst een dry-run: dit print het rapport op het scherm, maar verstuurt
-geen mail en wijzigt de sheet niet:
+## Stap 6: hosting (aanbevolen: Render, betaald, geen zolder-pc nodig)
+
+Zelf een pc thuis altijd laten aanstaan is gratis, maar betekent poorten openzetten in je router,
+een oplossing voor je (waarschijnlijk wisselende) thuis-IP, en dat de site plat gaat als je pc of
+internet even wegvalt. Voor een paar euro per maand is een VPS/PaaS stabieler en simpeler te
+beheren. Render.com is een prettige optie omdat het rechtstreeks vanaf GitHub deployt via de
+meegeleverde `Dockerfile`, zonder dat je zelf een server hoeft te beheren.
+
+1. Maak een account op [render.com](https://render.com), koppel je GitHub-repo.
+2. **New > Web Service**, kies deze repo. Render herkent de `Dockerfile` automatisch.
+3. Voeg een **Persistent Disk** toe (bijv. 1 GB, mount path `/app/data`) - hierop bewaar je de
+   bestanden die niet in git staan: `google-service-account.json`, `bunq_production.conf`,
+   `users.json`, `laatste_resultaat.json`, en de map `gegenereerde_contracten/`.
+4. Zet de environment variables (Render dashboard > Environment) zoals in `.env.example`, maar
+   met paden die naar de disk wijzen, bijvoorbeeld:
+   ```
+   GOOGLE_SERVICE_ACCOUNT_FILE=/app/data/google-service-account.json
+   BUNQ_CONF_FILE=/app/data/bunq_production.conf
+   USERS_FILE=/app/data/users.json
+   ```
+5. Na de eerste deploy: open een shell op de service (Render dashboard > Shell) en upload/plak de
+   inhoud van je `google-service-account.json` naar `/app/data/google-service-account.json`, en
+   draai daar `python scripts/setup_bunq.py` en `python scripts/create_user.py <naam>` (met de
+   env-variabelen die al door Render zijn ingesteld).
+6. Render geeft je een `https://...onrender.com` URL - deel die met Justin, samen met zijn
+   gebruikersnaam/wachtwoord.
+
+Andere prima alternatieven: Railway.app (vergelijkbaar met Render) of een goedkope VPS bij
+Hetzner (~€4/maand) met de `Dockerfile` en een reverse proxy (bijv. Caddy) voor gratis HTTPS -
+dat laatste vraagt wel wat meer zelf-beheer (patches, herstarten na een reboot).
+
+### Lokaal met Docker testen
 
 ```bash
-python main.py --dry-run
+docker build -t kamerverhuur-scanner .
+docker run --rm -p 8000:8000 \
+  -v "$(pwd)/.env:/app/.env" \
+  -v "$(pwd)/google-service-account.json:/app/google-service-account.json" \
+  -v "$(pwd)/bunq_production.conf:/app/bunq_production.conf" \
+  -v "$(pwd)/users.json:/app/users.json" \
+  kamerverhuur-scanner
 ```
 
-Klopt het overzicht? Draai 'm dan zonder `--dry-run` voor een echte run
-(sheet bijwerken + mail versturen):
+## Belangrijke kanttekeningen
 
-```bash
-python main.py
-```
-
-## Stap 7: automatisch laten draaien op de 1e, 3e en 5e van de maand
-
-### Linux/macOS (cron)
-
-Open je crontab:
-
-```bash
-crontab -e
-```
-
-Voeg toe (past aan `/pad/naar/kamerverhuur-scanner` en het venv-pad):
-
-```
-0 9 1,3,5 * * cd /pad/naar/kamerverhuur-scanner && /pad/naar/kamerverhuur-scanner/.venv/bin/python main.py >> /pad/naar/kamerverhuur-scanner/cron.log 2>&1
-```
-
-Dit draait elke 1e, 3e en 5e dag van de maand om 09:00. Pas het tijdstip aan naar wens.
-
-### Windows (Taakplanner)
-
-1. Open **Taakplanner** > **Basistaak maken**.
-2. Trigger: **Maandelijks**, dagen **1, 3, 5**.
-3. Actie: **Programma starten**, programma `C:\pad\naar\.venv\Scripts\python.exe`,
-   argumenten `main.py`, starten in `C:\pad\naar\kamerverhuur-scanner`.
+- **Huurcontracten zijn een voorbeeldsjabloon.** `contract_templates/huurovereenkomst_voorbeeld.html`
+  bevat placeholder-bepalingen, geen juridisch gecontroleerde tekst. Vervang de inhoud door een
+  gecontroleerd modelcontract (bijv. de modelhuurovereenkomst van de Rijksoverheid of Woonbond)
+  voordat je een gegenereerd contract laat ondertekenen. De site zelf toont deze waarschuwing ook
+  bij het genereren.
+- **Geen automatische Kamernet-plaatsing.** De advertentieknop genereert alleen tekst om te
+  kopiëren/plakken.
+- **Matching op naam is een benadering.** Bij twijfel is een IBAN of vast zoekwoord per kamer
+  betrouwbaarder dan matchen op naam.
+- **Betrouwbaarheidsscore** is simpel gehouden: het percentage uitgevoerde controles waarbij de
+  status "Betaald" was. Geen tracking van hoeveel dagen te laat, alleen of het bedrag klopte op
+  het moment van controleren.
 
 ## Beveiliging
 
-- `.env`, `google-service-account.json` en `bunq_production.conf` bevatten geheimen
-  en staan in `.gitignore` — commit ze nooit.
-- Gebruik de Google service account en bunq API key **alleen** voor dit script.
-- Het rapport bevat financiële gegevens; zorg dat `EMAIL_TO` een adres is dat alleen jij leest.
-
-## Beperkingen
-
-- Er wordt per bunq-rekening naar de meest recente 200 transacties gekeken (ruim
-  voldoende voor 15 huurders per maand, maar geen volledige historie).
-- Matching op naam is een benadering (substring-vergelijking); bij twijfel is een
-  IBAN of vast zoekwoord per huurder betrouwbaarder.
-- Een betaling wordt aan maximaal één huurder toegekend (op volgorde van de sheet),
-  zodat bedragen niet dubbel meetellen.
+- `.env`, `google-service-account.json`, `bunq_production.conf` en `users.json` bevatten geheimen
+  en staan in `.gitignore` - commit ze nooit, ook niet naar een privé-fork.
+- Gebruik de Google service account en bunq API key alleen voor dit doel.
+- Deel de site-login alleen met jou en Justin.
 
 ## Problemen oplossen
 
-- **`pip install` faalt op `bunq_sdk` met een `install_layout` fout** — dit komt door
-  een verouderde `setuptools`. Draai eerst `pip install --upgrade pip setuptools wheel`
-  in je virtualenv en probeer het opnieuw.
-- **"Kon bunq-context bestand niet vinden"** — draai `python scripts/setup_bunq.py` eenmalig.
-- **Huurder staat op "Nog niet ontvangen" terwijl er wel betaald is** — controleer of
-  de naam/IBAN in de sheet overeenkomt met de bankgegevens, of vul de kolom Zoekwoord in.
-- **E-mail komt niet aan** — controleer `GMAIL_APP_PASSWORD` (geen gewoon Gmail-wachtwoord)
-  en of "minder veilige apps"/app-wachtwoorden nog actief zijn op het Google-account.
+- **`pip install` faalt op `bunq_sdk` met een `install_layout` fout** - verouderde `setuptools`;
+  draai `pip install --upgrade pip setuptools wheel` en probeer opnieuw.
+- **"Kon bunq-context bestand niet vinden"** - draai `python scripts/setup_bunq.py` (opnieuw, na
+  het instellen van `BUNQ_CONF_FILE`).
+- **Kamer staat op "Nog niet ontvangen" terwijl er wel betaald is** - controleer IBAN/naam/Zoekwoord
+  in de sheet.
+- **Inloggen lukt niet** - controleer of `USERS_FILE` naar het juiste pad wijst en of
+  `scripts/create_user.py` succesvol is gedraaid.

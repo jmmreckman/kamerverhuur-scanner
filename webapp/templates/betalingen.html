@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Betalingen - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Betalingen controleren</h1>
+
+<div class="card">
+  <p>Haalt de inkomende betalingen van deze maand op via bunq, koppelt ze aan de huurders
+     en werkt de sheet + geschiedenis bij. Dit kan een paar seconden duren.</p>
+  <form method="post">
+    <button class="btn" type="submit">Nu controleren</button>
+  </form>
+</div>
+
+{% if net_gecontroleerd %}
+<div class="card">
+  <h2>Resultaat van deze controle</h2>
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
+    {% for r in net_gecontroleerd["results"] %}
+    <tr>
+      <td>{{ r.tenant.kamer }}</td>
+      <td>{{ r.tenant.naam }}</td>
+      <td>{{ r.tenant.verwacht_bedrag|eur }}</td>
+      <td>{{ r.ontvangen_bedrag|eur }}</td>
+      <td class="{{ r.status.value|status_klasse }}">{{ r.status.value }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if net_gecontroleerd["unmatched"] %}
+  <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <table>
+    <tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr>
+    {% for p in net_gecontroleerd["unmatched"] %}
+    <tr>
+      <td>{{ p.datum.strftime("%d-%m-%Y") }}</td>
+      <td>{{ p.tegenpartij_naam }}</td>
+      <td>{{ p.bedrag|eur }}</td>
+      <td>{{ p.omschrijving }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% elif cache %}
+<div class="card">
+  <h2>Laatste controle ({{ cache["gecontroleerd_op"] }})</h2>
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
+    {% for r in cache["resultaten"] %}
+    <tr>
+      <td>{{ r["kamer"] }}</td>
+      <td>{{ r["naam"] }}</td>
+      <td>{{ r["verwacht_bedrag"]|eur }}</td>
+      <td>{{ r["ontvangen_bedrag"]|eur }}</td>
+      <td class="{{ r['status']|status_klasse }}">{{ r["status"] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

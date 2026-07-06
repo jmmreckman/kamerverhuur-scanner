@@ -17,7 +17,7 @@ class Status(str, Enum):
 @dataclass(frozen=True)
 class Tenant:
     row_index: int  # rijnummer in de Google Sheet (voor terugschrijven)
-    naam: str
+    naam: str  # leeg = kamer staat leeg (geen huurder)
     kamer: str
     verwacht_bedrag: Decimal
     iban: str | None = None
@@ -40,3 +40,13 @@ class TenantResult:
     ontvangen_bedrag: Decimal
     status: Status
     gematchte_betalingen: list[Payment] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class HistorieRegel:
+    datum: date
+    kamer: str
+    huurder: str
+    verwacht_bedrag: Decimal
+    ontvangen_bedrag: Decimal
+    status: Status

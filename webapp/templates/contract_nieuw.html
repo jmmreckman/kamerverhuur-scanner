@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Nieuw huurcontract{% endblock %}
+{% block content %}
+<h1>Nieuw huurcontract</h1>
+
+<div class="warning-box">
+  <p>Dit genereert een <strong>concepttekst</strong> op basis van een voorbeeldsjabloon
+     (contract_templates/huurovereenkomst_voorbeeld.html) - geen juridisch gecontroleerd
+     document. Laat de bepalingen controleren (of vervang ze door een erkend
+     modelcontract, bv. van de Rijksoverheid) voordat je dit laat ondertekenen.</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    <label>Kamer
+      <select name="kamer" required>
+        {% for k in kamers %}
+        <option value="{{ k.kamer }}" {% if k.naam %}data-naam="{{ k.naam }}" data-prijs="{{ k.verwacht_bedrag|eur }}"{% endif %}>
+          Kamer {{ k.kamer }}{% if k.naam %} ({{ k.naam }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Naam huurder
+      <input type="text" name="huurder_naam" required>
+    </label>
+    <label>Huurprijs per maand (EUR)
+      <input type="text" name="huurprijs" required>
+    </label>
+    <label>Waarborgsom (EUR)
+      <input type="text" name="borg">
+    </label>
+    <label>Ingangsdatum
+      <input type="date" name="ingangsdatum" value="{{ vandaag.isoformat() }}" required>
+    </label>
+    <label>Bijzonderheden
+      <textarea name="bijzonderheden" placeholder="Eventuele aanvullende afspraken"></textarea>
+    </label>
+    <button class="btn" type="submit">Genereer contract</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if not cache %}
+<div class="card">
+  <p>Nog geen betaalcontrole uitgevoerd.</p>
+  <a class="btn" href="{{ url_for('betalingen') }}">Nu controleren</a>
+</div>
+{% else %}
+{% set resultaten = cache["resultaten"] %}
+{% set problemen = resultaten|rejectattr("status", "equalto", "Betaald")|list %}
+<div class="card">
+  <h2>Actuele stand</h2>
+  <p><strong>{{ resultaten|length - problemen|length }}</strong> van <strong>{{ resultaten|length }}</strong> kamers in orde.</p>
+  <p class="muted">Laatst gecontroleerd op {{ cache["gecontroleerd_op"] }}.</p>
+  {% if cache["niet_gekoppelde_betalingen"] %}
+  <p class="muted">{{ cache["niet_gekoppelde_betalingen"] }} inkomende betaling(en) konden niet gekoppeld worden - zie de betalingenpagina.</p>
+  {% endif %}
+  <a class="btn" href="{{ url_for('betalingen') }}">Opnieuw controleren</a>
+</div>
+
+{% if problemen %}
+<div class="card">
+  <h2>Aandachtspunten</h2>
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
+    {% for r in problemen %}
+    <tr>
+      <td><a href="{{ url_for('kamer_detail', kamer_naam=r['kamer']) }}">{{ r['kamer'] }}</a></td>
+      <td>{{ r["naam"] }}</td>
+      <td>{{ r["verwacht_bedrag"]|eur }}</td>
+      <td>{{ r["ontvangen_bedrag"]|eur }}</td>
+      <td class="{{ r['status']|status_klasse }}">{{ r["status"] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card"><p>Geen aandachtspunten.</p></div>
+{% endif %}
+{% endif %}
+{% endblock %}

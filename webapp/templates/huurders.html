@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Huurders - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Huurders</h1>
+<div class="card">
+  <p>De huurdersgegevens (naam, kamer, huurprijs, IBAN/zoekwoord) beheer je in de Google Sheet.
+     Wijzigingen daar worden bij de volgende controle automatisch meegenomen.</p>
+  <a class="btn" href="{{ sheet_url }}" target="_blank" rel="noopener">Open de Google Sheet om te bewerken</a>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Kamer</th><th>Naam</th><th>Huurprijs</th><th>IBAN</th><th>Zoekwoord</th></tr>
+    {% for k in kamers %}
+    <tr>
+      <td><a href="{{ url_for('kamer_detail', kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
+      <td>{{ k.naam or "(leegstaand)" }}</td>
+      <td>{{ k.verwacht_bedrag|eur }}</td>
+      <td>{{ k.iban or "-" }}</td>
+      <td>{{ k.zoekwoord or "-" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Contracten - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Contracten</h1>
+
+<div class="card">
+  <a class="btn" href="{{ url_for('contract_nieuw') }}">Nieuw huurcontract</a>
+</div>
+
+<div class="card">
+  {% if contracten %}
+    <ul>
+    {% for c in contracten %}
+      <li><a href="{{ url_for('contract_bekijken', bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Nog geen contracten gegenereerd.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Kamer {{ kamer.kamer }} - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Kamer {{ kamer.kamer }}</h1>
+
+<div class="card">
+  {% if kamer.naam %}
+    <p><strong>Huurder:</strong> {{ kamer.naam }}</p>
+    <p><strong>Huurprijs:</strong> {{ kamer.verwacht_bedrag|eur }} / maand</p>
+    {% if kamer.iban %}<p><strong>IBAN:</strong> {{ kamer.iban }}</p>{% endif %}
+    {% if cache_status %}
+      <p><strong>Laatste controle:</strong>
+        <span class="{{ cache_status['status']|status_klasse }}">{{ cache_status["status"] }}</span>
+        (ontvangen {{ cache_status["ontvangen_bedrag"]|eur }})
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="muted">Deze kamer staat op dit moment leeg.</p>
+  {% endif %}
+  <a class="btn" href="{{ url_for('kamer_advertentie', kamer_naam=kamer.kamer) }}">Advertentie plaatsen</a>
+</div>
+
+<div class="card">
+  <h2>Contracten</h2>
+  {% if contracten %}
+    <ul>
+    {% for c in contracten %}
+      <li><a href="{{ url_for('contract_bekijken', bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Nog geen contract gegenereerd voor deze kamer.</p>
+  {% endif %}
+  <a class="btn btn-secondary" href="{{ url_for('contract_nieuw') }}">Nieuw huurcontract</a>
+</div>
+
+<div class="card">
+  <h2>Betaalgeschiedenis</h2>
+  {% if betrouwbaarheid %}
+    <p><strong>Betrouwbaarheid:</strong> {{ betrouwbaarheid.percentage }}% op orde
+       ({{ betrouwbaarheid.op_orde }} van {{ betrouwbaarheid.totaal }} controles)</p>
+  {% else %}
+    <p class="muted">Nog geen geschiedenis - deze wordt opgebouwd bij elke uitgevoerde controle.</p>
+  {% endif %}
+  {% if geschiedenis %}
+  <table>
+    <tr><th>Datum</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
+    {% for regel in geschiedenis %}
+    <tr>
+      <td>{{ regel.datum.strftime("%d-%m-%Y") }}</td>
+      <td>{{ regel.huurder }}</td>
+      <td>{{ regel.verwacht_bedrag|eur }}</td>
+      <td>{{ regel.ontvangen_bedrag|eur }}</td>
+      <td class="{{ regel.status.value|status_klasse }}">{{ regel.status.value }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}
