@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Kamers - Mahoniestraat 15{% endblock %}
 {% block content %}
-<h1>Kamers</h1>
+<div class="page-header">
+  <h1>Kamers</h1>
+  <p class="muted">Klik op een kamer voor huurder, contract en betaalgeschiedenis</p>
+</div>
 <div class="grid">
   {% for k in kamers %}
   {% set cache_regel = (cache["resultaten"]|selectattr("kamer", "equalto", k.kamer)|first) if cache else none %}
@@ -11,7 +14,7 @@
       <p>{{ k.naam }}</p>
       <p class="muted">{{ k.verwacht_bedrag|eur }} / maand</p>
       {% if cache_regel %}
-        <p class="{{ cache_regel['status']|status_klasse }}">{{ cache_regel["status"] }}</p>
+        <span class="pil {{ cache_regel['status']|status_klasse }}">{{ cache_regel["status"] }}</span>
       {% else %}
         <p class="muted">Nog niet gecontroleerd</p>
       {% endif %}

@@ -1,7 +1,11 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten %}
 {% block title %}Dashboard - Mahoniestraat 15{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <p class="muted">Overzicht van Mahoniestraat 15</p>
+</div>
 
 {% if not cache %}
 <div class="card">
@@ -11,11 +15,33 @@
 {% else %}
 {% set resultaten = cache["resultaten"] %}
 {% set problemen = resultaten|rejectattr("status", "equalto", "Betaald")|list %}
+{% set alles_ok = problemen|length == 0 %}
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon {{ 'ok' if alles_ok else 'warn' }}">{{ icon_check() if alles_ok else icon_alert() }}</div>
+    <div>
+      <div class="stat-value">{{ resultaten|length - problemen|length }} / {{ resultaten|length }}</div>
+      <div class="stat-label">kamers in orde</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">{{ icon_euro() }}</div>
+    <div>
+      <div class="stat-value">{{ totalen.ontvangen|eur }}</div>
+      <div class="stat-label">van {{ totalen.verwacht|eur }} ontvangen</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">{{ icon_clock() }}</div>
+    <div>
+      <div class="stat-value">{{ cache["gecontroleerd_op"] }}</div>
+      <div class="stat-label">laatst gecontroleerd</div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
-  <h2>Actuele stand</h2>
-  <p><strong>{{ resultaten|length - problemen|length }}</strong> van <strong>{{ resultaten|length }}</strong> kamers in orde.</p>
-  <p><strong>Totaal:</strong> {{ totalen.ontvangen|eur }} ontvangen van {{ totalen.verwacht|eur }} verwacht per maand.</p>
-  <p class="muted">Laatst gecontroleerd op {{ cache["gecontroleerd_op"] }}.</p>
   {% if cache["niet_gekoppelde_betalingen"] %}
   <p class="muted">{{ cache["niet_gekoppelde_betalingen"] }} inkomende betaling(en) konden niet gekoppeld worden - zie de betalingenpagina.</p>
   {% endif %}
@@ -33,13 +59,40 @@
       <td>{{ r["naam"] }}</td>
       <td>{{ r["verwacht_bedrag"]|eur }}</td>
       <td>{{ r["ontvangen_bedrag"]|eur }}</td>
-      <td class="{{ r['status']|status_klasse }}">{{ r["status"] }}</td>
+      <td><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
     </tr>
     {% endfor %}
   </table>
 </div>
-{% else %}
-<div class="card"><p>Geen aandachtspunten.</p></div>
 {% endif %}
 {% endif %}
+
+<h2>Snel naar</h2>
+<div class="tegel-grid">
+  <a class="tegel" href="{{ url_for('kamers_overzicht') }}">
+    <div class="tegel-icon">{{ icon_kamers() }}</div>
+    <div class="tegel-titel">Kamers</div>
+    <div class="tegel-beschrijving">Overzicht per kamer, huurder, contract en geschiedenis</div>
+  </a>
+  <a class="tegel" href="{{ url_for('huurders') }}">
+    <div class="tegel-icon">{{ icon_huurders() }}</div>
+    <div class="tegel-titel">Huurders</div>
+    <div class="tegel-beschrijving">Gegevens bekijken en bewerken</div>
+  </a>
+  <a class="tegel" href="{{ url_for('betalingen') }}">
+    <div class="tegel-icon">{{ icon_betalingen() }}</div>
+    <div class="tegel-titel">Betalingen</div>
+    <div class="tegel-beschrijving">Huur controleren via bunq</div>
+  </a>
+  <a class="tegel" href="{{ url_for('contracten_overzicht') }}">
+    <div class="tegel-icon">{{ icon_contracten() }}</div>
+    <div class="tegel-titel">Contracten</div>
+    <div class="tegel-beschrijving">Huurcontracten genereren en bekijken</div>
+  </a>
+  <a class="tegel" href="{{ url_for('documenten') }}">
+    <div class="tegel-icon">{{ icon_documenten() }}</div>
+    <div class="tegel-titel">Documenten</div>
+    <div class="tegel-beschrijving">Puntentelling, contracten en meer</div>
+  </a>
+</div>
 {% endblock %}

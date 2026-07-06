@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{% if kamer %}Kamer {{ kamer.kamer }} bewerken{% else %}Nieuwe kamer{% endif %}{% endblock %}
 {% block content %}
-<h1>{% if kamer %}Kamer {{ kamer.kamer }} bewerken{% else %}Nieuwe kamer toevoegen{% endif %}</h1>
+<div class="page-header">
+  <h1>{% if kamer %}Kamer {{ kamer.kamer }} bewerken{% else %}Nieuwe kamer toevoegen{% endif %}</h1>
+</div>
 
 <div class="card">
   <form method="post" action="{% if kamer %}{{ url_for('huurder_bewerken', kamer_naam=kamer.kamer) }}{% else %}{{ url_for('huurder_nieuw') }}{% endif %}">

@@ -196,28 +196,51 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
         return Response(html, mimetype="text/html")
 
+    def _documenten_url(folder_id: str | None):
+        return url_for("documenten", folder_id=folder_id) if folder_id else url_for("documenten")
+
     @app.route("/documenten")
+    @app.route("/documenten/map/<folder_id>")
     @login_required
-    def documenten():
+    def documenten(folder_id: str | None = None):
         if not config.google_drive_folder_id:
-            return render_template("documenten.html", bestanden=None)
+            return render_template("documenten.html", bestanden=None, kruimels=[], folder_id=None)
         drive = DriveClient(config)
-        return render_template("documenten.html", bestanden=drive.list_bestanden())
+        return render_template(
+            "documenten.html",
+            bestanden=drive.list_bestanden(folder_id),
+            kruimels=drive.get_pad(folder_id),
+            folder_id=folder_id,
+        )
 
     @app.route("/documenten/upload", methods=["POST"])
     @login_required
     def documenten_upload():
+        folder_id = request.form.get("folder_id") or None
         if not config.google_drive_folder_id:
             flash("Documenten zijn nog niet ingesteld (GOOGLE_DRIVE_FOLDER_ID ontbreekt in .env).")
-            return redirect(url_for("documenten"))
-        bestand = request.files.get("bestand")
-        if bestand and bestand.filename:
-            drive = DriveClient(config)
-            drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read())
-            flash(f"'{bestand.filename}' geupload.")
-        else:
-            flash("Geen bestand geselecteerd.")
-        return redirect(url_for("documenten"))
+            return redirect(_documenten_url(folder_id))
+        drive = DriveClient(config)
+        aantal = 0
+        for bestand in request.files.getlist("bestand"):
+            if bestand and bestand.filename:
+                drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=folder_id)
+                aantal += 1
+        flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        return redirect(_documenten_url(folder_id))
+
+    @app.route("/documenten/nieuwe-map", methods=["POST"])
+    @login_required
+    def documenten_nieuwe_map():
+        folder_id = request.form.get("folder_id") or None
+        if not config.google_drive_folder_id:
+            flash("Documenten zijn nog niet ingesteld (GOOGLE_DRIVE_FOLDER_ID ontbreekt in .env).")
+            return redirect(_documenten_url(folder_id))
+        naam = request.form.get("naam", "").strip()
+        if naam:
+            DriveClient(config).maak_map(naam, folder_id=folder_id)
+            flash(f"Map '{naam}' aangemaakt.")
+        return redirect(_documenten_url(folder_id))
 
     @app.route("/documenten/<file_id>/download")
     @login_required

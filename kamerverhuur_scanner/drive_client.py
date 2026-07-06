@@ -1,5 +1,5 @@
-"""Lezen/schrijven van bestanden in een gedeelde Google Drive-map via de
-service account (dezelfde credentials als de Google Sheet). De map moet
+"""Lezen/schrijven van bestanden en mappen in een gedeelde Google Drive-map via
+de service account (dezelfde credentials als de Google Sheet). De map moet
 gedeeld zijn met het service-account e-mailadres (zie README)."""
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from .config import Config
 
 _SCOPES = ["https://www.googleapis.com/auth/drive"]
 _GOOGLE_NATIVE_PREFIX = "application/vnd.google-apps."
+_MAP_MIMETYPE = "application/vnd.google-apps.folder"
 
 
 @dataclass(frozen=True)
@@ -25,39 +26,58 @@ class DriveBestand:
     grootte: int | None
     weergave_link: str
 
+    @property
+    def is_map(self) -> bool:
+        return self.mimetype == _MAP_MIMETYPE
+
+
+@dataclass(frozen=True)
+class Kruimel:
+    id: str
+    naam: str
+
 
 class DriveClient:
     def __init__(self, config: Config):
         credentials = Credentials.from_service_account_file(config.google_service_account_file, scopes=_SCOPES)
         self._service = build("drive", "v3", credentials=credentials, cache_discovery=False)
-        self._folder_id = config.google_drive_folder_id
+        self.root_folder_id = config.google_drive_folder_id
 
-    def list_bestanden(self) -> list[DriveBestand]:
+    def list_bestanden(self, folder_id: str | None = None) -> list[DriveBestand]:
+        doel = folder_id or self.root_folder_id
         resultaat = (
             self._service.files()
             .list(
-                q=f"'{self._folder_id}' in parents and trashed = false",
+                q=f"'{doel}' in parents and trashed = false",
                 fields="files(id, name, mimeType, modifiedTime, size, webViewLink)",
-                orderBy="name",
+                orderBy="folder,name",
                 pageSize=200,
             )
             .execute()
         )
-        return [
-            DriveBestand(
-                id=f["id"],
-                naam=f["name"],
-                mimetype=f.get("mimeType", ""),
-                gewijzigd_op=f.get("modifiedTime", ""),
-                grootte=int(f["size"]) if f.get("size") else None,
-                weergave_link=f.get("webViewLink", ""),
-            )
-            for f in resultaat.get("files", [])
-        ]
+        return [_naar_bestand(f) for f in resultaat.get("files", [])]
 
-    def upload_bestand(self, bestandsnaam: str, mimetype: str, inhoud: bytes) -> None:
+    def get_pad(self, folder_id: str | None) -> list[Kruimel]:
+        """Broodkruimelpad vanaf de hoofdmap tot en met `folder_id`."""
+        if not folder_id or folder_id == self.root_folder_id:
+            return []
+        kruimels: list[Kruimel] = []
+        huidige_id = folder_id
+        while huidige_id and huidige_id != self.root_folder_id:
+            info = self._service.files().get(fileId=huidige_id, fields="id, name, parents").execute()
+            kruimels.append(Kruimel(id=info["id"], naam=info["name"]))
+            parents = info.get("parents") or []
+            huidige_id = parents[0] if parents else None
+        kruimels.reverse()
+        return kruimels
+
+    def maak_map(self, naam: str, folder_id: str | None = None) -> None:
+        metadata = {"name": naam, "mimeType": _MAP_MIMETYPE, "parents": [folder_id or self.root_folder_id]}
+        self._service.files().create(body=metadata, fields="id").execute()
+
+    def upload_bestand(self, bestandsnaam: str, mimetype: str, inhoud: bytes, folder_id: str | None = None) -> None:
         media = MediaIoBaseUpload(io.BytesIO(inhoud), mimetype=mimetype or "application/octet-stream", resumable=False)
-        metadata = {"name": bestandsnaam, "parents": [self._folder_id]}
+        metadata = {"name": bestandsnaam, "parents": [folder_id or self.root_folder_id]}
         self._service.files().create(body=metadata, media_body=media, fields="id").execute()
 
     def download_bestand(self, file_id: str) -> tuple[str, str, bytes]:
@@ -80,3 +100,14 @@ class DriveClient:
         while not done:
             _status, done = downloader.next_chunk()
         return naam, mimetype, buffer.getvalue()
+
+
+def _naar_bestand(f: dict) -> DriveBestand:
+    return DriveBestand(
+        id=f["id"],
+        naam=f["name"],
+        mimetype=f.get("mimeType", ""),
+        gewijzigd_op=f.get("modifiedTime", ""),
+        grootte=int(f["size"]) if f.get("size") else None,
+        weergave_link=f.get("webViewLink", ""),
+    )

@@ -20,9 +20,10 @@ zodat jullie er allebei bij kunnen zonder dat er iets lokaal hoeft te draaien.
 - **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-huurcontract
   (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is een voorbeeldsjabloon, geen
   juridisch gecontroleerd contract - zie de waarschuwing verderop.
-- **Documenten** - bekijk/upload/download bestanden (puntentellingen, huurcontracten, etc.) uit
-  een gedeelde Google Drive-map, rechtstreeks vanaf de site - ook hier is geen aparte Drive-toegang
-  voor Justin nodig, de site regelt dat via de service account.
+- **Documenten** - echte mappenstructuur van een gedeelde Google Drive-map: mappen openen,
+  bestanden slepen om te uploaden, nieuwe mappen aanmaken en downloaden, rechtstreeks vanaf de
+  site - ook hier is geen aparte Drive-toegang voor Justin nodig, de site regelt dat via de
+  service account.
 - **Advertentie plaatsen** - genereert een kant-en-klare titel/beschrijving per kamer om te
   plakken op Kamernet. Er is geen publieke Kamernet-API voor individuele verhuurders (alleen een
   zakelijke XML-feed voor makelaars/vastgoedbeheerders via een sales-contact) - vandaar geen

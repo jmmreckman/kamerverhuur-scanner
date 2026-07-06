@@ -1,11 +1,13 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon_plus %}
 {% block title %}Huurders - Mahoniestraat 15{% endblock %}
 {% block content %}
-<h1>Huurders</h1>
+<div class="page-header">
+  <h1>Huurders</h1>
+  <p class="muted">Wijzigingen worden direct in de sheet opgeslagen</p>
+</div>
 <div class="card">
-  <p>Bewerk hieronder de kamer-/huurdersgegevens. Wijzigingen worden direct in de sheet
-     opgeslagen en bij de volgende betaalcontrole meegenomen.</p>
-  <a class="btn" href="{{ url_for('huurder_nieuw') }}">Nieuwe kamer toevoegen</a>
+  <a class="btn" href="{{ url_for('huurder_nieuw') }}">{{ icon_plus() }} Nieuwe kamer toevoegen</a>
   <a class="btn btn-secondary" href="{{ sheet_url }}" target="_blank" rel="noopener">
     Optioneel: bekijk de ruwe Google Sheet
   </a>

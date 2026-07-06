@@ -1,10 +1,13 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon_plus %}
 {% block title %}Contracten - Mahoniestraat 15{% endblock %}
 {% block content %}
-<h1>Contracten</h1>
+<div class="page-header">
+  <h1>Contracten</h1>
+</div>
 
 <div class="card">
-  <a class="btn" href="{{ url_for('contract_nieuw') }}">Nieuw huurcontract</a>
+  <a class="btn" href="{{ url_for('contract_nieuw') }}">{{ icon_plus() }} Nieuw huurcontract</a>
 </div>
 
 <div class="card">

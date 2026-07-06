@@ -7,16 +7,25 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout %}
   {% if current_user.is_authenticated %}
+  {% set ep = request.endpoint or "" %}
   <nav class="navbar">
-    <div class="navbar-title">Mahoniestraat 15</div>
-    <a href="{{ url_for('dashboard') }}">Dashboard</a>
-    <a href="{{ url_for('kamers_overzicht') }}">Kamers</a>
-    <a href="{{ url_for('huurders') }}">Huurders</a>
-    <a href="{{ url_for('betalingen') }}">Betalingen</a>
-    <a href="{{ url_for('contracten_overzicht') }}">Contracten</a>
-    <a href="{{ url_for('documenten') }}">Documenten</a>
-    <a class="navbar-right" href="{{ url_for('logout') }}">Uitloggen ({{ current_user.id }})</a>
+    <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+      <span class="logo-mark">M15</span>
+      <span>Mahoniestraat 15</span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard') }}">{{ icon_dashboard() }} Dashboard</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht') }}">{{ icon_kamers() }} Kamers</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders') }}">{{ icon_huurders() }} Huurders</a>
+      <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen') }}">{{ icon_betalingen() }} Betalingen</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht') }}">{{ icon_contracten() }} Contracten</a>
+      <a class="nav-link {{ 'actief' if ep == 'documenten' }}" href="{{ url_for('documenten') }}">{{ icon_documenten() }} Documenten</a>
+    </div>
+    <div class="nav-right">
+      <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
+    </div>
   </nav>
   {% endif %}
 
