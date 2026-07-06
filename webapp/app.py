@@ -41,7 +41,9 @@ def create_app(config: Config | None = None) -> Flask:
 
     @app.template_filter("eur")
     def eur(value) -> str:
-        return f"{Decimal(str(value)):.2f}"
+        bedrag = f"{Decimal(str(value)):,.2f}"  # bv. "4,209.56"
+        bedrag = bedrag.replace(",", "X").replace(".", ",").replace("X", ".")  # -> "4.209,56"
+        return f"€{bedrag}"
 
     @app.template_filter("status_klasse")
     def status_klasse(status_tekst: str) -> str:

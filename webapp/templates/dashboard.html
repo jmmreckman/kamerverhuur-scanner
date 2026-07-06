@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten %}
+{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro %}
 {% block title %}Dashboard - Mahoniestraat 15{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -66,33 +66,4 @@
 </div>
 {% endif %}
 {% endif %}
-
-<h2>Snel naar</h2>
-<div class="tegel-grid">
-  <a class="tegel" href="{{ url_for('kamers_overzicht') }}">
-    <div class="tegel-icon">{{ icon_kamers() }}</div>
-    <div class="tegel-titel">Kamers</div>
-    <div class="tegel-beschrijving">Overzicht per kamer, huurder, contract en geschiedenis</div>
-  </a>
-  <a class="tegel" href="{{ url_for('huurders') }}">
-    <div class="tegel-icon">{{ icon_huurders() }}</div>
-    <div class="tegel-titel">Huurders</div>
-    <div class="tegel-beschrijving">Gegevens bekijken en bewerken</div>
-  </a>
-  <a class="tegel" href="{{ url_for('betalingen') }}">
-    <div class="tegel-icon">{{ icon_betalingen() }}</div>
-    <div class="tegel-titel">Betalingen</div>
-    <div class="tegel-beschrijving">Huur controleren via bunq</div>
-  </a>
-  <a class="tegel" href="{{ url_for('contracten_overzicht') }}">
-    <div class="tegel-icon">{{ icon_contracten() }}</div>
-    <div class="tegel-titel">Contracten</div>
-    <div class="tegel-beschrijving">Huurcontracten genereren en bekijken</div>
-  </a>
-  <a class="tegel" href="{{ url_for('documenten') }}">
-    <div class="tegel-icon">{{ icon_documenten() }}</div>
-    <div class="tegel-titel">Documenten</div>
-    <div class="tegel-beschrijving">Puntentelling, contracten en meer</div>
-  </a>
-</div>
 {% endblock %}
