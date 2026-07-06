@@ -197,8 +197,15 @@ docker run --rm -p 8000:8000 \
   bij het genereren.
 - **Geen automatische Kamernet-plaatsing.** De advertentieknop genereert alleen tekst om te
   kopiëren/plakken.
-- **Matching op naam is een benadering.** Bij twijfel is een IBAN of vast zoekwoord per kamer
-  betrouwbaarder dan matchen op naam.
+- **Matching op naam is een benadering.** Zonder IBAN/Zoekwoord wordt gekeken of de volledige
+  naam, of anders een los naamdeel (voornaam, achternaam, delen van een koppelnaam), voorkomt in
+  de afzendernaam of omschrijving - handig als bijvoorbeeld een ouder betaalt. Bij twijfel is een
+  IBAN of vast zoekwoord per kamer betrouwbaarder.
+- **Vooruitbetalingen**: er wordt ook gekeken naar betalingen die tot `VOORUITBETALING_DAGEN`
+  (standaard 14) vóór de 1e van de maand binnenkomen, voor huurders die ruim van tevoren betalen.
+  Als iemand wel érg vroeg in de vorige maand al voor de maand erna betaalt, kan dat er in de
+  vorige maand even uitzien als "te veel ontvangen" - dat is onschuldig (gewoon vooruitbetaald),
+  geen fout.
 - **Betrouwbaarheidsscore** is simpel gehouden: het percentage uitgevoerde controles waarbij de
   status "Betaald" was. Geen tracking van hoeveel dagen te laat, alleen of het bedrag klopte op
   het moment van controleren.

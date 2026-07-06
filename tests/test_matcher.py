@@ -92,6 +92,28 @@ def test_zoekwoord_heeft_voorrang_op_volledige_naam():
     assert unmatched == []
 
 
+def test_matcht_op_voornaam_als_ouder_betaalt():
+    # De moeder maakt over, maar de voornaam van de huurder staat in de omschrijving.
+    tenant = _tenant(naam="Ewen Jayad", bedrag="785.00")
+    payments = [_payment(bedrag="785.00", naam="Morgane Dubois", omschrijving="Huur Ewen juli")]
+
+    results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
+
+    assert results[0].status == Status.BETAALD
+    assert unmatched == []
+
+
+def test_matcht_op_deel_van_koppelnaam():
+    # Achternaam komt hier expres niet voor, alleen een deel van de koppelnaam.
+    tenant = _tenant(naam="Stefania-Teodora Olteanu", bedrag="745.00")
+    payments = [_payment(bedrag="745.00", naam="Andere Afzender", omschrijving="teodora huur juli")]
+
+    results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
+
+    assert results[0].status == Status.BETAALD
+    assert unmatched == []
+
+
 def test_betaling_wordt_niet_dubbel_toegekend():
     # "Vries" matcht ook op de betaling van "Jan de Vries" -> test dat de betaling
     # niet aan beide huurders tegelijk wordt toegekend.

@@ -37,6 +37,7 @@ class Config:
     flask_secret_key: str
 
     bedrag_tolerantie: Decimal
+    vooruitbetaling_dagen: int
 
     @staticmethod
     def load() -> "Config":
@@ -53,4 +54,5 @@ class Config:
             users_file=os.environ.get("USERS_FILE", "users.json").strip(),
             flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),
+            vooruitbetaling_dagen=int(os.environ.get("VOORUITBETALING_DAGEN", "14")),
         )

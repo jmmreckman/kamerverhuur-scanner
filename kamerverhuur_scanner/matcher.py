@@ -49,12 +49,24 @@ def _matches(tenant: Tenant, payment: Payment) -> bool:
     if zoekterm in haystack:
         return True
     if not tenant.zoekwoord:
-        # Bankrekeningen tonen namen soms afgekort (bv. "J de Vries"): val terug
-        # op de achternaam van de huurder als de volledige naam niet matcht.
-        achternaam = tenant.naam.strip().split()[-1].lower()
-        if achternaam and achternaam in haystack:
-            return True
+        # Val terug op losse naamdelen: de betaling komt soms van iemand anders
+        # (bv. een ouder) met alleen de voornaam of een deel van een
+        # koppelnaam in de omschrijving, of de bank toont een afgekorte naam.
+        for deel in _naam_delen(tenant.naam):
+            if deel in haystack:
+                return True
     return False
+
+
+def _naam_delen(naam: str) -> list[str]:
+    """Alle los bruikbare delen van een naam (elk woord, en delen van
+    koppelnamen), gefilterd op minimaal 3 tekens om valse matches te voorkomen."""
+    delen = []
+    for woord in naam.strip().lower().split():
+        for deel in woord.split("-"):
+            if len(deel) >= 3:
+                delen.append(deel)
+    return delen
 
 
 def _bepaal_status(ontvangen: Decimal, verwacht: Decimal, tolerantie: Decimal) -> Status:
