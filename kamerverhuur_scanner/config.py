@@ -31,6 +31,7 @@ class Config:
     bunq_conf_file: str
     bunq_environment: str
     bunq_api_key: str | None
+    bunq_rekening_iban: str
 
     users_file: str
     flask_secret_key: str
@@ -48,6 +49,7 @@ class Config:
             bunq_conf_file=_require("BUNQ_CONF_FILE"),
             bunq_environment=os.environ.get("BUNQ_ENVIRONMENT", "PRODUCTION").strip().upper(),
             bunq_api_key=os.environ.get("BUNQ_API_KEY", "").strip() or None,
+            bunq_rekening_iban=_require("BUNQ_REKENING_IBAN").replace(" ", "").upper(),
             users_file=os.environ.get("USERS_FILE", "users.json").strip(),
             flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),

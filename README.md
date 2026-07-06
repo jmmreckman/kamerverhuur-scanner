@@ -103,6 +103,10 @@ https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
    Dit registreert dit apparaat bij bunq en slaat de sessie op in het bestand uit `BUNQ_CONF_FILE`
    (`bunq_production.conf`). Dit bestand moet naar je hostingomgeving mee (zie Stap 6) - **nooit
    committen**.
+5. Zet in `.env` ook `BUNQ_REKENING_IBAN` op het IBAN van de **specifieke rekening** waar de
+   Mahoniestraat-huur op binnenkomt (te vinden in de bunq-app bij die rekening). Dit is belangrijk:
+   zonder dit scant de site *al* je bunq-rekeningen (inclusief privé en je andere panden), wat
+   zowel privacygevoelig is als de betaalcontrole kan laten missen door de paginalimiet.
 
 > bunq heeft de officiële Python SDK (`bunq_sdk`, gebruikt in dit project) gemarkeerd als niet
 > langer actief onderhouden. Hij werkt op dit moment nog goed; zie https://doc.bunq.com als bunq
