@@ -26,6 +26,7 @@ class Config:
     google_service_account_file: str
     google_sheet_worksheet: str
     history_worksheet: str
+    google_drive_folder_id: str
 
     bunq_conf_file: str
     bunq_environment: str
@@ -43,6 +44,7 @@ class Config:
             google_service_account_file=_require("GOOGLE_SERVICE_ACCOUNT_FILE"),
             google_sheet_worksheet=os.environ.get("GOOGLE_SHEET_WORKSHEET", "Mahoniestraat").strip(),
             history_worksheet=os.environ.get("GOOGLE_SHEET_HISTORY_WORKSHEET", "Historie").strip(),
+            google_drive_folder_id=_require("GOOGLE_DRIVE_FOLDER_ID"),
             bunq_conf_file=_require("BUNQ_CONF_FILE"),
             bunq_environment=os.environ.get("BUNQ_ENVIRONMENT", "PRODUCTION").strip().upper(),
             bunq_api_key=os.environ.get("BUNQ_API_KEY", "").strip() or None,

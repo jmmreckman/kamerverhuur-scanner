@@ -12,13 +12,17 @@ zodat jullie er allebei bij kunnen zonder dat er iets lokaal hoeft te draaien.
 - **Dashboard** - overzicht van de laatste betaalcontrole: hoeveel kamers in orde zijn en welke niet.
 - **Kamers** - overzicht van alle 6 kamers, klik door naar een kamer voor huurder, huurprijs,
   contract(en), betaalgeschiedenis en een betrouwbaarheidsscore (% van de controles op tijd/correct betaald).
-- **Huurders** - leest de kamer-/huurdersgegevens uit een Google Sheet (die blijft de bewerkbare bron).
+- **Huurders** - toont en bewerkt de kamer-/huurdersgegevens (Google Sheet blijft de opslag op de
+  achtergrond, maar bewerken kan gewoon op de site - geen aparte Google-toegang nodig voor Justin).
 - **Betalingen** - knop "Nu controleren": haalt inkomende betalingen van bunq op, koppelt ze aan de
   huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij. Er wordt niets automatisch
   op de achtergrond gecontroleerd en er wordt geen e-mail verstuurd - alles gebeurt on-demand via de site.
 - **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-huurcontract
   (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is een voorbeeldsjabloon, geen
   juridisch gecontroleerd contract - zie de waarschuwing verderop.
+- **Documenten** - bekijk/upload/download bestanden (puntentellingen, huurcontracten, etc.) uit
+  een gedeelde Google Drive-map, rechtstreeks vanaf de site - ook hier is geen aparte Drive-toegang
+  voor Justin nodig, de site regelt dat via de service account.
 - **Advertentie plaatsen** - genereert een kant-en-klare titel/beschrijving per kamer om te
   plakken op Kamernet. Er is geen publieke Kamernet-API voor individuele verhuurders (alleen een
   zakelijke XML-feed voor makelaars/vastgoedbeheerders via een sales-contact) - vandaar geen
@@ -73,6 +77,11 @@ https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
    (staat in `.gitignore`).
 6. Kopieer het `client_email` adres uit het JSON-bestand.
 7. Deel de Google Sheet (knop **Delen**) met dat e-mailadres als **Bewerker**.
+8. **APIs & Services > Library**, zoek **Google Drive API**, klik **Enable** (voor de Documenten-pagina).
+9. Deel jullie bestaande Drive-map met documenten (huurcontracten, puntentelling) ook met hetzelfde
+   `client_email` adres, als **Bewerker** (anders kan er niet geupload worden).
+10. Zet het map-ID in `.env` als `GOOGLE_DRIVE_FOLDER_ID` - dat is het stuk uit de URL van de map:
+    `https://drive.google.com/drive/folders/DIT_IS_HET_MAP_ID`.
 
 ## Stap 3: bunq API key aanmaken
 
@@ -184,6 +193,9 @@ docker run --rm -p 8000:8000 \
 - **Betrouwbaarheidsscore** is simpel gehouden: het percentage uitgevoerde controles waarbij de
   status "Betaald" was. Geen tracking van hoeveel dagen te laat, alleen of het bedrag klopte op
   het moment van controleren.
+- **Downloaden van Google Docs/Sheets uit de Documenten-map** levert automatisch een PDF-export op
+  (die bestandstypen kun je niet als los binair bestand downloaden) - voor al geuploade PDF's/foto's
+  werkt downloaden zoals verwacht.
 
 ## Beveiliging
 

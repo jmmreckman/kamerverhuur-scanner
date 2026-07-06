@@ -3,14 +3,17 @@
 {% block content %}
 <h1>Huurders</h1>
 <div class="card">
-  <p>De huurdersgegevens (naam, kamer, huurprijs, IBAN/zoekwoord) beheer je in de Google Sheet.
-     Wijzigingen daar worden bij de volgende controle automatisch meegenomen.</p>
-  <a class="btn" href="{{ sheet_url }}" target="_blank" rel="noopener">Open de Google Sheet om te bewerken</a>
+  <p>Bewerk hieronder de kamer-/huurdersgegevens. Wijzigingen worden direct in de sheet
+     opgeslagen en bij de volgende betaalcontrole meegenomen.</p>
+  <a class="btn" href="{{ url_for('huurder_nieuw') }}">Nieuwe kamer toevoegen</a>
+  <a class="btn btn-secondary" href="{{ sheet_url }}" target="_blank" rel="noopener">
+    Optioneel: bekijk de ruwe Google Sheet
+  </a>
 </div>
 
 <div class="card">
   <table>
-    <tr><th>Kamer</th><th>Naam</th><th>Huurprijs</th><th>IBAN</th><th>Zoekwoord</th></tr>
+    <tr><th>Kamer</th><th>Naam</th><th>Huurprijs</th><th>IBAN</th><th>Zoekwoord</th><th></th></tr>
     {% for k in kamers %}
     <tr>
       <td><a href="{{ url_for('kamer_detail', kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
@@ -18,6 +21,7 @@
       <td>{{ k.verwacht_bedrag|eur }}</td>
       <td>{{ k.iban or "-" }}</td>
       <td>{{ k.zoekwoord or "-" }}</td>
+      <td><a href="{{ url_for('huurder_bewerken', kamer_naam=k.kamer) }}">Bewerken</a></td>
     </tr>
     {% endfor %}
   </table>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{% if kamer %}Kamer {{ kamer.kamer }} bewerken{% else %}Nieuwe kamer{% endif %}{% endblock %}
+{% block content %}
+<h1>{% if kamer %}Kamer {{ kamer.kamer }} bewerken{% else %}Nieuwe kamer toevoegen{% endif %}</h1>
+
+<div class="card">
+  <form method="post" action="{% if kamer %}{{ url_for('huurder_bewerken', kamer_naam=kamer.kamer) }}{% else %}{{ url_for('huurder_nieuw') }}{% endif %}">
+    <label>Kamer
+      <input type="text" name="kamer" value="{{ kamer.kamer if kamer else '' }}" required>
+    </label>
+    <label>Naam huurder (leeg = kamer staat leeg)
+      <input type="text" name="naam" value="{{ kamer.naam if kamer else '' }}">
+    </label>
+    <label>Huurprijs per maand (EUR)
+      <input type="text" name="verwacht_bedrag" value="{{ kamer.verwacht_bedrag|eur if kamer else '' }}" required>
+    </label>
+    <label>IBAN (optioneel, meest betrouwbare matching)
+      <input type="text" name="iban" value="{{ kamer.iban or '' if kamer else '' }}">
+    </label>
+    <label>Zoekwoord (optioneel, gebruikt als er geen IBAN is)
+      <input type="text" name="zoekwoord" value="{{ kamer.zoekwoord or '' if kamer else '' }}">
+    </label>
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('huurders') }}">Annuleren</a>
+  </form>
+</div>
+{% endblock %}

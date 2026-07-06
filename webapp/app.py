@@ -15,9 +15,11 @@ from flask_login import LoginManager, login_required, login_user, logout_user
 
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
+from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.models import Tenant
 from kamerverhuur_scanner.runner import run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
+from kamerverhuur_scanner.utils import parse_bedrag
 
 from . import ads, contracts
 from .auth import User, load_users, verify_login
@@ -92,6 +94,36 @@ def create_app(config: Config | None = None) -> Flask:
         sheet_url = f"https://docs.google.com/spreadsheets/d/{config.google_sheet_id}/edit"
         return render_template("huurders.html", kamers=kamers, sheet_url=sheet_url)
 
+    def _kamer_form_naar_velden(form) -> dict:
+        return {
+            "naam": form.get("naam", "").strip(),
+            "kamer": form.get("kamer", "").strip(),
+            "verwacht_bedrag": parse_bedrag(form.get("verwacht_bedrag", "0")),
+            "iban": form.get("iban", "").strip().replace(" ", "").upper() or None,
+            "zoekwoord": form.get("zoekwoord", "").strip() or None,
+        }
+
+    @app.route("/huurders/nieuw", methods=["GET", "POST"])
+    @login_required
+    def huurder_nieuw():
+        if request.method == "POST":
+            sheet = SheetClient(config)
+            sheet.add_kamer(**_kamer_form_naar_velden(request.form))
+            flash("Nieuwe kamer toegevoegd.")
+            return redirect(url_for("huurders"))
+        return render_template("huurder_bewerken.html", kamer=None)
+
+    @app.route("/huurders/<kamer_naam>/bewerken", methods=["GET", "POST"])
+    @login_required
+    def huurder_bewerken(kamer_naam: str):
+        sheet = SheetClient(config)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if request.method == "POST":
+            sheet.update_kamer(row_index=kamer.row_index, **_kamer_form_naar_velden(request.form))
+            flash(f"Kamer {kamer_naam} bijgewerkt.")
+            return redirect(url_for("huurders"))
+        return render_template("huurder_bewerken.html", kamer=kamer)
+
     @app.route("/betalingen", methods=["GET", "POST"])
     @login_required
     def betalingen():
@@ -151,6 +183,35 @@ def create_app(config: Config | None = None) -> Flask:
         except FileNotFoundError:
             abort(404)
         return Response(html, mimetype="text/html")
+
+    @app.route("/documenten")
+    @login_required
+    def documenten():
+        drive = DriveClient(config)
+        return render_template("documenten.html", bestanden=drive.list_bestanden())
+
+    @app.route("/documenten/upload", methods=["POST"])
+    @login_required
+    def documenten_upload():
+        bestand = request.files.get("bestand")
+        if bestand and bestand.filename:
+            drive = DriveClient(config)
+            drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read())
+            flash(f"'{bestand.filename}' geupload.")
+        else:
+            flash("Geen bestand geselecteerd.")
+        return redirect(url_for("documenten"))
+
+    @app.route("/documenten/<file_id>/download")
+    @login_required
+    def documenten_download(file_id: str):
+        drive = DriveClient(config)
+        naam, mimetype, inhoud = drive.download_bestand(file_id)
+        return Response(
+            inhoud,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f'attachment; filename="{naam}"'},
+        )
 
     return app
 

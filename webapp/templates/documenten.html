@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Documenten - Mahoniestraat 15{% endblock %}
+{% block content %}
+<h1>Documenten</h1>
+<p class="muted">Gedeelde Drive-map met puntentellingen, huurcontracten e.d.</p>
+
+<div class="card">
+  <form method="post" action="{{ url_for('documenten_upload') }}" enctype="multipart/form-data">
+    <label>Nieuw bestand uploaden
+      <input type="file" name="bestand" required>
+    </label>
+    <button class="btn" type="submit">Uploaden</button>
+  </form>
+</div>
+
+<div class="card">
+  {% if bestanden %}
+  <table>
+    <tr><th>Naam</th><th>Gewijzigd</th><th></th></tr>
+    {% for b in bestanden %}
+    <tr>
+      <td>{{ b.naam }}</td>
+      <td>{{ b.gewijzigd_op[:10] }}</td>
+      <td><a href="{{ url_for('documenten_download', file_id=b.id) }}">Downloaden</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">Nog geen bestanden in deze map.</p>
+  {% endif %}
+</div>
+{% endblock %}

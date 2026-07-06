@@ -14,6 +14,7 @@ uitgevoerde controle voegt hier een rij per kamer aan toe.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 import gspread
 
@@ -67,6 +68,38 @@ class SheetClient:
     def get_tenants(self) -> list[Tenant]:
         """Geeft alleen de kamers terug die op dit moment een huurder hebben."""
         return [k for k in self.get_kamers() if k.naam]
+
+    def update_kamer(
+        self,
+        row_index: int,
+        naam: str,
+        kamer: str,
+        verwacht_bedrag: Decimal,
+        iban: str | None,
+        zoekwoord: str | None,
+    ) -> None:
+        updates = [
+            {"range": self._a1(row_index, COL_NAAM), "values": [[naam]]},
+            {"range": self._a1(row_index, COL_KAMER), "values": [[kamer]]},
+            {
+                "range": self._a1(row_index, COL_VERWACHT),
+                "values": [[f"{verwacht_bedrag:.2f}".replace(".", ",")]],
+            },
+            {"range": self._a1(row_index, COL_IBAN), "values": [[iban or ""]]},
+            {"range": self._a1(row_index, COL_ZOEKWOORD), "values": [[zoekwoord or ""]]},
+        ]
+        self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+
+    def add_kamer(
+        self,
+        naam: str,
+        kamer: str,
+        verwacht_bedrag: Decimal,
+        iban: str | None,
+        zoekwoord: str | None,
+    ) -> None:
+        row = [naam, kamer, f"{verwacht_bedrag:.2f}".replace(".", ","), iban or "", zoekwoord or "", "", "", ""]
+        self._worksheet.append_row(row, value_input_option="USER_ENTERED")
 
     def write_results(self, results: list[TenantResult]) -> None:
         now = datetime.now().strftime("%d-%m-%Y %H:%M")
