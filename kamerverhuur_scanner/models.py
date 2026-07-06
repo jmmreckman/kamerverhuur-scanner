@@ -1,0 +1,42 @@
+"""Datamodellen die door de sheet-, bunq- en matching-modules gedeeld worden."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+from enum import Enum
+
+
+class Status(str, Enum):
+    BETAALD = "Betaald"
+    TE_WEINIG = "Te weinig ontvangen"
+    TE_VEEL = "Te veel ontvangen"
+    NIET_ONTVANGEN = "Nog niet ontvangen"
+
+
+@dataclass(frozen=True)
+class Tenant:
+    row_index: int  # rijnummer in de Google Sheet (voor terugschrijven)
+    naam: str
+    kamer: str
+    verwacht_bedrag: Decimal
+    iban: str | None = None
+    zoekwoord: str | None = None
+
+
+@dataclass(frozen=True)
+class Payment:
+    bedrag: Decimal
+    valuta: str
+    tegenpartij_naam: str
+    tegenpartij_iban: str | None
+    omschrijving: str
+    datum: date
+
+
+@dataclass
+class TenantResult:
+    tenant: Tenant
+    ontvangen_bedrag: Decimal
+    status: Status
+    gematchte_betalingen: list[Payment] = field(default_factory=list)

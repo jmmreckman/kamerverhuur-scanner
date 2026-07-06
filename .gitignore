@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# secrets - nooit committen
+.env
+*.conf
+google-service-account.json
+bunq_production.conf
+bunq_sandbox.conf
