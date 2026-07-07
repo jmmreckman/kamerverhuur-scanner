@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{% if pand %}Pand {{ pand.naam }} bewerken{% else %}Nieuw pand{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{% if pand %}Pand {{ pand.naam }} bewerken{% else %}Nieuw pand toevoegen{% endif %}</h1>
+</div>
+
+<div class="warning-box">
+  <p>Zorg dat de Google Sheet (met de juiste kolomkoppen, zie README) en - als je die gebruikt -
+     de Drive-map al bestaan en gedeeld zijn met het e-mailadres uit je
+     <code>google-service-account.json</code>, vóórdat je hier opslaat. De bunq-koppeling zelf
+     (<code>bunq_production.conf</code>) is gedeeld met alle panden; hier vul je alleen het IBAN
+     in van de specifieke rekening van dit pand.</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    {% if pand %}
+    <label>Slug (niet meer te wijzigen)
+      <input type="text" value="{{ slug }}" disabled>
+    </label>
+    {% else %}
+    <label>Slug (verschijnt in de URL, bv. "baumannlaan" - alleen kleine letters, cijfers, streepjes)
+      <input type="text" name="slug" required pattern="[a-z0-9-]+" autofocus>
+    </label>
+    {% endif %}
+    <label>Naam (weergavenaam, bv. "Burgemeester Baumannlaan 70b")
+      <input type="text" name="naam" value="{{ pand.naam if pand else '' }}" required>
+    </label>
+    <label>Google Sheet ID (het stuk uit de URL van de sheet)
+      <input type="text" name="google_sheet_id" value="{{ pand.google_sheet_id if pand else '' }}" required>
+    </label>
+    <label>Tabbladnaam met de kamers
+      <input type="text" name="google_sheet_worksheet" value="{{ pand.google_sheet_worksheet if pand else 'Huurders' }}">
+    </label>
+    <label>Tabbladnaam voor betaalgeschiedenis
+      <input type="text" name="history_worksheet" value="{{ pand.history_worksheet if pand else 'Historie' }}">
+    </label>
+    <label>Tabbladnaam voor aanmeldingen
+      <input type="text" name="aanmeldingen_worksheet" value="{{ pand.aanmeldingen_worksheet if pand else 'Aanmeldingen' }}">
+    </label>
+    <label>Google Drive map-ID (optioneel - voor Documenten en aanbod-foto's/video's)
+      <input type="text" name="google_drive_folder_id" value="{{ (pand.google_drive_folder_id or '') if pand else '' }}">
+    </label>
+    <label>bunq IBAN van de rekening waar de huur van dit pand op binnenkomt
+      <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>
+    </label>
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('panden_overzicht') }}">Annuleren</a>
+  </form>
+</div>
+{% endblock %}

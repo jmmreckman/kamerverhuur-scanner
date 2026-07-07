@@ -8,6 +8,7 @@ Starten (productie): zie README (gunicorn + webapp.app:create_app()).
 from __future__ import annotations
 
 import dataclasses
+import re
 from datetime import date
 from decimal import Decimal
 from functools import wraps
@@ -20,7 +21,7 @@ from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.models import Tenant
-from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties
+from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
 from kamerverhuur_scanner.runner import run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import parse_bedrag
@@ -44,9 +45,17 @@ def create_app(config: Config | None = None) -> Flask:
             raise SystemExit(f"Configuratiefout: {exc}") from exc
 
     try:
-        properties = load_properties(config.properties_file)
+        load_properties(config.properties_file)  # fail fast bij een ongeldig properties.json
     except PropertiesError as exc:
         raise SystemExit(f"Pandenfout: {exc}") from exc
+
+    def _properties() -> list:
+        # Steeds opnieuw inlezen (net als users.json) zodat wijzigingen via
+        # "Panden beheren" meteen gelden, zonder de app te herstarten.
+        try:
+            return load_properties(config.properties_file)
+        except PropertiesError:
+            return []
 
     app.secret_key = config.flask_secret_key
 
@@ -75,7 +84,7 @@ def create_app(config: Config | None = None) -> Flask:
         if not request.view_args or "pand_slug" not in request.view_args:
             return None
         pand_slug = request.view_args["pand_slug"]
-        pand = find_pand(properties, pand_slug)
+        pand = find_pand(_properties(), pand_slug)
         if pand is None:
             abort(404, f"Pand '{pand_slug}' bestaat niet.")
         g.pand = pand
@@ -89,7 +98,7 @@ def create_app(config: Config | None = None) -> Flask:
     def _template_context():
         eigen_panden = []
         if current_user.is_authenticated:
-            eigen_panden = [p for p in properties if current_user.heeft_toegang(p.slug)]
+            eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         return {"eigen_panden": eigen_panden, "huidig_pand": getattr(g, "pand", None)}
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
@@ -132,7 +141,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/")
     @login_required
     def start():
-        eigen_panden = [p for p in properties if current_user.heeft_toegang(p.slug)]
+        eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
         return render_template("pand_kiezer.html", panden=eigen_panden)
@@ -171,7 +180,7 @@ def create_app(config: Config | None = None) -> Flask:
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' aangemaakt.")
                 return redirect(url_for("gebruikers_overzicht"))
-        return render_template("gebruiker_form.html", gebruiker=None, username=None, panden=properties)
+        return render_template("gebruiker_form.html", gebruiker=None, username=None, panden=_properties())
 
     @app.route("/beheer/gebruikers/<username>/bewerken", methods=["GET", "POST"])
     @login_required
@@ -193,7 +202,7 @@ def create_app(config: Config | None = None) -> Flask:
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' bijgewerkt.")
                 return redirect(url_for("gebruikers_overzicht"))
-        return render_template("gebruiker_form.html", gebruiker=gebruiker, username=username, panden=properties)
+        return render_template("gebruiker_form.html", gebruiker=gebruiker, username=username, panden=_properties())
 
     @app.route("/beheer/gebruikers/<username>/verwijderen", methods=["POST"])
     @login_required
@@ -207,6 +216,73 @@ def create_app(config: Config | None = None) -> Flask:
             save_users(config.users_file, users)
             flash(f"Gebruiker '{username}' verwijderd.")
         return redirect(url_for("gebruikers_overzicht"))
+
+    # --- Panden beheren (alleen voor beheerders met toegang tot alle panden) ---
+
+    def _pand_gegevens_uit_form(form) -> dict:
+        return {
+            "naam": form.get("naam", "").strip(),
+            "google_sheet_id": form.get("google_sheet_id", "").strip(),
+            "google_sheet_worksheet": form.get("google_sheet_worksheet", "").strip() or "Huurders",
+            "history_worksheet": form.get("history_worksheet", "").strip() or "Historie",
+            "aanmeldingen_worksheet": form.get("aanmeldingen_worksheet", "").strip() or "Aanmeldingen",
+            "google_drive_folder_id": form.get("google_drive_folder_id", "").strip() or None,
+            "bunq_rekening_iban": form.get("bunq_rekening_iban", "").strip().replace(" ", "").upper(),
+        }
+
+    @app.route("/beheer/panden")
+    @login_required
+    @admin_required
+    def panden_overzicht():
+        return render_template("panden.html", panden=_properties())
+
+    @app.route("/beheer/panden/nieuw", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def pand_nieuw():
+        if request.method == "POST":
+            slug = request.form.get("slug", "").strip().lower()
+            gegevens = _pand_gegevens_uit_form(request.form)
+            bestaande_slugs = {p.slug for p in _properties()}
+            if not re.fullmatch(r"[a-z0-9-]+", slug or ""):
+                flash("Slug mag alleen kleine letters, cijfers en streepjes bevatten.")
+            elif slug in bestaande_slugs:
+                flash(f"Pand met slug '{slug}' bestaat al.")
+            elif not gegevens["naam"] or not gegevens["google_sheet_id"] or not gegevens["bunq_rekening_iban"]:
+                flash("Naam, Google Sheet ID en bunq-IBAN zijn verplicht.")
+            else:
+                zet_pand(config.properties_file, slug, gegevens)
+                flash(f"Pand '{gegevens['naam']}' aangemaakt.")
+                return redirect(url_for("panden_overzicht"))
+        return render_template("pand_form.html", pand=None, slug=None)
+
+    @app.route("/beheer/panden/<slug>/bewerken", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def pand_bewerken(slug: str):
+        pand = find_pand(_properties(), slug)
+        if pand is None:
+            abort(404, f"Pand '{slug}' bestaat niet.")
+        if request.method == "POST":
+            gegevens = _pand_gegevens_uit_form(request.form)
+            if not gegevens["naam"] or not gegevens["google_sheet_id"] or not gegevens["bunq_rekening_iban"]:
+                flash("Naam, Google Sheet ID en bunq-IBAN zijn verplicht.")
+            else:
+                zet_pand(config.properties_file, slug, gegevens)
+                flash(f"Pand '{gegevens['naam']}' bijgewerkt.")
+                return redirect(url_for("panden_overzicht"))
+        return render_template("pand_form.html", pand=pand, slug=slug)
+
+    @app.route("/beheer/panden/<slug>/verwijderen", methods=["POST"])
+    @login_required
+    @admin_required
+    def pand_verwijderen(slug: str):
+        if len(_properties()) <= 1:
+            flash("Je kunt het laatste overgebleven pand niet verwijderen (de site heeft minstens één pand nodig om te starten).")
+            return redirect(url_for("panden_overzicht"))
+        verwijder_pand(config.properties_file, slug)
+        flash(f"Pand '{slug}' verwijderd (gebruikerstoegang tot dit pand blijft ongebruikt in users.json staan, maar heeft geen effect meer).")
+        return redirect(url_for("panden_overzicht"))
 
     # --- Dashboard ---
 
@@ -501,7 +577,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/aanbod")
     def aanbod_overzicht():
         kaarten = []
-        for pand in properties:
+        for pand in _properties():
             sheet = SheetClient(config, pand)
             drive = DriveClient(config, pand) if pand.google_drive_folder_id else None
             for kamer in sheet.get_kamers():

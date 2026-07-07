@@ -55,3 +55,32 @@ def load_properties(path: str) -> list[Pand]:
 
 def find_pand(panden: list[Pand], slug: str) -> Pand | None:
     return next((p for p in panden if p.slug == slug), None)
+
+
+def _lees_raw(path: str) -> list[dict]:
+    file_path = Path(path)
+    if not file_path.exists():
+        return []
+    try:
+        raw = json.loads(file_path.read_text())
+    except json.JSONDecodeError:
+        return []
+    return raw if isinstance(raw, list) else []
+
+
+def zet_pand(path: str, slug: str, gegevens: dict) -> None:
+    """Voegt een pand toe of werkt 'm bij (op basis van slug) in properties.json."""
+    panden = _lees_raw(path)
+    nieuw = {"slug": slug, **gegevens}
+    for i, p in enumerate(panden):
+        if p.get("slug") == slug:
+            panden[i] = nieuw
+            break
+    else:
+        panden.append(nieuw)
+    Path(path).write_text(json.dumps(panden, indent=2))
+
+
+def verwijder_pand(path: str, slug: str) -> None:
+    panden = [p for p in _lees_raw(path) if p.get("slug") != slug]
+    Path(path).write_text(json.dumps(panden, indent=2))

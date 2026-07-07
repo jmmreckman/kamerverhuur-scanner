@@ -24,6 +24,9 @@ nodig.
   toegevoegd kunnen worden en per gebruiker aan te vinken is bij welke panden
   diegene mag (of "alle panden"). Geen command line meer voor nodig na de
   eerste installatie.
+- **Panden beheren** - nieuwe panden toevoegen, bewerken of verwijderen kan
+  via de "Panden"-knop in de site zelf (voor beheerders met toegang tot alle
+  panden) - geen `properties.json` meer met de hand bewerken op de server.
 - **Dashboard** - overzicht van de laatste betaalcontrole per pand, plus een
   waarschuwing als een tijdelijk huurcontract binnenkort (of al) aangezegd moet
   worden (wettelijk verplicht 1-3 maanden voor de einddatum, art. 7:271 BW).
@@ -222,9 +225,39 @@ cp properties.json.example properties.json
   van dít pand op binnenkomt. Belangrijk: zonder correct IBAN scant de site de
   verkeerde rekening, wat zowel privacygevoelig is (als het een andere/prive
   rekening raakt) als de betaalcontrole kan laten missen.
-- Voeg een nieuw pand later toe door simpelweg een nieuw blok aan de lijst toe
-  te voegen - geen nieuwe container, service of domein nodig, gewoon
-  `docker compose restart app` (of de app herstarten bij lokaal draaien).
+- Dit `properties.json`-bestand is alleen nodig om het **allereerste** pand in
+  te stellen (er moet minstens één pand zijn voordat de site opstart). Nieuwe
+  panden voeg je daarna toe via de site zelf, zie hieronder - geen
+  command line of herstart meer nodig.
+
+### Nieuw pand toevoegen via de site ("Panden beheren")
+
+Beheerders met toegang tot alle panden zien een **"Panden"**-knop in de
+navigatie. Daar kun je een nieuw pand toevoegen (naam, Google Sheet ID,
+tabbladnamen, optioneel een Drive-map-ID, en het bunq-IBAN), bewerken, of
+verwijderen. Wijzigingen gelden meteen, geen herstart nodig - net als bij
+Gebruikers.
+
+Dat scheelt SSH/JSON-bewerken, maar de "echte wereld"-voorbereiding blijft
+hetzelfde als bij het eerste pand:
+
+1. Maak (of hergebruik) een Google Sheet met de juiste kolomkoppen (zie
+   hierboven) voor het nieuwe pand, en deel 'm met het `client_email`-adres
+   uit je `google-service-account.json` (Stap 2) - hetzelfde service-account
+   werkt voor alle panden, je hoeft niks opnieuw aan te maken in Google Cloud.
+2. Optioneel: maak een Drive-map voor documenten/aanbod-foto's van dat pand,
+   en deel die ook met hetzelfde `client_email`-adres.
+3. bunq: als de rekening van het nieuwe pand **onder dezelfde bunq-login**
+   valt als je bestaande panden (meestal het geval - één bunq-profiel met
+   meerdere rekeningen), is er **geen nieuwe API key** nodig. Zoek gewoon het
+   IBAN van de juiste rekening op in de bunq-app en vul dat in. Alleen als het
+   een compleet aparte bunq-zakelijke login/profiel is, is een nieuwe
+   `setup_bunq.py`-koppeling nodig.
+4. Vul daarna het formulier op "Panden > Nieuw pand" in met de slug, naam,
+   sheet ID, en IBAN.
+
+Toegang geven aan gebruikers (bijv. alleen jijzelf, niet Justin, voor een
+pand dat volledig van jou is) regel je zoals gewoonlijk via "Gebruikers".
 
 ## Stap 5: de eerste gebruiker aanmaken
 
