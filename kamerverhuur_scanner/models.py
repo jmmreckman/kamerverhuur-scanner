@@ -29,6 +29,8 @@ class Tenant:
     beschikbaar: bool = False  # staat deze kamer op de publieke aanbodpagina?
     advertentie_omschrijving: str | None = None
     advertentie_map_id: str | None = None  # Drive-map met foto's/video's voor de aanbodpagina
+    email: str | None = None
+    telefoonnummer: str | None = None
 
 
 @dataclass(frozen=True)

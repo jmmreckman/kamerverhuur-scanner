@@ -333,6 +333,8 @@ def create_app(config: Config | None = None) -> Flask:
             "servicekosten": parse_bedrag(servicekosten) if servicekosten else None,
             "contract_einddatum": form.get("contract_einddatum", "").strip() or None,
             "opmerking": form.get("opmerking", "").strip() or None,
+            "email": form.get("email", "").strip() or None,
+            "telefoonnummer": form.get("telefoonnummer", "").strip() or None,
         }
 
     @app.route("/pand/<pand_slug>/huurders/nieuw", methods=["GET", "POST"])

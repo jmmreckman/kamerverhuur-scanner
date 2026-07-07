@@ -13,6 +13,12 @@
     <label>Naam huurder (leeg = kamer staat leeg)
       <input type="text" name="naam" value="{{ kamer.naam if kamer else '' }}">
     </label>
+    <label>Mail
+      <input type="email" name="email" value="{{ kamer.email or '' if kamer else '' }}">
+    </label>
+    <label>Telefoonnummer
+      <input type="tel" name="telefoonnummer" value="{{ kamer.telefoonnummer or '' if kamer else '' }}">
+    </label>
     <label>Kale huurprijs per maand (EUR, optioneel)
       <input type="text" name="kale_huurprijs" value="{{ kamer.kale_huurprijs|eur if kamer and kamer.kale_huurprijs is not none else '' }}">
     </label>

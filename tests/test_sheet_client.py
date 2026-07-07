@@ -30,22 +30,25 @@ def _sheet_client(rows) -> tuple[SheetClient, FakeWorksheet]:
 
 
 HEADER = ["Kamer", "Huurder", "Kale", "Service", "Totaal", "Einddatum", "Opmerking", "IBAN", "Zoekwoord",
-          "Status", "Ontvangen", "Laatst", "Beschikbaar", "Omschrijving", "Map ID"]
+          "Status", "Ontvangen", "Laatst", "Beschikbaar", "Omschrijving", "Map ID", "Mail", "Telefoonnummer"]
 
 
 def test_get_kamers_leest_beschikbaar_en_omschrijving():
     rows = [
         HEADER,
-        ["1", "Jan", "", "", "650,00", "", "", "", "", "", "", "", "JA", "Nice room", "map123"],
-        ["2", "", "", "", "600,00", "", "", "", "", "", "", "", "NEE", "", ""],
+        ["1", "Jan", "", "", "650,00", "", "", "", "", "", "", "", "JA", "Nice room", "map123", "jan@example.com", "0612345678"],
+        ["2", "", "", "", "600,00", "", "", "", "", "", "", "", "NEE", "", "", "", ""],
     ]
     client, _ = _sheet_client(rows)
     kamers = client.get_kamers()
     assert kamers[0].beschikbaar is True
     assert kamers[0].advertentie_omschrijving == "Nice room"
     assert kamers[0].advertentie_map_id == "map123"
+    assert kamers[0].email == "jan@example.com"
+    assert kamers[0].telefoonnummer == "0612345678"
     assert kamers[1].beschikbaar is False
     assert kamers[1].advertentie_omschrijving is None
+    assert kamers[1].email is None
 
 
 def test_get_kamers_werkt_ook_met_korte_rijen_zonder_nieuwe_kolommen():
@@ -73,5 +76,30 @@ def test_add_kamer_voegt_lege_aanbod_kolommen_toe():
     appended = []
     ws.append_row = lambda row, value_input_option="USER_ENTERED": appended.append(row)
     client.add_kamer(naam="Piet", kamer="3", verwacht_bedrag=Decimal("700.00"), iban=None, zoekwoord=None)
-    assert len(appended[0]) == 15  # kolom A t/m O
-    assert appended[0][12:] == ["", "", ""]  # Beschikbaar/Omschrijving/Map ID nog leeg
+    assert len(appended[0]) == 17  # kolom A t/m Q
+    assert appended[0][12:15] == ["", "", ""]  # Beschikbaar/Omschrijving/Map ID nog leeg
+    assert appended[0][15:] == ["", ""]  # Mail/Telefoonnummer nog leeg
+
+
+def test_add_kamer_met_contactgegevens():
+    rows = [HEADER]
+    client, ws = _sheet_client(rows)
+    appended = []
+    ws.append_row = lambda row, value_input_option="USER_ENTERED": appended.append(row)
+    client.add_kamer(
+        naam="Piet", kamer="3", verwacht_bedrag=Decimal("700.00"), iban=None, zoekwoord=None,
+        email="piet@example.com", telefoonnummer="0698765432",
+    )
+    assert appended[0][15:] == ["piet@example.com", "0698765432"]
+
+
+def test_update_kamer_schrijft_contactgegevens():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    client.update_kamer(
+        row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"), iban=None, zoekwoord=None,
+        email="jan@example.com", telefoonnummer="0612345678",
+    )
+    ranges = {u["range"]: u["values"][0][0] for u in ws.batch_updates[0]}
+    assert ranges["P2"] == "jan@example.com"
+    assert ranges["Q2"] == "0612345678"

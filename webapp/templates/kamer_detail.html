@@ -23,6 +23,8 @@
 <div class="card">
   {% if kamer.naam %}
     <p><strong>Huurder:</strong> {{ kamer.naam }}</p>
+    {% if kamer.email %}<p><strong>Mail:</strong> <a href="mailto:{{ kamer.email }}">{{ kamer.email }}</a></p>{% endif %}
+    {% if kamer.telefoonnummer %}<p><strong>Telefoonnummer:</strong> <a href="tel:{{ kamer.telefoonnummer }}">{{ kamer.telefoonnummer }}</a></p>{% endif %}
     <p><strong>Totale huur:</strong> {{ kamer.verwacht_bedrag|eur }} / maand
       {% if kamer.kale_huurprijs is not none and kamer.servicekosten is not none %}
         <span class="muted">(kaal {{ kamer.kale_huurprijs|eur }} + servicekosten {{ kamer.servicekosten|eur }})</span>

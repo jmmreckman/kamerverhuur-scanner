@@ -97,9 +97,9 @@ zijn.
 Elk pand heeft zijn eigen tabblad/sheet, aangesloten op je bestaande
 huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 
-| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | |
+| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID | P Mail | Q Telefoonnummer |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | | | |
 
 - Kolom **A t/m G** zijn je bestaande kolommen, die pas je zelf aan (of via de
   site, zie hieronder).
@@ -112,6 +112,9 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   map-ID) horen bij de publieke aanbodpagina - voeg de koppen toe, maar vul de
   inhoud niet zelf in: dat doet de site via de "Aanbod beheren"-knop op de
   kamerpagina.
+- Kolom **P en Q** (Mail, Telefoonnummer) zijn nieuw en optioneel -
+  contactgegevens van de huurder, te bewerken via de Huurders-pagina op de
+  site en zichtbaar op de kamerpagina (met directe mailto:/tel:-links).
 - **Totale huur** (kolom E) is het bedrag dat de site verwacht via bunq binnen
   te zien komen (kale huur + servicekosten).
 - Een lege **Huurder** met een ingevulde **Kamer** betekent: kamer staat leeg.
