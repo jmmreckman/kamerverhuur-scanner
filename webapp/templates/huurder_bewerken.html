@@ -6,7 +6,7 @@
 </div>
 
 <div class="card">
-  <form method="post" action="{% if kamer %}{{ url_for('huurder_bewerken', kamer_naam=kamer.kamer) }}{% else %}{{ url_for('huurder_nieuw') }}{% endif %}">
+  <form method="post" action="{% if kamer %}{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}{% else %}{{ url_for('huurder_nieuw', pand_slug=huidig_pand.slug) }}{% endif %}">
     <label>Kamer
       <input type="text" name="kamer" value="{{ kamer.kamer if kamer else '' }}" required>
     </label>
@@ -35,7 +35,7 @@
       <input type="text" name="zoekwoord" value="{{ kamer.zoekwoord or '' if kamer else '' }}">
     </label>
     <button class="btn" type="submit">Opslaan</button>
-    <a class="btn btn-secondary" href="{{ url_for('huurders') }}">Annuleren</a>
+    <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Annuleren</a>
   </form>
 </div>
 {% endblock %}

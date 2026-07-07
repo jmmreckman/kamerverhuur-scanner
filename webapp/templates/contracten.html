@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon_plus %}
-{% block title %}Contracten - Mahoniestraat 15{% endblock %}
+{% block title %}Contracten - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Contracten</h1>
 </div>
 
 <div class="card">
-  <a class="btn" href="{{ url_for('contract_nieuw') }}">{{ icon_plus() }} Nieuw huurcontract</a>
+  <a class="btn" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuw huurcontract</a>
 </div>
 
 <div class="card">
   {% if contracten %}
     <ul>
     {% for c in contracten %}
-      <li><a href="{{ url_for('contract_bekijken', bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+      <li><a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
     {% endfor %}
     </ul>
   {% else %}

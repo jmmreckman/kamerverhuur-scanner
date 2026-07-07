@@ -1,4 +1,9 @@
-"""Configuratie voor de kamerverhuur-scanner, geladen uit omgevingsvariabelen (.env)."""
+"""Configuratie voor de kamerverhuur-scanner, geladen uit omgevingsvariabelen (.env).
+
+Instellingen die voor alle panden gelden (dit bestand). Instellingen die per
+pand verschillen (welke sheet, welke bunq-rekening, welke Drive-map) staan
+in properties.json - zie kamerverhuur_scanner/properties.py.
+"""
 from __future__ import annotations
 
 import os
@@ -22,16 +27,12 @@ def _require(name: str) -> str:
 
 @dataclass(frozen=True)
 class Config:
-    google_sheet_id: str
     google_service_account_file: str
-    google_sheet_worksheet: str
-    history_worksheet: str
-    google_drive_folder_id: str | None
+    properties_file: str
 
     bunq_conf_file: str
     bunq_environment: str
     bunq_api_key: str | None
-    bunq_rekening_iban: str
 
     users_file: str
     flask_secret_key: str
@@ -42,15 +43,11 @@ class Config:
     @staticmethod
     def load() -> "Config":
         return Config(
-            google_sheet_id=_require("GOOGLE_SHEET_ID"),
             google_service_account_file=_require("GOOGLE_SERVICE_ACCOUNT_FILE"),
-            google_sheet_worksheet=os.environ.get("GOOGLE_SHEET_WORKSHEET", "Mahoniestraat").strip(),
-            history_worksheet=os.environ.get("GOOGLE_SHEET_HISTORY_WORKSHEET", "Historie").strip(),
-            google_drive_folder_id=os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None,
+            properties_file=os.environ.get("PROPERTIES_FILE", "properties.json").strip(),
             bunq_conf_file=_require("BUNQ_CONF_FILE"),
             bunq_environment=os.environ.get("BUNQ_ENVIRONMENT", "PRODUCTION").strip().upper(),
             bunq_api_key=os.environ.get("BUNQ_API_KEY", "").strip() or None,
-            bunq_rekening_iban=_require("BUNQ_REKENING_IBAN").replace(" ", "").upper(),
             users_file=os.environ.get("USERS_FILE", "users.json").strip(),
             flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),

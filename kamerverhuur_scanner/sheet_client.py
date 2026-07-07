@@ -24,7 +24,7 @@ from decimal import Decimal
 import gspread
 
 from .config import Config
-from .models import HistorieRegel, Status, Tenant, TenantResult
+from .models import HistorieRegel, Pand, Status, Tenant, TenantResult
 from .utils import parse_bedrag
 
 COL_KAMER = 1
@@ -51,11 +51,11 @@ def _optioneel(waarde: str) -> str | None:
 
 
 class SheetClient:
-    def __init__(self, config: Config):
-        self._config = config
+    def __init__(self, config: Config, pand: Pand):
+        self._pand = pand
         gc = gspread.service_account(filename=config.google_service_account_file)
-        self._spreadsheet = gc.open_by_key(config.google_sheet_id)
-        self._worksheet = self._spreadsheet.worksheet(config.google_sheet_worksheet)
+        self._spreadsheet = gc.open_by_key(pand.google_sheet_id)
+        self._worksheet = self._spreadsheet.worksheet(pand.google_sheet_worksheet)
 
     def get_kamers(self) -> list[Tenant]:
         """Geeft alle kamers terug, inclusief leegstaande (lege huurder, wel een kamernaam)."""
@@ -199,10 +199,10 @@ class SheetClient:
 
     def _history_worksheet(self):
         try:
-            return self._spreadsheet.worksheet(self._config.history_worksheet)
+            return self._spreadsheet.worksheet(self._pand.history_worksheet)
         except gspread.exceptions.WorksheetNotFound:
             ws = self._spreadsheet.add_worksheet(
-                title=self._config.history_worksheet, rows=1000, cols=len(_HISTORIE_HEADER)
+                title=self._pand.history_worksheet, rows=1000, cols=len(_HISTORIE_HEADER)
             )
             ws.append_row(_HISTORIE_HEADER, value_input_option="USER_ENTERED")
             return ws

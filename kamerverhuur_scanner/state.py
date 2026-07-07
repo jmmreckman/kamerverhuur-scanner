@@ -1,18 +1,22 @@
-"""Bewaart het resultaat van de laatste 'check betalingen'-run in een klein
-JSON-bestandje, zodat de website dat kan tonen zonder bij elk paginabezoek
-opnieuw bunq/Sheets te hoeven bevragen."""
+"""Bewaart het resultaat van de laatste 'check betalingen'-run per pand in een
+klein JSON-bestandje, zodat de website dat kan tonen zonder bij elk
+paginabezoek opnieuw bunq/Sheets te hoeven bevragen."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 from .models import TenantResult
 
-DEFAULT_PATH = "laatste_resultaat.json"
+
+def _bestandsnaam(pand_slug: str) -> str:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return f"laatste_resultaat_{veilige_slug}.json"
 
 
-def save(results: list[TenantResult], niet_gekoppelde_betalingen: int, path: str = DEFAULT_PATH) -> None:
+def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen: int) -> None:
     data = {
         "gecontroleerd_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
         "resultaten": [
@@ -27,11 +31,11 @@ def save(results: list[TenantResult], niet_gekoppelde_betalingen: int, path: str
         ],
         "niet_gekoppelde_betalingen": niet_gekoppelde_betalingen,
     }
-    Path(path).write_text(json.dumps(data, indent=2))
+    Path(_bestandsnaam(pand_slug)).write_text(json.dumps(data, indent=2))
 
 
-def load(path: str = DEFAULT_PATH) -> dict | None:
-    p = Path(path)
+def load(pand_slug: str) -> dict | None:
+    p = Path(_bestandsnaam(pand_slug))
     if not p.exists():
         return None
     return json.loads(p.read_text())

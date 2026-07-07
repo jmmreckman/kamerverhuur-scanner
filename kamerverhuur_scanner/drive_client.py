@@ -11,6 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from .config import Config
+from .models import Pand
 
 _SCOPES = ["https://www.googleapis.com/auth/drive"]
 _GOOGLE_NATIVE_PREFIX = "application/vnd.google-apps."
@@ -38,10 +39,10 @@ class Kruimel:
 
 
 class DriveClient:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, pand: Pand):
         credentials = Credentials.from_service_account_file(config.google_service_account_file, scopes=_SCOPES)
         self._service = build("drive", "v3", credentials=credentials, cache_discovery=False)
-        self.root_folder_id = config.google_drive_folder_id
+        self.root_folder_id = pand.google_drive_folder_id
 
     def list_bestanden(self, folder_id: str | None = None) -> list[DriveBestand]:
         doel = folder_id or self.root_folder_id

@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon_plus %}
-{% block title %}Huurders - Mahoniestraat 15{% endblock %}
+{% block title %}Huurders - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Huurders</h1>
   <p class="muted">Wijzigingen worden direct in de sheet opgeslagen</p>
 </div>
 <div class="card">
-  <a class="btn" href="{{ url_for('huurder_nieuw') }}">{{ icon_plus() }} Nieuwe kamer toevoegen</a>
+  <a class="btn" href="{{ url_for('huurder_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuwe kamer toevoegen</a>
   <a class="btn btn-secondary" href="{{ sheet_url }}" target="_blank" rel="noopener">
     Optioneel: bekijk de ruwe Google Sheet
   </a>
@@ -18,11 +18,11 @@
     <tr><th>Kamer</th><th>Naam</th><th>Totale huur</th><th>Contract einddatum</th><th></th></tr>
     {% for k in kamers %}
     <tr>
-      <td><a href="{{ url_for('kamer_detail', kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
+      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
       <td>{{ k.naam or "(leegstaand)" }}</td>
       <td>{{ k.verwacht_bedrag|eur }}</td>
       <td>{{ k.contract_einddatum or "-" }}</td>
-      <td><a href="{{ url_for('huurder_bewerken', kamer_naam=k.kamer) }}">Bewerken</a></td>
+      <td><a href="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Bewerken</a></td>
     </tr>
     {% endfor %}
   </table>

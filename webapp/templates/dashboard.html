@@ -1,16 +1,33 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro %}
-{% block title %}Dashboard - Mahoniestraat 15{% endblock %}
+{% block title %}Dashboard - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Dashboard</h1>
-  <p class="muted">Overzicht van Mahoniestraat 15</p>
+  <p class="muted">Overzicht van {{ huidig_pand.naam }}</p>
 </div>
+
+{% if aanzeg_waarschuwingen %}
+<div class="card warning-box">
+  <h2>Contracten die aangezegd moeten worden</h2>
+  <p class="muted">Bij tijdelijke huurcontracten moet je 1-3 maanden voor de einddatum schriftelijk
+     laten weten dat het contract afloopt, anders wordt het automatisch voor onbepaalde tijd.</p>
+  <ul>
+    {% for kamer, status in aanzeg_waarschuwingen %}
+    <li>
+      <a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Kamer {{ kamer.kamer }} ({{ kamer.naam }})</a>
+      - einddatum {{ status.einddatum.strftime("%d-%m-%Y") }}
+      {% if status.venster_verstreken %}<strong>- de aanzegtermijn loopt al, actie nodig!</strong>{% else %}- aanzeggen vóór {{ status.venster_einde.strftime("%d-%m-%Y") }}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 {% if not cache %}
 <div class="card">
   <p>Nog geen betaalcontrole uitgevoerd.</p>
-  <a class="btn" href="{{ url_for('betalingen') }}">Nu controleren</a>
+  <a class="btn" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Nu controleren</a>
 </div>
 {% else %}
 {% set resultaten = cache["resultaten"] %}
@@ -45,7 +62,7 @@
   {% if cache["niet_gekoppelde_betalingen"] %}
   <p class="muted">{{ cache["niet_gekoppelde_betalingen"] }} inkomende betaling(en) konden niet gekoppeld worden - zie de betalingenpagina.</p>
   {% endif %}
-  <a class="btn" href="{{ url_for('betalingen') }}">Opnieuw controleren</a>
+  <a class="btn" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Opnieuw controleren</a>
 </div>
 
 {% if problemen %}
@@ -55,7 +72,7 @@
     <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
     {% for r in problemen %}
     <tr>
-      <td><a href="{{ url_for('kamer_detail', kamer_naam=r['kamer']) }}">{{ r['kamer'] }}</a></td>
+      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r['kamer'] }}</a></td>
       <td>{{ r["naam"] }}</td>
       <td>{{ r["verwacht_bedrag"]|eur }}</td>
       <td>{{ r["ontvangen_bedrag"]|eur }}</td>

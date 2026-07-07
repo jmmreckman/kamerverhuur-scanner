@@ -1,5 +1,6 @@
-"""Flask-website voor Mahoniestraat 15: dashboard, kamers, betalingen-check en
-contracten. Login is beperkt tot de gebruikers in users.json (jij + Justin).
+"""Flask-website voor meerdere panden: dashboard, kamers, betalingen-check,
+contracten en documenten, per pand. Login is beperkt tot de gebruikers in
+users.json, elk met eigen pand-toegang (zie webapp/auth.py).
 
 Starten (development): python -m webapp.app
 Starten (productie): zie README (gunicorn + webapp.app:create_app()).
@@ -10,19 +11,21 @@ from datetime import date
 from decimal import Decimal
 
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, flash, redirect, render_template, request, url_for
-from flask_login import LoginManager, login_required, login_user, logout_user
+from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.models import Tenant
+from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties
 from kamerverhuur_scanner.runner import run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import parse_bedrag
 
 from . import ads, contracts
-from .auth import User, load_users, verify_login
+from .aanzegging import bereken_aanzeg_status
+from .auth import User, load_users, user_uit_gegevens, verify_login
 from .reliability import bereken_betrouwbaarheid
 
 load_dotenv()
@@ -36,6 +39,11 @@ def create_app(config: Config | None = None) -> Flask:
             config = Config.load()
         except ConfigError as exc:
             raise SystemExit(f"Configuratiefout: {exc}") from exc
+
+    try:
+        properties = load_properties(config.properties_file)
+    except PropertiesError as exc:
+        raise SystemExit(f"Pandenfout: {exc}") from exc
 
     app.secret_key = config.flask_secret_key
 
@@ -56,13 +64,38 @@ def create_app(config: Config | None = None) -> Flask:
     @login_manager.user_loader
     def load_user(username: str) -> User | None:
         users = load_users(config.users_file)
-        return User(username) if username in users else None
+        gebruiker = users.get(username)
+        return user_uit_gegevens(username, gebruiker) if gebruiker else None
+
+    @app.before_request
+    def _laad_pand_en_check_toegang():
+        if not request.view_args or "pand_slug" not in request.view_args:
+            return None
+        pand_slug = request.view_args["pand_slug"]
+        pand = find_pand(properties, pand_slug)
+        if pand is None:
+            abort(404, f"Pand '{pand_slug}' bestaat niet.")
+        g.pand = pand
+        if not current_user.is_authenticated:
+            return None  # login_required op de route zorgt voor de redirect naar /login
+        if not current_user.heeft_toegang(pand_slug):
+            return render_template("geen_toegang.html", pand=pand), 403
+        return None
+
+    @app.context_processor
+    def _template_context():
+        eigen_panden = []
+        if current_user.is_authenticated:
+            eigen_panden = [p for p in properties if current_user.heeft_toegang(p.slug)]
+        return {"eigen_panden": eigen_panden, "huidig_pand": getattr(g, "pand", None)}
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
         for kamer in sheet.get_kamers():
             if kamer.kamer == kamer_naam:
                 return kamer
         abort(404, f"Kamer '{kamer_naam}' niet gevonden.")
+
+    # --- Login/logout ---
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -71,8 +104,8 @@ def create_app(config: Config | None = None) -> Flask:
             password = request.form.get("password", "")
             users = load_users(config.users_file)
             if verify_login(users, username, password):
-                login_user(User(username))
-                return redirect(url_for("dashboard"))
+                login_user(user_uit_gegevens(username, users[username]))
+                return redirect(url_for("start"))
             flash("Onjuiste gebruikersnaam of wachtwoord.")
         return render_template("login.html")
 
@@ -82,24 +115,50 @@ def create_app(config: Config | None = None) -> Flask:
         logout_user()
         return redirect(url_for("login"))
 
+    # --- Pandkiezer (landingspagina na het inloggen) ---
+
     @app.route("/")
     @login_required
-    def dashboard():
-        cache = state.load()
+    def start():
+        eigen_panden = [p for p in properties if current_user.heeft_toegang(p.slug)]
+        if len(eigen_panden) == 1:
+            return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
+        return render_template("pand_kiezer.html", panden=eigen_panden)
+
+    # --- Dashboard ---
+
+    @app.route("/pand/<pand_slug>/")
+    @login_required
+    def dashboard(pand_slug: str):
+        cache = state.load(pand_slug)
         totalen = None
         if cache:
             totalen = {
                 "verwacht": sum(Decimal(r["verwacht_bedrag"]) for r in cache["resultaten"]),
                 "ontvangen": sum(Decimal(r["ontvangen_bedrag"]) for r in cache["resultaten"]),
             }
-        return render_template("dashboard.html", cache=cache, totalen=totalen)
+        sheet = SheetClient(config, g.pand)
+        aanzeg_waarschuwingen = [
+            (kamer, bereken_aanzeg_status(kamer.contract_einddatum))
+            for kamer in sheet.get_kamers()
+        ]
+        aanzeg_waarschuwingen = [
+            (kamer, status)
+            for kamer, status in aanzeg_waarschuwingen
+            if status and (status.moet_nu_aanzeggen or status.venster_verstreken)
+        ]
+        return render_template(
+            "dashboard.html", cache=cache, totalen=totalen, aanzeg_waarschuwingen=aanzeg_waarschuwingen
+        )
 
-    @app.route("/huurders")
+    # --- Huurders ---
+
+    @app.route("/pand/<pand_slug>/huurders")
     @login_required
-    def huurders():
-        sheet = SheetClient(config)
+    def huurders(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
         kamers = sheet.get_kamers()
-        sheet_url = f"https://docs.google.com/spreadsheets/d/{config.google_sheet_id}/edit"
+        sheet_url = f"https://docs.google.com/spreadsheets/d/{g.pand.google_sheet_id}/edit"
         return render_template("huurders.html", kamers=kamers, sheet_url=sheet_url)
 
     def _kamer_form_naar_velden(form) -> dict:
@@ -117,46 +176,50 @@ def create_app(config: Config | None = None) -> Flask:
             "opmerking": form.get("opmerking", "").strip() or None,
         }
 
-    @app.route("/huurders/nieuw", methods=["GET", "POST"])
+    @app.route("/pand/<pand_slug>/huurders/nieuw", methods=["GET", "POST"])
     @login_required
-    def huurder_nieuw():
+    def huurder_nieuw(pand_slug: str):
         if request.method == "POST":
-            sheet = SheetClient(config)
+            sheet = SheetClient(config, g.pand)
             sheet.add_kamer(**_kamer_form_naar_velden(request.form))
             flash("Nieuwe kamer toegevoegd.")
-            return redirect(url_for("huurders"))
+            return redirect(url_for("huurders", pand_slug=pand_slug))
         return render_template("huurder_bewerken.html", kamer=None)
 
-    @app.route("/huurders/<kamer_naam>/bewerken", methods=["GET", "POST"])
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/bewerken", methods=["GET", "POST"])
     @login_required
-    def huurder_bewerken(kamer_naam: str):
-        sheet = SheetClient(config)
+    def huurder_bewerken(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
         if request.method == "POST":
             sheet.update_kamer(row_index=kamer.row_index, **_kamer_form_naar_velden(request.form))
             flash(f"Kamer {kamer_naam} bijgewerkt.")
-            return redirect(url_for("huurders"))
+            return redirect(url_for("huurders", pand_slug=pand_slug))
         return render_template("huurder_bewerken.html", kamer=kamer)
 
-    @app.route("/betalingen", methods=["GET", "POST"])
+    # --- Betalingen ---
+
+    @app.route("/pand/<pand_slug>/betalingen", methods=["GET", "POST"])
     @login_required
-    def betalingen():
+    def betalingen(pand_slug: str):
         net_gecontroleerd = None
         if request.method == "POST":
-            _tenants, results, unmatched = run_check(config, dry_run=False)
+            _tenants, results, unmatched = run_check(config, g.pand, dry_run=False)
             net_gecontroleerd = {"results": results, "unmatched": unmatched}
-        return render_template("betalingen.html", net_gecontroleerd=net_gecontroleerd, cache=state.load())
+        return render_template("betalingen.html", net_gecontroleerd=net_gecontroleerd, cache=state.load(pand_slug))
 
-    @app.route("/kamers")
-    @login_required
-    def kamers_overzicht():
-        sheet = SheetClient(config)
-        return render_template("kamers.html", kamers=sheet.get_kamers(), cache=state.load())
+    # --- Kamers ---
 
-    @app.route("/kamers/<kamer_naam>")
+    @app.route("/pand/<pand_slug>/kamers")
     @login_required
-    def kamer_detail(kamer_naam: str):
-        sheet = SheetClient(config)
+    def kamers_overzicht(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        return render_template("kamers.html", kamers=sheet.get_kamers(), cache=state.load(pand_slug))
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>")
+    @login_required
+    def kamer_detail(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
         geschiedenis = sheet.get_geschiedenis(kamer_naam)
         return render_template(
@@ -164,50 +227,64 @@ def create_app(config: Config | None = None) -> Flask:
             kamer=kamer,
             geschiedenis=list(reversed(geschiedenis)),
             betrouwbaarheid=bereken_betrouwbaarheid(geschiedenis),
-            cache_status=state.status_voor_kamer(state.load(), kamer_naam),
-            contracten=contracts.list_contracten_voor_kamer(kamer_naam),
+            cache_status=state.status_voor_kamer(state.load(pand_slug), kamer_naam),
+            contracten=contracts.list_contracten_voor_kamer(pand_slug, kamer_naam),
+            aanzeg_status=bereken_aanzeg_status(kamer.contract_einddatum),
         )
 
-    @app.route("/kamers/<kamer_naam>/advertentie")
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/advertentie")
     @login_required
-    def kamer_advertentie(kamer_naam: str):
-        sheet = SheetClient(config)
+    def kamer_advertentie(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
-        return render_template("advertentie.html", kamer=kamer, advertentie=ads.genereer_advertentie(kamer))
+        return render_template("advertentie.html", kamer=kamer, advertentie=ads.genereer_advertentie(g.pand, kamer))
 
-    @app.route("/contracten")
-    @login_required
-    def contracten_overzicht():
-        return render_template("contracten.html", contracten=contracts.list_contracten())
+    # --- Contracten ---
 
-    @app.route("/contracten/nieuw", methods=["GET", "POST"])
+    @app.route("/pand/<pand_slug>/contracten")
     @login_required
-    def contract_nieuw():
-        sheet = SheetClient(config)
+    def contracten_overzicht(pand_slug: str):
+        return render_template("contracten.html", contracten=contracts.list_contracten(pand_slug))
+
+    @app.route("/pand/<pand_slug>/contracten/nieuw", methods=["GET", "POST"])
+    @login_required
+    def contract_nieuw(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
         if request.method == "POST":
-            bestandsnaam = contracts.genereer_contract(request.form)
-            return redirect(url_for("contract_bekijken", bestandsnaam=bestandsnaam))
+            bestandsnaam = contracts.genereer_contract(pand_slug, request.form)
+            return redirect(url_for("contract_bekijken", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         return render_template("contract_nieuw.html", kamers=sheet.get_kamers(), vandaag=date.today())
 
-    @app.route("/contracten/<bestandsnaam>")
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>")
     @login_required
-    def contract_bekijken(bestandsnaam: str):
+    def contract_bekijken(pand_slug: str, bestandsnaam: str):
         try:
-            html = contracts.lees_contract(bestandsnaam)
+            html = contracts.lees_contract(pand_slug, bestandsnaam)
         except FileNotFoundError:
             abort(404)
         return Response(html, mimetype="text/html")
 
-    def _documenten_url(folder_id: str | None):
-        return url_for("documenten", folder_id=folder_id) if folder_id else url_for("documenten")
+    # --- Documenten ---
 
-    @app.route("/documenten")
-    @app.route("/documenten/map/<folder_id>")
+    def _documenten_url(pand_slug: str, folder_id: str | None):
+        if folder_id:
+            return url_for("documenten_map", pand_slug=pand_slug, folder_id=folder_id)
+        return url_for("documenten", pand_slug=pand_slug)
+
+    @app.route("/pand/<pand_slug>/documenten")
     @login_required
-    def documenten(folder_id: str | None = None):
-        if not config.google_drive_folder_id:
+    def documenten(pand_slug: str):
+        return _documenten_view(pand_slug, None)
+
+    @app.route("/pand/<pand_slug>/documenten/map/<folder_id>")
+    @login_required
+    def documenten_map(pand_slug: str, folder_id: str):
+        return _documenten_view(pand_slug, folder_id)
+
+    def _documenten_view(pand_slug: str, folder_id: str | None):
+        if not g.pand.google_drive_folder_id:
             return render_template("documenten.html", bestanden=None, kruimels=[], folder_id=None)
-        drive = DriveClient(config)
+        drive = DriveClient(config, g.pand)
         return render_template(
             "documenten.html",
             bestanden=drive.list_bestanden(folder_id),
@@ -215,39 +292,39 @@ def create_app(config: Config | None = None) -> Flask:
             folder_id=folder_id,
         )
 
-    @app.route("/documenten/upload", methods=["POST"])
+    @app.route("/pand/<pand_slug>/documenten/upload", methods=["POST"])
     @login_required
-    def documenten_upload():
+    def documenten_upload(pand_slug: str):
         folder_id = request.form.get("folder_id") or None
-        if not config.google_drive_folder_id:
-            flash("Documenten zijn nog niet ingesteld (GOOGLE_DRIVE_FOLDER_ID ontbreekt in .env).")
-            return redirect(_documenten_url(folder_id))
-        drive = DriveClient(config)
+        if not g.pand.google_drive_folder_id:
+            flash("Documenten zijn nog niet ingesteld (google_drive_folder_id ontbreekt in properties.json).")
+            return redirect(_documenten_url(pand_slug, folder_id))
+        drive = DriveClient(config, g.pand)
         aantal = 0
         for bestand in request.files.getlist("bestand"):
             if bestand and bestand.filename:
                 drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=folder_id)
                 aantal += 1
         flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
-        return redirect(_documenten_url(folder_id))
+        return redirect(_documenten_url(pand_slug, folder_id))
 
-    @app.route("/documenten/nieuwe-map", methods=["POST"])
+    @app.route("/pand/<pand_slug>/documenten/nieuwe-map", methods=["POST"])
     @login_required
-    def documenten_nieuwe_map():
+    def documenten_nieuwe_map(pand_slug: str):
         folder_id = request.form.get("folder_id") or None
-        if not config.google_drive_folder_id:
-            flash("Documenten zijn nog niet ingesteld (GOOGLE_DRIVE_FOLDER_ID ontbreekt in .env).")
-            return redirect(_documenten_url(folder_id))
+        if not g.pand.google_drive_folder_id:
+            flash("Documenten zijn nog niet ingesteld (google_drive_folder_id ontbreekt in properties.json).")
+            return redirect(_documenten_url(pand_slug, folder_id))
         naam = request.form.get("naam", "").strip()
         if naam:
-            DriveClient(config).maak_map(naam, folder_id=folder_id)
+            DriveClient(config, g.pand).maak_map(naam, folder_id=folder_id)
             flash(f"Map '{naam}' aangemaakt.")
-        return redirect(_documenten_url(folder_id))
+        return redirect(_documenten_url(pand_slug, folder_id))
 
-    @app.route("/documenten/<file_id>/download")
+    @app.route("/pand/<pand_slug>/documenten/<file_id>/download")
     @login_required
-    def documenten_download(file_id: str):
-        drive = DriveClient(config)
+    def documenten_download(pand_slug: str, file_id: str):
+        drive = DriveClient(config, g.pand)
         naam, mimetype, inhoud = drive.download_bestand(file_id)
         return Response(
             inhoud,

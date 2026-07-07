@@ -1,10 +1,24 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon_megafoon, icon_plus %}
-{% block title %}Kamer {{ kamer.kamer }} - Mahoniestraat 15{% endblock %}
+{% block title %}Kamer {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Kamer {{ kamer.kamer }}</h1>
 </div>
+
+{% if aanzeg_status and (aanzeg_status.moet_nu_aanzeggen or aanzeg_status.venster_verstreken) %}
+<div class="card warning-box">
+  {% if aanzeg_status.venster_verstreken %}
+    <p><strong>Let op:</strong> de wettelijke aanzegtermijn voor dit contract loopt al (moest vóór
+       {{ aanzeg_status.venster_einde.strftime("%d-%m-%Y") }}) - regel dit zo snel mogelijk.</p>
+  {% else %}
+    <p><strong>Aanzeggen nodig:</strong> dit tijdelijke contract loopt af op
+       {{ aanzeg_status.einddatum.strftime("%d-%m-%Y") }}. Zeg dit schriftelijk aan vóór
+       {{ aanzeg_status.venster_einde.strftime("%d-%m-%Y") }}, anders wordt het contract automatisch
+       voor onbepaalde tijd.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="card">
   {% if kamer.naam %}
@@ -26,7 +40,7 @@
   {% else %}
     <p class="muted">Deze kamer staat op dit moment leeg.</p>
   {% endif %}
-  <a class="btn" href="{{ url_for('kamer_advertentie', kamer_naam=kamer.kamer) }}">{{ icon_megafoon() }} Advertentie plaatsen</a>
+  <a class="btn" href="{{ url_for('kamer_advertentie', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ icon_megafoon() }} Advertentie plaatsen</a>
 </div>
 
 <div class="card">
@@ -34,13 +48,13 @@
   {% if contracten %}
     <ul>
     {% for c in contracten %}
-      <li><a href="{{ url_for('contract_bekijken', bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+      <li><a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
     {% endfor %}
     </ul>
   {% else %}
     <p class="muted">Nog geen contract gegenereerd voor deze kamer.</p>
   {% endif %}
-  <a class="btn btn-secondary" href="{{ url_for('contract_nieuw') }}">{{ icon_plus() }} Nieuw huurcontract</a>
+  <a class="btn btn-secondary" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuw huurcontract</a>
 </div>
 
 <div class="card">

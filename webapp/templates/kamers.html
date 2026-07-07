@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Kamers - Mahoniestraat 15{% endblock %}
+{% block title %}Kamers - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Kamers</h1>
@@ -8,7 +8,7 @@
 <div class="grid">
   {% for k in kamers %}
   {% set cache_regel = (cache["resultaten"]|selectattr("kamer", "equalto", k.kamer)|first) if cache else none %}
-  <a class="card kamer-tile" href="{{ url_for('kamer_detail', kamer_naam=k.kamer) }}">
+  <a class="card kamer-tile" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">
     <h2>Kamer {{ k.kamer }}</h2>
     {% if k.naam %}
       <p>{{ k.naam }}</p>

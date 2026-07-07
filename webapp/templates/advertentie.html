@@ -19,5 +19,5 @@
   <textarea readonly rows="12" onclick="this.select()">{{ advertentie.beschrijving }}</textarea>
 </div>
 
-<a class="btn btn-secondary" href="{{ url_for('kamer_detail', kamer_naam=kamer.kamer) }}">Terug naar kamer</a>
+<a class="btn btn-secondary" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Terug naar kamer</a>
 {% endblock %}

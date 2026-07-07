@@ -1,37 +1,20 @@
-# Draait alle panden op één VPS, elk in een eigen container, achter één
-# gedeelde Caddy reverse-proxy (die ook automatisch gratis HTTPS regelt).
+# Eén website die meerdere panden bedient (dropdown/toegang per gebruiker),
+# achter Caddy als reverse-proxy (die ook automatisch gratis HTTPS regelt).
 #
-# Nieuw pand toevoegen:
-#   1. Kopieer het "mahoniestraat"-blok hieronder, geef het een nieuwe naam
-#      (bv. "pand2") en verwijs naar een nieuw .env-bestand + databestandsmap.
-#   2. Voeg in Caddyfile een nieuw blok toe met het domein van dat pand.
-#   3. `docker compose up -d --build`
-#
-# Zie ../README.md voor de volledige uitleg per stap.
+# Nieuw pand toevoegen: een blok toevoegen aan properties.json - geen nieuwe
+# container of nieuw domein nodig, het is dezelfde site.
 
 services:
-  mahoniestraat:
+  app:
     build:
       context: ..
     restart: unless-stopped
     env_file:
-      - ./mahoniestraat.env
+      - ./app.env
     volumes:
-      - ./data/mahoniestraat:/app/data
+      - ./data:/app/data
     expose:
       - "8000"
-
-  # --- Volgend pand: kopieer dit blok en pas de naam/bestanden aan ---
-  # pand2:
-  #   build:
-  #     context: ..
-  #   restart: unless-stopped
-  #   env_file:
-  #     - ./pand2.env
-  #   volumes:
-  #     - ./data/pand2:/app/data
-  #   expose:
-  #     - "8000"
 
   caddy:
     image: caddy:2-alpine
@@ -44,7 +27,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - mahoniestraat
+      - app
 
 volumes:
   caddy_data:

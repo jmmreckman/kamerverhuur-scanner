@@ -11,7 +11,7 @@ from bunq.sdk.model.generated.endpoint import MonetaryAccountBankApiObject as Mo
 from bunq.sdk.model.generated.endpoint import PaymentApiObject as BunqPayment
 
 from .config import Config
-from .models import Payment
+from .models import Pand, Payment
 from .utils import parse_bedrag
 
 _PAGINA_GROOTTE = 200
@@ -39,11 +39,11 @@ class BunqClient:
         api_context.save(self._config.bunq_conf_file)
         BunqContext.load_api_context(api_context)
 
-    def get_incoming_payments(self, since: date) -> list[Payment]:
+    def get_incoming_payments(self, pand: Pand, since: date) -> list[Payment]:
         """Geeft alle inkomende (positieve) betalingen sinds `since`, alleen op de
-        rekening die in BUNQ_REKENING_IBAN is ingesteld (voorkomt dat privé-rekeningen
-        of rekeningen van andere panden worden meegescand)."""
-        doel_iban = self._config.bunq_rekening_iban.replace(" ", "").upper()
+        rekening die bij dit pand hoort (voorkomt dat privé-rekeningen of
+        rekeningen van andere panden worden meegescand)."""
+        doel_iban = pand.bunq_rekening_iban.replace(" ", "").upper()
         payments: list[Payment] = []
         gevonden_rekening = False
 
@@ -57,9 +57,9 @@ class BunqClient:
 
         if not gevonden_rekening:
             raise BunqClientError(
-                f"Geen actieve bunq-rekening gevonden met IBAN '{self._config.bunq_rekening_iban}' "
-                "(BUNQ_REKENING_IBAN in .env). Controleer of dit IBAN klopt en of de API key "
-                "toegang heeft tot deze rekening."
+                f"Geen actieve bunq-rekening gevonden met IBAN '{pand.bunq_rekening_iban}' "
+                f"voor pand '{pand.naam}'. Controleer of dit IBAN klopt in properties.json en "
+                "of de API key toegang heeft tot deze rekening."
             )
         return payments
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Mahoniestraat 15{% endblock %}</title>
+  <title>{% block title %}Vastgoedbeheer{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,19 +11,29 @@
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
   <nav class="navbar">
-    <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-      <span class="logo-mark">M15</span>
-      <span>Mahoniestraat 15</span>
+    <a class="navbar-brand" href="{{ url_for('start') }}">
+      <span class="logo-mark">VB</span>
+      <span>{{ huidig_pand.naam if huidig_pand else "Vastgoedbeheer" }}</span>
     </a>
+    {% if huidig_pand %}
     <div class="nav-links">
-      <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard') }}">{{ icon_dashboard() }} Dashboard</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht') }}">{{ icon_kamers() }} Kamers</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders') }}">{{ icon_huurders() }} Huurders</a>
-      <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen') }}">{{ icon_betalingen() }} Betalingen</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht') }}">{{ icon_contracten() }} Contracten</a>
-      <a class="nav-link {{ 'actief' if ep == 'documenten' }}" href="{{ url_for('documenten') }}">{{ icon_documenten() }} Documenten</a>
+      <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard', pand_slug=huidig_pand.slug) }}">{{ icon_dashboard() }} Dashboard</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_kamers() }} Kamers</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">{{ icon_huurders() }} Huurders</a>
+      <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
+      <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
     </div>
+    {% endif %}
     <div class="nav-right">
+      {% if eigen_panden|length > 1 %}
+      <select onchange="if (this.value) window.location.href = this.value" style="width:auto; margin:0">
+        <option value="">Wissel van pand...</option>
+        {% for pand in eigen_panden %}
+        <option value="{{ url_for('dashboard', pand_slug=pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
       <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
     </div>
   </nav>

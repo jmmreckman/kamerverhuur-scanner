@@ -14,7 +14,10 @@ from kamerverhuur_scanner.bunq_client import BunqClient, BunqClientError
 @dataclass
 class FakeConfig:
     bunq_conf_file: str = "fake.conf"
-    bunq_rekening_iban: str = "NL81BUNQ2163127125"
+
+
+def _pand(iban="NL81BUNQ2163127125"):
+    return SimpleNamespace(naam="Mahoniestraat 15", bunq_rekening_iban=iban)
 
 
 def _account(id_, iban, status="ACTIVE"):
@@ -57,7 +60,7 @@ def test_filtert_op_iban_en_negeert_andere_rekeningen():
             value=[] if params.get("older_id") else payments_per_account.get(monetary_account_id, [])
         )
 
-        result = BunqClient(FakeConfig()).get_incoming_payments(since=date(2026, 7, 1))
+        result = BunqClient(FakeConfig()).get_incoming_payments(_pand(), since=date(2026, 7, 1))
 
     assert len(result) == 1
     assert result[0].bedrag == Decimal("745.00")
@@ -91,7 +94,7 @@ def test_paginering_stopt_pas_voorbij_since_datum():
         MockAccount.list.return_value = SimpleNamespace(value=[account])
         MockPayment.list.side_effect = fake_list
 
-        result = BunqClient(FakeConfig()).get_incoming_payments(since=date(2026, 7, 1))
+        result = BunqClient(FakeConfig()).get_incoming_payments(_pand(), since=date(2026, 7, 1))
 
     assert sorted(p.bedrag for p in result) == [Decimal("100.00"), Decimal("100.00"), Decimal("745.00")]
     assert calls["n"] == 2
@@ -101,4 +104,4 @@ def test_geen_matchende_rekening_geeft_duidelijke_fout():
     with mock.patch("kamerverhuur_scanner.bunq_client.MonetaryAccountBank") as MockAccount:
         MockAccount.list.return_value = SimpleNamespace(value=[_account(1, "NL00WATANDERS00000")])
         with pytest.raises(BunqClientError, match="NL81BUNQ2163127125"):
-            BunqClient(FakeConfig()).get_incoming_payments(since=date(2026, 7, 1))
+            BunqClient(FakeConfig()).get_incoming_payments(_pand(), since=date(2026, 7, 1))

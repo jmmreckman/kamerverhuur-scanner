@@ -54,3 +54,14 @@ class HistorieRegel:
     verwacht_bedrag: Decimal
     ontvangen_bedrag: Decimal
     status: Status
+
+
+@dataclass(frozen=True)
+class Pand:
+    slug: str  # korte code in URL's, bv. "mahoniestraat"
+    naam: str  # weergavenaam, bv. "Mahoniestraat 15"
+    google_sheet_id: str
+    google_sheet_worksheet: str
+    history_worksheet: str
+    google_drive_folder_id: str | None
+    bunq_rekening_iban: str
