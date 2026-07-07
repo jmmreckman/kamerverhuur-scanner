@@ -1,8 +1,10 @@
 # Eén domein voor de hele site (alle panden zitten in dezelfde app, met een
 # dropdown/toegangscontrole per gebruiker - zie properties.json en users.json).
-#
-# Vervang "vastgoedbeheerreckman.nl" hieronder door je eigen domein.
 
-vastgoedbeheerreckman.nl {
+steenhub.nl {
     reverse_proxy app:8000
+}
+
+www.steenhub.nl {
+    redir https://steenhub.nl{uri} permanent
 }

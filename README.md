@@ -234,8 +234,7 @@ domein. Alle configuratie hiervoor staat in de map `deploy/`:
 
 - `deploy/docker-compose.yml` - één `app`-service (de website) + één
   `caddy`-service (reverse proxy/HTTPS).
-- `deploy/Caddyfile` - één domeinblok; vervang `vastgoedbeheerreckman.nl`
-  door je eigen domein.
+- `deploy/Caddyfile` - domeinblok voor `steenhub.nl` (met `www.` redirect).
 - `deploy/app.env.example` - kopieer naar `deploy/app.env` en vul in.
 - `deploy/setup-vps.sh` - eenmalig script dat Docker installeert, automatische
   beveiligingsupdates inschakelt en de firewall instelt.
