@@ -331,6 +331,22 @@ docker compose run --rm app python scripts/create_user.py jouw_gebruikersnaam --
 docker compose up -d --build
 ```
 
+### Automatisch deployen (GitHub Actions)
+
+Nadat de VPS eenmaal draait, hoef je niet steeds handmatig `git pull` +
+`docker compose up -d --build` te draaien: `.github/workflows/deploy.yml`
+doet dit automatisch bij elke push naar de branch. Eenmalige instelling:
+
+1. Genereer een apart SSH-sleutelpaar specifiek voor deployen (niet je eigen
+   sleutel hergebruiken), en zet de publieke helft in `~/.ssh/authorized_keys`
+   op de VPS (naast je eigen sleutel, niet in plaats daarvan).
+2. Zet in de repo-instellingen (**Settings > Secrets and variables >
+   Actions**) drie secrets: `DEPLOY_SSH_KEY` (de privésleutel),
+   `DEPLOY_HOST` (het IP-adres van de VPS), `DEPLOY_USER` (meestal `root`).
+3. Klaar - vanaf nu deployt elke push naar de branch automatisch. Ook handig:
+   **Actions**-tab in GitHub > workflow **"Deploy naar VPS"** > **Run
+   workflow** om een deploy handmatig opnieuw te triggeren zonder nieuwe code.
+
 Log daarna in op de site als `jouw_gebruikersnaam` en maak verdere gebruikers
 (zoals Justin) aan via de **"Gebruikers"**-knop op de site zelf (zie Stap 5) -
 dat hoeft dus niet meer via de command line.
