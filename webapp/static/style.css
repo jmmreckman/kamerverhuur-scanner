@@ -120,12 +120,15 @@ a { color: inherit; }
 
 .nav-link.actief { background: var(--primary-soft); color: var(--primary); }
 
+.nav-menu { display: contents; }
+
 .nav-right {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
+.nav-right select { width: auto; margin: 0; }
 
 .nav-logout {
   display: flex;
@@ -137,9 +140,55 @@ a { color: inherit; }
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 .nav-logout:hover { background: var(--surface-alt); color: var(--text); }
 .nav-logout svg { width: 16px; height: 16px; }
+
+/* ---------- Mobiel navigatiemenu (hamburger) ---------- */
+
+.nav-toggle-checkbox { display: none; }
+
+.nav-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-toggle-btn:hover { background: var(--surface-alt); }
+.nav-toggle-btn svg { width: 22px; height: 22px; }
+
+@media (max-width: 860px) {
+  .navbar { flex-wrap: wrap; }
+  .navbar-brand { margin-right: 0; }
+  .nav-toggle-btn { display: flex; }
+
+  .nav-menu {
+    display: none;
+    flex-basis: 100%;
+    order: 3;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-menu { display: flex; }
+
+  .nav-links { flex-direction: column; align-items: stretch; gap: 0.2rem; }
+  .nav-link { justify-content: flex-start; }
+
+  .nav-right { flex-direction: column; align-items: stretch; margin-left: 0; margin-top: 0.5rem; gap: 0.4rem; }
+  .nav-right select { width: 100%; }
+  .nav-logout { justify-content: flex-start; }
+}
 
 /* ---------- Layout ---------- */
 
@@ -207,6 +256,7 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
 
 /* ---------- Tabellen ---------- */
 
+.tabel-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.65rem 0.7rem; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }

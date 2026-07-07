@@ -66,6 +66,7 @@
     <p class="muted">Nog geen geschiedenis - deze wordt opgebouwd bij elke uitgevoerde controle.</p>
   {% endif %}
   {% if geschiedenis %}
+  <div class="tabel-scroll">
   <table>
     <tr><th>Datum</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
     {% for regel in geschiedenis %}
@@ -78,6 +79,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% endif %}
 </div>
 {% endblock %}

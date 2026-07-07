@@ -15,29 +15,35 @@
       <span class="logo-mark">VB</span>
       <span>{{ huidig_pand.naam if huidig_pand else "Vastgoedbeheer" }}</span>
     </a>
-    {% if huidig_pand %}
-    <div class="nav-links">
-      <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard', pand_slug=huidig_pand.slug) }}">{{ icon_dashboard() }} Dashboard</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_kamers() }} Kamers</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">{{ icon_huurders() }} Huurders</a>
-      <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
-      <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
-    </div>
-    {% endif %}
-    <div class="nav-right">
-      {% if eigen_panden|length > 1 %}
-      <select onchange="if (this.value) window.location.href = this.value" style="width:auto; margin:0">
-        <option value="">Wissel van pand...</option>
-        {% for pand in eigen_panden %}
-        <option value="{{ url_for('dashboard', pand_slug=pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
-        {% endfor %}
-      </select>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox">
+    <label for="nav-toggle" class="nav-toggle-btn" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </label>
+    <div class="nav-menu">
+      {% if huidig_pand %}
+      <div class="nav-links">
+        <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard', pand_slug=huidig_pand.slug) }}">{{ icon_dashboard() }} Dashboard</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_kamers() }} Kamers</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">{{ icon_huurders() }} Huurders</a>
+        <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
+      </div>
       {% endif %}
-      {% if current_user.mag_gebruikers_beheren() %}
-      <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
-      {% endif %}
-      <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
+      <div class="nav-right">
+        {% if eigen_panden|length > 1 %}
+        <select onchange="if (this.value) window.location.href = this.value">
+          <option value="">Wissel van pand...</option>
+          {% for pand in eigen_panden %}
+          <option value="{{ url_for('dashboard', pand_slug=pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        {% if current_user.mag_gebruikers_beheren() %}
+        <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
+        {% endif %}
+        <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
+      </div>
     </div>
   </nav>
   {% endif %}

@@ -68,6 +68,7 @@
 {% if problemen %}
 <div class="card">
   <h2>Aandachtspunten</h2>
+  <div class="tabel-scroll">
   <table>
     <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
     {% for r in problemen %}
@@ -80,6 +81,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 {% endif %}
 {% endif %}

@@ -17,6 +17,7 @@
 {% if net_gecontroleerd %}
 <div class="card">
   <h2>Resultaat van deze controle</h2>
+  <div class="tabel-scroll">
   <table>
     <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
     {% for r in net_gecontroleerd["results"] %}
@@ -29,9 +30,11 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 
   {% if net_gecontroleerd["unmatched"] %}
   <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <div class="tabel-scroll">
   <table>
     <tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr>
     {% for p in net_gecontroleerd["unmatched"] %}
@@ -43,11 +46,13 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
   {% endif %}
 </div>
 {% elif cache %}
 <div class="card">
   <h2>Laatste controle ({{ cache["gecontroleerd_op"] }})</h2>
+  <div class="tabel-scroll">
   <table>
     <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
     {% for r in cache["resultaten"] %}
@@ -60,6 +65,7 @@
     </tr>
     {% endfor %}
   </table>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
