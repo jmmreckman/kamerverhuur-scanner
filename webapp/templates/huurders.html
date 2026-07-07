@@ -16,11 +16,13 @@
 <div class="card">
   <div class="tabel-scroll">
   <table>
-    <tr><th>Kamer</th><th>Naam</th><th>Totale huur</th><th>Contract einddatum</th><th></th></tr>
+    <tr><th>Kamer</th><th>Naam</th><th>Mail</th><th>Telefoonnummer</th><th>Totale huur</th><th>Contract einddatum</th><th></th></tr>
     {% for k in kamers %}
     <tr>
       <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
       <td>{{ k.naam or "(leegstaand)" }}</td>
+      <td>{% if k.email %}<a href="mailto:{{ k.email }}">{{ k.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if k.telefoonnummer %}<a href="tel:{{ k.telefoonnummer }}">{{ k.telefoonnummer }}</a>{% else %}-{% endif %}</td>
       <td>{{ k.verwacht_bedrag|eur }}</td>
       <td>{{ k.contract_einddatum or "-" }}</td>
       <td><a href="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Bewerken</a></td>
