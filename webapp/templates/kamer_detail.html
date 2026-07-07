@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_megafoon, icon_plus %}
+{% from "_icons.html" import icon_megafoon, icon_plus, icon_foto %}
 {% block title %}Kamer {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -41,6 +41,10 @@
     <p class="muted">Deze kamer staat op dit moment leeg.</p>
   {% endif %}
   <a class="btn" href="{{ url_for('kamer_advertentie', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ icon_megafoon() }} Advertentie plaatsen</a>
+  <a class="btn btn-secondary" href="{{ url_for('kamer_aanbod', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    {{ icon_foto() }} Aanbod beheren
+    {% if kamer.beschikbaar %}<span class="pil status-betaald" style="margin-left:0.4rem">Te huur</span>{% endif %}
+  </a>
 </div>
 
 <div class="card">

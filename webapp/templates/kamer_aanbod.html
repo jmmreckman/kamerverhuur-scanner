@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Aanbod - kamer {{ kamer.kamer }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Aanbod beheren - kamer {{ kamer.kamer }}</h1>
+  <p class="muted">Dit bepaalt wat er op de publieke aanbodpagina (/aanbod) te zien is.</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    <label>
+      <input type="checkbox" name="beschikbaar" style="width:auto; display:inline-block" {{ 'checked' if kamer.beschikbaar }}>
+      Deze kamer is te huur (zichtbaar op de publieke aanbodpagina)
+    </label>
+    <label>Omschrijving (in het Engels - dit ziet de bezoeker)
+      <textarea name="omschrijving" rows="10">{{ kamer.advertentie_omschrijving or standaard_omschrijving }}</textarea>
+    </label>
+    <button class="btn" type="submit">Opslaan</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Foto's en video's</h2>
+  <form id="upload-form" method="post" action="{{ url_for('kamer_aanbod_upload', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}" enctype="multipart/form-data">
+    <div id="dropzone" class="dropzone">
+      <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p>Sleep foto's/video's hierheen, of <label for="bestand-input" class="dropzone-link">kies bestanden</label></p>
+      <input id="bestand-input" type="file" name="bestand" multiple hidden accept="image/*,video/*">
+    </div>
+  </form>
+</div>
+
+<div class="bestand-grid">
+  {% for b in media %}
+  <div class="bestand-tile">
+    {% if b.mimetype.startswith('image/') %}
+      <img src="{{ url_for('documenten_download', pand_slug=huidig_pand.slug, file_id=b.id) }}" alt="{{ b.naam }}"
+           style="width:100%; aspect-ratio:1; object-fit:cover; border-radius: var(--radius-sm)">
+    {% else %}
+      <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="5" width="14" height="14" rx="2" stroke-linejoin="round"/>
+        <path d="m16 10 5-3v10l-5-3" stroke-linejoin="round"/>
+      </svg>
+    {% endif %}
+    <div class="tile-naam">{{ b.naam }}</div>
+    <form method="post" action="{{ url_for('kamer_aanbod_media_verwijderen', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id) }}"
+          onsubmit="return confirm('Bestand \'{{ b.naam }}\' verwijderen?')">
+      <button class="btn-link-danger" type="submit">Verwijderen</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen foto's/video's geupload.</p>
+  {% endfor %}
+</div>
+
+<a class="btn btn-secondary" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Terug naar kamer</a>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const bestandInput = document.getElementById('bestand-input');
+  const uploadForm = document.getElementById('upload-form');
+
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dropzone-actief'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dropzone-actief'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('dropzone-actief');
+    bestandInput.files = e.dataTransfer.files;
+    uploadForm.submit();
+  });
+  bestandInput.addEventListener('change', () => uploadForm.submit());
+</script>
+{% endblock %}

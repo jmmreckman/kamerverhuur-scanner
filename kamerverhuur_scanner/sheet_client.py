@@ -6,7 +6,8 @@ op de bestaande huuradministratie-sheet:
     A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur |
     F Contract einddatum | G Opmerking | H IBAN (nieuw, optioneel) |
     I Zoekwoord (nieuw, optioneel) | J Status (auto) | K Ontvangen bedrag (auto) |
-    L Laatst gecontroleerd (auto)
+    L Laatst gecontroleerd (auto) | M Beschikbaar (nieuw, JA/NEE) |
+    N Advertentie omschrijving (nieuw) | O Advertentie map-ID (nieuw, auto)
 
 "Totale huur" (kolom E) is het bedrag dat via bunq moet binnenkomen. Een rij met
 een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
@@ -15,6 +16,9 @@ waarvan de Kamer-kolom "totalen"/"totaal" is (de somrij onderaan) wordt genegeer
 Daarnaast is er een "Historie" tabblad (wordt aangemaakt als het nog niet bestaat)
 met kolommen: Datum | Kamer | Huurder | Verwacht | Ontvangen | Status - elke
 uitgevoerde controle voegt hier een rij per kamer aan toe.
+
+En een "Aanmeldingen" tabblad (ook automatisch aangemaakt) waar reacties op de
+publieke aanbodpagina in terechtkomen - zie webapp/aanbod.py.
 """
 from __future__ import annotations
 
@@ -24,7 +28,7 @@ from decimal import Decimal
 import gspread
 
 from .config import Config
-from .models import HistorieRegel, Pand, Status, Tenant, TenantResult
+from .models import Aanmelding, HistorieRegel, Pand, Status, Tenant, TenantResult
 from .utils import parse_bedrag
 
 COL_KAMER = 1
@@ -39,15 +43,33 @@ COL_ZOEKWOORD = 9
 COL_STATUS = 10
 COL_ONTVANGEN = 11
 COL_LAATST_GECONTROLEERD = 12
+COL_BESCHIKBAAR = 13
+COL_ADVERTENTIE_OMSCHRIJVING = 14
+COL_ADVERTENTIE_MAP_ID = 15
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
 
 _HISTORIE_HEADER = ["Datum", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status"]
 
+_AANMELDINGEN_HEADER = [
+    "Datum", "Kamer", "Naam", "Email", "Telefoon", "Huidig adres", "Studie",
+    "Studentnummer", "Gewenste ingangsdatum", "Gewenste huurduur",
+    "Inkomstenbron", "Inkomsten (bedrag)", "Borgsteller", "Bezichtiging",
+    "Video-bel nummer", "Bewijs inschrijving",
+]
+
 
 def _optioneel(waarde: str) -> str | None:
     return waarde.strip() or None
+
+
+def _naar_ja_nee(waarde: bool) -> str:
+    return "JA" if waarde else "NEE"
+
+
+def _naar_bool(waarde: str) -> bool:
+    return waarde.strip().upper() in {"JA", "TRUE", "WAAR", "1"}
 
 
 class SheetClient:
@@ -63,7 +85,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_LAATST_GECONTROLEERD - len(row))
+            row = row + [""] * (COL_ADVERTENTIE_MAP_ID - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -79,6 +101,9 @@ class SheetClient:
                     servicekosten=parse_bedrag(row[COL_SERVICEKOSTEN - 1]) if row[COL_SERVICEKOSTEN - 1].strip() else None,
                     contract_einddatum=_optioneel(row[COL_CONTRACT_EINDDATUM - 1]),
                     opmerking=_optioneel(row[COL_OPMERKING - 1]),
+                    beschikbaar=_naar_bool(row[COL_BESCHIKBAAR - 1]),
+                    advertentie_omschrijving=_optioneel(row[COL_ADVERTENTIE_OMSCHRIJVING - 1]),
+                    advertentie_map_id=_optioneel(row[COL_ADVERTENTIE_MAP_ID - 1]),
                 )
             )
         return kamers
@@ -141,8 +166,19 @@ class SheetClient:
             "",
             "",
             "",
+            "",
+            "",
+            "",
         ]
         self._worksheet.append_row(row, value_input_option="USER_ENTERED")
+
+    def update_aanbod(self, row_index: int, beschikbaar: bool, omschrijving: str | None, map_id: str | None) -> None:
+        updates = [
+            {"range": self._a1(row_index, COL_BESCHIKBAAR), "values": [[_naar_ja_nee(beschikbaar)]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_OMSCHRIJVING), "values": [[omschrijving or ""]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_MAP_ID), "values": [[map_id or ""]]},
+        ]
+        self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
     def write_results(self, results: list[TenantResult]) -> None:
         now = datetime.now().strftime("%d-%m-%Y %H:%M")
@@ -205,6 +241,48 @@ class SheetClient:
                 title=self._pand.history_worksheet, rows=1000, cols=len(_HISTORIE_HEADER)
             )
             ws.append_row(_HISTORIE_HEADER, value_input_option="USER_ENTERED")
+            return ws
+
+    def add_aanmelding(self, kamer: str, aanmelding: Aanmelding) -> None:
+        ws = self._aanmeldingen_worksheet()
+        row = [
+            datetime.now().strftime("%d-%m-%Y %H:%M"),
+            kamer,
+            aanmelding.naam,
+            aanmelding.email,
+            aanmelding.telefoon,
+            aanmelding.huidig_adres,
+            aanmelding.studie,
+            aanmelding.studentnummer,
+            aanmelding.gewenste_ingangsdatum,
+            aanmelding.gewenste_huurduur,
+            aanmelding.inkomstenbron,
+            aanmelding.inkomsten_bedrag,
+            aanmelding.borgsteller,
+            aanmelding.bezichtiging,
+            aanmelding.videobel_nummer,
+            aanmelding.bewijs_inschrijving_link,
+        ]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+
+    def get_aanmeldingen(self) -> list[list[str]]:
+        ws = self._aanmeldingen_worksheet()
+        rows = ws.get_all_values()[1:]  # koprij overslaan
+        return [row for row in rows if any(cel.strip() for cel in row)]
+
+    def wis_aanmeldingen(self) -> None:
+        ws = self._aanmeldingen_worksheet()
+        ws.clear()
+        ws.append_row(_AANMELDINGEN_HEADER, value_input_option="USER_ENTERED")
+
+    def _aanmeldingen_worksheet(self):
+        try:
+            return self._spreadsheet.worksheet(self._pand.aanmeldingen_worksheet)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = self._spreadsheet.add_worksheet(
+                title=self._pand.aanmeldingen_worksheet, rows=1000, cols=len(_AANMELDINGEN_HEADER)
+            )
+            ws.append_row(_AANMELDINGEN_HEADER, value_input_option="USER_ENTERED")
             return ws
 
     @staticmethod

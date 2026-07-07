@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Aanmeldingen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Aanmeldingen</h1>
+  <p class="muted">Reacties van geïnteresseerden via de publieke aanbodpagina.</p>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('aanmeldingen_wissen', pand_slug=huidig_pand.slug) }}"
+        onsubmit="return confirm('Alle aanmeldingen wissen? Dit kan niet ongedaan gemaakt worden.')">
+    <button class="btn btn-secondary" type="submit">Lijst wissen</button>
+  </form>
+</div>
+
+<div class="card">
+  {% if rijen %}
+  <div class="tabel-scroll">
+  <table>
+    <tr>
+      <th>Datum</th><th>Kamer</th><th>Naam</th><th>Email</th><th>Telefoon</th><th>Adres</th>
+      <th>Studie</th><th>Studentnr.</th><th>Ingangsdatum</th><th>Huurduur</th>
+      <th>Inkomstenbron</th><th>Inkomsten</th><th>Borgsteller</th><th>Bezichtiging</th>
+      <th>Video-bel nr.</th><th>Bewijs inschrijving</th>
+    </tr>
+    {% for r in rijen %}
+    <tr>
+      {% for cel in r %}
+        {% if loop.index0 == 15 and cel %}
+          <td><a href="{{ cel }}" target="_blank" rel="noopener">Bekijken</a></td>
+        {% else %}
+          <td>{{ cel }}</td>
+        {% endif %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen aanmeldingen.</p>
+  {% endif %}
+</div>
+{% endblock %}

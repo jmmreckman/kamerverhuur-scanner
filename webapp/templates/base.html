@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen %}
+  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox %}
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
   <nav class="navbar">
@@ -28,6 +28,7 @@
         <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
         <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
         <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('aanmeldingen') }}" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Aanmeldingen</a>
       </div>
       {% endif %}
       <div class="nav-right">

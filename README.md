@@ -50,15 +50,53 @@ nodig.
   geen publieke Kamernet-API voor individuele verhuurders (alleen een zakelijke
   XML-feed voor makelaars/vastgoedbeheerders via een sales-contact) - vandaar
   geen automatische plaatsing.
+- **Publieke aanbodpagina** (`/aanbod`, Engelstalig, geen login nodig) - toont
+  alle kamers die je als "te huur" hebt aangevinkt, met foto's/video's en een
+  "Apply"-knop die naar een aanmeldformulier leidt. Zie "Aanbod & aanmeldingen"
+  hieronder.
+- **Aanmeldingen** - reacties op de aanbodpagina komen (met een upload van hun
+  bewijs van inschrijving) in een overzicht terecht dat alleen beheerders van
+  dat specifieke pand kunnen zien - met één druk op de knop weer leeg te maken
+  zodra je een huurder hebt gekozen.
+
+## Aanbod & aanmeldingen (publieke kamerlisting)
+
+Naast het besloten beheergedeelte heeft de site ook een openbare, Engelstalige
+aanbodpagina - handig omdat de meeste kamerzoekers internationale studenten
+zijn.
+
+- **Een kamer te huur zetten**: ga naar de kamerpagina (Kamers > kies een
+  kamer) en klik op **"Aanbod beheren"**. Daar vink je "Deze kamer is te huur"
+  aan, schrijf je een Engelse omschrijving (of gebruik de voorgestelde tekst),
+  en upload je foto's/video's (drag-and-drop, net als bij Documenten). Zodra
+  je opslaat, verschijnt de kamer op `steenhub.nl/aanbod` en op zijn eigen
+  deelbare pagina `steenhub.nl/aanbod/<pand-slug>/<kamernaam>` - geen login
+  nodig om die te bekijken.
+- **Reageren**: bezoekers klikken op "Apply for this room" en vullen een
+  formulier in (naam, contactgegevens, studie, studentnummer, gewenste
+  ingangsdatum/huurduur, inkomsten, borgsteller ja/nee, voorkeur voor een
+  fysieke bezichtiging of videobellen, en een verplichte upload van hun bewijs
+  van inschrijving). Bewust een aantal extra vragen, zodat vooral serieus
+  geïnteresseerden de moeite nemen te reageren. Het bewijs van inschrijving
+  wordt automatisch in de Drive-map van het pand gezet (onder
+  "Aanmeldingen/<kamernaam>/") - dat is dus nergens publiek te downloaden.
+- **Aanmeldingen bekijken**: ga naar **"Aanmeldingen"** in de site-navigatie
+  (alleen zichtbaar/toegankelijk voor ingelogde beheerders van dat pand) voor
+  een overzicht van alle reacties, met een link naar het geuploade bewijs van
+  inschrijving. Heb je een huurder gekozen? Klik op **"Lijst wissen"** om
+  helemaal opnieuw te beginnen voor de volgende keer dat de kamer vrijkomt.
+- Nog geen ID-controle, inkomenscontrole of automatische contractopstelling
+  vanuit een aanmelding - dat blijft (bewust) een latere stap, die begint pas
+  als je een kandidaat definitief hebt gekozen.
 
 ## Verwachte kolomindeling in de Google Sheet (per pand)
 
 Elk pand heeft zijn eigen tabblad/sheet, aangesloten op je bestaande
 huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 
-| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | |
+| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | |
 
 - Kolom **A t/m G** zijn je bestaande kolommen, die pas je zelf aan (of via de
   site, zie hieronder).
@@ -67,6 +105,10 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   huurder.
 - Kolom **J, K, L** (Status, Ontvangen bedrag, Laatst gecontroleerd) zijn ook
   nieuw - voeg de koppen toe, de site vult de inhoud zelf.
+- Kolom **M, N, O** (Beschikbaar, Advertentie omschrijving, Advertentie
+  map-ID) horen bij de publieke aanbodpagina - voeg de koppen toe, maar vul de
+  inhoud niet zelf in: dat doet de site via de "Aanbod beheren"-knop op de
+  kamerpagina.
 - **Totale huur** (kolom E) is het bedrag dat de site verwacht via bunq binnen
   te zien komen (kale huur + servicekosten).
 - Een lege **Huurder** met een ingevulde **Kamer** betekent: kamer staat leeg.
@@ -79,6 +121,10 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 Er wordt automatisch een tweede tabblad (**Historie**, naam instelbaar per
 pand) aangemaakt waar elke "Nu controleren"-run een rij per kamer aan toevoegt.
 Dat voedt de betaalgeschiedenis en betrouwbaarheidsscore op de kamerpagina's.
+
+Ook wordt automatisch een derde tabblad (**Aanmeldingen**, naam ook instelbaar
+per pand) aangemaakt waar reacties op de publieke aanbodpagina in
+terechtkomen - zie "Aanbod & aanmeldingen" hierboven.
 
 ## Vereisten
 
@@ -354,6 +400,13 @@ docker run --rm -p 8000:8000 \
 - Deel elke gebruikersinlog alleen met de betreffende persoon, en geef alleen
   toegang tot de panden die diegene ook echt nodig heeft (`--panden`, niet
   standaard `--alle-panden`).
+- **Persoonsgegevens uit het aanmeldformulier** (naam, contactgegevens,
+  studentnummer, inkomsten, bewijs van inschrijving) staan alleen in de Google
+  Sheet ("Aanmeldingen"-tabblad) en de Drive-map van het betreffende pand -
+  beide alleen bereikbaar voor ingelogde beheerders van dat pand, nooit
+  publiek. Wis de aanmeldingenlijst (knop op de Aanmeldingen-pagina) zodra je
+  een huurder hebt gekozen, zodat je niet onnodig lang gegevens bewaart van
+  mensen die het niet zijn geworden.
 
 ## Problemen oplossen
 

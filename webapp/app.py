@@ -7,6 +7,7 @@ Starten (productie): zie README (gunicorn + webapp.app:create_app()).
 """
 from __future__ import annotations
 
+import dataclasses
 from datetime import date
 from decimal import Decimal
 from functools import wraps
@@ -25,6 +26,7 @@ from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import parse_bedrag
 
 from . import ads, contracts
+from .aanmeldingen import AanmeldingFout, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
 from .reliability import bereken_betrouwbaarheid
@@ -320,6 +322,76 @@ def create_app(config: Config | None = None) -> Flask:
         kamer = _kamer_of_404(sheet, kamer_naam)
         return render_template("advertentie.html", kamer=kamer, advertentie=ads.genereer_advertentie(g.pand, kamer))
 
+    # --- Aanbod beheren (foto's/video's + beschikbaarheid voor de publieke aanbodpagina) ---
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/aanbod", methods=["GET", "POST"])
+    @login_required
+    def kamer_aanbod(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if request.method == "POST":
+            beschikbaar = request.form.get("beschikbaar") == "on"
+            omschrijving = request.form.get("omschrijving", "").strip() or None
+            sheet.update_aanbod(kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id)
+            flash("Aanbod bijgewerkt.")
+            return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        media = []
+        if kamer.advertentie_map_id:
+            media = DriveClient(config, g.pand).list_bestanden(kamer.advertentie_map_id)
+        standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
+        return render_template("kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving)
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/aanbod/upload", methods=["POST"])
+    @login_required
+    def kamer_aanbod_upload(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not g.pand.google_drive_folder_id:
+            flash("Foto's/video's uploaden kan pas als er een Drive-map voor dit pand is ingesteld (zie properties.json).")
+            return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        drive = DriveClient(config, g.pand)
+        map_id = kamer.advertentie_map_id
+        if not map_id:
+            aanbod_map = drive.vind_of_maak_map("Aanbod")
+            map_id = drive.vind_of_maak_map(kamer_naam, aanbod_map)
+            sheet.update_aanbod(kamer.row_index, kamer.beschikbaar, kamer.advertentie_omschrijving, map_id)
+        aantal = 0
+        for bestand in request.files.getlist("bestand"):
+            if bestand and bestand.filename:
+                drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=map_id)
+                aantal += 1
+        flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/aanbod/<file_id>/verwijderen", methods=["POST"])
+    @login_required
+    def kamer_aanbod_media_verwijderen(pand_slug: str, kamer_naam: str, file_id: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if kamer.advertentie_map_id:
+            drive = DriveClient(config, g.pand)
+            bestanden = drive.list_bestanden(kamer.advertentie_map_id)
+            if any(b.id == file_id for b in bestanden):
+                drive.verwijder_bestand(file_id)
+                flash("Bestand verwijderd.")
+        return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    # --- Aanmeldingen (reacties op de publieke aanbodpagina) ---
+
+    @app.route("/pand/<pand_slug>/aanmeldingen")
+    @login_required
+    def aanmeldingen_overzicht(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        return render_template("aanmeldingen.html", rijen=sheet.get_aanmeldingen())
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/wissen", methods=["POST"])
+    @login_required
+    def aanmeldingen_wissen(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        sheet.wis_aanmeldingen()
+        flash("Lijst met aanmeldingen gewist.")
+        return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
     # --- Contracten ---
 
     @app.route("/pand/<pand_slug>/contracten")
@@ -412,6 +484,88 @@ def create_app(config: Config | None = None) -> Flask:
             mimetype=mimetype,
             headers={"Content-Disposition": f'attachment; filename="{naam}"'},
         )
+
+    # --- Publieke aanbodpagina (geen login, Engelstalig - vooral voor expats) ---
+
+    def _beschikbare_kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.beschikbaar:
+            abort(404)
+        return kamer
+
+    def _eerste_foto(drive: DriveClient, map_id: str | None):
+        if not map_id:
+            return None
+        return next((b for b in drive.list_bestanden(map_id) if b.mimetype.startswith("image/")), None)
+
+    @app.route("/aanbod")
+    def aanbod_overzicht():
+        kaarten = []
+        for pand in properties:
+            sheet = SheetClient(config, pand)
+            drive = DriveClient(config, pand) if pand.google_drive_folder_id else None
+            for kamer in sheet.get_kamers():
+                if not kamer.beschikbaar:
+                    continue
+                foto = _eerste_foto(drive, kamer.advertentie_map_id) if drive else None
+                kaarten.append({"pand": pand, "kamer": kamer, "foto": foto})
+        return render_template("aanbod_overzicht.html", kaarten=kaarten)
+
+    @app.route("/aanbod/<pand_slug>/<kamer_naam>")
+    def aanbod_detail(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
+        media = []
+        if kamer.advertentie_map_id:
+            media = DriveClient(config, g.pand).list_bestanden(kamer.advertentie_map_id)
+        omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
+        return render_template("aanbod_detail.html", kamer=kamer, media=media, omschrijving=omschrijving)
+
+    @app.route("/aanbod/<pand_slug>/<kamer_naam>/media/<file_id>")
+    def aanbod_media(pand_slug: str, kamer_naam: str, file_id: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
+        if not kamer.advertentie_map_id:
+            abort(404)
+        drive = DriveClient(config, g.pand)
+        bestanden = drive.list_bestanden(kamer.advertentie_map_id)
+        if not any(b.id == file_id for b in bestanden):
+            abort(404)
+        _naam, mimetype, inhoud = drive.download_bestand(file_id)
+        return Response(inhoud, mimetype=mimetype, headers={"Cache-Control": "public, max-age=3600"})
+
+    @app.route("/aanbod/<pand_slug>/<kamer_naam>/apply", methods=["GET", "POST"])
+    def aanbod_apply(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
+        if request.method == "POST":
+            if not g.pand.google_drive_folder_id:
+                return render_template(
+                    "aanbod_apply.html", kamer=kamer,
+                    fout="Sorry, applications are temporarily unavailable for this property. Please contact us directly.",
+                ), 503
+            bestand = request.files.get("study_proof")
+            try:
+                aanmelding = valideer_en_bouw(request.form, heeft_bestand=bool(bestand and bestand.filename))
+            except AanmeldingFout as exc:
+                return render_template("aanbod_apply.html", kamer=kamer, fout=str(exc)), 400
+            drive = DriveClient(config, g.pand)
+            aanmeldingen_map = drive.vind_of_maak_map("Aanmeldingen")
+            kamer_map = drive.vind_of_maak_map(kamer_naam, aanmeldingen_map)
+            bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
+            file_id = drive.upload_bestand(bestandsnaam, bestand.mimetype, bestand.read(), folder_id=kamer_map)
+            aanmelding = dataclasses.replace(
+                aanmelding, bewijs_inschrijving_link=f"https://drive.google.com/file/d/{file_id}/view"
+            )
+            sheet.add_aanmelding(kamer_naam, aanmelding)
+            return redirect(url_for("aanbod_apply_bedankt", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        return render_template("aanbod_apply.html", kamer=kamer, fout=None)
+
+    @app.route("/aanbod/<pand_slug>/<kamer_naam>/apply/thanks")
+    def aanbod_apply_bedankt(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
+        return render_template("aanbod_bedankt.html", kamer=kamer)
 
     return app
 

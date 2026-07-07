@@ -72,14 +72,32 @@ class DriveClient:
         kruimels.reverse()
         return kruimels
 
-    def maak_map(self, naam: str, folder_id: str | None = None) -> None:
+    def maak_map(self, naam: str, folder_id: str | None = None) -> str:
         metadata = {"name": naam, "mimeType": _MAP_MIMETYPE, "parents": [folder_id or self.root_folder_id]}
-        self._service.files().create(body=metadata, fields="id").execute()
+        resultaat = self._service.files().create(body=metadata, fields="id").execute()
+        return resultaat["id"]
 
-    def upload_bestand(self, bestandsnaam: str, mimetype: str, inhoud: bytes, folder_id: str | None = None) -> None:
+    def vind_map(self, naam: str, folder_id: str | None = None) -> str | None:
+        ouder = folder_id or self.root_folder_id
+        q = (
+            f"'{ouder}' in parents and trashed = false and mimeType = '{_MAP_MIMETYPE}' "
+            f"and name = '{_escape_q(naam)}'"
+        )
+        resultaat = self._service.files().list(q=q, fields="files(id)", pageSize=1).execute()
+        gevonden = resultaat.get("files", [])
+        return gevonden[0]["id"] if gevonden else None
+
+    def vind_of_maak_map(self, naam: str, folder_id: str | None = None) -> str:
+        return self.vind_map(naam, folder_id) or self.maak_map(naam, folder_id)
+
+    def upload_bestand(self, bestandsnaam: str, mimetype: str, inhoud: bytes, folder_id: str | None = None) -> str:
         media = MediaIoBaseUpload(io.BytesIO(inhoud), mimetype=mimetype or "application/octet-stream", resumable=False)
         metadata = {"name": bestandsnaam, "parents": [folder_id or self.root_folder_id]}
-        self._service.files().create(body=metadata, media_body=media, fields="id").execute()
+        resultaat = self._service.files().create(body=metadata, media_body=media, fields="id").execute()
+        return resultaat["id"]
+
+    def verwijder_bestand(self, file_id: str) -> None:
+        self._service.files().delete(fileId=file_id).execute()
 
     def download_bestand(self, file_id: str) -> tuple[str, str, bytes]:
         """Downloadt een bestand. Google Docs/Sheets/Slides worden als PDF geexporteerd
@@ -101,6 +119,10 @@ class DriveClient:
         while not done:
             _status, done = downloader.next_chunk()
         return naam, mimetype, buffer.getvalue()
+
+
+def _escape_q(waarde: str) -> str:
+    return waarde.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def _naar_bestand(f: dict) -> DriveBestand:

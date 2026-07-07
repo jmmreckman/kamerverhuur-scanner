@@ -26,6 +26,9 @@ class Tenant:
     servicekosten: Decimal | None = None
     contract_einddatum: str | None = None  # vrije tekst: kan een datum zijn of "onbepaalde tijd"
     opmerking: str | None = None
+    beschikbaar: bool = False  # staat deze kamer op de publieke aanbodpagina?
+    advertentie_omschrijving: str | None = None
+    advertentie_map_id: str | None = None  # Drive-map met foto's/video's voor de aanbodpagina
 
 
 @dataclass(frozen=True)
@@ -65,3 +68,23 @@ class Pand:
     history_worksheet: str
     google_drive_folder_id: str | None
     bunq_rekening_iban: str
+    aanmeldingen_worksheet: str = "Aanmeldingen"
+
+
+@dataclass(frozen=True)
+class Aanmelding:
+    """Eén reactie op een kameraanbod, via het publieke aanmeldformulier."""
+    naam: str
+    email: str
+    telefoon: str
+    huidig_adres: str
+    studie: str
+    studentnummer: str
+    gewenste_ingangsdatum: str
+    gewenste_huurduur: str
+    inkomstenbron: str
+    inkomsten_bedrag: str
+    borgsteller: str
+    bezichtiging: str
+    videobel_nummer: str
+    bewijs_inschrijving_link: str

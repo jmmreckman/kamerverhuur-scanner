@@ -40,6 +40,7 @@ def load_properties(path: str) -> list[Pand]:
                     history_worksheet=item.get("history_worksheet", "Historie"),
                     google_drive_folder_id=item.get("google_drive_folder_id") or None,
                     bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
+                    aanmeldingen_worksheet=item.get("aanmeldingen_worksheet", "Aanmeldingen"),
                 )
             )
         except KeyError as exc:

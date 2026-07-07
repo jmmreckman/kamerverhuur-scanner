@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Apply - room {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Apply for room {{ kamer.kamer }}</h1>
+  <p class="muted">{{ huidig_pand.naam }} - {{ kamer.verwacht_bedrag|eur }} / month</p>
+</div>
+
+<div class="card">
+  <p>Please fill in the form below to apply for this room. If your details match what
+     we're looking for, we'll invite you for a viewing (in person, or by video call -
+     your choice).</p>
+  <p><strong>House rules:</strong> no smoking, no pets, and you must be enrolled as a student.</p>
+</div>
+
+{% if fout %}
+<div class="flash"><p>{{ fout }}</p></div>
+{% endif %}
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    <label>Full name
+      <input type="text" name="full_name" required value="{{ request.form.get('full_name', '') }}">
+    </label>
+    <label>Email address
+      <input type="email" name="email" required value="{{ request.form.get('email', '') }}">
+    </label>
+    <label>Phone number
+      <input type="tel" name="phone" required value="{{ request.form.get('phone', '') }}">
+    </label>
+    <label>Current address
+      <input type="text" name="current_address" required value="{{ request.form.get('current_address', '') }}">
+    </label>
+    <label>Study programme
+      <input type="text" name="study_program" required value="{{ request.form.get('study_program', '') }}">
+    </label>
+    <label>Student number
+      <input type="text" name="student_number" required value="{{ request.form.get('student_number', '') }}">
+    </label>
+    <label>Desired start date
+      <input type="date" name="desired_start_date" required value="{{ request.form.get('desired_start_date', '') }}">
+    </label>
+    <label>Desired contract duration
+      <input type="text" name="desired_contract_duration" placeholder="e.g. 12 months" required
+             value="{{ request.form.get('desired_contract_duration', '') }}">
+    </label>
+    <label>Source of income (job, parents, scholarship, ...)
+      <input type="text" name="income_source" required value="{{ request.form.get('income_source', '') }}">
+    </label>
+    <label>Monthly income
+      <input type="text" name="income_amount" placeholder="e.g. €1200" required value="{{ request.form.get('income_amount', '') }}">
+    </label>
+    <label>Do you have a guarantor?
+      <select name="guarantor" required>
+        <option value="">Select...</option>
+        <option value="Yes" {{ 'selected' if request.form.get('guarantor') == 'Yes' }}>Yes</option>
+        <option value="No" {{ 'selected' if request.form.get('guarantor') == 'No' }}>No</option>
+      </select>
+    </label>
+    <label>Viewing preference
+      <select name="viewing_preference" id="viewing_preference" required>
+        <option value="">Select...</option>
+        <option value="in_person" {{ 'selected' if request.form.get('viewing_preference') == 'in_person' }}>In person</option>
+        <option value="video_call" {{ 'selected' if request.form.get('viewing_preference') == 'video_call' }}>Video call</option>
+      </select>
+    </label>
+    <label id="video_call_number_label">Phone number for the video call
+      <input type="tel" name="video_call_number" id="video_call_number" value="{{ request.form.get('video_call_number', '') }}">
+    </label>
+    <label>Proof of study enrollment (PDF or photo)
+      <input type="file" name="study_proof" accept="image/*,.pdf" required>
+    </label>
+    <label>
+      <input type="checkbox" name="agree_rules" style="width:auto; display:inline-block" required>
+      I confirm I am a student, do not smoke, and have no pets.
+    </label>
+    <button class="btn" type="submit">Submit application</button>
+  </form>
+</div>
+
+<script>
+  const pref = document.getElementById('viewing_preference');
+  const label = document.getElementById('video_call_number_label');
+  function toggleVideoField() { label.style.display = pref.value === 'video_call' ? 'block' : 'none'; }
+  pref.addEventListener('change', toggleVideoField);
+  toggleVideoField();
+</script>
+{% endblock %}

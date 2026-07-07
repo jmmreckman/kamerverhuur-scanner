@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Room {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ huidig_pand.naam }} - room {{ kamer.kamer }}</h1>
+  <p class="muted">{{ kamer.verwacht_bedrag|eur }} / month</p>
+</div>
+
+{% if media %}
+<div class="bestand-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-bottom: 1.5rem">
+  {% for b in media %}
+    {% if b.mimetype.startswith('image/') %}
+      <img src="{{ url_for('aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id) }}" alt=""
+           style="width:100%; aspect-ratio:4/3; object-fit:cover; border-radius: var(--radius)">
+    {% elif b.mimetype.startswith('video/') %}
+      <video controls style="width:100%; border-radius: var(--radius)">
+        <source src="{{ url_for('aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id) }}" type="{{ b.mimetype }}">
+      </video>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <p style="white-space: pre-line">{{ omschrijving }}</p>
+</div>
+
+<a class="btn" href="{{ url_for('aanbod_apply', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Apply for this room</a>
+<a class="btn btn-secondary" href="{{ url_for('aanbod_overzicht') }}">Back to all rooms</a>
+{% endblock %}
