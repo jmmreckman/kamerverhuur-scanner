@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from flask_login import UserMixin
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class User(UserMixin):
@@ -25,12 +25,30 @@ class User(UserMixin):
     def heeft_toegang(self, pand_slug: str) -> bool:
         return self.alle_panden or pand_slug in self.panden
 
+    def mag_gebruikers_beheren(self) -> bool:
+        return self.alle_panden
+
 
 def load_users(path: str) -> dict:
     p = Path(path)
     if not p.exists():
         return {}
     return json.loads(p.read_text())
+
+
+def save_users(path: str, users: dict) -> None:
+    Path(path).write_text(json.dumps(users, indent=2))
+
+
+def zet_gebruiker(users: dict, username: str, wachtwoord: str | None, alle_panden: bool, panden: list[str]) -> dict:
+    """Voegt een gebruiker toe of werkt 'm bij. Zonder wachtwoord blijft het
+    bestaande wachtwoord staan (voor het bewerken van alleen de toegang)."""
+    bestaand = users.get(username, {})
+    wachtwoord_hash = generate_password_hash(wachtwoord) if wachtwoord else bestaand.get("wachtwoord_hash")
+    if not wachtwoord_hash:
+        raise ValueError("Nieuwe gebruikers hebben een wachtwoord nodig.")
+    users[username] = {"wachtwoord_hash": wachtwoord_hash, "alle_panden": alle_panden, "panden": panden}
+    return users
 
 
 def verify_login(users: dict, username: str, password: str) -> bool:

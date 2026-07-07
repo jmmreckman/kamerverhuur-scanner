@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from functools import wraps
 
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
@@ -25,7 +26,7 @@ from kamerverhuur_scanner.utils import parse_bedrag
 
 from . import ads, contracts
 from .aanzegging import bereken_aanzeg_status
-from .auth import User, load_users, user_uit_gegevens, verify_login
+from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
 from .reliability import bereken_betrouwbaarheid
 
 load_dotenv()
@@ -95,6 +96,15 @@ def create_app(config: Config | None = None) -> Flask:
                 return kamer
         abort(404, f"Kamer '{kamer_naam}' niet gevonden.")
 
+    def admin_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not current_user.mag_gebruikers_beheren():
+                flash("Je hebt geen toegang tot gebruikersbeheer.")
+                return redirect(url_for("start"))
+            return view(*args, **kwargs)
+        return wrapped
+
     # --- Login/logout ---
 
     @app.route("/login", methods=["GET", "POST"])
@@ -124,6 +134,77 @@ def create_app(config: Config | None = None) -> Flask:
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
         return render_template("pand_kiezer.html", panden=eigen_panden)
+
+    # --- Gebruikersbeheer (alleen voor beheerders met toegang tot alle panden) ---
+
+    def _panden_uit_form(form) -> tuple[bool, list[str]]:
+        alle_panden = form.get("alle_panden") == "on"
+        panden = form.getlist("panden") if not alle_panden else []
+        return alle_panden, panden
+
+    @app.route("/beheer/gebruikers")
+    @login_required
+    @admin_required
+    def gebruikers_overzicht():
+        users = load_users(config.users_file)
+        return render_template("gebruikers.html", users=users)
+
+    @app.route("/beheer/gebruikers/nieuw", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def gebruiker_nieuw():
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            wachtwoord = request.form.get("wachtwoord", "")
+            users = load_users(config.users_file)
+            if not username:
+                flash("Gebruikersnaam is verplicht.")
+            elif username in users:
+                flash(f"Gebruiker '{username}' bestaat al.")
+            elif len(wachtwoord) < 8:
+                flash("Gebruik een wachtwoord van minimaal 8 tekens.")
+            else:
+                alle_panden, panden = _panden_uit_form(request.form)
+                zet_gebruiker(users, username, wachtwoord, alle_panden, panden)
+                save_users(config.users_file, users)
+                flash(f"Gebruiker '{username}' aangemaakt.")
+                return redirect(url_for("gebruikers_overzicht"))
+        return render_template("gebruiker_form.html", gebruiker=None, username=None, panden=properties)
+
+    @app.route("/beheer/gebruikers/<username>/bewerken", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def gebruiker_bewerken(username: str):
+        users = load_users(config.users_file)
+        gebruiker = users.get(username)
+        if gebruiker is None:
+            abort(404, f"Gebruiker '{username}' bestaat niet.")
+        if request.method == "POST":
+            wachtwoord = request.form.get("wachtwoord", "")
+            alle_panden, panden = _panden_uit_form(request.form)
+            if wachtwoord and len(wachtwoord) < 8:
+                flash("Gebruik een wachtwoord van minimaal 8 tekens.")
+            elif username == current_user.id and not alle_panden:
+                flash("Je kunt jezelf niet de toegang tot alle panden ontnemen.")
+            else:
+                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden)
+                save_users(config.users_file, users)
+                flash(f"Gebruiker '{username}' bijgewerkt.")
+                return redirect(url_for("gebruikers_overzicht"))
+        return render_template("gebruiker_form.html", gebruiker=gebruiker, username=username, panden=properties)
+
+    @app.route("/beheer/gebruikers/<username>/verwijderen", methods=["POST"])
+    @login_required
+    @admin_required
+    def gebruiker_verwijderen(username: str):
+        if username == current_user.id:
+            flash("Je kunt jezelf niet verwijderen.")
+            return redirect(url_for("gebruikers_overzicht"))
+        users = load_users(config.users_file)
+        if users.pop(username, None) is not None:
+            save_users(config.users_file, users)
+            flash(f"Gebruiker '{username}' verwijderd.")
+        return redirect(url_for("gebruikers_overzicht"))
 
     # --- Dashboard ---
 

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_plus %}
+{% block title %}Gebruikers{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Gebruikers</h1>
+  <p class="muted">Wie mag inloggen, en bij welke panden kan diegene?</p>
+</div>
+
+<div class="card">
+  <a class="btn" href="{{ url_for('gebruiker_nieuw') }}">{{ icon_plus() }} Nieuwe gebruiker</a>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>Gebruikersnaam</th><th>Toegang</th><th></th></tr>
+    {% for username, gebruiker in users.items() %}
+    <tr>
+      <td>{{ username }}{% if username == current_user.id %} <span class="muted">(jij)</span>{% endif %}</td>
+      <td>
+        {% if gebruiker.alle_panden %}
+          <span class="pil pil-neutral">Alle panden</span>
+        {% elif gebruiker.panden %}
+          {% for slug in gebruiker.panden %}<span class="pil pil-neutral">{{ slug }}</span> {% endfor %}
+        {% else %}
+          <span class="muted">Geen toegang</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('gebruiker_bewerken', username=username) }}">Bewerken</a>
+        {% if username != current_user.id %}
+        <form method="post" action="{{ url_for('gebruiker_verwijderen', username=username) }}" style="display:inline"
+              onsubmit="return confirm('Gebruiker \'{{ username }}\' verwijderen?')">
+          <button class="btn-link-danger" type="submit">Verwijderen</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

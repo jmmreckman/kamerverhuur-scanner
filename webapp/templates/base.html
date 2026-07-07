@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout %}
+  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen %}
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
   <nav class="navbar">
@@ -33,6 +33,9 @@
         <option value="{{ url_for('dashboard', pand_slug=pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
         {% endfor %}
       </select>
+      {% endif %}
+      {% if current_user.mag_gebruikers_beheren() %}
+      <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
       {% endif %}
       <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
     </div>

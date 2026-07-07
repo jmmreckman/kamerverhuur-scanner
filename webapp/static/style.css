@@ -225,6 +225,7 @@ tr:last-child td { border-bottom: none; }
 .status-betaald { background: var(--ok-soft); color: var(--ok); }
 .status-te-weinig-ontvangen, .status-te-veel-ontvangen { background: var(--warn-soft); color: var(--warn); }
 .status-nog-niet-ontvangen { background: var(--bad-soft); color: var(--bad); }
+.pil-neutral { background: var(--primary-soft); color: var(--primary); margin-right: 0.3rem; }
 td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, td.status-nog-niet-ontvangen {
   background: none;
 }
@@ -256,6 +257,18 @@ td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, t
   border: 1px solid var(--border);
 }
 .btn-secondary:hover { background: var(--primary-soft); }
+
+.btn-link-danger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.75rem;
+  color: var(--bad);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
 
 /* ---------- Kamer/kaart-tegels ---------- */
 

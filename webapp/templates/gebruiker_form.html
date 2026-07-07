@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{% if gebruiker %}Gebruiker {{ username }} bewerken{% else %}Nieuwe gebruiker{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{% if gebruiker %}Gebruiker {{ username }} bewerken{% else %}Nieuwe gebruiker{% endif %}</h1>
+</div>
+
+<div class="card">
+  <form method="post" action="{% if gebruiker %}{{ url_for('gebruiker_bewerken', username=username) }}{% else %}{{ url_for('gebruiker_nieuw') }}{% endif %}">
+    {% if gebruiker %}
+    <label>Gebruikersnaam
+      <input type="text" value="{{ username }}" disabled>
+    </label>
+    {% else %}
+    <label>Gebruikersnaam
+      <input type="text" name="username" required autofocus>
+    </label>
+    {% endif %}
+
+    <label>{% if gebruiker %}Nieuw wachtwoord (leeg laten om het huidige wachtwoord te behouden){% else %}Wachtwoord{% endif %}
+      <input type="password" name="wachtwoord" {{ 'required' if not gebruiker }} minlength="8">
+    </label>
+
+    <label>
+      <input type="checkbox" id="alle_panden" name="alle_panden" style="width:auto; display:inline-block"
+             {{ 'checked' if gebruiker and gebruiker.alle_panden }}>
+      Toegang tot alle panden (ook panden die later worden toegevoegd)
+    </label>
+
+    <fieldset id="panden-lijst" style="border:none; padding:0; margin:0 0 1rem">
+      <p class="muted" style="margin-top:0">Of kies specifieke panden:</p>
+      {% for pand in panden %}
+      <label style="font-weight:400">
+        <input type="checkbox" name="panden" value="{{ pand.slug }}" style="width:auto; display:inline-block"
+               {{ 'checked' if gebruiker and not gebruiker.alle_panden and pand.slug in gebruiker.panden }}>
+        {{ pand.naam }}
+      </label>
+      {% endfor %}
+    </fieldset>
+
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('gebruikers_overzicht') }}">Annuleren</a>
+  </form>
+</div>
+
+<script>
+  const alleCheckbox = document.getElementById('alle_panden');
+  const pandenLijst = document.getElementById('panden-lijst');
+  function toggle() { pandenLijst.style.opacity = alleCheckbox.checked ? '0.5' : '1'; }
+  alleCheckbox.addEventListener('change', toggle);
+  toggle();
+</script>
+{% endblock %}

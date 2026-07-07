@@ -19,6 +19,11 @@ nodig.
 - **Toegangscontrole per pand** - probeer je bij een pand te komen waar je geen
   toegang toe hebt, dan krijg je een duidelijke melding ("geen toegang, vraag de
   beheerder") in plaats van een foutmelding.
+- **Gebruikersbeheer** - gebruikers met toegang tot alle panden zien een
+  "Gebruikers"-knop in de site zelf, waar nieuwe collega's/mede-eigenaren
+  toegevoegd kunnen worden en per gebruiker aan te vinken is bij welke panden
+  diegene mag (of "alle panden"). Geen command line meer voor nodig na de
+  eerste installatie.
 - **Dashboard** - overzicht van de laatste betaalcontrole per pand, plus een
   waarschuwing als een tijdelijk huurcontract binnenkort (of al) aangezegd moet
   worden (wettelijk verplicht 1-3 maanden voor de einddatum, art. 7:271 BW).
@@ -175,23 +180,38 @@ cp properties.json.example properties.json
   te voegen - geen nieuwe container, service of domein nodig, gewoon
   `docker compose restart app` (of de app herstarten bij lokaal draaien).
 
-## Stap 5: gebruikers + toegang per pand instellen
+## Stap 5: de eerste gebruiker aanmaken
+
+De allereerste gebruiker (jijzelf, met toegang tot alle panden) maak je eenmalig
+via de command line aan, omdat er dan nog niemand is die kan inloggen op de
+gebruikersbeheer-pagina:
 
 ```bash
 python scripts/create_user.py jouw_gebruikersnaam --alle-panden
-python scripts/create_user.py justin --panden mahoniestraat
 ```
 
 - `--alle-panden`: deze gebruiker mag bij elk pand in `properties.json`, ook
   panden die je later toevoegt.
-- `--panden slug1,slug2`: deze gebruiker mag alleen bij de genoemde panden
-  (comma-gescheiden slugs). Probeert deze gebruiker een ander pand te openen,
-  dan krijgt die een duidelijke "geen toegang"-melding.
+- `--panden slug1,slug2`: (alternatief) deze gebruiker mag alleen bij de
+  genoemde panden (comma-gescheiden slugs).
 
 Dit vraagt een wachtwoord (niet zichtbaar tijdens typen) en slaat het gehasht
-op in `users.json` (**nooit committen**). Zet ook een willekeurige lange
-random string in `app.env`/`.env` als `FLASK_SECRET_KEY` (bijv. met
-`python -c "import secrets; print(secrets.token_hex(32))"`).
+op in `users.json` (**nooit committen**).
+
+**Alle volgende gebruikers** (bijv. Justin) maak je niet meer via de command
+line aan, maar gewoon op de site zelf: log in als jouw net aangemaakte
+gebruiker, klik rechtsboven op **"Gebruikers"** (die knop is alleen zichtbaar
+voor gebruikers met toegang tot alle panden), en voeg daar een nieuwe
+gebruiker toe met een wachtwoord en de panden waar diegene bij mag. Wachtwoord
+wijzigen of toegang aanpassen kan daar ook, evenals een gebruiker verwijderen.
+Je kunt jezelf niet per ongeluk je eigen beheerrechten ontnemen of jezelf
+verwijderen - dat voorkomt dat je buitengesloten raakt.
+
+`scripts/create_user.py` blijft ook daarna gewoon werken (bijv. als
+noodoplossing als je een keer niet kan inloggen).
+
+Zet daarnaast een willekeurige lange random string in `app.env`/`.env` als
+`FLASK_SECRET_KEY` (bijv. met `python -c "import secrets; print(secrets.token_hex(32))"`).
 
 ## Stap 6: lokaal testen
 
@@ -261,10 +281,13 @@ mkdir -p data
 
 docker compose run --rm app python scripts/setup_bunq.py
 docker compose run --rm app python scripts/create_user.py jouw_gebruikersnaam --alle-panden
-docker compose run --rm app python scripts/create_user.py justin --panden mahoniestraat
 
 docker compose up -d --build
 ```
+
+Log daarna in op de site als `jouw_gebruikersnaam` en maak verdere gebruikers
+(zoals Justin) aan via de **"Gebruikers"**-knop op de site zelf (zie Stap 5) -
+dat hoeft dus niet meer via de command line.
 
 Een nieuw pand toevoegen (later): een blok toevoegen aan `properties.json` op
 de VPS, en `docker compose restart app` - geen nieuwe container, service of
