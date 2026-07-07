@@ -30,6 +30,10 @@
         <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
         <a class="nav-link {{ 'actief' if ep.startswith('aanmeldingen') }}" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Aanmeldingen</a>
       </div>
+      {% else %}
+      <div class="nav-links">
+        <a class="nav-link" href="{{ url_for('start') }}">{{ icon_dashboard() }} Terug naar beheer</a>
+      </div>
       {% endif %}
       <div class="nav-right">
         {% if eigen_panden|length > 1 %}
