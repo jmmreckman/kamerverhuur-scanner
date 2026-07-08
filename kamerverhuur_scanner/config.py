@@ -40,6 +40,12 @@ class Config:
     bedrag_tolerantie: Decimal
     vooruitbetaling_dagen: int
 
+    # Map waar de "laatste controle"-cache (laatste_resultaat_<pand>.json) in
+    # wordt opgeslagen. Moet op een blijvend gekoppeld volume staan (zie
+    # deploy/app.env: STATE_DIR=/app/data) - anders is de Betalingen-pagina na
+    # elke herbuild/deploy weer leeg, ook al is er niets echt kwijt.
+    state_dir: str = "."
+
     # E-mail (betaalherinnering/ingebrekestelling) - optioneel, alleen nodig
     # als je die knoppen op de Betalingen-pagina gebruikt.
     smtp_host: str | None = None
@@ -62,6 +68,7 @@ class Config:
             flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),
             vooruitbetaling_dagen=int(os.environ.get("VOORUITBETALING_DAGEN", "14")),
+            state_dir=os.environ.get("STATE_DIR", ".").strip() or ".",
             smtp_host=os.environ.get("SMTP_HOST", "").strip() or None,
             smtp_port=int(os.environ.get("SMTP_PORT", "587").strip() or "587"),
             smtp_username=os.environ.get("SMTP_USERNAME", "").strip() or None,

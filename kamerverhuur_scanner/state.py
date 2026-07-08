@@ -11,12 +11,12 @@ from pathlib import Path
 from .models import TenantResult
 
 
-def _bestandsnaam(pand_slug: str) -> str:
+def _bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
-    return f"laatste_resultaat_{veilige_slug}.json"
+    return Path(state_dir) / f"laatste_resultaat_{veilige_slug}.json"
 
 
-def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen: int) -> None:
+def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen: int, state_dir: str = ".") -> None:
     data = {
         "gecontroleerd_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
         "resultaten": [
@@ -31,11 +31,11 @@ def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen
         ],
         "niet_gekoppelde_betalingen": niet_gekoppelde_betalingen,
     }
-    Path(_bestandsnaam(pand_slug)).write_text(json.dumps(data, indent=2))
+    _bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
 
 
-def load(pand_slug: str) -> dict | None:
-    p = Path(_bestandsnaam(pand_slug))
+def load(pand_slug: str, state_dir: str = ".") -> dict | None:
+    p = _bestandsnaam(pand_slug, state_dir)
     if not p.exists():
         return None
     return json.loads(p.read_text())

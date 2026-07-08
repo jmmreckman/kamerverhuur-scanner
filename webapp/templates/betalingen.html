@@ -28,6 +28,15 @@
   </form>
 </div>
 
+<div class="card">
+  <p>Vult de betaalgeschiedenis (voor de betrouwbaarheidsscore per kamer) aan met de 12
+     maanden vóór deze maand, op basis van de huidige huurderslijst. Kamers die pas kort
+     verhuurd zijn kunnen voor oudere maanden leeg blijven - dat kan niet worden opgehaald.</p>
+  <form method="post" action="{{ url_for('geschiedenis_aanvullen', pand_slug=huidig_pand.slug) }}">
+    <button class="btn btn-secondary" type="submit">{{ icon_betalingen() }} Betaalgeschiedenis aanvullen (12 maanden terug)</button>
+  </form>
+</div>
+
 {% if net_gecontroleerd %}
 <div class="card">
   <h2>Resultaat van deze controle</h2>

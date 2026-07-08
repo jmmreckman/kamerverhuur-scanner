@@ -23,7 +23,7 @@ from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.models import Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
-from kamerverhuur_scanner.runner import run_check
+from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import parse_bedrag
 
@@ -307,7 +307,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/pand/<pand_slug>/")
     @login_required
     def dashboard(pand_slug: str):
-        cache = state.load(pand_slug)
+        cache = state.load(pand_slug, config.state_dir)
         totalen = None
         if cache:
             totalen = {
@@ -390,9 +390,20 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "betalingen.html",
             net_gecontroleerd=net_gecontroleerd,
-            cache=state.load(pand_slug),
+            cache=state.load(pand_slug, config.state_dir),
             tenants_by_kamer=tenants_by_kamer,
         )
+
+    @app.route("/pand/<pand_slug>/betalingen/geschiedenis-aanvullen", methods=["POST"])
+    @login_required
+    def geschiedenis_aanvullen(pand_slug: str):
+        aantal = backfill_geschiedenis(config, g.pand)
+        flash(
+            f"Betaalgeschiedenis aangevuld voor de laatste {aantal} maanden "
+            "(op basis van de huidige huurderslijst - kamers die pas onlangs "
+            "verhuurd zijn, kunnen voor oudere maanden leeg blijven)."
+        )
+        return redirect(url_for("betalingen", pand_slug=pand_slug))
 
     _EMAIL_SOORTEN = {
         "herinnering": (bouw_herinnering, "Betaalherinnering"),
@@ -411,7 +422,7 @@ def create_app(config: Config | None = None) -> Flask:
             flash(f"Kamer {kamer_naam} heeft geen e-mailadres - vul dit eerst in bij Huurders.")
             return redirect(url_for("betalingen", pand_slug=pand_slug))
 
-        status = state.status_voor_kamer(state.load(pand_slug), kamer_naam)
+        status = state.status_voor_kamer(state.load(pand_slug, config.state_dir), kamer_naam)
         ontvangen_bedrag = parse_bedrag(status["ontvangen_bedrag"]) if status else Decimal("0")
 
         if request.method == "POST":
@@ -441,7 +452,7 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def kamers_overzicht(pand_slug: str):
         sheet = SheetClient(config, g.pand)
-        return render_template("kamers.html", kamers=sheet.get_kamers(), cache=state.load(pand_slug))
+        return render_template("kamers.html", kamers=sheet.get_kamers(), cache=state.load(pand_slug, config.state_dir))
 
     @app.route("/pand/<pand_slug>/kamers/<kamer_naam>")
     @login_required
@@ -454,7 +465,7 @@ def create_app(config: Config | None = None) -> Flask:
             kamer=kamer,
             geschiedenis=list(reversed(geschiedenis)),
             betrouwbaarheid=bereken_betrouwbaarheid(geschiedenis),
-            cache_status=state.status_voor_kamer(state.load(pand_slug), kamer_naam),
+            cache_status=state.status_voor_kamer(state.load(pand_slug, config.state_dir), kamer_naam),
             contracten=contracts.list_contracten_voor_kamer(pand_slug, kamer_naam),
             aanzeg_status=bereken_aanzeg_status(kamer.contract_einddatum),
         )

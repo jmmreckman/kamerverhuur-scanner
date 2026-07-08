@@ -41,6 +41,15 @@ nodig.
   huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij. Er
   wordt niets automatisch op de achtergrond gecontroleerd - alles gebeurt
   on-demand via de site.
+- **Betaalgeschiedenis aanvullen** - knop op de Betalingen-pagina die in één
+  keer de 12 kalendermaanden vóór de huidige maand ophaalt bij bunq en per
+  maand een Historie-regel wegschrijft (op basis van de huidige
+  huurderslijst - werkt dus het beste voor kamers die al een tijd dezelfde
+  huurder hebben). Handig om de betrouwbaarheidsscore meteen met meer
+  geschiedenis te vullen in plaats van pas vanaf nu op te bouwen. bunq zelf
+  legt geen harde limiet op hoe ver terug je transacties kunt ophalen (zolang
+  de rekening bestaat), dus dit kan in principe nog verder teruggezet worden
+  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen.
 - **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
   "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
   herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"
