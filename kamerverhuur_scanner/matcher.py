@@ -1,9 +1,14 @@
 """Koppelt binnengekomen bunq-betalingen aan huurders uit de sheet.
 
-Matching-volgorde per huurder:
-  1. Als een IBAN is opgegeven: alleen betalingen van precies dat IBAN.
-  2. Anders: betalingen waarvan de tegenpartijnaam of omschrijving het
-     'zoekwoord' bevat (of, als dat leeg is, de volledige naam van de huurder).
+Matching per huurder (een betaling telt mee zodra één van deze twee raak is):
+  1. Als een IBAN is opgegeven: betalingen van precies dat IBAN.
+  2. Betalingen waarvan de tegenpartijnaam of omschrijving het 'zoekwoord'
+     bevat (of, als dat leeg is, de volledige naam of een los naamdeel van de
+     huurder).
+
+Een IBAN-match is dus geen exclusieve/enige manier om te matchen - als het
+IBAN net niet klopt (typefout, of iemand anders betaalt namens de huurder)
+valt de site alsnog terug op naam-matching, in plaats van niets te vinden.
 
 Een betaling wordt aan maximaal 1 huurder toegekend (op volgorde van de sheet),
 zodat bedragen niet dubbel meetellen.
@@ -40,7 +45,11 @@ def match_tenants_to_payments(
 def _matches(tenant: Tenant, payment: Payment) -> bool:
     if tenant.iban:
         payment_iban = (payment.tegenpartij_iban or "").replace(" ", "").upper()
-        return payment_iban == tenant.iban
+        if payment_iban == tenant.iban:
+            return True
+        # Geen exacte IBAN-match: val terug op naam-matching hieronder in
+        # plaats van meteen "geen match" te zeggen - het IBAN op de sheet kan
+        # verouderd zijn, of iemand anders betaalt namens de huurder.
 
     zoekterm = (tenant.zoekwoord or tenant.naam).strip().lower()
     if not zoekterm:

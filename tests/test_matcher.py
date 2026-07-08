@@ -69,17 +69,27 @@ def test_te_veel_ontvangen():
     assert results[0].status == Status.TE_VEEL
 
 
-def test_matcht_op_iban_en_negeert_naam():
+def test_matcht_op_iban_ook_als_naam_niet_overeenkomt():
     tenant = _tenant(iban="NL91ABNA0417164300")
-    payments = [
-        _payment(bedrag="650.00", naam="Verkeerde Naam", iban="NL91ABNA0417164300"),
-        _payment(bedrag="650.00", naam="Jan de Vries", iban="NL00ANDERBANK000001"),
-    ]
+    payments = [_payment(bedrag="650.00", naam="Verkeerde Naam", iban="NL91ABNA0417164300", omschrijving="salaris")]
 
     results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
 
     assert results[0].status == Status.BETAALD
-    assert len(unmatched) == 1  # de betaling met het verkeerde IBAN blijft ongekoppeld
+    assert unmatched == []
+
+
+def test_iban_mismatch_valt_terug_op_naam_matching():
+    # Regressietest: een IBAN op de sheet dat niet (meer) klopt mag geen
+    # matches blokkeren die anders wel op naam zouden lukken - anders wordt
+    # een kamer erger af na het invullen van een IBAN dan ervoor.
+    tenant = _tenant(iban="NL91ABNA0417164300")
+    payments = [_payment(bedrag="650.00", naam="Jan de Vries", iban="NL00ANDERBANK000001")]
+
+    results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
+
+    assert results[0].status == Status.BETAALD
+    assert unmatched == []
 
 
 def test_zoekwoord_heeft_voorrang_op_volledige_naam():

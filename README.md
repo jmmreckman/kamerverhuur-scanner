@@ -423,8 +423,11 @@ docker run --rm -p 8000:8000 \
 - **Matching op naam is een benadering.** Zonder IBAN/Zoekwoord wordt gekeken
   of de volledige naam, of anders een los naamdeel (voornaam, achternaam,
   delen van een koppelnaam), voorkomt in de afzendernaam of omschrijving -
-  handig als bijvoorbeeld een ouder betaalt. Bij twijfel is een IBAN of vast
-  zoekwoord per kamer betrouwbaarder.
+  handig als bijvoorbeeld een ouder betaalt. Een IBAN of zoekwoord is
+  betrouwbaarder, maar is **geen exclusieve eis**: matcht het IBAN op de
+  sheet niet met de daadwerkelijke afzender (bijv. een typefout, of iemand
+  anders betaalt namens de huurder), dan valt de site automatisch terug op
+  naam-matching in plaats van niets te vinden.
 - **Vooruitbetalingen**: er wordt ook gekeken naar betalingen die tot
   `VOORUITBETALING_DAGEN` (standaard 14) vóór de 1e van de maand binnenkomen,
   voor huurders die ruim van tevoren betalen. Als iemand wel érg vroeg in de
