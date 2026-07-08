@@ -14,22 +14,29 @@ op de bestaande huuradministratie-sheet:
 een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
 waarvan de Kamer-kolom "totalen"/"totaal" is (de somrij onderaan) wordt genegeerd.
 
-Daarnaast is er een "Historie" tabblad (wordt aangemaakt als het nog niet bestaat)
-met kolommen: Datum | Kamer | Huurder | Verwacht | Ontvangen | Status - elke
-uitgevoerde controle voegt hier een rij per kamer aan toe.
+Daarnaast is er een "Historie" tabblad (wordt aangemaakt als het nog niet
+bestaat) met kolommen: Maand | Kamer | Huurder | Verwacht | Ontvangen |
+Status | Betaaldatum - precies 1 regel per kamer per kalendermaand
+("jjjj-mm"). Elke controle werkt de regel van de huidige maand bij (in
+plaats van een nieuwe regel toe te voegen), zodat vaker controleren binnen
+dezelfde maand de betrouwbaarheidsscore niet vertekent. "Betaaldatum" is de
+datum van de (laatste) gematchte betaling, niet de controledatum - zo blijft
+zichtbaar of iemand laat betaalde, ook al is de kamer inmiddels gewoon
+"Betaald".
 
 En een "Aanmeldingen" tabblad (ook automatisch aangemaakt) waar reacties op de
 publieke aanbodpagina in terechtkomen - zie webapp/aanbod.py.
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
 import gspread
 
 from .config import Config
-from .models import Aanmelding, HistorieRegel, Pand, Status, Tenant, TenantResult
+from .models import Aanmelding, HistorieRegel, Pand, Payment, Status, Tenant, TenantResult
 from .utils import parse_bedrag
 
 COL_KAMER = 1
@@ -53,7 +60,8 @@ COL_TELEFOONNUMMER = 17
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
 
-_HISTORIE_HEADER = ["Datum", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status"]
+_HISTORIE_HEADER = ["Maand", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status", "Betaaldatum"]
+_MAAND_PATROON = re.compile(r"\d{4}-\d{2}")
 
 _AANMELDINGEN_HEADER = [
     "Datum", "Kamer", "Naam", "Email", "Telefoon", "Huidig adres", "Studie",
@@ -73,6 +81,10 @@ def _naar_ja_nee(waarde: bool) -> str:
 
 def _naar_bool(waarde: str) -> bool:
     return waarde.strip().upper() in {"JA", "TRUE", "WAAR", "1"}
+
+
+def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
+    return max((p.datum for p in betalingen), default=None)
 
 
 class SheetClient:
@@ -209,41 +221,67 @@ class SheetClient:
         if updates:
             self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
-    def append_history(self, results: list[TenantResult], vandaag: date) -> None:
+    def upsert_history(self, results: list[TenantResult], maand: str) -> None:
+        """Werkt de historieregel van elke huurder voor deze kalendermaand bij
+        (of maakt 'm aan als die nog niet bestaat) - nooit een tweede regel
+        voor dezelfde (kamer, maand)-combinatie, ook niet bij vaker
+        controleren binnen dezelfde maand."""
         ws = self._history_worksheet()
-        rows = [
-            [
-                vandaag.strftime("%d-%m-%Y"),
+        bestaande = ws.get_all_values()
+        rij_voor_kamer = {
+            row[1].strip(): i
+            for i, row in enumerate(bestaande[1:], start=2)
+            if len(row) > 1
+        }
+
+        updates = []
+        nieuwe_rijen = []
+        for r in results:
+            betaaldatum = _laatste_betaaldatum(r.gematchte_betalingen)
+            rij = [
+                maand,
                 r.tenant.kamer,
                 r.tenant.naam,
                 f"{r.tenant.verwacht_bedrag:.2f}".replace(".", ","),
                 f"{r.ontvangen_bedrag:.2f}".replace(".", ","),
                 r.status.value,
+                betaaldatum.strftime("%d-%m-%Y") if betaaldatum else "",
             ]
-            for r in results
-        ]
-        if rows:
-            ws.append_rows(rows, value_input_option="USER_ENTERED")
+            rij_index = rij_voor_kamer.get(r.tenant.kamer)
+            bestaande_maand = bestaande[rij_index - 1][0].strip() if rij_index else None
+            if rij_index and bestaande_maand == maand:
+                updates.append({"range": f"A{rij_index}:G{rij_index}", "values": [rij]})
+            else:
+                nieuwe_rijen.append(rij)
+
+        if updates:
+            ws.batch_update(updates, value_input_option="USER_ENTERED")
+        if nieuwe_rijen:
+            ws.append_rows(nieuwe_rijen, value_input_option="USER_ENTERED")
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
         ws = self._history_worksheet()
         rows = ws.get_all_values()[1:]  # koprij overslaan
         regels: list[HistorieRegel] = []
         for row in rows:
-            row = row + [""] * (6 - len(row))
-            if row[1].strip() != kamer:
-                continue
-            regels.append(
-                HistorieRegel(
-                    datum=datetime.strptime(row[0].strip(), "%d-%m-%Y").date(),
-                    kamer=row[1].strip(),
-                    huurder=row[2].strip(),
-                    verwacht_bedrag=parse_bedrag(row[3]),
-                    ontvangen_bedrag=parse_bedrag(row[4]),
-                    status=Status(row[5].strip()),
+            row = row + [""] * (7 - len(row))
+            if row[1].strip() != kamer or not _MAAND_PATROON.fullmatch(row[0].strip()):
+                continue  # andere kamer, of een regel van vóór deze indeling (oud datumformaat)
+            try:
+                regels.append(
+                    HistorieRegel(
+                        maand=row[0].strip(),
+                        kamer=row[1].strip(),
+                        huurder=row[2].strip(),
+                        verwacht_bedrag=parse_bedrag(row[3]),
+                        ontvangen_bedrag=parse_bedrag(row[4]),
+                        status=Status(row[5].strip()),
+                        betaaldatum=datetime.strptime(row[6].strip(), "%d-%m-%Y").date() if row[6].strip() else None,
+                    )
                 )
-            )
-        regels.sort(key=lambda r: r.datum)
+            except ValueError:
+                continue  # onverwacht/onvolledig rijformaat overslaan
+        regels.sort(key=lambda r: r.maand)
         return regels
 
     def _history_worksheet(self):

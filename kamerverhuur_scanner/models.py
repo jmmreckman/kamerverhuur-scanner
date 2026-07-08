@@ -53,12 +53,17 @@ class TenantResult:
 
 @dataclass(frozen=True)
 class HistorieRegel:
-    datum: date
+    """Eén regel betaalgeschiedenis - precies 1 per kamer per kalendermaand
+    ("maand", formaat "jjjj-mm"). Wordt bij elke controle bijgewerkt in
+    plaats van een nieuwe regel toe te voegen, zodat vaker controleren in
+    dezelfde maand de betrouwbaarheidsscore niet vertekent."""
+    maand: str
     kamer: str
     huurder: str
     verwacht_bedrag: Decimal
     ontvangen_bedrag: Decimal
     status: Status
+    betaaldatum: date | None = None  # datum van de (laatste) betaling, None = nog niet ontvangen
 
 
 @dataclass(frozen=True)

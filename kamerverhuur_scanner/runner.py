@@ -40,7 +40,7 @@ def run_check(
 
     if not dry_run:
         sheet.write_results(results)
-        sheet.append_history(results, vandaag)
+        sheet.upsert_history(results, vandaag.strftime("%Y-%m"))
         state.save(pand.slug, results, len(unmatched))
         logger.info("[%s] Sheet en geschiedenis bijgewerkt.", pand.slug)
 

@@ -69,6 +69,19 @@ def create_app(config: Config | None = None) -> Flask:
     def status_klasse(status_tekst: str) -> str:
         return "status-" + status_tekst.lower().replace(" ", "-")
 
+    _MAAND_NAMEN = [
+        "januari", "februari", "maart", "april", "mei", "juni",
+        "juli", "augustus", "september", "oktober", "november", "december",
+    ]
+
+    @app.template_filter("maandnaam")
+    def maandnaam(waarde: str) -> str:
+        try:
+            jaar, maand = waarde.split("-")
+            return f"{_MAAND_NAMEN[int(maand) - 1]} {jaar}"
+        except (ValueError, IndexError):
+            return waarde
+
     login_manager = LoginManager()
     login_manager.login_view = "login"
     login_manager.init_app(app)

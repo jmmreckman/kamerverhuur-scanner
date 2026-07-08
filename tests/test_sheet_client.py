@@ -1,8 +1,9 @@
 """Tests voor de kolomparsing/-opslag van SheetClient, zonder een echte Google
 Sheets-verbinding: we bouwen een SheetClient met een neppe worksheet."""
+from datetime import date
 from decimal import Decimal
 
-from kamerverhuur_scanner.models import Pand
+from kamerverhuur_scanner.models import Pand, Payment, Status, Tenant, TenantResult
 from kamerverhuur_scanner.sheet_client import SheetClient
 
 
@@ -10,12 +11,24 @@ class FakeWorksheet:
     def __init__(self, rows):
         self._rows = rows
         self.batch_updates = []
+        self.appended_rows = []
 
     def get_all_values(self):
         return self._rows
 
     def batch_update(self, updates, value_input_option="USER_ENTERED"):
         self.batch_updates.append(updates)
+        for u in updates:
+            # simuleer het effect op _rows, zodat opeenvolgende aanroepen
+            # (bv. get_all_values erna) de update ook echt terugzien
+            kolom_start, rij = u["range"][0], int(u["range"].split(":")[0][1:])
+            while len(self._rows) <= rij - 1:
+                self._rows.append([])
+            self._rows[rij - 1] = u["values"][0]
+
+    def append_rows(self, rows, value_input_option="USER_ENTERED"):
+        self.appended_rows.extend(rows)
+        self._rows.extend(rows)
 
 
 def _sheet_client(rows) -> tuple[SheetClient, FakeWorksheet]:
@@ -27,6 +40,27 @@ def _sheet_client(rows) -> tuple[SheetClient, FakeWorksheet]:
     ws = FakeWorksheet(rows)
     client._worksheet = ws
     return client, ws
+
+
+def _sheet_client_met_historie(historie_rows) -> tuple[SheetClient, FakeWorksheet]:
+    client = object.__new__(SheetClient)
+    client._pand = Pand(
+        slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
+        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+    )
+    historie_ws = FakeWorksheet(historie_rows)
+    client._history_worksheet = lambda: historie_ws
+    return client, historie_ws
+
+
+HISTORIE_HEADER = ["Maand", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status", "Betaaldatum"]
+
+
+def _result(kamer="1", naam="Jan", bedrag="650.00", ontvangen="650.00", status=Status.BETAALD, betaaldatum=None):
+    tenant = Tenant(row_index=2, naam=naam, kamer=kamer, verwacht_bedrag=Decimal(bedrag))
+    betalingen = [Payment(bedrag=Decimal(ontvangen), valuta="EUR", tegenpartij_naam=naam,
+                           tegenpartij_iban=None, omschrijving="huur", datum=betaaldatum)] if betaaldatum else []
+    return TenantResult(tenant=tenant, ontvangen_bedrag=Decimal(ontvangen), status=status, gematchte_betalingen=betalingen)
 
 
 HEADER = ["Kamer", "Huurder", "Kale", "Service", "Totaal", "Einddatum", "Opmerking", "IBAN", "Zoekwoord",
@@ -103,3 +137,64 @@ def test_update_kamer_schrijft_contactgegevens():
     ranges = {u["range"]: u["values"][0][0] for u in ws.batch_updates[0]}
     assert ranges["P2"] == "jan@example.com"
     assert ranges["Q2"] == "0612345678"
+
+
+def test_upsert_history_voegt_nieuwe_maand_toe():
+    client, ws = _sheet_client_met_historie([HISTORIE_HEADER])
+    resultaat = _result(betaaldatum=date(2026, 7, 3))
+    client.upsert_history([resultaat], maand="2026-07")
+
+    assert len(ws.appended_rows) == 1
+    rij = ws.appended_rows[0]
+    assert rij[0] == "2026-07"
+    assert rij[1] == "1"
+    assert rij[5] == "Betaald"
+    assert rij[6] == "03-07-2026"
+
+
+def test_upsert_history_werkt_zelfde_maand_bij_in_plaats_van_nieuwe_regel():
+    bestaand = [
+        HISTORIE_HEADER,
+        ["2026-07", "1", "Jan", "650,00", "0,00", "Nog niet ontvangen", ""],
+    ]
+    client, ws = _sheet_client_met_historie(bestaand)
+
+    resultaat = _result(betaaldatum=date(2026, 7, 5))
+    client.upsert_history([resultaat], maand="2026-07")
+
+    # Geen nieuwe rij - de bestaande regel voor kamer 1 / juli is bijgewerkt.
+    assert ws.appended_rows == []
+    assert len(ws.batch_updates) == 1
+    bijgewerkte_rij = ws.batch_updates[0][0]["values"][0]
+    assert bijgewerkte_rij[5] == "Betaald"
+    assert bijgewerkte_rij[6] == "05-07-2026"
+
+
+def test_upsert_history_maakt_nieuwe_regel_voor_nieuwe_maand_zelfde_kamer():
+    bestaand = [
+        HISTORIE_HEADER,
+        ["2026-06", "1", "Jan", "650,00", "650,00", "Betaald", "01-06-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(bestaand)
+
+    resultaat = _result(betaaldatum=date(2026, 7, 2))
+    client.upsert_history([resultaat], maand="2026-07")
+
+    assert len(ws.appended_rows) == 1
+    assert ws.appended_rows[0][0] == "2026-07"
+    # De juni-regel blijft ongemoeid staan.
+    assert ws.get_all_values()[1][0] == "2026-06"
+
+
+def test_get_geschiedenis_negeert_oud_datumformaat():
+    rows = [
+        HISTORIE_HEADER,
+        ["03-07-2026", "1", "Jan", "650,00", "650,00", "Betaald", ""],  # oude indeling (voor de wijziging)
+        ["2026-07", "1", "Jan", "650,00", "650,00", "Betaald", "03-07-2026"],
+    ]
+    client, _ = _sheet_client_met_historie(rows)
+    geschiedenis = client.get_geschiedenis("1")
+
+    assert len(geschiedenis) == 1
+    assert geschiedenis[0].maand == "2026-07"
+    assert geschiedenis[0].betaaldatum == date(2026, 7, 3)

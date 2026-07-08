@@ -67,21 +67,22 @@
   <h2>Betaalgeschiedenis</h2>
   {% if betrouwbaarheid %}
     <p><strong>Betrouwbaarheid:</strong> {{ betrouwbaarheid.percentage }}% op orde
-       ({{ betrouwbaarheid.op_orde }} van {{ betrouwbaarheid.totaal }} controles)</p>
+       ({{ betrouwbaarheid.op_orde }} van {{ betrouwbaarheid.totaal }} maanden)</p>
   {% else %}
     <p class="muted">Nog geen geschiedenis - deze wordt opgebouwd bij elke uitgevoerde controle.</p>
   {% endif %}
   {% if geschiedenis %}
   <div class="tabel-scroll">
   <table>
-    <tr><th>Datum</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th></tr>
+    <tr><th>Maand</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Betaald op</th></tr>
     {% for regel in geschiedenis %}
     <tr>
-      <td>{{ regel.datum.strftime("%d-%m-%Y") }}</td>
+      <td>{{ regel.maand|maandnaam }}</td>
       <td>{{ regel.huurder }}</td>
       <td>{{ regel.verwacht_bedrag|eur }}</td>
       <td>{{ regel.ontvangen_bedrag|eur }}</td>
       <td><span class="pil {{ regel.status.value|status_klasse }}">{{ regel.status.value }}</span></td>
+      <td>{{ regel.betaaldatum.strftime("%d-%m-%Y") if regel.betaaldatum else "-" }}</td>
     </tr>
     {% endfor %}
   </table>

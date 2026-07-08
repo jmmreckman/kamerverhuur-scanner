@@ -125,8 +125,23 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   tijd" erin zetten) als het contract geen einddatum heeft.
 
 Er wordt automatisch een tweede tabblad (**Historie**, naam instelbaar per
-pand) aangemaakt waar elke "Nu controleren"-run een rij per kamer aan toevoegt.
-Dat voedt de betaalgeschiedenis en betrouwbaarheidsscore op de kamerpagina's.
+pand) aangemaakt met kolommen **Maand | Kamer | Huurder | Verwacht bedrag |
+Ontvangen bedrag | Status | Betaaldatum**. Per kamer komt er precies **1 regel
+per kalendermaand** in - een "Nu controleren"-run werkt de regel van de
+huidige maand bij in plaats van er een nieuwe aan toe te voegen, zodat vaker
+controleren binnen dezelfde maand de betrouwbaarheidsscore niet vertekent.
+"Betaaldatum" is de datum van de (laatste) gematchte betaling, dus een late
+betaling blijft zichtbaar als "laat betaald" ook al staat de status
+inmiddels gewoon op "Betaald". Dat voedt de betaalgeschiedenis en
+betrouwbaarheidsscore op de kamerpagina's.
+
+> Was je Historie-tabblad al aangemaakt vóórdat deze indeling bestond (oude
+> koprij: Datum | Kamer | Huurder | Verwacht bedrag | Ontvangen bedrag |
+> Status)? De site laat die oude regels dan gewoon met rust (ze crashen niets,
+> maar worden ook niet meer getoond) en telt vanaf nu opnieuw per maand mee.
+> Wil je een nette overgang, werk dan zelf de koprij bij naar **Maand | Kamer
+> | Huurder | Verwacht bedrag | Ontvangen bedrag | Status | Betaaldatum** (voeg
+> kolom G toe) - nieuwe tabbladen krijgen deze koprij automatisch.
 
 Ook wordt automatisch een derde tabblad (**Aanmeldingen**, naam ook instelbaar
 per pand) aangemaakt waar reacties op de publieke aanbodpagina in
