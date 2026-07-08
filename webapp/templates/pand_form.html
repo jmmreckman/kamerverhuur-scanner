@@ -50,6 +50,33 @@
       altijd mee, voor alle panden.
       <input type="text" name="extra_bcc" value="{{ pand.extra_bcc|join(', ') if pand else '' }}">
     </label>
+
+    <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
+    <p class="muted">Deze velden worden gebruikt om automatisch een huurcontract te genereren (zie
+       Contracten). Zonder deze gegevens ingevuld staan er lege plekken in het gegenereerde contract.</p>
+    <label>Postcode
+      <input type="text" name="postcode" value="{{ pand.postcode if pand else '' }}">
+    </label>
+    <label>Plaats
+      <input type="text" name="plaats" value="{{ pand.plaats if pand else '' }}">
+    </label>
+    <label>Verhuurder(s) - één per regel, formaat "Naam | Adres" (adres is optioneel)
+      <textarea name="verhuurders" rows="3">{% if pand %}{% for v in pand.verhuurders %}{{ v.naam }}{% if v.adres %} | {{ v.adres }}{% endif %}
+{% endfor %}{% endif %}</textarea>
+    </label>
+    <label>Naam rekeninghouder (zoals genoemd in het contract als ontvanger van de huur)
+      <input type="text" name="rekeninghouder_naam" value="{{ pand.rekeninghouder_naam if pand else '' }}">
+    </label>
+    <label>Gedeelde ruimtes (bv. "keuken, badkamer, woonkamer, tuin")
+      <input type="text" name="gedeelde_ruimtes" value="{{ pand.gedeelde_ruimtes if pand else '' }}">
+    </label>
+    <label>Bijzondere bepalingen / huisregels (vrije tekst, komt letterlijk in het contract)
+      <textarea name="bijzondere_bepalingen" rows="4">{{ pand.bijzondere_bepalingen if pand else '' }}</textarea>
+    </label>
+    <label>Gemeentelijk meldpunt ongewenst verhuurgedrag (naam/website, optioneel)
+      <input type="text" name="gemeente_meldpunt" value="{{ pand.gemeente_meldpunt if pand else '' }}">
+    </label>
+
     <button class="btn" type="submit">Opslaan</button>
     <a class="btn btn-secondary" href="{{ url_for('panden_overzicht') }}">Annuleren</a>
   </form>

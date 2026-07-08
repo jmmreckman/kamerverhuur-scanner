@@ -31,6 +31,16 @@ class Tenant:
     advertentie_map_id: str | None = None  # Drive-map met foto's/video's voor de aanbodpagina
     email: str | None = None
     telefoonnummer: str | None = None
+    # Onderstaande velden zijn puur voor het invullen van het huurcontract
+    # (zie contract_templates/huurovereenkomst_voorbeeld.html) - vrije tekst,
+    # want dit zijn geen bedragen/datums die de site zelf hoeft te berekenen.
+    geboortedatum: str | None = None
+    geboorteplaats: str | None = None  # bv. "Tatabánya, Hungary"
+    studentnummer: str | None = None
+    studierichting: str | None = None
+    borgsteller_naam: str | None = None
+    borgsteller_relatie: str | None = None  # bv. "Father"
+    contract_startdatum: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,13 @@ class HistorieRegel:
 
 
 @dataclass(frozen=True)
+class Verhuurder:
+    """Eén verhuurder/eigenaar zoals genoemd in het huurcontract."""
+    naam: str
+    adres: str = ""
+
+
+@dataclass(frozen=True)
 class Pand:
     slug: str  # korte code in URL's, bv. "mahoniestraat"
     naam: str  # weergavenaam, bv. "Mahoniestraat 15"
@@ -80,6 +97,15 @@ class Pand:
     # ingebrekestelling-mails (bv. een mede-eigenaar van alleen dit pand) -
     # naast de adressen in EMAIL_BCC (.env), die voor alle panden gelden.
     extra_bcc: list[str] = field(default_factory=list)
+    # Onderstaande velden zijn puur voor het invullen van het huurcontract
+    # (zie contract_templates/huurovereenkomst_voorbeeld.html).
+    postcode: str = ""
+    plaats: str = ""
+    verhuurders: list[Verhuurder] = field(default_factory=list)
+    rekeninghouder_naam: str = ""  # naam op de bankrekening waarop de huur binnenkomt
+    gedeelde_ruimtes: str = ""  # bv. "keuken, badkamer, woonkamer, tuin"
+    bijzondere_bepalingen: str = ""  # huisregels/extra bepalingen, vrije tekst
+    gemeente_meldpunt: str = ""  # meldpunt ongewenst verhuurgedrag van de gemeente
 
 
 @dataclass(frozen=True)

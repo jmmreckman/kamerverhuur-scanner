@@ -21,7 +21,7 @@
       <th>Datum</th><th>Kamer</th><th>Naam</th><th>Email</th><th>Telefoon</th><th>Adres</th>
       <th>Studie</th><th>Studentnr.</th><th>Ingangsdatum</th><th>Huurduur</th>
       <th>Inkomstenbron</th><th>Inkomsten</th><th>Borgsteller</th><th>Bezichtiging</th>
-      <th>Video-bel nr.</th><th>Bewijs inschrijving</th>
+      <th>Video-bel nr.</th><th>Bewijs inschrijving</th><th>Actie</th>
     </tr>
     {% for r in rijen %}
     <tr>
@@ -32,6 +32,10 @@
           <td>{{ cel }}</td>
         {% endif %}
       {% endfor %}
+      <td>
+        <a class="btn btn-secondary" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug,
+          kamer=r[1], huurder_naam=r[2], studentnummer=r[7]) }}">Contract maken</a>
+      </td>
     </tr>
     {% endfor %}
   </table>

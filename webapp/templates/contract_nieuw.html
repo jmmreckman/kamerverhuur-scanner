@@ -4,39 +4,130 @@
 <div class="page-header"><h1>Nieuw huurcontract</h1></div>
 
 <div class="warning-box">
-  <p>Dit genereert een <strong>concepttekst</strong> op basis van een voorbeeldsjabloon
+  <p>Dit genereert een <strong>concepttekst</strong> op basis van het contractsjabloon
      (contract_templates/huurovereenkomst_voorbeeld.html) - geen juridisch gecontroleerd
-     document. Laat de bepalingen controleren (of vervang ze door een erkend
-     modelcontract, bv. van de Rijksoverheid) voordat je dit laat ondertekenen.</p>
+     document. Laat de bepalingen controleren voordat je dit ter ondertekening aanbiedt (bv. via
+     DocHub). Vul eerst de verhuurder(s), het adres en de gedeelde ruimtes van dit pand in bij
+     <a href="{{ url_for('pand_bewerken', slug=huidig_pand.slug) }}">Panden beheren</a> als dat nog
+     niet is gebeurd, anders blijven die velden leeg in het contract.</p>
 </div>
 
 <div class="card">
-  <form method="post">
+  <form method="post" id="contract-form">
     <label>Kamer
-      <select name="kamer" required>
+      <select name="kamer" id="kamer-select" required>
+        <option value="">- kies een kamer -</option>
         {% for k in kamers %}
-        <option value="{{ k.kamer }}" {% if k.naam %}data-naam="{{ k.naam }}" data-prijs="{{ k.verwacht_bedrag|eur }}"{% endif %}>
+        <option value="{{ k.kamer }}"
+          {% if k.kamer == request.args.get('kamer') %}selected{% endif %}
+          data-naam="{{ k.naam }}"
+          data-kale="{{ k.kale_huurprijs|eur if k.kale_huurprijs is not none else '' }}"
+          data-service="{{ k.servicekosten|eur if k.servicekosten is not none else '' }}"
+          data-totaal="{{ k.verwacht_bedrag|eur }}"
+          data-einddatum="{{ k.contract_einddatum or '' }}"
+          data-startdatum="{{ k.contract_startdatum or '' }}"
+          data-geboortedatum="{{ k.geboortedatum or '' }}"
+          data-geboorteplaats="{{ k.geboorteplaats or '' }}"
+          data-studentnummer="{{ k.studentnummer or '' }}"
+          data-studierichting="{{ k.studierichting or '' }}"
+          data-borgstellernaam="{{ k.borgsteller_naam or '' }}"
+          data-borgstellerrelatie="{{ k.borgsteller_relatie or '' }}"
+        >
           Kamer {{ k.kamer }}{% if k.naam %} ({{ k.naam }}){% endif %}
         </option>
         {% endfor %}
       </select>
     </label>
+    <p class="muted">Bij het kiezen van een kamer met een huidige huurder worden onderstaande velden
+       automatisch ingevuld met de gegevens die al bij Huurders bekend zijn - je kunt ze hier nog
+       aanpassen. Kwam de huurder net binnen via een aanmelding? Ga dan naar
+       <a href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Aanmeldingen</a>
+       en klik daar op "Contract maken".</p>
+
+    <h2>Huurder</h2>
     <label>Naam huurder
-      <input type="text" name="huurder_naam" required>
+      <input type="text" name="huurder_naam" id="veld-naam" value="{{ request.args.get('huurder_naam', '') }}" required>
     </label>
-    <label>Huurprijs per maand (EUR)
-      <input type="text" name="huurprijs" required>
+    <label>Geboortedatum
+      <input type="text" name="geboortedatum" id="veld-geboortedatum" placeholder="dd-mm-jjjj">
+    </label>
+    <label>Geboorteplaats / land
+      <input type="text" name="geboorteplaats" id="veld-geboorteplaats" placeholder="bv. Tatabánya, Hongarije">
+    </label>
+    <label>Studentnummer
+      <input type="text" name="studentnummer" id="veld-studentnummer" value="{{ request.args.get('studentnummer', '') }}">
+    </label>
+    <label>Studierichting
+      <input type="text" name="studierichting" id="veld-studierichting">
+    </label>
+
+    <h2>Borgsteller (optioneel)</h2>
+    <label>Naam borgsteller
+      <input type="text" name="borgsteller_naam" id="veld-borgstellernaam">
+    </label>
+    <label>Relatie tot huurder
+      <input type="text" name="borgsteller_relatie" id="veld-borgstellerrelatie" placeholder="bv. Vader">
+    </label>
+
+    <h2>Kamer en huurprijs</h2>
+    <label>Omschrijving van de kamer (zoals in het contract, bv. "ground floor garden side with own kitchen")
+      <input type="text" name="kamer_omschrijving" id="veld-kameromschrijving">
+    </label>
+    <label>Kale huurprijs per maand (EUR)
+      <input type="text" name="kale_huurprijs" id="veld-kale">
+    </label>
+    <label>Servicekosten per maand (EUR)
+      <input type="text" name="servicekosten" id="veld-service">
+    </label>
+    <label>Totale huur per maand (EUR)
+      <input type="text" name="huurprijs" id="veld-totaal" required>
     </label>
     <label>Waarborgsom (EUR)
       <input type="text" name="borg">
     </label>
-    <label>Ingangsdatum
-      <input type="date" name="ingangsdatum" value="{{ vandaag.isoformat() }}" required>
+    <label>Aantal bewoners waarover de servicekosten verdeeld worden
+      <input type="number" name="aantal_bewoners" min="1" value="{{ aantal_bewoners }}">
     </label>
+
+    <h2>Duur</h2>
+    <label>Ingangsdatum
+      <input type="date" name="ingangsdatum" id="veld-startdatum" value="{{ vandaag.isoformat() }}" required>
+    </label>
+    <label>Einddatum (leeg = onbepaalde tijd)
+      <input type="date" name="einddatum" id="veld-einddatum">
+    </label>
+
+    <h2>Overig</h2>
     <label>Bijzonderheden
       <textarea name="bijzonderheden" placeholder="Eventuele aanvullende afspraken"></textarea>
     </label>
     <button class="btn" type="submit">Genereer contract</button>
   </form>
 </div>
+
+<script>
+(function () {
+  var select = document.getElementById("kamer-select");
+  var velden = {
+    naam: "veld-naam", geboortedatum: "veld-geboortedatum", geboorteplaats: "veld-geboorteplaats",
+    studentnummer: "veld-studentnummer", studierichting: "veld-studierichting",
+    borgstellernaam: "veld-borgstellernaam", borgstellerrelatie: "veld-borgstellerrelatie",
+    kale: "veld-kale", service: "veld-service", totaal: "veld-totaal",
+    startdatum: "veld-startdatum", einddatum: "veld-einddatum"
+  };
+  function vulIn() {
+    var optie = select.options[select.selectedIndex];
+    if (!optie) return;
+    Object.keys(velden).forEach(function (attr) {
+      var waarde = optie.getAttribute("data-" + attr);
+      var input = document.getElementById(velden[attr]);
+      if (waarde && input) {
+        input.value = waarde;
+      }
+    });
+  }
+  select.addEventListener("change", vulIn);
+  if (select.value) vulIn();
+})();
+</script>
 {% endblock %}

@@ -119,6 +119,36 @@ def test_beheerder_kan_pand_bewerken(client):
     assert panden[0]["naam"] == "Mahoniestraat 15 - bijgewerkt"
 
 
+def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15",
+        "google_sheet_id": "fake",
+        "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "postcode": "3077WD",
+        "plaats": "Rotterdam",
+        "verhuurders": "Jurian Reckman | Batavierenplantsoen 33, Haarlem\nJustin Winkelman | Rijksstraatweg 98, Haarlem",
+        "rekeninghouder_naam": "JMM Reckman",
+        "gedeelde_ruimtes": "keuken, badkamer, tuin",
+        "bijzondere_bepalingen": "Geen huisdieren.",
+        "gemeente_meldpunt": "www.rotterdam.nl/ongewenst-verhuurgedrag-melden",
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    panden = json.loads(properties_file.read_text())
+    pand = panden[0]
+    assert pand["postcode"] == "3077WD"
+    assert pand["plaats"] == "Rotterdam"
+    assert pand["verhuurders"] == [
+        {"naam": "Jurian Reckman", "adres": "Batavierenplantsoen 33, Haarlem"},
+        {"naam": "Justin Winkelman", "adres": "Rijksstraatweg 98, Haarlem"},
+    ]
+    assert pand["rekeninghouder_naam"] == "JMM Reckman"
+    assert pand["gedeelde_ruimtes"] == "keuken, badkamer, tuin"
+    assert pand["bijzondere_bepalingen"] == "Geen huisdieren."
+    assert pand["gemeente_meldpunt"] == "www.rotterdam.nl/ongewenst-verhuurgedrag-melden"
+
+
 def test_beheerder_kan_pand_verwijderen(client):
     c, properties_file = client
     _login(c, "beheerder")

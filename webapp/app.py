@@ -12,6 +12,7 @@ import re
 from datetime import date
 from decimal import Decimal
 from functools import wraps
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
@@ -237,6 +238,16 @@ def create_app(config: Config | None = None) -> Flask:
     # --- Panden beheren (alleen voor beheerders met toegang tot alle panden) ---
 
     def _pand_gegevens_uit_form(form) -> dict:
+        verhuurders = []
+        for regel in form.get("verhuurders", "").splitlines():
+            regel = regel.strip()
+            if not regel:
+                continue
+            if "|" in regel:
+                naam, adres = regel.split("|", 1)
+                verhuurders.append({"naam": naam.strip(), "adres": adres.strip()})
+            else:
+                verhuurders.append({"naam": regel, "adres": ""})
         return {
             "naam": form.get("naam", "").strip(),
             "google_sheet_id": form.get("google_sheet_id", "").strip(),
@@ -246,6 +257,13 @@ def create_app(config: Config | None = None) -> Flask:
             "google_drive_folder_id": form.get("google_drive_folder_id", "").strip() or None,
             "bunq_rekening_iban": form.get("bunq_rekening_iban", "").strip().replace(" ", "").upper(),
             "extra_bcc": [e.strip() for e in form.get("extra_bcc", "").split(",") if e.strip()],
+            "postcode": form.get("postcode", "").strip(),
+            "plaats": form.get("plaats", "").strip(),
+            "verhuurders": verhuurders,
+            "rekeninghouder_naam": form.get("rekeninghouder_naam", "").strip(),
+            "gedeelde_ruimtes": form.get("gedeelde_ruimtes", "").strip(),
+            "bijzondere_bepalingen": form.get("bijzondere_bepalingen", "").strip(),
+            "gemeente_meldpunt": form.get("gemeente_meldpunt", "").strip(),
         }
 
     @app.route("/beheer/panden")
@@ -353,6 +371,13 @@ def create_app(config: Config | None = None) -> Flask:
             "opmerking": form.get("opmerking", "").strip() or None,
             "email": form.get("email", "").strip() or None,
             "telefoonnummer": form.get("telefoonnummer", "").strip() or None,
+            "geboortedatum": form.get("geboortedatum", "").strip() or None,
+            "geboorteplaats": form.get("geboorteplaats", "").strip() or None,
+            "studentnummer": form.get("studentnummer", "").strip() or None,
+            "studierichting": form.get("studierichting", "").strip() or None,
+            "borgsteller_naam": form.get("borgsteller_naam", "").strip() or None,
+            "borgsteller_relatie": form.get("borgsteller_relatie", "").strip() or None,
+            "contract_startdatum": form.get("contract_startdatum", "").strip() or None,
         }
 
     @app.route("/pand/<pand_slug>/huurders/nieuw", methods=["GET", "POST"])
@@ -624,10 +649,42 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def contract_nieuw(pand_slug: str):
         sheet = SheetClient(config, g.pand)
+        kamers = sheet.get_kamers()
         if request.method == "POST":
-            bestandsnaam = contracts.genereer_contract(pand_slug, request.form)
+            bestandsnaam = contracts.genereer_contract(pand_slug, g.pand, request.form)
+            # Gegevens ook terugschrijven naar de Huurders-sheet, zodat ze bij een
+            # volgend contract (of op de Huurders-pagina) meteen weer klaarstaan.
+            kamer_naam = request.form.get("kamer", "").strip()
+            bestaande = next((k for k in kamers if k.kamer == kamer_naam), None)
+            if bestaande is not None:
+                kale = request.form.get("kale_huurprijs", "").strip()
+                service = request.form.get("servicekosten", "").strip()
+                sheet.update_kamer(
+                    row_index=bestaande.row_index,
+                    naam=request.form.get("huurder_naam", "").strip() or bestaande.naam,
+                    kamer=kamer_naam,
+                    verwacht_bedrag=bestaande.verwacht_bedrag,
+                    iban=bestaande.iban,
+                    zoekwoord=bestaande.zoekwoord,
+                    kale_huurprijs=parse_bedrag(kale) if kale else bestaande.kale_huurprijs,
+                    servicekosten=parse_bedrag(service) if service else bestaande.servicekosten,
+                    contract_einddatum=request.form.get("einddatum", "").strip() or bestaande.contract_einddatum,
+                    opmerking=bestaande.opmerking,
+                    email=bestaande.email,
+                    telefoonnummer=bestaande.telefoonnummer,
+                    geboortedatum=request.form.get("geboortedatum", "").strip() or bestaande.geboortedatum,
+                    geboorteplaats=request.form.get("geboorteplaats", "").strip() or bestaande.geboorteplaats,
+                    studentnummer=request.form.get("studentnummer", "").strip() or bestaande.studentnummer,
+                    studierichting=request.form.get("studierichting", "").strip() or bestaande.studierichting,
+                    borgsteller_naam=request.form.get("borgsteller_naam", "").strip() or bestaande.borgsteller_naam,
+                    borgsteller_relatie=request.form.get("borgsteller_relatie", "").strip() or bestaande.borgsteller_relatie,
+                    contract_startdatum=request.form.get("ingangsdatum", "").strip() or bestaande.contract_startdatum,
+                )
             return redirect(url_for("contract_bekijken", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
-        return render_template("contract_nieuw.html", kamers=sheet.get_kamers(), vandaag=date.today())
+        aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1
+        return render_template(
+            "contract_nieuw.html", kamers=kamers, vandaag=date.today(), aantal_bewoners=aantal_bewoners
+        )
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>")
     @login_required
@@ -637,6 +694,22 @@ def create_app(config: Config | None = None) -> Flask:
         except FileNotFoundError:
             abort(404)
         return Response(html, mimetype="text/html")
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/pdf")
+    @login_required
+    def contract_pdf(pand_slug: str, bestandsnaam: str):
+        try:
+            pdf = contracts.genereer_pdf(pand_slug, bestandsnaam)
+        except FileNotFoundError:
+            abort(404)
+        except contracts.PdfGenerationError:
+            flash("PDF-generatie is mislukt voor dit contract.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
+        return Response(
+            pdf, mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{pdf_bestandsnaam}"'},
+        )
 
     # --- Documenten ---
 

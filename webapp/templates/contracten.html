@@ -14,7 +14,10 @@
   {% if contracten %}
     <ul>
     {% for c in contracten %}
-      <li><a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+      <li>
+        <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a>
+        - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Download als PDF</a>
+      </li>
     {% endfor %}
     </ul>
   {% else %}

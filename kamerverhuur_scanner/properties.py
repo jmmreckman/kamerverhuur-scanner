@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .models import Pand
+from .models import Pand, Verhuurder
 
 
 class PropertiesError(RuntimeError):
@@ -22,6 +22,33 @@ def _normaliseer_extra_bcc(waarde) -> list[str]:
     if isinstance(waarde, str):
         return [e.strip() for e in waarde.split(",") if e.strip()]
     return [str(e).strip() for e in waarde if str(e).strip()]
+
+
+def _parse_verhuurders(waarde) -> list[Verhuurder]:
+    """verhuurders mag in properties.json een lijst met {'naam', 'adres'}-
+    dicts zijn (normale vorm, zoals zet_pand 'm opslaat) of - bij handmatig
+    bewerken - een string met per regel "Naam | Adres"."""
+    if not waarde:
+        return []
+    regels = waarde.splitlines() if isinstance(waarde, str) else waarde
+
+    verhuurders = []
+    for regel in regels:
+        if isinstance(regel, dict):
+            naam = str(regel.get("naam", "")).strip()
+            adres = str(regel.get("adres", "")).strip()
+            if naam:
+                verhuurders.append(Verhuurder(naam=naam, adres=adres))
+            continue
+        tekst = str(regel).strip()
+        if not tekst:
+            continue
+        if "|" in tekst:
+            naam, adres = tekst.split("|", 1)
+            verhuurders.append(Verhuurder(naam=naam.strip(), adres=adres.strip()))
+        else:
+            verhuurders.append(Verhuurder(naam=tekst, adres=""))
+    return verhuurders
 
 
 def load_properties(path: str) -> list[Pand]:
@@ -53,6 +80,13 @@ def load_properties(path: str) -> list[Pand]:
                     bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
                     aanmeldingen_worksheet=item.get("aanmeldingen_worksheet", "Aanmeldingen"),
                     extra_bcc=_normaliseer_extra_bcc(item.get("extra_bcc")),
+                    postcode=item.get("postcode", ""),
+                    plaats=item.get("plaats", ""),
+                    verhuurders=_parse_verhuurders(item.get("verhuurders")),
+                    rekeninghouder_naam=item.get("rekeninghouder_naam", ""),
+                    gedeelde_ruimtes=item.get("gedeelde_ruimtes", ""),
+                    bijzondere_bepalingen=item.get("bijzondere_bepalingen", ""),
+                    gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
                 )
             )
         except KeyError as exc:

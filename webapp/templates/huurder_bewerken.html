@@ -40,6 +40,32 @@
     <label>Zoekwoord (optioneel, gebruikt als er geen IBAN is)
       <input type="text" name="zoekwoord" value="{{ kamer.zoekwoord or '' if kamer else '' }}">
     </label>
+
+    <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
+    <p class="muted">Optioneel - wordt gebruikt om automatisch een huurcontract voor te vullen (zie
+       Contracten). Wordt ook bijgewerkt zodra je voor deze kamer een contract genereert.</p>
+    <label>Geboortedatum
+      <input type="text" name="geboortedatum" value="{{ kamer.geboortedatum or '' if kamer else '' }}" placeholder="dd-mm-jjjj">
+    </label>
+    <label>Geboorteplaats / land
+      <input type="text" name="geboorteplaats" value="{{ kamer.geboorteplaats or '' if kamer else '' }}" placeholder="bv. Tatabánya, Hongarije">
+    </label>
+    <label>Studentnummer
+      <input type="text" name="studentnummer" value="{{ kamer.studentnummer or '' if kamer else '' }}">
+    </label>
+    <label>Studierichting
+      <input type="text" name="studierichting" value="{{ kamer.studierichting or '' if kamer else '' }}">
+    </label>
+    <label>Naam borgsteller
+      <input type="text" name="borgsteller_naam" value="{{ kamer.borgsteller_naam or '' if kamer else '' }}">
+    </label>
+    <label>Relatie borgsteller tot huurder
+      <input type="text" name="borgsteller_relatie" value="{{ kamer.borgsteller_relatie or '' if kamer else '' }}" placeholder="bv. Vader">
+    </label>
+    <label>Contract startdatum
+      <input type="text" name="contract_startdatum" value="{{ kamer.contract_startdatum or '' if kamer else '' }}" placeholder="dd-mm-jjjj">
+    </label>
+
     <button class="btn" type="submit">Opslaan</button>
     <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Annuleren</a>
   </form>

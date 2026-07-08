@@ -97,10 +97,11 @@ nodig.
   niet), met dezelfde BCC/Reply-To-instelling als de betaalherinneringen.
   Huurders zonder bekend e-mailadres worden overgeslagen, met een melding
   wie dat waren.
-- **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-
-  huurcontract (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is
-  een voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie de
-  waarschuwing verderop.
+- **Contracten** - vult een sjabloon in met de pand- en huurdersgegevens tot een
+  concept-huurcontract, inclusief echte **PDF-download** (handig om direct te
+  uploaden naar DocHub voor de handtekeningaanvraag). **Let op:** dit is een
+  voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie "Huurcontracten
+  genereren" hieronder.
 - **Documenten** - echte mappenstructuur van de Google Drive-map van het
   gekozen pand: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
   aanmaken en downloaden, rechtstreeks vanaf de site.
@@ -144,18 +145,53 @@ zijn.
   een overzicht van alle reacties, met een link naar het geuploade bewijs van
   inschrijving. Heb je een huurder gekozen? Klik op **"Lijst wissen"** om
   helemaal opnieuw te beginnen voor de volgende keer dat de kamer vrijkomt.
-- Nog geen ID-controle, inkomenscontrole of automatische contractopstelling
-  vanuit een aanmelding - dat blijft (bewust) een latere stap, die begint pas
-  als je een kandidaat definitief hebt gekozen.
+- Vanuit een aanmelding kun je wel direct op **"Contract maken"** klikken - dat
+  opent "Nieuw huurcontract" met naam, studentnummer en kamer al ingevuld.
+
+## Huurcontracten genereren
+
+Het contractsjabloon (`contract_templates/huurovereenkomst_voorbeeld.html`) is
+gebaseerd op een echt (Engelstalig) tijdelijk huurcontract-op-kamerbasis en
+bevat alle 16 standaardartikelen (gehuurde ruimte, duur, studentclausule, huur
+en kosten, betaaltermijn, waarborgsom, servicekosten-afrekening,
+gemeentelijke belastingen, huisregels, onderhoud, toepasselijk recht,
+borgstelling, reparaties, toegang, verzekering, informatieplicht Wet goed
+verhuurderschap) plus een handtekeningenblok. **Let op:** dit is een
+voorbeeldsjabloon, geen juridisch gecontroleerd contract - laat een
+jurist/Woonbond/de Rijksoverheid-modelovereenkomst meekijken voordat je dit
+daadwerkelijk laat ondertekenen.
+
+- **Pandgegevens invullen (eenmalig per pand)**: ga naar **Panden beheren >
+  bewerken** en vul onderaan de contractvelden in: verhuurder(s) (naam +
+  adres, één per regel), postcode/plaats, naam rekeninghouder, gedeelde
+  ruimtes, bijzondere bepalingen/huisregels (vrije tekst, komt letterlijk in
+  het contract) en het gemeentelijk meldpunt ongewenst verhuurgedrag. Zonder
+  deze gegevens blijven er `[fill in]`-plekken in het gegenereerde contract
+  staan.
+- **Contract genereren**: ga naar **Contracten > Nieuw huurcontract**, kies een
+  kamer (vult automatisch de gegevens in die al bekend zijn bij Huurders) en
+  vul de rest aan (geboortedatum, studentnummer, borgsteller, huurprijs,
+  waarborgsom, ingangs-/einddatum, etc.). Bij het opslaan worden deze gegevens
+  ook teruggeschreven naar de Huurders-sheet (kolommen R t/m X), zodat ze bij
+  een volgend contract - of gewoon op de Huurders-pagina - meteen weer
+  klaarstaan.
+- **PDF-export**: elk gegenereerd contract heeft een **"Download als PDF"**-
+  link (op de Contracten-pagina en bovenaan het contract zelf) - handig om
+  direct te uploaden naar DocHub voor de handtekeningaanvraag. Er is ook nog
+  een "Print / opslaan als PDF"-knop die de browser-eigen afdrukfunctie
+  gebruikt, als alternatief.
+- De WWS-puntentelling (Annex 1, verplicht volgens de Wet goed
+  verhuurderschap) wordt niet automatisch gegenereerd - reken deze zelf uit
+  en voeg 'm apart toe als bijlage.
 
 ## Verwachte kolomindeling in de Google Sheet (per pand)
 
 Elk pand heeft zijn eigen tabblad/sheet, aangesloten op je bestaande
 huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 
-| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID | P Mail | Q Telefoonnummer |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | | | |
+| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID | P Mail | Q Telefoonnummer | R Geboortedatum | S Geboorteplaats | T Studentnummer | U Studierichting | V Borgsteller naam | W Borgsteller relatie | X Contract startdatum |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | | | | | | | | | | |
 
 - Kolom **A t/m G** zijn je bestaande kolommen, die pas je zelf aan (of via de
   site, zie hieronder).
@@ -171,6 +207,12 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 - Kolom **P en Q** (Mail, Telefoonnummer) zijn nieuw en optioneel -
   contactgegevens van de huurder, te bewerken via de Huurders-pagina op de
   site en zichtbaar op de kamerpagina (met directe mailto:/tel:-links).
+- Kolom **R t/m X** (Geboortedatum, Geboorteplaats, Studentnummer,
+  Studierichting, Borgsteller naam, Borgsteller relatie, Contract
+  startdatum) zijn nieuw en optioneel - puur bedoeld om een huurcontract mee
+  voor te vullen (zie "Huurcontracten genereren" hieronder). Te bewerken via
+  de Huurders-pagina; worden ook automatisch bijgewerkt zodra je voor die
+  kamer een contract genereert.
 - **Totale huur** (kolom E) is het bedrag dat de site verwacht via bunq binnen
   te zien komen (kale huur + servicekosten).
 - Een lege **Huurder** met een ingevulde **Kamer** betekent: kamer staat leeg.
@@ -348,7 +390,10 @@ Beheerders met toegang tot alle panden zien een **"Panden"**-knop in de
 navigatie. Daar kun je een nieuw pand toevoegen (naam, Google Sheet ID,
 tabbladnamen, optioneel een Drive-map-ID, en het bunq-IBAN), bewerken, of
 verwijderen. Wijzigingen gelden meteen, geen herstart nodig - net als bij
-Gebruikers.
+Gebruikers. Onderaan het bewerkformulier staan ook de contractgegevens van dat
+pand (verhuurder(s), postcode/plaats, naam rekeninghouder, gedeelde ruimtes,
+bijzondere bepalingen, gemeentelijk meldpunt) - zie "Huurcontracten
+genereren" hierboven.
 
 Dat scheelt SSH/JSON-bewerken, maar de "echte wereld"-voorbereiding blijft
 hetzelfde als bij het eerste pand:

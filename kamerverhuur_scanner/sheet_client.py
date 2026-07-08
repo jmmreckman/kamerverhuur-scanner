@@ -8,7 +8,14 @@ op de bestaande huuradministratie-sheet:
     I Zoekwoord (nieuw, optioneel) | J Status (auto) | K Ontvangen bedrag (auto) |
     L Laatst gecontroleerd (auto) | M Beschikbaar (nieuw, JA/NEE) |
     N Advertentie omschrijving (nieuw) | O Advertentie map-ID (nieuw, auto) |
-    P Mail (nieuw, optioneel) | Q Telefoonnummer (nieuw, optioneel)
+    P Mail (nieuw, optioneel) | Q Telefoonnummer (nieuw, optioneel) |
+    R Geboortedatum (nieuw, optioneel, tbv huurcontract) |
+    S Geboorteplaats (nieuw, optioneel, tbv huurcontract) |
+    T Studentnummer (nieuw, optioneel, tbv huurcontract) |
+    U Studierichting (nieuw, optioneel, tbv huurcontract) |
+    V Borgsteller naam (nieuw, optioneel, tbv huurcontract) |
+    W Borgsteller relatie (nieuw, optioneel, tbv huurcontract) |
+    X Contract startdatum (nieuw, optioneel, tbv huurcontract)
 
 "Totale huur" (kolom E) is het bedrag dat via bunq moet binnenkomen. Een rij met
 een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
@@ -56,6 +63,13 @@ COL_ADVERTENTIE_OMSCHRIJVING = 14
 COL_ADVERTENTIE_MAP_ID = 15
 COL_EMAIL = 16
 COL_TELEFOONNUMMER = 17
+COL_GEBOORTEDATUM = 18
+COL_GEBOORTEPLAATS = 19
+COL_STUDENTNUMMER = 20
+COL_STUDIERICHTING = 21
+COL_BORGSTELLER_NAAM = 22
+COL_BORGSTELLER_RELATIE = 23
+COL_CONTRACT_STARTDATUM = 24
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
@@ -100,7 +114,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_TELEFOONNUMMER - len(row))
+            row = row + [""] * (COL_CONTRACT_STARTDATUM - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -121,6 +135,13 @@ class SheetClient:
                     advertentie_map_id=_optioneel(row[COL_ADVERTENTIE_MAP_ID - 1]),
                     email=_optioneel(row[COL_EMAIL - 1]),
                     telefoonnummer=_optioneel(row[COL_TELEFOONNUMMER - 1]),
+                    geboortedatum=_optioneel(row[COL_GEBOORTEDATUM - 1]),
+                    geboorteplaats=_optioneel(row[COL_GEBOORTEPLAATS - 1]),
+                    studentnummer=_optioneel(row[COL_STUDENTNUMMER - 1]),
+                    studierichting=_optioneel(row[COL_STUDIERICHTING - 1]),
+                    borgsteller_naam=_optioneel(row[COL_BORGSTELLER_NAAM - 1]),
+                    borgsteller_relatie=_optioneel(row[COL_BORGSTELLER_RELATIE - 1]),
+                    contract_startdatum=_optioneel(row[COL_CONTRACT_STARTDATUM - 1]),
                 )
             )
         return kamers
@@ -143,6 +164,13 @@ class SheetClient:
         opmerking: str | None = None,
         email: str | None = None,
         telefoonnummer: str | None = None,
+        geboortedatum: str | None = None,
+        geboorteplaats: str | None = None,
+        studentnummer: str | None = None,
+        studierichting: str | None = None,
+        borgsteller_naam: str | None = None,
+        borgsteller_relatie: str | None = None,
+        contract_startdatum: str | None = None,
     ) -> None:
         updates = [
             {"range": self._a1(row_index, COL_KAMER), "values": [[kamer]]},
@@ -159,6 +187,13 @@ class SheetClient:
             {"range": self._a1(row_index, COL_ZOEKWOORD), "values": [[zoekwoord or ""]]},
             {"range": self._a1(row_index, COL_EMAIL), "values": [[email or ""]]},
             {"range": self._a1(row_index, COL_TELEFOONNUMMER), "values": [[telefoonnummer or ""]]},
+            {"range": self._a1(row_index, COL_GEBOORTEDATUM), "values": [[geboortedatum or ""]]},
+            {"range": self._a1(row_index, COL_GEBOORTEPLAATS), "values": [[geboorteplaats or ""]]},
+            {"range": self._a1(row_index, COL_STUDENTNUMMER), "values": [[studentnummer or ""]]},
+            {"range": self._a1(row_index, COL_STUDIERICHTING), "values": [[studierichting or ""]]},
+            {"range": self._a1(row_index, COL_BORGSTELLER_NAAM), "values": [[borgsteller_naam or ""]]},
+            {"range": self._a1(row_index, COL_BORGSTELLER_RELATIE), "values": [[borgsteller_relatie or ""]]},
+            {"range": self._a1(row_index, COL_CONTRACT_STARTDATUM), "values": [[contract_startdatum or ""]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
@@ -175,6 +210,13 @@ class SheetClient:
         opmerking: str | None = None,
         email: str | None = None,
         telefoonnummer: str | None = None,
+        geboortedatum: str | None = None,
+        geboorteplaats: str | None = None,
+        studentnummer: str | None = None,
+        studierichting: str | None = None,
+        borgsteller_naam: str | None = None,
+        borgsteller_relatie: str | None = None,
+        contract_startdatum: str | None = None,
     ) -> None:
         row = [
             kamer,
@@ -194,6 +236,13 @@ class SheetClient:
             "",
             email or "",
             telefoonnummer or "",
+            geboortedatum or "",
+            geboorteplaats or "",
+            studentnummer or "",
+            studierichting or "",
+            borgsteller_naam or "",
+            borgsteller_relatie or "",
+            contract_startdatum or "",
         ]
         self._worksheet.append_row(row, value_input_option="USER_ENTERED")
 
