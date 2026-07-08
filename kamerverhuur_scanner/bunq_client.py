@@ -86,13 +86,16 @@ class BunqClient:
                 if bedrag <= 0:
                     continue  # uitgaande betaling, niet relevant voor huurcontrole
 
-                counterparty = bunq_payment.counterparty_alias
+                # counterparty_alias is een MonetaryAccountReference: de naam/IBAN
+                # van de tegenpartij staan genest onder .label_monetary_account,
+                # niet direct op counterparty_alias zelf.
+                label = getattr(bunq_payment.counterparty_alias, "label_monetary_account", None)
                 resultaten.append(
                     Payment(
                         bedrag=bedrag,
                         valuta=bunq_payment.amount.currency,
-                        tegenpartij_naam=getattr(counterparty, "display_name", "") or "",
-                        tegenpartij_iban=(getattr(counterparty, "iban", None) or None),
+                        tegenpartij_naam=getattr(label, "display_name", "") or "",
+                        tegenpartij_iban=(getattr(label, "iban", None) or None),
                         omschrijving=bunq_payment.description or "",
                         datum=payment_date,
                     )

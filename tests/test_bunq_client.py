@@ -25,11 +25,15 @@ def _account(id_, iban, status="ACTIVE"):
 
 
 def _payment(id_, amount, created, counterparty_iban="NL00OTHER0000000000", omschrijving="huur"):
+    # De echte bunq SDK nest naam/IBAN van de tegenpartij onder
+    # counterparty_alias.label_monetary_account (een LabelMonetaryAccountObject),
+    # niet direct op counterparty_alias - zie bunq_client.py.
+    label = SimpleNamespace(display_name="Test Huurder", iban=counterparty_iban)
     return SimpleNamespace(
         id_=id_,
         amount=SimpleNamespace(value=amount, currency="EUR"),
         created=created,
-        counterparty_alias=SimpleNamespace(display_name="Test Huurder", iban=counterparty_iban),
+        counterparty_alias=SimpleNamespace(label_monetary_account=label),
         description=omschrijving,
     )
 
@@ -64,6 +68,28 @@ def test_filtert_op_iban_en_negeert_andere_rekeningen():
 
     assert len(result) == 1
     assert result[0].bedrag == Decimal("745.00")
+
+
+def test_haalt_naam_en_iban_uit_geneste_label_monetary_account():
+    # Regressietest: counterparty_alias.display_name/.iban bestaan niet in de
+    # echte bunq SDK (het zit genest onder .label_monetary_account) - zonder
+    # de juiste attribuutpaden komt hier stilletjes altijd "" / None uit,
+    # waardoor naam- en IBAN-matching allebei nooit iets zouden vinden.
+    account = _account(1, "NL81BUNQ2163127125")
+    payment = _payment(1, "745.00", "2026-07-03 09:00:00.000000", counterparty_iban="NL91ABNA0417164300")
+
+    with mock.patch("kamerverhuur_scanner.bunq_client.MonetaryAccountBank") as MockAccount, mock.patch(
+        "kamerverhuur_scanner.bunq_client.BunqPayment"
+    ) as MockPayment:
+        MockAccount.list.return_value = SimpleNamespace(value=[account])
+        MockPayment.list.side_effect = lambda monetary_account_id, params: SimpleNamespace(
+            value=[] if params.get("older_id") else [payment]
+        )
+
+        result = BunqClient(FakeConfig()).get_incoming_payments(_pand(), since=date(2026, 7, 1))
+
+    assert result[0].tegenpartij_naam == "Test Huurder"
+    assert result[0].tegenpartij_iban == "NL91ABNA0417164300"
 
 
 def test_paginering_stopt_pas_voorbij_since_datum():
