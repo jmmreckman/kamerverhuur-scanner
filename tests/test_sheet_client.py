@@ -306,3 +306,38 @@ def test_dedupliceer_geschiedenis_zonder_duplicaten_doet_niets():
 
     assert verwijderd == 0
     assert ws.get_all_values() == rows
+
+
+def test_verwijder_geschiedenis_voor_instapdatum_ruimt_alleen_oude_regels_van_deze_huurder_op():
+    rows = [
+        HISTORIE_HEADER,
+        ["2026-03", "1", "Bence", "650,00", "0,00", "Niet ontvangen", ""],  # vóór de instapdatum - moet weg
+        ["2026-04", "1", "Bence", "650,00", "0,00", "Niet ontvangen", ""],  # vóór de instapdatum - moet weg
+        ["2026-07", "1", "Bence", "650,00", "650,00", "Betaald", "01-07-2026"],  # instapmaand zelf - blijft staan
+        ["2026-04", "1", "Oud-Huurder", "600,00", "600,00", "Betaald", "02-04-2026"],  # vorige huurder, zelfde kamer - blijft staan
+        ["2026-04", "2", "Piet", "700,00", "700,00", "Betaald", "02-04-2026"],  # andere kamer - blijft staan
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    verwijderd = client.verwijder_geschiedenis_voor_instapdatum(kamer="1", huurder="Bence", oudste_geldige_maand="2026-07")
+
+    assert verwijderd == 2
+    overgebleven = ws.get_all_values()
+    assert len(overgebleven) == 4  # koprij + 3 regels
+    maanden_bence = [r[0] for r in overgebleven[1:] if r[2] == "Bence"]
+    assert maanden_bence == ["2026-07"]
+    assert any(r[2] == "Oud-Huurder" for r in overgebleven[1:])
+    assert any(r[1] == "2" for r in overgebleven[1:])
+
+
+def test_verwijder_geschiedenis_voor_instapdatum_zonder_oude_regels_doet_niets():
+    rows = [
+        HISTORIE_HEADER,
+        ["2026-07", "1", "Bence", "650,00", "650,00", "Betaald", "01-07-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    verwijderd = client.verwijder_geschiedenis_voor_instapdatum(kamer="1", huurder="Bence", oudste_geldige_maand="2026-07")
+
+    assert verwijderd == 0
+    assert ws.get_all_values() == rows

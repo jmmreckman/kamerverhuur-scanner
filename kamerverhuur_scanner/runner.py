@@ -301,6 +301,16 @@ def backfill_geschiedenis(
         if start:
             start_per_kamer[tenant.kamer] = start
             maanden_per_kamer[tenant.kamer] = _maanden_vanaf((start.year, start.month), vandaag)
+            # Ruimt regels op die een eerdere run (vóórdat de startdatum kon
+            # worden gelezen, bv. een toen nog onherkend datumformaat) al
+            # verkeerd had teruggerekend tot vóór de werkelijke instapmaand.
+            start_maand_sleutel = f"{start.year}-{start.month:02d}"
+            opgeschoond = sheet.verwijder_geschiedenis_voor_instapdatum(tenant.kamer, tenant.naam, start_maand_sleutel)
+            if opgeschoond:
+                logger.info(
+                    "[%s] %d historieregel(s) van vóór de instapdatum van %s (kamer %s) opgeschoond.",
+                    pand.slug, opgeschoond, tenant.naam, tenant.kamer,
+                )
         else:
             maanden_per_kamer[tenant.kamer] = standaard_maanden
 

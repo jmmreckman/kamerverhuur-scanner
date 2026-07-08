@@ -102,8 +102,12 @@ nodig.
   "Te veel ontvangen" verschijnen. Zie ook "Welke maand telt een betaling mee"
   hieronder voor de 1e/17e/18e-regel die ná de instapmaand blijft gelden.
   Ruimt bij elke druk op de knop ook automatisch eventuele dubbele
-  Historie-regels voor dezelfde (kamer, maand)-combinatie op - je hoeft dit
-  dus nooit zelf met de hand in de sheet te doen.
+  Historie-regels voor dezelfde (kamer, maand)-combinatie op, én (voor kamers
+  met een bekende "Contract startdatum") regels van vóór die instapdatum die
+  door een eerdere run per ongeluk waren weggeschreven - bv. toen de
+  startdatum nog niet in een herkend formaat stond. Regels van een vorige
+  huurder op diezelfde kamer blijven daarbij gewoon staan. Je hoeft dus nooit
+  zelf met de hand in de sheet op te ruimen.
 - **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
   "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
   herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"

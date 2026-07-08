@@ -172,6 +172,7 @@ class FakeSheetClientBackfill:
     def __init__(self, _config, _pand):
         self.upsert_calls = []
         self.dedupliceer_aangeroepen = False
+        self.opgeschoond_voor = []
 
     def get_tenants(self):
         return [
@@ -187,6 +188,10 @@ class FakeSheetClientBackfill:
 
     def dedupliceer_geschiedenis(self):
         self.dedupliceer_aangeroepen = True
+        return 0
+
+    def verwijder_geschiedenis_voor_instapdatum(self, kamer, huurder, oudste_geldige_maand):
+        self.opgeschoond_voor.append((kamer, huurder, oudste_geldige_maand))
         return 0
 
 
@@ -249,6 +254,10 @@ def test_backfill_geschiedenis_per_kamer_vanaf_startdatum(monkeypatch):
     assert len(luisa_maanden) == 12
 
     assert sheet.dedupliceer_aangeroepen is True
+    # alleen voor Henri (bekende startdatum) worden oude, te-ver-terugreikende
+    # historieregels opgeschoond - Luisa heeft geen bekende startdatum, dus
+    # geen enkele maand is "te vroeg" om op te schonen.
+    assert sheet.opgeschoond_voor == [("1", "Henri", "2026-05")]
 
 
 class FakeSheetClientBackfillIso(FakeSheetClientBackfill):

@@ -322,6 +322,36 @@ class SheetClient:
         if nieuwe_rijen:
             ws.append_rows(nieuwe_rijen, value_input_option="USER_ENTERED")
 
+    def verwijder_geschiedenis_voor_instapdatum(self, kamer: str, huurder: str, oudste_geldige_maand: str) -> int:
+        """Verwijdert Historie-regels van déze huurder op déze kamer van vóór
+        `oudste_geldige_maand` (formaat 'jjjj-mm') - regels die zijn
+        ontstaan doordat een eerdere 'Betaalgeschiedenis aanvullen' de
+        Contract-startdatum niet kon lezen (bv. een datumformaat dat toen nog
+        niet werd herkend) en daardoor per ongeluk terugrekende tot vóór de
+        werkelijke instapdatum van de huurder. Regels van een eerdere huurder
+        op dezelfde kamer (ander 'Huurder'-veld) blijven onaangeroerd. Geeft
+        het aantal verwijderde regels terug."""
+        ws = self._history_worksheet()
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            return 0
+        header, data_rows = rows[0], rows[1:]
+
+        schoon = [
+            row for row in data_rows
+            if not (
+                len(row) > 2 and row[1].strip() == kamer and row[2].strip() == huurder
+                and row[0].strip() < oudste_geldige_maand
+            )
+        ]
+        verwijderd = len(data_rows) - len(schoon)
+        if verwijderd > 0:
+            ws.clear()
+            ws.append_row(header, value_input_option="USER_ENTERED")
+            if schoon:
+                ws.append_rows(schoon, value_input_option="USER_ENTERED")
+        return verwijderd
+
     def dedupliceer_geschiedenis(self) -> int:
         """Verwijdert dubbele Historie-regels voor dezelfde (kamer, maand) -
         combinatie (kon ontstaan door een bug in upsert_history) en houdt de
