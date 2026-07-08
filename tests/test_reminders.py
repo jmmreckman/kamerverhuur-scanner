@@ -34,5 +34,7 @@ def test_bouw_ingebrekestelling_bevat_termijn_en_bedrag():
     resultaat = bouw_ingebrekestelling(_pand(), _kamer(), Decimal("300.00"))
     assert "Luisa" in resultaat["tekst"]
     assert "350.00" in resultaat["tekst"]  # 650 - 300 openstaand
-    assert "ingebrekestelling" in resultaat["onderwerp"].lower() or "Ingebrekestelling" in resultaat["onderwerp"]
-    assert "dagen" in resultaat["tekst"]
+    assert "notice of default" in resultaat["onderwerp"].lower()
+    assert "days" in resultaat["tekst"]
+    assert "Jurian Reckman" in resultaat["tekst"]
+    assert "Beste" not in resultaat["tekst"] and "Met vriendelijke groet" not in resultaat["tekst"]
