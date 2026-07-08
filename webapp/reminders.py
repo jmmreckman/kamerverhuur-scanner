@@ -15,35 +15,44 @@ from kamerverhuur_scanner.models import Pand, Tenant
 
 INGEBREKESTELLING_TERMIJN_DAGEN = 5
 
-_MAAND_NAMEN = [
+# Ondertekening van de (Engelstalige) vriendelijke betaalherinnering.
+HERINNERING_AFZENDER = "Jurian Reckman"
+
+_MAAND_NAMEN_NL = [
     "januari", "februari", "maart", "april", "mei", "juni",
     "juli", "augustus", "september", "oktober", "november", "december",
+]
+_MAAND_NAMEN_EN = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
 ]
 
 
 def _maandnaam(d: date) -> str:
-    return f"{_MAAND_NAMEN[d.month - 1]} {d.year}"
+    return f"{_MAAND_NAMEN_NL[d.month - 1]} {d.year}"
+
+
+def _maandnaam_en(d: date) -> str:
+    return f"{_MAAND_NAMEN_EN[d.month - 1]} {d.year}"
 
 
 def bouw_herinnering(pand: Pand, kamer: Tenant, ontvangen_bedrag) -> dict[str, str]:
     vandaag = date.today()
-    onderwerp = f"Betaalherinnering huur {_maandnaam(vandaag)} - {pand.naam}, kamer {kamer.kamer}"
+    onderwerp = f"Payment reminder - rent {_maandnaam_en(vandaag)}"
     openstaand = kamer.verwacht_bedrag - ontvangen_bedrag
     tekst = (
-        f"Beste {kamer.naam},\n\n"
-        f"Bij het controleren van de huurbetalingen zagen we dat de huur van "
-        f"{_maandnaam(vandaag)} voor kamer {kamer.kamer} ({pand.naam}) nog niet "
-        f"(volledig) is bijgeschreven.\n\n"
-        f"Verwacht bedrag: EUR {kamer.verwacht_bedrag:.2f}\n"
-        f"Tot nu toe ontvangen: EUR {ontvangen_bedrag:.2f}\n"
-        f"Nog openstaand: EUR {openstaand:.2f}\n\n"
-        f"Zou je het openstaande bedrag zo spoedig mogelijk willen overmaken naar "
-        f"{pand.bunq_rekening_iban}, onder vermelding van je naam en kamernummer?\n\n"
-        f"Heb je de betaling inmiddels al gedaan, dan kun je dit bericht als niet "
-        f"verzonden beschouwen - het kan een paar dagen duren voordat alles "
-        f"verwerkt is.\n\n"
-        f"Heb je vragen, laat het gerust weten.\n\n"
-        f"Met vriendelijke groet,\n{pand.naam}"
+        f"Dear {kamer.naam},\n\n"
+        f"While checking rent payments, we noticed that your rent for "
+        f"{_maandnaam_en(vandaag)} has not been (fully) received yet.\n\n"
+        f"Expected amount: EUR {kamer.verwacht_bedrag:.2f}\n"
+        f"Received so far: EUR {ontvangen_bedrag:.2f}\n"
+        f"Outstanding: EUR {openstaand:.2f}\n\n"
+        f"Could you please transfer the outstanding amount as soon as possible to "
+        f"{pand.bunq_rekening_iban}, stating your name as reference?\n\n"
+        f"If you have already made the payment, please disregard this message - it "
+        f"can take a few days before everything is processed.\n\n"
+        f"If you have any questions, please let us know.\n\n"
+        f"Kind regards,\n{HERINNERING_AFZENDER}"
     )
     return {"onderwerp": onderwerp, "tekst": tekst}
 

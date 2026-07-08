@@ -20,11 +20,14 @@ def _kamer() -> Tenant:
 def test_bouw_herinnering_bevat_kernpunten():
     resultaat = bouw_herinnering(_pand(), _kamer(), Decimal("0.00"))
     assert "Luisa" in resultaat["tekst"]
-    assert "Mahoniestraat 15" in resultaat["tekst"]
+    assert "Mahoniestraat 15" not in resultaat["tekst"]  # geen kameromschrijving/pandnaam in de mail
+    assert "kamer" not in resultaat["tekst"].lower()
     assert "650,00" not in resultaat["tekst"]  # we gebruiken punt-notatie, geen NL-komma
     assert "650.00" in resultaat["tekst"]
     assert "NL91ABNA0417164300" in resultaat["tekst"]
-    assert "herinnering" in resultaat["onderwerp"].lower() or "Betaalherinnering" in resultaat["onderwerp"]
+    assert "Jurian Reckman" in resultaat["tekst"]
+    assert "Dear Luisa" in resultaat["tekst"]
+    assert "reminder" in resultaat["onderwerp"].lower()
 
 
 def test_bouw_ingebrekestelling_bevat_termijn_en_bedrag():
