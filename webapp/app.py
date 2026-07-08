@@ -520,6 +520,22 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Bestand verwijderd.")
         return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/aanbod/<file_id>/weergeven")
+    @login_required
+    def kamer_aanbod_media(pand_slug: str, kamer_naam: str, file_id: str):
+        """Toont een aanbod-foto/video inline (geen Content-Disposition: attachment,
+        anders tonen <img>/<video>-tags op de 'Aanbod beheren'-pagina niets)."""
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.advertentie_map_id:
+            abort(404)
+        drive = DriveClient(config, g.pand)
+        bestanden = drive.list_bestanden(kamer.advertentie_map_id)
+        if not any(b.id == file_id for b in bestanden):
+            abort(404)
+        _naam, mimetype, inhoud = drive.download_bestand(file_id)
+        return Response(inhoud, mimetype=mimetype, headers={"Cache-Control": "private, max-age=3600"})
+
     # --- Aanmeldingen (reacties op de publieke aanbodpagina) ---
 
     @app.route("/pand/<pand_slug>/aanmeldingen")

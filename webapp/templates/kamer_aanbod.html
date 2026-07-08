@@ -37,7 +37,7 @@
   {% for b in media %}
   <div class="bestand-tile">
     {% if b.mimetype.startswith('image/') %}
-      <img src="{{ url_for('documenten_download', pand_slug=huidig_pand.slug, file_id=b.id) }}" alt="{{ b.naam }}"
+      <img src="{{ url_for('kamer_aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id) }}" alt="{{ b.naam }}"
            style="width:100%; aspect-ratio:1; object-fit:cover; border-radius: var(--radius-sm)">
     {% else %}
       <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

@@ -192,6 +192,32 @@ def test_kamer_aanbod_beheren_toont_media_en_omschrijving(app_client):
     assert b"foto.jpg" in resp.data
 
 
+def test_kamer_aanbod_thumbnail_wijst_naar_inline_route_niet_naar_download(app_client):
+    # Regressietest: de <img> op deze pagina moet naar een inline-route wijzen.
+    # Eerder wees hij naar documenten_download, die Content-Disposition: attachment
+    # meestuurt - daardoor tonen browsers geen thumbnail, alleen een gebroken icoon.
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod")
+    body = resp.get_data(as_text=True)
+    assert "/aanbod/file-1/weergeven" in body
+    assert "/documenten/file-1/download" not in body
+
+
+def test_kamer_aanbod_media_toont_inline_zonder_attachment_header(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod/file-1/weergeven")
+    assert resp.status_code == 200
+    assert resp.data == b"fake-image-bytes"
+    assert resp.mimetype == "image/jpeg"
+    assert "Content-Disposition" not in resp.headers
+
+
+def test_kamer_aanbod_media_onbekend_bestand_geeft_404(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod/onbekend-id/weergeven")
+    assert resp.status_code == 404
+
+
 def test_aanmeldingen_overzicht_en_wissen(app_client):
     app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
     data = dict(VOLLEDIG_FORMULIER)
