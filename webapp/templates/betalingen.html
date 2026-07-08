@@ -35,7 +35,8 @@
   <h2>Resultaat van deze controle</h2>
   <div class="tabel-scroll tabel-responsief">
   <table>
-    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
+    <thead><tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr></thead>
+    <tbody>
     {% for r in net_gecontroleerd["results"] %}
     <tr>
       <td data-label="Kamer">{{ r.tenant.kamer }}</td>
@@ -46,6 +47,7 @@
       <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email) }}</td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
   </div>
 
@@ -53,7 +55,8 @@
   <h2>Niet-gekoppelde inkomende betalingen</h2>
   <div class="tabel-scroll tabel-responsief">
   <table>
-    <tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr>
+    <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
+    <tbody>
     {% for p in net_gecontroleerd["unmatched"] %}
     <tr>
       <td data-label="Datum">{{ p.datum.strftime("%d-%m-%Y") }}</td>
@@ -62,6 +65,7 @@
       <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p.omschrijving }}</td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
   </div>
   {% endif %}
@@ -71,7 +75,8 @@
   <h2>Laatste controle ({{ cache["gecontroleerd_op"] }})</h2>
   <div class="tabel-scroll tabel-responsief">
   <table>
-    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
+    <thead><tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr></thead>
+    <tbody>
     {% for r in cache["resultaten"] %}
     <tr>
       <td data-label="Kamer">{{ r["kamer"] }}</td>
@@ -82,6 +87,7 @@
       <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None) }}</td>
     </tr>
     {% endfor %}
+    </tbody>
   </table>
   </div>
 </div>

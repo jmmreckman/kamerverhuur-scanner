@@ -58,9 +58,11 @@ def _zoek_vanaf_voor_maand(vandaag: date) -> date:
 
 def _parse_datum_dmy(tekst: str) -> date | None:
     """Parseert een vrije-tekst datum zoals opgeslagen in kolom 'Contract
-    startdatum' (formaat dd-mm-jjjj, met dd/mm/jjjj als fallback). Geeft None
-    terug als de tekst geen (herkenbare) datum is."""
-    for formaat in ("%d-%m-%Y", "%d/%m/%Y"):
+    startdatum' (formaat dd-mm-jjjj, met dd/mm/jjjj en het ISO-formaat
+    jjjj-mm-dd als fallback, want Google Sheets slaat een datumcel soms zo
+    op i.p.v. als platte tekst). Geeft None terug als de tekst geen
+    (herkenbare) datum is."""
+    for formaat in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(tekst.strip(), formaat).date()
         except ValueError:

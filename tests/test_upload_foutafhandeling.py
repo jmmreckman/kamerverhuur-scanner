@@ -1,5 +1,5 @@
-"""Tests dat een falende Google Drive-upload (bv. een netwerkfout of een te
-groot bestand) een nette foutmelding geeft in plaats van een onbeholpen
+"""Tests dat een falende upload (bv. een schijffout of een netwerkfout naar
+Google Drive) een nette foutmelding geeft in plaats van een onbeholpen
 Internal Server Error."""
 import json
 from decimal import Decimal
@@ -14,7 +14,7 @@ from webapp.app import create_app
 
 KAMER_1 = Tenant(
     row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"),
-    beschikbaar=True, advertentie_map_id="map123",
+    beschikbaar=True,
 )
 
 
@@ -30,6 +30,18 @@ class FakeSheetClient:
 
     def add_aanmelding(self, *args, **kwargs):
         pass
+
+
+class FalendeLokaleMediaClient:
+    """Simuleert een schijffout bij het opslaan van een lokaal bestand."""
+    def __init__(self, _config, _pand, _categorie):
+        pass
+
+    def upload_bestand(self, *args, **kwargs):
+        raise OSError("simulated schijffout (bv. schijf vol)")
+
+    def list_bestanden(self, *args, **kwargs):
+        return []
 
 
 class FalendeDriveClient:
@@ -54,6 +66,7 @@ class FalendeDriveClient:
 def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
+    monkeypatch.setattr(appmodule, "LokaleMediaClient", FalendeLokaleMediaClient)
     monkeypatch.setattr(appmodule, "DriveClient", FalendeDriveClient)
     monkeypatch.chdir(tmp_path)
 

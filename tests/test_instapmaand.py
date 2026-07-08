@@ -235,3 +235,37 @@ def test_backfill_geschiedenis_per_kamer_vanaf_startdatum(monkeypatch):
     assert len(luisa_maanden) == 12
 
     assert sheet.dedupliceer_aangeroepen is True
+
+
+class FakeSheetClientBackfillIso(FakeSheetClientBackfill):
+    def get_tenants(self):
+        # Google Sheets slaat een datumcel soms op als ISO-formaat
+        # (jjjj-mm-dd) i.p.v. platte tekst dd-mm-jjjj - moet ook werken.
+        return [_tenant(kamer="1", naam="Henri", contract_startdatum="2026-05-16", verwacht_bedrag=Decimal("745.00"))]
+
+
+def test_backfill_geschiedenis_herkent_iso_datumformaat(monkeypatch):
+    sheet_instances = []
+
+    def _sheet_factory(config, pand):
+        instance = FakeSheetClientBackfillIso(config, pand)
+        sheet_instances.append(instance)
+        return instance
+
+    monkeypatch.setattr(runner, "SheetClient", _sheet_factory)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientBackfill)
+
+    config = Config(
+        google_service_account_file="fake.json", properties_file="properties.json",
+        bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
+        users_file="users.json", flask_secret_key="test-secret",
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=".",
+    )
+    backfill_geschiedenis(config, _pand(), aantal_maanden=12, vandaag=date(2026, 7, 8))
+
+    sheet = sheet_instances[0]
+    per_maand = dict(sheet.upsert_calls)
+    henri_maanden = {maand for maand, resultaten in per_maand.items() if any(r.tenant.kamer == "1" for r in resultaten)}
+    # net als bij het dd-mm-jjjj-formaat: alleen mei en juni, niet de
+    # standaard 12 maanden terug.
+    assert henri_maanden == {"2026-05", "2026-06"}

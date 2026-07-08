@@ -1,5 +1,6 @@
 """Integratietests voor de publieke aanbodpagina + aanmeldformulier, en de
-admin-kant (aanbod beheren, aanmeldingen-overzicht), met nep-Sheet/Drive-clients."""
+admin-kant (aanbod beheren, aanmeldingen-overzicht), met een nep-Sheetclient
+en lokale mediaopslag (tmp_path) in plaats van Google Drive."""
 import io
 import json
 from decimal import Decimal
@@ -8,12 +9,13 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from kamerverhuur_scanner.config import Config
-from kamerverhuur_scanner.models import Tenant
+from kamerverhuur_scanner.lokale_media import LokaleMediaClient
+from kamerverhuur_scanner.models import Pand, Tenant
 from webapp.app import create_app
 
 KAMER_BESCHIKBAAR = Tenant(
     row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("650.00"),
-    beschikbaar=True, advertentie_omschrijving="A nice room", advertentie_map_id="map-1",
+    beschikbaar=True, advertentie_omschrijving="A nice room",
 )
 KAMER_VERHUURD = Tenant(
     row_index=3, naam="Jan Jansen", kamer="2", verwacht_bedrag=Decimal("700.00"), beschikbaar=False,
@@ -53,33 +55,7 @@ def _fake_sheet_factory(config, pand):
     return _fake_sheet_singleton[pand.slug]
 
 
-class FakeDriveClient:
-    def __init__(self, _config, _pand):
-        pass
-
-    def list_bestanden(self, folder_id):
-        if folder_id == "map-1":
-            return [_FakeBestand("foto.jpg", "image/jpeg")]
-        return []
-
-    def vind_of_maak_map(self, naam, folder_id=None):
-        return "nieuwe-map-id"
-
-    def upload_bestand(self, naam, mimetype, inhoud, folder_id=None):
-        return "nieuw-bestand-id"
-
-    def download_bestand(self, file_id):
-        return "foto.jpg", "image/jpeg", b"fake-image-bytes"
-
-    def verwijder_bestand(self, file_id):
-        pass
-
-
-class _FakeBestand:
-    def __init__(self, naam, mimetype):
-        self.id = "file-1"
-        self.naam = naam
-        self.mimetype = mimetype
+_file_id = {}
 
 
 @pytest.fixture
@@ -87,23 +63,33 @@ def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     _fake_sheet_singleton.clear()
     monkeypatch.setattr(appmodule, "SheetClient", _fake_sheet_factory)
-    monkeypatch.setattr(appmodule, "DriveClient", FakeDriveClient)
 
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "google_drive_folder_id": "root-folder", "bunq_rekening_iban": "NL81BUNQ2163127125"},
+         "bunq_rekening_iban": "NL81BUNQ2163127125"},
     ]))
     users_file = tmp_path / "users.json"
     users_file.write_text(json.dumps({
         "beheerder": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": []},
     }))
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
     config = Config(
         google_service_account_file="fake.json", properties_file=str(properties_file),
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
-        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=str(state_dir),
     )
+    pand = Pand(
+        slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="fake",
+        google_sheet_worksheet="Huurders", history_worksheet="Historie",
+        google_drive_folder_id=None, bunq_rekening_iban="NL81BUNQ2163127125",
+    )
+    _file_id["1"] = LokaleMediaClient(config, pand, "aanbod").upload_bestand(
+        "1", "foto.jpg", "image/jpeg", b"fake-image-bytes"
+    )
+
     app = create_app(config)
     app.testing = True
     return app.test_client()
@@ -147,7 +133,7 @@ def test_aanbod_detail_van_beschikbare_kamer_werkt(app_client):
 
 
 def test_aanbod_media_alleen_voor_bekende_bestanden(app_client):
-    ok = app_client.get("/aanbod/mahoniestraat/1/media/file-1")
+    ok = app_client.get(f"/aanbod/mahoniestraat/1/media/{_file_id['1']}")
     assert ok.status_code == 200
     onbekend = app_client.get("/aanbod/mahoniestraat/1/media/ander-bestand")
     assert onbekend.status_code == 404
@@ -170,7 +156,7 @@ def test_apply_form_volledig_ingevuld_slaagt(app_client):
     kamer, aanmelding = sheet.aanmeldingen[0]
     assert kamer == "1"
     assert aanmelding.naam == "Jane Doe"
-    assert aanmelding.bewijs_inschrijving_link.startswith("https://drive.google.com/")
+    assert aanmelding.bewijs_inschrijving_link.startswith("/pand/mahoniestraat/aanmeldingen/bewijs/1/")
 
 
 def test_apply_form_op_verhuurde_kamer_geeft_404(app_client):
@@ -199,13 +185,13 @@ def test_kamer_aanbod_thumbnail_wijst_naar_inline_route_niet_naar_download(app_c
     app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
     resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod")
     body = resp.get_data(as_text=True)
-    assert "/aanbod/file-1/weergeven" in body
-    assert "/documenten/file-1/download" not in body
+    assert f"/aanbod/{_file_id['1']}/weergeven" in body
+    assert f"/documenten/{_file_id['1']}/download" not in body
 
 
 def test_kamer_aanbod_media_toont_inline_zonder_attachment_header(app_client):
     app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
-    resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod/file-1/weergeven")
+    resp = app_client.get(f"/pand/mahoniestraat/kamers/1/aanbod/{_file_id['1']}/weergeven")
     assert resp.status_code == 200
     assert resp.data == b"fake-image-bytes"
     assert resp.mimetype == "image/jpeg"

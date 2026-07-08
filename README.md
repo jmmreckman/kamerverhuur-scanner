@@ -160,18 +160,19 @@ zijn.
 - **Een kamer te huur zetten**: ga naar de kamerpagina (Kamers > kies een
   kamer) en klik op **"Aanbod beheren"**. Daar vink je "Deze kamer is te huur"
   aan, schrijf je een Engelse omschrijving (of gebruik de voorgestelde tekst),
-  en upload je foto's/video's (drag-and-drop, net als bij Documenten). Zodra
-  je opslaat, verschijnt de kamer op `steenhub.nl/aanbod` en op zijn eigen
-  deelbare pagina `steenhub.nl/aanbod/<pand-slug>/<kamernaam>` - geen login
-  nodig om die te bekijken.
+  en upload je foto's/video's. Zodra je opslaat, verschijnt de kamer op
+  `steenhub.nl/aanbod` en op zijn eigen deelbare pagina
+  `steenhub.nl/aanbod/<pand-slug>/<kamernaam>` - geen login nodig om die te
+  bekijken.
 - **Reageren**: bezoekers klikken op "Apply for this room" en vullen een
   formulier in (naam, contactgegevens, studie, studentnummer, gewenste
   ingangsdatum/huurduur, inkomsten, borgsteller ja/nee, voorkeur voor een
   fysieke bezichtiging of videobellen, en een verplichte upload van hun bewijs
   van inschrijving). Bewust een aantal extra vragen, zodat vooral serieus
   geïnteresseerden de moeite nemen te reageren. Het bewijs van inschrijving
-  wordt automatisch in de Drive-map van het pand gezet (onder
-  "Aanmeldingen/<kamernaam>/") - dat is dus nergens publiek te downloaden.
+  wordt lokaal op de server opgeslagen (zie "Lokale opslag van foto's/video's/
+  bewijsstukken" hieronder) en is alleen te bekijken via een besloten link
+  voor ingelogde beheerders van dat pand - dus nergens publiek te downloaden.
 - **Aanmeldingen bekijken**: ga naar **"Aanmeldingen"** in de site-navigatie
   (alleen zichtbaar/toegankelijk voor ingelogde beheerders van dat pand) voor
   een overzicht van alle reacties, met een link naar het geuploade bewijs van
@@ -179,6 +180,25 @@ zijn.
   helemaal opnieuw te beginnen voor de volgende keer dat de kamer vrijkomt.
 - Vanuit een aanmelding kun je wel direct op **"Contract maken"** klikken - dat
   opent "Nieuw huurcontract" met naam, studentnummer en kamer al ingevuld.
+
+### Lokale opslag van foto's/video's/bewijsstukken
+
+De foto's/video's van "Aanbod beheren" en de bewijsstukken van inschrijving bij
+aanmeldingen staan **niet** op Google Drive, maar lokaal op de server, onder
+`<STATE_DIR>/media/<pand>/<aanbod of aanmeldingen>/<kamer>/`. Reden: een Google
+*service account* (het soort inlog dat deze site gebruikt) heeft zelf 0 GB
+Drive-opslagruimte. Zodra de site een bestand probeert te **uploaden** naar een
+gewone, persoonlijke Drive-map die alleen met dat account gedeeld is, weigert
+Google dat altijd met een "storageQuotaExceeded"-fout - ongeacht bestandsgrootte.
+Lokale opslag omzeilt dit probleem volledig. `STATE_DIR` is dezelfde blijvend
+gekoppelde data-map die ook de betaalcontrole-cache gebruikt (`/app/data` op de
+VPS), dus deze bestanden overleven gewoon een herbuild/redeploy.
+
+**Let op:** de **Documenten**-pagina staat nog wel op Google Drive en heeft
+dus in theorie dezelfde upload-beperking (browsen/downloaden werkt daar prima,
+alleen nieuwe uploads zouden mislukken). Dat is bewust buiten scope gelaten
+toen dit werd opgelost - laat het weten als je dat ook lokaal opgeslagen wilt
+hebben.
 
 ## Huurcontracten genereren
 

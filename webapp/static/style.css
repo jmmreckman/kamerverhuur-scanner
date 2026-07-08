@@ -286,15 +286,17 @@ a.stat-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
   }
   .tabel-responsief thead tr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .tabel-responsief tbody tr {
+    background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    margin-bottom: 0.75rem;
-    padding: 0.4rem 0.75rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 0.9rem;
+    padding: 0.5rem 0.9rem;
   }
   .tabel-responsief tbody tr:last-child { margin-bottom: 0; }
   .tabel-responsief td {
     border-bottom: none;
-    padding: 0.4rem 0;
+    padding: 0.45rem 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
