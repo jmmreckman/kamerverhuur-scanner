@@ -69,6 +69,33 @@ def test_verstuur_email_lege_bcc_lijst_laat_bcc_header_weg(mock_smtp_cls):
     assert verzonden_bericht["Bcc"] is None
 
 
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_zet_reply_to_op_bcc_adressen(mock_smtp_cls):
+    # Antwoordt de huurder op de mail, dan moet dat bij de beheerder(s)
+    # terechtkomen - niet alleen in de info@-mailbox die niemand dagelijks
+    # leest.
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", bcc=["eigenaar@example.com"])
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Reply-To"] == "eigenaar@example.com"
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_zonder_bcc_geen_reply_to(mock_smtp_cls):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", bcc=[])
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Reply-To"] is None
+
+
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP_SSL")
 def test_verstuur_email_gebruikt_ssl_op_poort_465(mock_smtp_ssl_cls):
     smtp_instance = MagicMock()

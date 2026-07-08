@@ -34,6 +34,10 @@ def verstuur_email(config: Config, aan: str, onderwerp: str, tekst: str, bcc: li
     bcc_adressen = bcc if bcc is not None else config.email_bcc
     if bcc_adressen:
         msg["Bcc"] = ", ".join(bcc_adressen)
+        # Reageert de huurder op deze mail, dan moet dat rechtstreeks bij de
+        # beheerder(s) terechtkomen (dezelfde adressen als de BCC) - niet
+        # alleen in de info@-mailbox belanden, die niemand dagelijks leest.
+        msg["Reply-To"] = ", ".join(bcc_adressen)
     msg.set_content(tekst)
 
     try:

@@ -71,9 +71,13 @@ nodig.
   (met bedrag, kamer en pandnaam) en toont 'm op een voorbeeldscherm waar je
   onderwerp/tekst nog kunt aanpassen voordat je 'm verstuurt. De mail gaat
   naar het e-mailadres van de huurder (kolom P), met een BCC naar de
-  adressen in `EMAIL_BCC`. Vereist eenmalig SMTP-instellingen in `.env` (zie
-  Stap 2b) - zonder die instellingen krijg je een duidelijke foutmelding in
-  plaats van een crash. Zodra een mail écht is verstuurd (niet al bij het
+  adressen in `EMAIL_BCC` (plus eventuele pand-specifieke "Extra BCC"). Die
+  BCC-adressen staan ook meteen als Reply-To in de mail - antwoordt de
+  huurder erop, dan komt dat rechtstreeks bij jou (en eventuele mede-
+  eigenaren) terecht, in plaats van alleen in de info@-mailbox die niemand
+  dagelijks in de gaten houdt. Vereist eenmalig SMTP-instellingen in `.env`
+  (zie Stap 2b) - zonder die instellingen krijg je een duidelijke
+  foutmelding in plaats van een crash. Zodra een mail écht is verstuurd (niet al bij het
   klikken op de knop, pas ná een geslaagde verzending) verschijnt er een
   groen "Verzonden"-vinkje naast de betreffende knop, zodat in één oogopslag
   duidelijk is of je die huurder deze maand al benaderd hebt. Dat vinkje
