@@ -94,7 +94,9 @@ a { color: inherit; }
   font-size: 0.8rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+  flex-shrink: 0;
 }
+.navbar-brand .logo-mark svg { width: 18px; height: 18px; }
 
 .nav-links {
   grid-area: links;

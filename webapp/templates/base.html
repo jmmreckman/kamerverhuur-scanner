@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox, icon_megafoon, icon_panden %}
+  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox, icon_megafoon, icon_panden, icon_baksteen %}
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
   <nav class="navbar">
     <a class="navbar-brand" href="{{ url_for('start') }}">
-      <span class="logo-mark">VB</span>
+      <span class="logo-mark">{{ icon_baksteen() }}</span>
       <span>{{ huidig_pand.naam if huidig_pand else "Vastgoedbeheer" }}</span>
     </a>
     <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox">
