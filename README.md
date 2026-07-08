@@ -49,10 +49,14 @@ nodig.
   geschiedenis te vullen in plaats van pas vanaf nu op te bouwen. bunq zelf
   legt geen harde limiet op hoe ver terug je transacties kunt ophalen (zolang
   de rekening bestaat), dus dit kan in principe nog verder teruggezet worden
-  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen. De
-  betalingen worden cumulatief/chronologisch verdeeld in plaats van per
-  losse kalendermaand: een gemiste maand die later in één keer wordt
-  ingehaald (bv. een dubbele betaling) telt dan als "Betaald" voor beide
+  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen. Elke
+  maand wordt onafhankelijk beoordeeld op basis van wat er die kalendermaand
+  ECHT is binnengekomen (vergeleken met het HUIDIGE verwachte bedrag - de
+  sheet houdt geen historische huurbedragen bij, dus rond een huurverhoging
+  kunnen oudere maanden om die reden "Te weinig" tonen, ook al was er op dat
+  moment gewoon correct betaald tegen het toen geldende bedrag). Eén gerichte
+  uitzondering: een gemiste maand die de maand erna in één keer wordt
+  ingehaald (een dubbele betaling) telt dan als "Betaald" voor beide
   maanden - met de datum van de inhaalbetaling als betaaldatum voor de
   oudere maand, zodat zichtbaar blijft dat die laat was - in plaats van de
   oudere maand als "Nog niet ontvangen" en de nieuwere als "Te veel
@@ -69,7 +73,11 @@ nodig.
   naar het e-mailadres van de huurder (kolom P), met een BCC naar de
   adressen in `EMAIL_BCC`. Vereist eenmalig SMTP-instellingen in `.env` (zie
   Stap 2b) - zonder die instellingen krijg je een duidelijke foutmelding in
-  plaats van een crash.
+  plaats van een crash. Zodra een mail écht is verstuurd (niet al bij het
+  klikken op de knop, pas ná een geslaagde verzending) verschijnt er een
+  groen "Verzonden"-vinkje naast de betreffende knop, zodat in één oogopslag
+  duidelijk is of je die huurder deze maand al benaderd hebt. Dat vinkje
+  reset vanzelf zodra er een nieuwe kalendermaand begint.
 - **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-
   huurcontract (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is
   een voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie de

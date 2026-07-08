@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon_baksteen %}
 {% block title %}Inloggen - Mahoniestraat 15{% endblock %}
 {% block content %}
 <div class="login-page">
   <div style="display:flex; flex-direction:column; align-items:center; gap:0.6rem; margin-bottom:1.5rem;">
-    <span class="logo-mark" style="width:48px; height:48px; font-size:1rem;">M15</span>
+    <span class="logo-mark" style="width:48px; height:48px;">{{ icon_baksteen() }}</span>
     <strong>Mahoniestraat 15</strong>
   </div>
   <div class="card">

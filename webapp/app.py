@@ -387,11 +387,18 @@ def create_app(config: Config | None = None) -> Flask:
             net_gecontroleerd = {"results": results, "unmatched": unmatched}
         sheet = SheetClient(config, g.pand)
         tenants_by_kamer = {k.kamer: k for k in sheet.get_kamers()}
+        huidige_maand = date.today().strftime("%Y-%m")
+        verzonden = {
+            (kamer, soort): state.email_verzonden_op(pand_slug, kamer, soort, huidige_maand, config.state_dir)
+            for kamer in tenants_by_kamer
+            for soort in _EMAIL_SOORTEN
+        }
         return render_template(
             "betalingen.html",
             net_gecontroleerd=net_gecontroleerd,
             cache=state.load(pand_slug, config.state_dir),
             tenants_by_kamer=tenants_by_kamer,
+            verzonden=verzonden,
         )
 
     @app.route("/pand/<pand_slug>/betalingen/geschiedenis-aanvullen", methods=["POST"])
@@ -437,6 +444,8 @@ def create_app(config: Config | None = None) -> Flask:
                     "kamer_email.html", kamer=kamer, soort=soort, titel=titel,
                     onderwerp=onderwerp, tekst=tekst,
                 )
+            huidige_maand = date.today().strftime("%Y-%m")
+            state.markeer_email_verzonden(pand_slug, kamer_naam, soort, huidige_maand, config.state_dir)
             flash(f"{titel} verstuurd naar {kamer.naam} ({kamer.email}).")
             return redirect(url_for("betalingen", pand_slug=pand_slug))
 

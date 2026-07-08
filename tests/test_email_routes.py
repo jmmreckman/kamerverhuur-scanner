@@ -141,3 +141,45 @@ def test_bcc_zonder_extra_bcc_bevat_alleen_globaal_adres(tmp_path, monkeypatch, 
         data={"onderwerp": "Test onderwerp", "tekst": "Test tekst"},
     )
     assert verstuurde_mails[0]["bcc"] == ["eigenaar@example.com"]
+
+
+def _seed_cache(tmp_path):
+    from kamerverhuur_scanner import state
+    from kamerverhuur_scanner.models import Status, TenantResult
+
+    resultaat = TenantResult(tenant=KAMER_MET_MAIL, ontvangen_bedrag=Decimal("0"), status=Status.NIET_ONTVANGEN)
+    state.save("mahoniestraat", [resultaat], 0, state_dir=str(tmp_path))
+
+
+def test_verzonden_badge_ontbreekt_voor_versturen(app_client, tmp_path):
+    _seed_cache(tmp_path)
+    resp = app_client.get("/pand/mahoniestraat/betalingen")
+    assert "stuur herinnering" in resp.get_data(as_text=True).lower()  # de knop zelf staat er wel
+    assert "verzonden" not in resp.get_data(as_text=True).lower()
+
+
+def test_verzonden_badge_verschijnt_pas_na_geslaagd_versturen(app_client, verstuurde_mails, tmp_path):
+    _seed_cache(tmp_path)
+    app_client.post(
+        "/pand/mahoniestraat/kamers/3/email/herinnering",
+        data={"onderwerp": "Test onderwerp", "tekst": "Test tekst"},
+    )
+    resp = app_client.get("/pand/mahoniestraat/betalingen")
+    assert "verzonden" in resp.get_data(as_text=True).lower()
+
+
+def test_verzonden_badge_blijft_weg_bij_mailerror(app_client, monkeypatch, tmp_path):
+    _seed_cache(tmp_path)
+    import webapp.app as appmodule
+
+    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None):
+        raise MailError("SMTP niet ingesteld")
+
+    monkeypatch.setattr(appmodule, "verstuur_email", _kapotte_mailer)
+    app_client.post(
+        "/pand/mahoniestraat/kamers/3/email/herinnering",
+        data={"onderwerp": "Test onderwerp", "tekst": "Test tekst"},
+    )
+    resp = app_client.get("/pand/mahoniestraat/betalingen")
+    # alleen daadwerkelijk verstuurde mails (niet alleen een klik op de knop) mogen het vinkje geven
+    assert "verzonden" not in resp.get_data(as_text=True).lower()

@@ -12,7 +12,7 @@ from decimal import Decimal
 from . import state
 from .bunq_client import BunqClient
 from .config import Config
-from .matcher import match_tenants_to_payments
+from .matcher import _bepaal_status, match_tenants_to_payments
 from .models import Pand, Payment, Status, Tenant, TenantResult
 from .sheet_client import SheetClient
 
@@ -71,35 +71,52 @@ def _verdeel_over_maanden(
     maanden: list[tuple[int, int]],
     tolerantie: Decimal,
 ) -> dict[str, tuple[Decimal, Status, date | None]]:
-    """Verdeelt iemands betalingen cumulatief/chronologisch over de gegeven
-    maanden, in plaats van elke maand los tegen elkaar af te zetten. Een
-    dubbele/inhaalbetaling wordt zo eerst gebruikt om een eerdere achterstand
-    in te lopen: die oudere maand wordt alsnog 'Betaald' (met de datum van de
-    inhaalbetaling als betaaldatum - dus zichtbaar dat het laat was), in
-    plaats van dat die maand als 'Nog niet ontvangen' blijft staan én de
-    latere maand als 'Te veel ontvangen' - dat gaf een verkeerd/verwarrend
-    beeld. Geeft per maand ("jjjj-mm") het (ontvangen bedrag, status,
-    betaaldatum) terug."""
-    betalingen = sorted(betalingen, key=lambda p: p.datum)
-    cumulatieve_events: list[tuple[Decimal, date]] = []
-    lopend = Decimal("0")
-    for p in betalingen:
-        lopend += p.bedrag
-        cumulatieve_events.append((lopend, p.datum))
+    """Bepaalt per maand het ontvangen bedrag/status op basis van wat er ECHT
+    in die kalendermaand is binnengekomen - met één gerichte uitzondering:
+    als een maand niets ontvangen heeft én de eropvolgende maand ongeveer het
+    dubbele bedrag ontving (een inhaalbetaling), telt dat als 'Betaald' voor
+    allebei de maanden - de oudere met de datum van de inhaalbetaling als
+    betaaldatum (dus zichtbaar dat het laat was), in plaats van de oudere
+    maand als 'Nog niet ontvangen' en de nieuwere als 'Te veel ontvangen' te
+    laten staan.
+
+    Bewust GEEN cumulatieve verrekening over de hele periode: een
+    huurverhoging halverwege de teruggezochte maanden zou dan het
+    verwachte/ontvangen bedrag van alle latere maanden laten verschuiven en
+    fout weergeven (de sheet houdt geen historische huurbedragen bij). Deze
+    aanpak kijkt daarom alleen naar dit ene aangrenzende-maandenpatroon, dus
+    andere maanden blijven onaangetast door wat er verderop gebeurt."""
+    per_maand: dict[tuple[int, int], tuple[Decimal, date | None]] = {}
+    for jaar, maand in maanden:
+        maand_start = date(jaar, maand, 1)
+        maand_eind = date(jaar, maand, calendar.monthrange(jaar, maand)[1])
+        maand_betalingen = [p for p in betalingen if maand_start <= p.datum <= maand_eind]
+        ontvangen = sum((p.bedrag for p in maand_betalingen), Decimal("0"))
+        laatste_datum = max((p.datum for p in maand_betalingen), default=None)
+        per_maand[(jaar, maand)] = (ontvangen, laatste_datum)
 
     resultaat: dict[str, tuple[Decimal, Status, date | None]] = {}
-    for i, (jaar, maand) in enumerate(maanden, start=1):
-        cumulatief_verwacht = verwacht_bedrag * i
-        voldaan = next((e for e in cumulatieve_events if e[0] >= cumulatief_verwacht - tolerantie), None)
-        maand_key = f"{jaar}-{maand:02d}"
-        if voldaan is not None:
-            resultaat[maand_key] = (verwacht_bedrag, Status.BETAALD, voldaan[1])
-        else:
-            laatste_bekend = cumulatieve_events[-1][0] if cumulatieve_events else Decimal("0")
-            tekort = cumulatief_verwacht - laatste_bekend
-            ontvangen_voor_maand = max(Decimal("0"), verwacht_bedrag - tekort)
-            status = Status.NIET_ONTVANGEN if ontvangen_voor_maand <= 0 else Status.TE_WEINIG
-            resultaat[maand_key] = (ontvangen_voor_maand, status, None)
+    overgeslagen: set[tuple[int, int]] = set()
+
+    for i, sleutel in enumerate(maanden):
+        if sleutel in overgeslagen:
+            continue
+        ontvangen, laatste_datum = per_maand[sleutel]
+        maand_key = f"{sleutel[0]}-{sleutel[1]:02d}"
+
+        if ontvangen <= tolerantie and i + 1 < len(maanden):
+            volgende_sleutel = maanden[i + 1]
+            volgende_ontvangen, volgende_datum = per_maand[volgende_sleutel]
+            if volgende_ontvangen >= 2 * verwacht_bedrag - tolerantie:
+                volgende_maand_key = f"{volgende_sleutel[0]}-{volgende_sleutel[1]:02d}"
+                resultaat[maand_key] = (verwacht_bedrag, Status.BETAALD, volgende_datum)
+                resultaat[volgende_maand_key] = (verwacht_bedrag, Status.BETAALD, volgende_datum)
+                overgeslagen.add(volgende_sleutel)
+                continue
+
+        status = _bepaal_status(ontvangen, verwacht_bedrag, tolerantie)
+        resultaat[maand_key] = (ontvangen, status, laatste_datum)
+
     return resultaat
 
 

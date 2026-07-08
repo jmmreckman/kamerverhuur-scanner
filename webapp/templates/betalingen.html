@@ -1,13 +1,23 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_betalingen, icon_inbox, icon_alert %}
+{% from "_icons.html" import icon_betalingen, icon_inbox, icon_alert, icon_check %}
 {% block title %}Betalingen - {{ huidig_pand.naam }}{% endblock %}
+
+{% macro email_knop(kamer_naam, soort, label, icon_html) %}
+  {% set verzonden_op = verzonden.get((kamer_naam, soort)) %}
+  <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap">
+    <a class="btn btn-secondary btn-xs" href="{{ url_for('kamer_email', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam, soort=soort) }}">{{ icon_html }} {{ label }}</a>
+    {% if verzonden_op %}
+      <span class="pil status-betaald" style="font-size:0.7rem" title="Verzonden op {{ verzonden_op }}">{{ icon_check() }} Verzonden</span>
+    {% endif %}
+  </div>
+{% endmacro %}
 
 {% macro actie_knoppen(kamer_naam, status, email) %}
   {% if status != "Betaald" %}
     {% if email %}
-      <div style="display:flex; gap:0.4rem; flex-wrap:wrap">
-        <a class="btn btn-secondary btn-xs" href="{{ url_for('kamer_email', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam, soort='herinnering') }}">{{ icon_inbox() }} Stuur herinnering</a>
-        <a class="btn btn-secondary btn-xs" href="{{ url_for('kamer_email', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam, soort='ingebrekestelling') }}">{{ icon_alert() }} Stuur ingebrekestelling</a>
+      <div style="display:flex; flex-direction:column; gap:0.35rem">
+        {{ email_knop(kamer_naam, 'herinnering', 'Stuur herinnering', icon_inbox()) }}
+        {{ email_knop(kamer_naam, 'ingebrekestelling', 'Stuur ingebrekestelling', icon_alert()) }}
       </div>
     {% else %}
       <span class="muted" style="font-size:0.8rem">Geen e-mailadres bekend</span>

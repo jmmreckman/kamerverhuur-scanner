@@ -48,3 +48,27 @@ def status_voor_kamer(cache: dict | None, kamer: str) -> dict | None:
         if regel["kamer"] == kamer:
             return regel
     return None
+
+
+def _verzonden_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"verzonden_mails_{veilige_slug}.json"
+
+
+def markeer_email_verzonden(pand_slug: str, kamer: str, soort: str, maand: str, state_dir: str = ".") -> None:
+    """Onthoudt dat een herinnering/ingebrekestelling daadwerkelijk verstuurd
+    is voor deze kamer, deze maand - alleen aanroepen ná een geslaagde
+    verstuur_email(), niet meteen bij het klikken op de knop. Reset vanzelf
+    zodra er een nieuwe maand is (andere `maand`-sleutel)."""
+    p = _verzonden_bestandsnaam(pand_slug, state_dir)
+    data = json.loads(p.read_text()) if p.exists() else {}
+    data[f"{kamer}|{soort}|{maand}"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    p.write_text(json.dumps(data, indent=2))
+
+
+def email_verzonden_op(pand_slug: str, kamer: str, soort: str, maand: str, state_dir: str = ".") -> str | None:
+    p = _verzonden_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return None
+    data = json.loads(p.read_text())
+    return data.get(f"{kamer}|{soort}|{maand}")

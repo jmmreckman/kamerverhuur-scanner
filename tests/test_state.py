@@ -29,3 +29,29 @@ def test_load_in_andere_state_dir_vindt_niets(tmp_path):
     (tmp_path / "b").mkdir()
     state.save("mahoniestraat", [_result()], 0, state_dir=str(tmp_path / "a"))
     assert state.load("mahoniestraat", state_dir=str(tmp_path / "b")) is None
+
+
+def test_email_verzonden_op_zonder_markering_geeft_none(tmp_path):
+    assert state.email_verzonden_op("mahoniestraat", "3", "herinnering", "2026-07", state_dir=str(tmp_path)) is None
+
+
+def test_markeer_email_verzonden_en_opvragen(tmp_path):
+    state.markeer_email_verzonden("mahoniestraat", "3", "herinnering", "2026-07", state_dir=str(tmp_path))
+
+    verzonden_op = state.email_verzonden_op("mahoniestraat", "3", "herinnering", "2026-07", state_dir=str(tmp_path))
+    assert verzonden_op is not None
+
+
+def test_markeer_email_verzonden_onderscheidt_soort_en_kamer(tmp_path):
+    state.markeer_email_verzonden("mahoniestraat", "3", "herinnering", "2026-07", state_dir=str(tmp_path))
+
+    # andere soort, andere kamer: geen van beide gemarkeerd
+    assert state.email_verzonden_op("mahoniestraat", "3", "ingebrekestelling", "2026-07", state_dir=str(tmp_path)) is None
+    assert state.email_verzonden_op("mahoniestraat", "4", "herinnering", "2026-07", state_dir=str(tmp_path)) is None
+
+
+def test_markeer_email_verzonden_reset_bij_nieuwe_maand(tmp_path):
+    state.markeer_email_verzonden("mahoniestraat", "3", "herinnering", "2026-06", state_dir=str(tmp_path))
+    # een nieuwe maand heeft nog geen eigen markering, ook al is dezelfde
+    # kamer/soort al eens eerder (in een vorige maand) verzonden
+    assert state.email_verzonden_op("mahoniestraat", "3", "herinnering", "2026-07", state_dir=str(tmp_path)) is None

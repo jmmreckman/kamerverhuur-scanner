@@ -1,8 +1,11 @@
 """Tests voor runner.backfill_geschiedenis: vult de Historie-tab in één keer
 aan met zoveel mogelijk voorgaande maanden, op basis van de huidige
-huurderslijst - en de cumulatieve verdeling die voorkomt dat een
-inhaalbetaling de ene maand als 'Te veel' en de andere als 'Nog niet
-ontvangen' laat zien terwijl de huurder gewoon laat was."""
+huurderslijst - en de maand-voor-maand verdeling (met één gerichte
+uitzondering voor een inhaalbetaling na een gemiste maand) die voorkomt dat
+zo'n inhaalbetaling de ene maand als 'Te veel' en de andere als 'Nog niet
+ontvangen' laat zien terwijl de huurder gewoon laat was. Bewust GEEN
+cumulatieve/lopende-balans-aanpak over de hele periode - dat zou een
+huurverhoging halverwege de reeks alle latere maanden laten verschuiven."""
 from datetime import date
 from decimal import Decimal
 
@@ -78,7 +81,44 @@ def test_verdeel_over_maanden_gedeeltelijke_betaling_blijft_open():
     ontvangen, status, betaaldatum = resultaat["2026-04"]
     assert status == Status.TE_WEINIG
     assert ontvangen == Decimal("300.00")
-    assert betaaldatum is None
+    # er is wel degelijk iets ontvangen die maand, dus de datum blijft zichtbaar
+    assert betaaldatum == date(2026, 4, 5)
+
+
+def test_verdeel_over_maanden_huurverhoging_beinvloedt_andere_maanden_niet():
+    # Regressietest: bij een cumulatieve/lopende-balans-aanpak zou een
+    # huurverhoging halverwege de reeks alle latere maanden laten verschuiven
+    # (foutief "vol betaald tegen het nieuwe/hogere bedrag" of "te weinig"
+    # tonen voor maanden die op het moment zelf gewoon correct betaald waren).
+    # Elke maand moet onafhankelijk beoordeeld worden tegen wat er die maand
+    # ECHT binnenkwam.
+    maanden = [(2026, 1), (2026, 2), (2026, 3), (2026, 4), (2026, 5)]
+    oude_huur = Decimal("600.00")
+    nieuwe_huur = Decimal("650.00")  # huidig verwacht bedrag (na verhoging in maart)
+    betalingen = [
+        _betaling("600.00", date(2026, 1, 3)),
+        _betaling("600.00", date(2026, 2, 3)),
+        _betaling("600.00", date(2026, 3, 3)),  # nog tegen het oude bedrag betaald
+        _betaling("650.00", date(2026, 4, 3)),  # vanaf hier de nieuwe huur
+        _betaling("650.00", date(2026, 5, 3)),
+    ]
+    resultaat = _verdeel_over_maanden(nieuwe_huur, betalingen, maanden, TOLERANTIE)
+
+    # de maanden vóór de verhoging tonen gewoon wat er toen echt binnenkwam
+    # (600, minder dan het huidige verwachte bedrag) - geen kunstmatig
+    # "volledig betaald tegen het nieuwe bedrag" of weggehaalde/verschoven
+    # bedragen door latere maanden.
+    for maand_key in ("2026-01", "2026-02", "2026-03"):
+        ontvangen, status, _betaaldatum = resultaat[maand_key]
+        assert ontvangen == oude_huur
+        assert status == Status.TE_WEINIG
+
+    # de maanden na de verhoging zijn gewoon "Betaald" en blijven dat ook -
+    # geen achterstand die van de oudere maanden wordt "doorgeschoven".
+    for maand_key in ("2026-04", "2026-05"):
+        ontvangen, status, _betaaldatum = resultaat[maand_key]
+        assert ontvangen == nieuwe_huur
+        assert status == Status.BETAALD
 
 
 def _pand() -> Pand:
@@ -157,7 +197,7 @@ def test_backfill_geschiedenis_ruimt_eerst_dubbele_regels_op(monkeypatch):
     assert sheet_instances[0].dedupliceer_aangeroepen is True
 
 
-def test_backfill_geschiedenis_verdeelt_inhaalbetaling_cumulatief(monkeypatch):
+def test_backfill_geschiedenis_verdeelt_inhaalbetaling_naar_vorige_maand(monkeypatch):
     sheet_instances = []
 
     def _sheet_factory(config, pand):
