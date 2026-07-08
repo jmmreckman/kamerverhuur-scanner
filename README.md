@@ -49,7 +49,14 @@ nodig.
   geschiedenis te vullen in plaats van pas vanaf nu op te bouwen. bunq zelf
   legt geen harde limiet op hoe ver terug je transacties kunt ophalen (zolang
   de rekening bestaat), dus dit kan in principe nog verder teruggezet worden
-  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen.
+  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen. De
+  betalingen worden cumulatief/chronologisch verdeeld in plaats van per
+  losse kalendermaand: een gemiste maand die later in één keer wordt
+  ingehaald (bv. een dubbele betaling) telt dan als "Betaald" voor beide
+  maanden - met de datum van de inhaalbetaling als betaaldatum voor de
+  oudere maand, zodat zichtbaar blijft dat die laat was - in plaats van de
+  oudere maand als "Nog niet ontvangen" en de nieuwere als "Te veel
+  ontvangen" te laten staan.
 - **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
   "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
   herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"
