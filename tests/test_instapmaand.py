@@ -12,12 +12,26 @@ import pytest
 from kamerverhuur_scanner.config import Config
 from kamerverhuur_scanner.models import Pand, Payment, Status, Tenant
 from kamerverhuur_scanner.runner import (
+    _parse_datum_dmy,
     _pro_rata_huur,
     _verwacht_bedrag_voor_maand,
     backfill_geschiedenis,
     run_check,
 )
 import kamerverhuur_scanner.runner as runner
+
+
+@pytest.mark.parametrize("tekst", [
+    "01-07-2026", "1-7-2026", "01/07/2026", "01.07.2026", "2026-07-01",
+    "2026-07-01 00:00:00", "1 juli 2026", "01 Juli 2026", "  1 juli 2026  ",
+])
+def test_parse_datum_dmy_herkent_diverse_formaten(tekst):
+    assert _parse_datum_dmy(tekst) == date(2026, 7, 1)
+
+
+@pytest.mark.parametrize("tekst", ["", "onzin", "32-13-2026", "7 augustuss 2026"])
+def test_parse_datum_dmy_geeft_none_bij_onherkenbare_tekst(tekst):
+    assert _parse_datum_dmy(tekst) is None
 
 
 def test_pro_rata_huur_bij_start_op_de_1e_is_volle_maandhuur():

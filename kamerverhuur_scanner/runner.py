@@ -26,6 +26,7 @@ _MAAND_NAMEN_NL = [
 ]
 _ALLES_BETAALD_KAMER_SLEUTEL = "__alle_kamers__"
 _ALLES_BETAALD_SOORT = "alles-betaald"
+_MAAND_NAAM_NAAR_NUMMER = {naam: i + 1 for i, naam in enumerate(_MAAND_NAMEN_NL)}
 
 # Harde grens voor welke kalendermaand een betaling telt: 1e t/m 17e van de
 # maand = die maand zelf, 18e t/m einde van de maand = de maand erna (bv. een
@@ -58,15 +59,30 @@ def _zoek_vanaf_voor_maand(vandaag: date) -> date:
 
 def _parse_datum_dmy(tekst: str) -> date | None:
     """Parseert een vrije-tekst datum zoals opgeslagen in kolom 'Contract
-    startdatum' (formaat dd-mm-jjjj, met dd/mm/jjjj en het ISO-formaat
-    jjjj-mm-dd als fallback, want Google Sheets slaat een datumcel soms zo
-    op i.p.v. als platte tekst). Geeft None terug als de tekst geen
+    startdatum'. Bedoeld formaat is dd-mm-jjjj, maar wie rechtstreeks in de
+    Google Sheet typt houdt zich daar niet altijd aan - vandaar ook
+    dd/mm/jjjj, dd.mm.jjjj, het ISO-formaat jjjj-mm-dd (met of zonder
+    tijdstempel, zoals Google Sheets een datumcel soms opslaat) en losse
+    Nederlandse tekst als "1 juli 2026". Geeft None terug als de tekst geen
     (herkenbare) datum is."""
-    for formaat in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+    tekst = tekst.strip()
+    for formaat in (
+        "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%Y-%m-%d",
+        "%d-%m-%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S",
+    ):
         try:
-            return datetime.strptime(tekst.strip(), formaat).date()
+            return datetime.strptime(tekst, formaat).date()
         except ValueError:
             continue
+    delen = tekst.lower().split()
+    if len(delen) == 3:
+        dag_tekst, maandnaam, jaar_tekst = delen
+        maandnr = _MAAND_NAAM_NAAR_NUMMER.get(maandnaam)
+        if maandnr and dag_tekst.isdigit() and jaar_tekst.isdigit():
+            try:
+                return date(int(jaar_tekst), maandnr, int(dag_tekst))
+            except ValueError:
+                return None
     return None
 
 
