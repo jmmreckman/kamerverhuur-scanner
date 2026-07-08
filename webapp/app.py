@@ -112,9 +112,11 @@ def create_app(config: Config | None = None) -> Flask:
     @app.context_processor
     def _template_context():
         eigen_panden = []
+        alle_panden = []
         if current_user.is_authenticated:
-            eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
-        return {"eigen_panden": eigen_panden, "huidig_pand": getattr(g, "pand", None)}
+            alle_panden = _properties()
+            eigen_panden = [p for p in alle_panden if current_user.heeft_toegang(p.slug)]
+        return {"eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None)}
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
         for kamer in sheet.get_kamers():

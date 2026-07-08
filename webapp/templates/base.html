@@ -36,10 +36,10 @@
       </div>
       {% endif %}
       <div class="nav-right">
-        {% if eigen_panden|length > 1 %}
+        {% if alle_panden|length > 1 %}
         <select onchange="if (this.value) window.location.href = this.value">
           <option value="">Wissel van pand...</option>
-          {% for pand in eigen_panden %}
+          {% for pand in alle_panden %}
           <option value="{{ url_for('dashboard', pand_slug=pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
           {% endfor %}
         </select>
