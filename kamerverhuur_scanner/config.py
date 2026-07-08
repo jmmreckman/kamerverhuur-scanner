@@ -7,7 +7,7 @@ in properties.json - zie kamerverhuur_scanner/properties.py.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 
 
@@ -40,6 +40,16 @@ class Config:
     bedrag_tolerantie: Decimal
     vooruitbetaling_dagen: int
 
+    # E-mail (betaalherinnering/ingebrekestelling) - optioneel, alleen nodig
+    # als je die knoppen op de Betalingen-pagina gebruikt.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_from_naam: str = "Steenhub"
+    email_bcc: list[str] = field(default_factory=list)
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -52,4 +62,11 @@ class Config:
             flask_secret_key=_require("FLASK_SECRET_KEY"),
             bedrag_tolerantie=Decimal(os.environ.get("BEDRAG_TOLERANTIE_CENT", "1")) / Decimal(100),
             vooruitbetaling_dagen=int(os.environ.get("VOORUITBETALING_DAGEN", "14")),
+            smtp_host=os.environ.get("SMTP_HOST", "").strip() or None,
+            smtp_port=int(os.environ.get("SMTP_PORT", "587").strip() or "587"),
+            smtp_username=os.environ.get("SMTP_USERNAME", "").strip() or None,
+            smtp_password=os.environ.get("SMTP_PASSWORD", "").strip() or None,
+            smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", "").strip() or None,
+            smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", "Steenhub").strip(),
+            email_bcc=[e.strip() for e in os.environ.get("EMAIL_BCC", "").split(",") if e.strip()],
         )

@@ -322,6 +322,18 @@ td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, t
   text-decoration: underline;
 }
 
+.btn-xs {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.btn-xs svg { width: 13px; height: 13px; }
+.btn-xs[disabled], .btn-xs.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* ---------- Kamer/kaart-tegels ---------- */
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }

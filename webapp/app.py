@@ -20,6 +20,7 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
+from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.models import Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
 from kamerverhuur_scanner.runner import run_check
@@ -31,6 +32,7 @@ from .aanmeldingen import AanmeldingFout, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
 from .reliability import bereken_betrouwbaarheid
+from .reminders import bouw_herinnering, bouw_ingebrekestelling
 
 load_dotenv()
 
@@ -380,7 +382,54 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             _tenants, results, unmatched = run_check(config, g.pand, dry_run=False)
             net_gecontroleerd = {"results": results, "unmatched": unmatched}
-        return render_template("betalingen.html", net_gecontroleerd=net_gecontroleerd, cache=state.load(pand_slug))
+        sheet = SheetClient(config, g.pand)
+        tenants_by_kamer = {k.kamer: k for k in sheet.get_kamers()}
+        return render_template(
+            "betalingen.html",
+            net_gecontroleerd=net_gecontroleerd,
+            cache=state.load(pand_slug),
+            tenants_by_kamer=tenants_by_kamer,
+        )
+
+    _EMAIL_SOORTEN = {
+        "herinnering": (bouw_herinnering, "Betaalherinnering"),
+        "ingebrekestelling": (bouw_ingebrekestelling, "Ingebrekestelling"),
+    }
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/email/<soort>", methods=["GET", "POST"])
+    @login_required
+    def kamer_email(pand_slug: str, kamer_naam: str, soort: str):
+        if soort not in _EMAIL_SOORTEN:
+            abort(404)
+        bouwer, titel = _EMAIL_SOORTEN[soort]
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.email:
+            flash(f"Kamer {kamer_naam} heeft geen e-mailadres - vul dit eerst in bij Huurders.")
+            return redirect(url_for("betalingen", pand_slug=pand_slug))
+
+        status = state.status_voor_kamer(state.load(pand_slug), kamer_naam)
+        ontvangen_bedrag = parse_bedrag(status["ontvangen_bedrag"]) if status else Decimal("0")
+
+        if request.method == "POST":
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            try:
+                verstuur_email(config, kamer.email, onderwerp, tekst)
+            except MailError as exc:
+                flash(str(exc))
+                return render_template(
+                    "kamer_email.html", kamer=kamer, soort=soort, titel=titel,
+                    onderwerp=onderwerp, tekst=tekst,
+                )
+            flash(f"{titel} verstuurd naar {kamer.naam} ({kamer.email}).")
+            return redirect(url_for("betalingen", pand_slug=pand_slug))
+
+        opgesteld = bouwer(g.pand, kamer, ontvangen_bedrag)
+        return render_template(
+            "kamer_email.html", kamer=kamer, soort=soort, titel=titel,
+            onderwerp=opgesteld["onderwerp"], tekst=opgesteld["tekst"],
+        )
 
     # --- Kamers ---
 

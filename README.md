@@ -41,6 +41,16 @@ nodig.
   huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij. Er
   wordt niets automatisch op de achtergrond gecontroleerd - alles gebeurt
   on-demand via de site.
+- **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
+  "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
+  herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"
+  (formele aanmaning met een betaaltermijn). De site stelt de e-mail zelf op
+  (met bedrag, kamer en pandnaam) en toont 'm op een voorbeeldscherm waar je
+  onderwerp/tekst nog kunt aanpassen voordat je 'm verstuurt. De mail gaat
+  naar het e-mailadres van de huurder (kolom P), met een BCC naar de
+  adressen in `EMAIL_BCC`. Vereist eenmalig SMTP-instellingen in `.env` (zie
+  Stap 2b) - zonder die instellingen krijg je een duidelijke foutmelding in
+  plaats van een crash.
 - **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-
   huurcontract (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is
   een voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie de
@@ -190,6 +200,38 @@ https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
 
 Eén service account volstaat voor alle panden - je deelt hem gewoon met meer
 sheets en Drive-mappen.
+
+## Stap 2b: e-mail versturen instellen (optioneel, voor de herinnering/ingebrekestelling-knoppen)
+
+Alleen nodig als je de knoppen "Stuur herinnering"/"Stuur ingebrekestelling" op
+de Betalingen-pagina wilt gebruiken. Je hebt een mailbox nodig die e-mail mag
+versturen via SMTP - bijvoorbeeld `info@steenhub.nl` als die mailbox al bij je
+hostingpartij/domeinregistrar hoort, of anders een Gmail-account met een
+[app-wachtwoord](https://myaccount.google.com/apppasswords) als tijdelijke
+oplossing.
+
+Zet in `.env` (op de VPS in `deploy/app.env`, zie Stap 7):
+
+```
+SMTP_HOST=smtp.jouwprovider.nl
+SMTP_PORT=587
+SMTP_USERNAME=info@steenhub.nl
+SMTP_PASSWORD=jouw-wachtwoord-of-app-wachtwoord
+SMTP_FROM_EMAIL=info@steenhub.nl
+SMTP_FROM_NAAM=Steenhub
+EMAIL_BCC=jouw-eigen-email@voorbeeld.nl,justin@voorbeeld.nl
+```
+
+`EMAIL_BCC` is een komma-gescheiden lijst - elke verstuurde herinnering/
+ingebrekestelling gaat automatisch ook (blind kopie) naar die adressen.
+Zonder deze instellingen blijven de knoppen gewoon zichtbaar, maar krijg je
+bij het versturen een nette foutmelding in plaats van een crash.
+
+> De ingebrekestelling-tekst is een standaardformulering (redelijke termijn
+> om alsnog te betalen, art. 6:82 BW) - geen juridisch advies. Je kunt de
+> tekst altijd aanpassen op het voorbeeldscherm voordat je 'm verstuurt, en
+> laat 'm bij een echt geschil het beste even meelezen door een jurist/
+> rechtsbijstandsverzekeraar.
 
 ## Stap 3: bunq API key aanmaken (eenmalig, voor alle rekeningen samen)
 
