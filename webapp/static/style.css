@@ -186,12 +186,23 @@ a { color: inherit; }
   }
   .nav-toggle-checkbox:checked ~ .nav-menu { display: flex; }
 
-  .nav-links { flex-direction: column; align-items: stretch; gap: 0.2rem; }
-  .nav-link { justify-content: flex-start; }
+  .nav-links { flex-direction: column; align-items: stretch; gap: 0.3rem; }
+  .nav-link {
+    justify-content: flex-start;
+    padding: 0.9rem 1rem;
+    font-size: 1.05rem;
+    border-radius: 10px;
+  }
+  .nav-link svg { width: 20px; height: 20px; }
 
   .nav-right { flex-direction: column; align-items: stretch; margin-left: 0; margin-top: 0.5rem; gap: 0.4rem; }
   .nav-right select { width: 100%; }
-  .nav-logout { justify-content: flex-start; }
+  .nav-logout {
+    justify-content: flex-start;
+    padding: 0.9rem 1rem;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
 }
 
 /* ---------- Layout ---------- */
@@ -264,6 +275,53 @@ a.stat-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
 /* ---------- Tabellen ---------- */
 
 .tabel-scroll { overflow-x: auto; }
+
+/* Op smalle schermen wordt een .tabel-responsief-tabel een gestapelde lijst
+   (elke rij een kaartje, elke cel een label + waarde) in plaats van
+   horizontaal te moeten scrollen. */
+@media (max-width: 640px) {
+  .tabel-responsief table, .tabel-responsief thead, .tabel-responsief tbody,
+  .tabel-responsief th, .tabel-responsief td, .tabel-responsief tr {
+    display: block;
+  }
+  .tabel-responsief thead tr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabel-responsief tbody tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.75rem;
+    padding: 0.4rem 0.75rem;
+  }
+  .tabel-responsief tbody tr:last-child { margin-bottom: 0; }
+  .tabel-responsief td {
+    border-bottom: none;
+    padding: 0.4rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    text-align: right;
+  }
+  .tabel-responsief td:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .tabel-responsief td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  /* Cellen met complexere inhoud (bv. meerdere knoppen) krijgen het label
+     boven de inhoud in plaats van ernaast, anders wordt het te krap. */
+  .tabel-responsief td.tabel-cel-stapel {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .tabel-responsief td.tabel-cel-stapel::before { margin-bottom: 0.3rem; }
+  .tabel-responsief .tabel-scroll { overflow-x: visible; }
+}
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 0.65rem 0.7rem; border-bottom: 1px solid var(--border); }
 th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }

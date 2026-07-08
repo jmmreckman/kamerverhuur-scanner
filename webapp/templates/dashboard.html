@@ -9,7 +9,7 @@
     <div class="stat-icon warn">{{ icon_contracten() }}</div>
     <div>
       <div class="stat-value">Binnen {{ status.dagen_tot_einddatum // 7 }} weken</div>
-      <div class="stat-label">verloopt kamer {{ kamer.kamer }} ({{ kamer.naam }})</div>
+      <div class="stat-label">komt kamer {{ kamer.kamer }} ({{ kamer.naam }}) leeg</div>
     </div>
   </a>
   {% endfor %}
@@ -18,7 +18,7 @@
     <div class="stat-icon ok">{{ icon_check() }}</div>
     <div>
       <div class="stat-value">Geen</div>
-      <div class="stat-label">contracten lopen binnenkort af</div>
+      <div class="stat-label">kamers komen binnenkort leeg</div>
     </div>
   </div>
   {% endif %}

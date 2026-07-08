@@ -30,6 +30,63 @@
   <h1>Betalingen controleren</h1>
 </div>
 
+{% if net_gecontroleerd %}
+<div class="card">
+  <h2>Resultaat van deze controle</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
+    {% for r in net_gecontroleerd["results"] %}
+    <tr>
+      <td data-label="Kamer">{{ r.tenant.kamer }}</td>
+      <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r.tenant.kamer) }}">{{ r.tenant.naam }}</a></td>
+      <td data-label="Verwacht">{{ r.tenant.verwacht_bedrag|eur }}</td>
+      <td data-label="Ontvangen">{{ r.ontvangen_bedrag|eur }}</td>
+      <td data-label="Status"><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span></td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+
+  {% if net_gecontroleerd["unmatched"] %}
+  <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr>
+    {% for p in net_gecontroleerd["unmatched"] %}
+    <tr>
+      <td data-label="Datum">{{ p.datum.strftime("%d-%m-%Y") }}</td>
+      <td data-label="Van">{{ p.tegenpartij_naam }}</td>
+      <td data-label="Bedrag">{{ p.bedrag|eur }}</td>
+      <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p.omschrijving }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% elif cache %}
+<div class="card">
+  <h2>Laatste controle ({{ cache["gecontroleerd_op"] }})</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
+    {% for r in cache["resultaten"] %}
+    <tr>
+      <td data-label="Kamer">{{ r["kamer"] }}</td>
+      <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r["naam"] }}</a></td>
+      <td data-label="Verwacht">{{ r["verwacht_bedrag"]|eur }}</td>
+      <td data-label="Ontvangen">{{ r["ontvangen_bedrag"]|eur }}</td>
+      <td data-label="Status"><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <p>Haalt de inkomende betalingen van deze maand op via bunq, koppelt ze aan de huurders
      en werkt de sheet + geschiedenis bij. Dit kan een paar seconden duren.</p>
@@ -46,61 +103,4 @@
     <button class="btn btn-secondary" type="submit">{{ icon_betalingen() }} Betaalgeschiedenis aanvullen (12 maanden terug)</button>
   </form>
 </div>
-
-{% if net_gecontroleerd %}
-<div class="card">
-  <h2>Resultaat van deze controle</h2>
-  <div class="tabel-scroll">
-  <table>
-    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
-    {% for r in net_gecontroleerd["results"] %}
-    <tr>
-      <td>{{ r.tenant.kamer }}</td>
-      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r.tenant.kamer) }}">{{ r.tenant.naam }}</a></td>
-      <td>{{ r.tenant.verwacht_bedrag|eur }}</td>
-      <td>{{ r.ontvangen_bedrag|eur }}</td>
-      <td><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span></td>
-      <td>{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email) }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  </div>
-
-  {% if net_gecontroleerd["unmatched"] %}
-  <h2>Niet-gekoppelde inkomende betalingen</h2>
-  <div class="tabel-scroll">
-  <table>
-    <tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr>
-    {% for p in net_gecontroleerd["unmatched"] %}
-    <tr>
-      <td>{{ p.datum.strftime("%d-%m-%Y") }}</td>
-      <td>{{ p.tegenpartij_naam }}</td>
-      <td>{{ p.bedrag|eur }}</td>
-      <td>{{ p.omschrijving }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  </div>
-  {% endif %}
-</div>
-{% elif cache %}
-<div class="card">
-  <h2>Laatste controle ({{ cache["gecontroleerd_op"] }})</h2>
-  <div class="tabel-scroll">
-  <table>
-    <tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr>
-    {% for r in cache["resultaten"] %}
-    <tr>
-      <td>{{ r["kamer"] }}</td>
-      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r["naam"] }}</a></td>
-      <td>{{ r["verwacht_bedrag"]|eur }}</td>
-      <td>{{ r["ontvangen_bedrag"]|eur }}</td>
-      <td><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
-      <td>{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None) }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  </div>
-</div>
-{% endif %}
 {% endblock %}

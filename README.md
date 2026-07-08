@@ -27,15 +27,18 @@ nodig.
 - **Panden beheren** - nieuwe panden toevoegen, bewerken of verwijderen kan
   via de "Panden"-knop in de site zelf (voor beheerders met toegang tot alle
   panden) - geen `properties.json` meer met de hand bewerken op de server.
-- **Dashboard** - vier tegels per pand: "X/Y huurpenningen ontvangen" (deze
-  kalendermaand), het ontvangen bedrag, of er binnenkort (binnen ~2 maanden)
-  een contract afloopt (en zo ja, welke kamer als eerste), en een
-  snelkoppeling naar "Mail het hele huishouden". Daarboven staat, indien van
-  toepassing, een waarschuwing als een tijdelijk huurcontract binnenkort (of
-  al) aangezegd moet worden (wettelijk verplicht 1-3 maanden voor de
-  einddatum, art. 7:271 BW) - eenmaal aangezegd kun je die waarschuwing
-  wegklikken ("Afgehandeld"), ze verdwijnt dan totdat er een nieuw contract
-  met een andere einddatum voor die kamer is.
+- **Dashboard** - tegels per pand: "X/Y huurpenningen ontvangen" (deze
+  kalendermaand), het ontvangen bedrag, per kamer die binnenkort (binnen ~2
+  maanden) leegkomt een eigen tegel ("Binnen X weken komt kamer Y leeg"), en
+  een snelkoppeling naar "Mail het hele huishouden". Daarboven staat, indien
+  van toepassing, een aparte waarschuwing als een tijdelijk huurcontract
+  binnenkort (of al) aangezegd moet worden (wettelijk verplicht 1-3 maanden
+  voor de einddatum, art. 7:271 BW) - eenmaal aangezegd kun je die
+  waarschuwing wegklikken ("Afgehandeld"); ze verdwijnt dan totdat er een
+  nieuw contract met een andere einddatum voor die kamer is. De "komt leeg"-
+  tegel blijft daarna gewoon staan (aangezegd hebben betekent niet dat de
+  kamer al weer verhuurd is) - die verdwijnt vanzelf zodra de kamer een
+  nieuwe huurder (en dus een nieuwe einddatum) heeft.
 - **Kamers** - overzicht van alle kamers van het gekozen pand, klik door naar een
   kamer voor huurder, huurprijs, contract(en), betaalgeschiedenis en een
   betrouwbaarheidsscore (% van de controles op tijd/correct betaald). De
@@ -45,9 +48,14 @@ nodig.
 - **Huurders** - toont en bewerkt de kamer-/huurdersgegevens (Google Sheet blijft
   de opslag op de achtergrond, maar bewerken kan gewoon op de site - geen aparte
   Google-toegang nodig voor medegebruikers).
-- **Betalingen** - knop "Nu controleren": haalt inkomende betalingen van bunq op
-  (alleen van de bunq-rekening die bij dat pand hoort), koppelt ze aan de
-  huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij.
+- **Betalingen** - toont eerst het overzicht wie wel/niet betaald heeft, met de
+  actieknoppen (herinnering/ingebrekestelling) per rij; de "Nu controleren"-
+  en "Betaalgeschiedenis aanvullen"-knoppen staan daaronder. Op mobiel wordt
+  de tabel geen brede tabel om horizontaal te scrollen, maar een gestapelde
+  lijst (elke rij een kaartje met labels) die past op het scherm. "Nu
+  controleren" haalt inkomende betalingen van bunq op (alleen van de
+  bunq-rekening die bij dat pand hoort), koppelt ze aan de huurders, toont
+  het resultaat, en schrijft de sheet + geschiedenis bij.
 - **Dagelijkse automatische controle** - draait daarnaast elke ochtend om
   06:00 (Nederlandse tijd) vanzelf dezelfde controle voor alle panden, zodat
   de lijst altijd up-to-date is zonder dat er iemand op de knop hoeft te

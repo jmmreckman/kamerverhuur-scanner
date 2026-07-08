@@ -62,7 +62,7 @@ def test_geen_aflopende_contracten_toont_geen_tegel(app_client):
     client, _config = app_client
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
-    assert "contracten lopen binnenkort af" in body.lower()
+    assert "kamers komen binnenkort leeg" in body.lower()
 
 
 def test_kamer_die_binnen_2_maanden_afloopt_toont_tegel(app_client):
@@ -71,7 +71,7 @@ def test_kamer_die_binnen_2_maanden_afloopt_toont_tegel(app_client):
     FakeSheetClient.kamers = [_kamer(einddatum=einddatum)]
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
-    assert "verloopt kamer 1" in body.lower()
+    assert "komt kamer 1" in body.lower()
 
 
 def test_kamer_die_over_6_maanden_afloopt_toont_geen_tegel(app_client):
@@ -80,7 +80,7 @@ def test_kamer_die_over_6_maanden_afloopt_toont_geen_tegel(app_client):
     FakeSheetClient.kamers = [_kamer(einddatum=einddatum)]
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
-    assert "contracten lopen binnenkort af" in body.lower()
+    assert "kamers komen binnenkort leeg" in body.lower()
 
 
 def test_meerdere_aflopende_contracten_krijgen_elk_een_eigen_tegel(app_client):
@@ -93,8 +93,8 @@ def test_meerdere_aflopende_contracten_krijgen_elk_een_eigen_tegel(app_client):
     ]
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
-    assert "verloopt kamer 1" in body.lower()
-    assert "verloopt kamer 2" in body.lower()
+    assert "komt kamer 1" in body.lower()
+    assert "komt kamer 2" in body.lower()
     assert "+ 1 meer" not in body.lower()
 
 
@@ -115,7 +115,7 @@ def test_mail_snelkoppeling_staat_altijd_op_dashboard(app_client):
     assert "/pand/mahoniestraat/huurders/mailen" in body
 
 
-def test_aanzegging_afhandelen_verbergt_waarschuwing(app_client):
+def test_aanzegging_afhandelen_verbergt_waarschuwing_maar_niet_de_leegkomt_tegel(app_client):
     client, config = app_client
     # binnen de wettelijke aanzegtermijn (1-3 maanden voor einddatum)
     einddatum = (date.today() + timedelta(days=45)).strftime("%d-%m-%Y")
@@ -124,7 +124,7 @@ def test_aanzegging_afhandelen_verbergt_waarschuwing(app_client):
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
     assert "aangezegd moeten worden" in body.lower()
-    assert "verloopt kamer 1" in body.lower()
+    assert "komt kamer 1" in body.lower()
 
     status = bereken_aanzeg_status(einddatum)
     client.post("/pand/mahoniestraat/dashboard/aanzegging-afhandelen", data={
@@ -134,7 +134,10 @@ def test_aanzegging_afhandelen_verbergt_waarschuwing(app_client):
     resp = client.get("/pand/mahoniestraat/")
     body = resp.get_data(as_text=True)
     assert "aangezegd moeten worden" not in body.lower()
-    assert "contracten lopen binnenkort af" in body.lower()
+    # het wegklikken van de wettelijke aanzegging betekent niet dat er al een
+    # nieuwe huurder is - de "komt leeg"-tegel moet dus gewoon blijven staan
+    assert "komt kamer 1" in body.lower()
+    assert "kamers komen binnenkort leeg" not in body.lower()
 
     # de markering staat ook echt in de state-map, niet alleen in de sessie
     assert state.aanzegging_is_afgehandeld("mahoniestraat", "1", status.einddatum.isoformat(), config.state_dir)

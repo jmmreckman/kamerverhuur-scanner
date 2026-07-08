@@ -340,15 +340,14 @@ def create_app(config: Config | None = None) -> Flask:
             for kamer in sheet.get_kamers()
             if kamer.naam
         ]
-        kamer_statussen = [
-            (kamer, status)
-            for kamer, status in kamer_statussen
-            if status
-            and not state.aanzegging_is_afgehandeld(pand_slug, kamer.kamer, status.einddatum.isoformat(), config.state_dir)
-        ]
-        aanzeg_waarschuwingen = [
-            (kamer, status) for kamer, status in kamer_statussen if status.moet_nu_aanzeggen or status.venster_verstreken
-        ]
+        kamer_statussen = [(kamer, status) for kamer, status in kamer_statussen if status]
+
+        # De tegel "kamer komt leeg" is puur informatief (er loopt een contract
+        # af, ongeacht of de wettelijke aanzegging al gedaan is) en blijft dus
+        # staan totdat de kamer daadwerkelijk weer een (nieuw) contract heeft -
+        # wegklikken van de aanzeg-waarschuwing hieronder mag deze niet
+        # verbergen, want aangezegd hebben betekent niet dat er al een nieuwe
+        # huurder gevonden is.
         aflopende_contracten = sorted(
             (
                 (kamer, status)
@@ -357,6 +356,15 @@ def create_app(config: Config | None = None) -> Flask:
             ),
             key=lambda ks: ks[1].dagen_tot_einddatum,
         )
+
+        niet_afgehandeld = [
+            (kamer, status)
+            for kamer, status in kamer_statussen
+            if not state.aanzegging_is_afgehandeld(pand_slug, kamer.kamer, status.einddatum.isoformat(), config.state_dir)
+        ]
+        aanzeg_waarschuwingen = [
+            (kamer, status) for kamer, status in niet_afgehandeld if status.moet_nu_aanzeggen or status.venster_verstreken
+        ]
         return render_template(
             "dashboard.html", cache=cache, totalen=totalen,
             aanzeg_waarschuwingen=aanzeg_waarschuwingen, aflopende_contracten=aflopende_contracten,
