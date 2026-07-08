@@ -38,9 +38,17 @@ nodig.
   Google-toegang nodig voor medegebruikers).
 - **Betalingen** - knop "Nu controleren": haalt inkomende betalingen van bunq op
   (alleen van de bunq-rekening die bij dat pand hoort), koppelt ze aan de
-  huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij. Er
-  wordt niets automatisch op de achtergrond gecontroleerd - alles gebeurt
-  on-demand via de site.
+  huurders, toont het resultaat, en schrijft de sheet + geschiedenis bij.
+- **Dagelijkse automatische controle** - draait daarnaast elke ochtend om
+  06:00 (Nederlandse tijd) vanzelf dezelfde controle voor alle panden, zodat
+  de lijst altijd up-to-date is zonder dat er iemand op de knop hoeft te
+  drukken (zie `scripts/dagelijkse_controle.py` en de `dagelijkse-check`-
+  service in `deploy/docker-compose.yml`). De "Nu controleren"-knop blijft
+  gewoon werken voor tussendoor. Zodra alle kamers van een pand voor de
+  huidige maand "Betaald" staan, gaat er - eenmalig die maand - een mailtje
+  naar de beheerder(s) (`EMAIL_BCC` + eventuele pand-specifieke "Extra BCC")
+  met de melding dat de huur compleet binnen is. Geen SMTP ingesteld? Dan
+  wordt die melding gewoon overgeslagen (de rest van de controle werkt door).
 - **Betaalgeschiedenis aanvullen** - knop op de Betalingen-pagina die in één
   keer de 12 kalendermaanden vóór de huidige maand ophaalt bij bunq en per
   maand een Historie-regel wegschrijft (op basis van de huidige
@@ -82,6 +90,13 @@ nodig.
   groen "Verzonden"-vinkje naast de betreffende knop, zodat in één oogopslag
   duidelijk is of je die huurder deze maand al benaderd hebt. Dat vinkje
   reset vanzelf zodra er een nieuwe kalendermaand begint.
+- **Mail het hele huishouden** - knop op de Huurders-pagina om alle huidige
+  huurders van dat pand in één keer aan te schrijven (bv. "de taxateur komt
+  langs", "we zijn bekend met de lekkage"). Je typt onderwerp/tekst op de
+  site; elke huurder krijgt een eigen, losse mail (ze zien elkaars adres
+  niet), met dezelfde BCC/Reply-To-instelling als de betaalherinneringen.
+  Huurders zonder bekend e-mailadres worden overgeslagen, met een melding
+  wie dat waren.
 - **Contracten** - vult een sjabloon in met de huurdersgegevens tot een concept-
   huurcontract (HTML, printbaar naar PDF vanuit de browser). **Let op:** dit is
   een voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie de

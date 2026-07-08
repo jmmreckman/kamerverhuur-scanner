@@ -376,6 +376,47 @@ def create_app(config: Config | None = None) -> Flask:
             return redirect(url_for("huurders", pand_slug=pand_slug))
         return render_template("huurder_bewerken.html", kamer=kamer)
 
+    @app.route("/pand/<pand_slug>/huurders/mailen", methods=["GET", "POST"])
+    @login_required
+    def huishouden_mailen(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        tenants = sheet.get_tenants()
+        tenants_met_mail = [t for t in tenants if t.email]
+        tenants_zonder_mail = [t for t in tenants if not t.email]
+
+        if request.method == "POST":
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            if not onderwerp or not tekst:
+                flash("Onderwerp en tekst zijn verplicht.")
+                return render_template(
+                    "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
+                    tenants_zonder_mail=tenants_zonder_mail, onderwerp=onderwerp, tekst=tekst,
+                )
+            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+            verzonden, mislukt = 0, []
+            for tenant in tenants_met_mail:
+                try:
+                    verstuur_email(config, tenant.email, onderwerp, tekst, bcc=bcc)
+                    verzonden += 1
+                except MailError:
+                    mislukt.append(tenant.naam)
+            if verzonden:
+                flash(f"Mail verstuurd naar {verzonden} huurder(s).")
+            if mislukt:
+                flash(f"Versturen is mislukt voor: {', '.join(mislukt)}.")
+            if tenants_zonder_mail:
+                flash(
+                    "Geen e-mailadres bekend voor: "
+                    f"{', '.join(t.naam for t in tenants_zonder_mail)} - deze hebben niets ontvangen."
+                )
+            return redirect(url_for("huurders", pand_slug=pand_slug))
+
+        return render_template(
+            "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
+            tenants_zonder_mail=tenants_zonder_mail, onderwerp="", tekst="",
+        )
+
     # --- Betalingen ---
 
     @app.route("/pand/<pand_slug>/betalingen", methods=["GET", "POST"])

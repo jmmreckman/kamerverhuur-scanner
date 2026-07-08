@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Mail het huishouden - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Mail het hele huishouden</h1>
+  <p class="muted">Stuurt dezelfde mail apart naar elke huidige huurder van {{ huidig_pand.naam }} - bijvoorbeeld voor
+     een aankondiging (taxateur langs, lekkage, onderhoud). Elke huurder krijgt zijn eigen mail, ze zien elkaars
+     adres niet.</p>
+</div>
+
+<div class="card">
+  <h2>Ontvangers</h2>
+  {% if tenants_met_mail %}
+  <p>Gaat naar {{ tenants_met_mail|length }} huurder(s): {{ tenants_met_mail|map(attribute="naam")|join(", ") }}.</p>
+  {% else %}
+  <p class="muted">Geen enkele huidige huurder heeft een e-mailadres bekend - vul dit eerst in bij Huurders.</p>
+  {% endif %}
+  {% if tenants_zonder_mail %}
+  <p class="muted">Geen e-mailadres bekend voor: {{ tenants_zonder_mail|map(attribute="naam")|join(", ") }} - deze
+     ontvangen dus niets.</p>
+  {% endif %}
+</div>
+
+{% if tenants_met_mail %}
+<div class="card">
+  <form method="post" onsubmit="return confirm('Weet je zeker dat je deze mail nu wilt versturen naar alle {{ tenants_met_mail|length }} huurder(s) van {{ huidig_pand.naam }}?');">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="12" required>{{ tekst }}</textarea>
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

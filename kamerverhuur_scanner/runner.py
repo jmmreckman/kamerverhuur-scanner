@@ -12,11 +12,19 @@ from decimal import Decimal
 from . import state
 from .bunq_client import BunqClient
 from .config import Config
+from .mailer import MailError, verstuur_email
 from .matcher import _bepaal_status, match_tenants_to_payments
 from .models import Pand, Payment, Status, Tenant, TenantResult
 from .sheet_client import SheetClient
 
 logger = logging.getLogger(__name__)
+
+_MAAND_NAMEN_NL = [
+    "januari", "februari", "maart", "april", "mei", "juni",
+    "juli", "augustus", "september", "oktober", "november", "december",
+]
+_ALLES_BETAALD_KAMER_SLEUTEL = "__alle_kamers__"
+_ALLES_BETAALD_SOORT = "alles-betaald"
 
 
 def run_check(
@@ -42,12 +50,48 @@ def run_check(
     results, unmatched = match_tenants_to_payments(tenants, payments, config.bedrag_tolerantie)
 
     if not dry_run:
+        maand = vandaag.strftime("%Y-%m")
         sheet.write_results(results)
-        sheet.upsert_history(results, vandaag.strftime("%Y-%m"))
+        sheet.upsert_history(results, maand)
         state.save(pand.slug, results, len(unmatched), config.state_dir)
         logger.info("[%s] Sheet en geschiedenis bijgewerkt.", pand.slug)
+        _meld_indien_alles_betaald(config, pand, results, maand)
 
     return tenants, results, unmatched
+
+
+def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantResult], maand: str) -> None:
+    """Stuurt eenmalig per pand per maand een kennisgeving naar de
+    beheerder(s) zodra de huur van alle kamers binnen is - handig omdat de
+    dagelijkse automatische controle (zie scripts/dagelijkse_controle.py)
+    niemand actief in de gaten houdt."""
+    if not results or not all(r.status == Status.BETAALD for r in results):
+        return
+    if state.email_verzonden_op(pand.slug, _ALLES_BETAALD_KAMER_SLEUTEL, _ALLES_BETAALD_SOORT, maand, config.state_dir):
+        return  # deze maand al eerder gemeld
+
+    ontvangers = list(dict.fromkeys(config.email_bcc + pand.extra_bcc))
+    if not ontvangers:
+        logger.info(
+            "[%s] Geen EMAIL_BCC/extra_bcc-adressen ingesteld - 'alles betaald'-melding overgeslagen.", pand.slug
+        )
+        return
+
+    jaar, maandnr = maand.split("-")
+    maandtekst = f"{_MAAND_NAMEN_NL[int(maandnr) - 1]} {jaar}"
+    onderwerp = f"Alle huur ontvangen - {pand.naam} - {maandtekst}"
+    tekst = (
+        f"Beste beheerder,\n\n"
+        f"De huur van alle kamers van {pand.naam} is voor {maandtekst} volledig ontvangen.\n\n"
+        f"Geen verdere actie nodig.\n\n"
+        f"- Steenhub (automatisch bericht)"
+    )
+    try:
+        verstuur_email(config, ", ".join(ontvangers), onderwerp, tekst)
+    except MailError:
+        logger.exception("[%s] Versturen van 'alles betaald'-melding is mislukt.", pand.slug)
+        return
+    state.markeer_email_verzonden(pand.slug, _ALLES_BETAALD_KAMER_SLEUTEL, _ALLES_BETAALD_SOORT, maand, config.state_dir)
 
 
 def _voorgaande_maanden(vandaag: date, aantal: int) -> list[tuple[int, int]]:

@@ -16,6 +16,20 @@ services:
     expose:
       - "8000"
 
+  # Draait elke ochtend om 06:00 (Europe/Amsterdam) automatisch dezelfde
+  # betaalcontrole als de "Nu controleren"-knop, voor alle panden. Zelfde
+  # image als 'app', alleen een ander opstartcommando - geen losse cron-
+  # daemon nodig. Zie scripts/dagelijkse_controle.py.
+  dagelijkse-check:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "scripts/dagelijkse_controle.py"]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_plus %}
+{% from "_icons.html" import icon_plus, icon_inbox %}
 {% block title %}Huurders - {{ huidig_pand.naam }}{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -8,6 +8,7 @@
 </div>
 <div class="card">
   <a class="btn" href="{{ url_for('huurder_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuwe kamer toevoegen</a>
+  <a class="btn btn-secondary" href="{{ url_for('huishouden_mailen', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Mail het hele huishouden</a>
   <a class="btn btn-secondary" href="{{ sheet_url }}" target="_blank" rel="noopener">
     Optioneel: bekijk de ruwe Google Sheet
   </a>
