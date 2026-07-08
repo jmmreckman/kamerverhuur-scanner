@@ -45,6 +45,30 @@ def test_verstuur_email_gebruikt_starttls_en_bcc(mock_smtp_cls):
     assert "info@steenhub.nl" in verzonden_bericht["From"]
 
 
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_expliciete_bcc_overschrijft_config(mock_smtp_cls):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()  # config.email_bcc = eigenaar + justin
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", bcc=["alleen-dit-pand@example.com"])
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Bcc"] == "alleen-dit-pand@example.com"
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_lege_bcc_lijst_laat_bcc_header_weg(mock_smtp_cls):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", bcc=[])
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Bcc"] is None
+
+
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP_SSL")
 def test_verstuur_email_gebruikt_ssl_op_poort_465(mock_smtp_ssl_cls):
     smtp_instance = MagicMock()

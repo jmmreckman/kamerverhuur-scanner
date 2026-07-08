@@ -243,6 +243,7 @@ def create_app(config: Config | None = None) -> Flask:
             "aanmeldingen_worksheet": form.get("aanmeldingen_worksheet", "").strip() or "Aanmeldingen",
             "google_drive_folder_id": form.get("google_drive_folder_id", "").strip() or None,
             "bunq_rekening_iban": form.get("bunq_rekening_iban", "").strip().replace(" ", "").upper(),
+            "extra_bcc": [e.strip() for e in form.get("extra_bcc", "").split(",") if e.strip()],
         }
 
     @app.route("/beheer/panden")
@@ -414,8 +415,9 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             onderwerp = request.form.get("onderwerp", "").strip()
             tekst = request.form.get("tekst", "").strip()
+            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
             try:
-                verstuur_email(config, kamer.email, onderwerp, tekst)
+                verstuur_email(config, kamer.email, onderwerp, tekst, bcc=bcc)
             except MailError as exc:
                 flash(str(exc))
                 return render_template(

@@ -45,6 +45,11 @@
     <label>bunq IBAN van de rekening waar de huur van dit pand op binnenkomt
       <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>
     </label>
+    <label>Extra BCC bij herinnering/ingebrekestelling-mails van dit pand (optioneel, komma-gescheiden -
+      bv. een mede-eigenaar van alleen dit pand). Je eigen adres uit EMAIL_BCC in .env gaat sowieso
+      altijd mee, voor alle panden.
+      <input type="text" name="extra_bcc" value="{{ pand.extra_bcc|join(', ') if pand else '' }}">
+    </label>
     <button class="btn" type="submit">Opslaan</button>
     <a class="btn btn-secondary" href="{{ url_for('panden_overzicht') }}">Annuleren</a>
   </form>

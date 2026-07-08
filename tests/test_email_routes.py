@@ -34,16 +34,15 @@ class FakeSheetClient:
 def verstuurde_mails(monkeypatch):
     verstuurd = []
 
-    def _fake_verstuur_email(config, aan, onderwerp, tekst):
-        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst})
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None):
+        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
 
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
     return verstuurd
 
 
-@pytest.fixture
-def app_client(tmp_path, monkeypatch):
+def _app_client(tmp_path, monkeypatch, extra_bcc=None, email_bcc=None):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
     monkeypatch.chdir(tmp_path)
@@ -51,7 +50,8 @@ def app_client(tmp_path, monkeypatch):
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125"},
+         "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125",
+         "extra_bcc": extra_bcc or []},
     ]))
     users_file = tmp_path / "users.json"
     users_file.write_text(json.dumps({
@@ -62,12 +62,18 @@ def app_client(tmp_path, monkeypatch):
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
         bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+        email_bcc=email_bcc or [],
     )
     app = create_app(config)
     app.testing = True
     client = app.test_client()
     client.post("/login", data={"username": "beheerder", "password": "geheim123"})
     return client
+
+
+@pytest.fixture
+def app_client(tmp_path, monkeypatch):
+    return _app_client(tmp_path, monkeypatch)
 
 
 def test_email_voorbeeldscherm_toont_opgestelde_tekst(app_client):
@@ -103,7 +109,7 @@ def test_versturen_roept_mailer_aan_en_flasht_bevestiging(app_client, verstuurde
 def test_mailerror_bij_versturen_toont_foutmelding_en_behoudt_formulier(app_client, monkeypatch):
     import webapp.app as appmodule
 
-    def _kapotte_mailer(config, aan, onderwerp, tekst):
+    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None):
         raise MailError("SMTP niet ingesteld")
 
     monkeypatch.setattr(appmodule, "verstuur_email", _kapotte_mailer)
@@ -114,3 +120,24 @@ def test_mailerror_bij_versturen_toont_foutmelding_en_behoudt_formulier(app_clie
     )
     assert resp.status_code == 200
     assert "SMTP niet ingesteld" in resp.get_data(as_text=True)
+
+
+def test_bcc_combineert_globale_en_pand_specifieke_adressen(tmp_path, monkeypatch, verstuurde_mails):
+    client = _app_client(
+        tmp_path, monkeypatch,
+        extra_bcc=["justin@example.com"], email_bcc=["eigenaar@example.com"],
+    )
+    client.post(
+        "/pand/mahoniestraat/kamers/3/email/herinnering",
+        data={"onderwerp": "Test onderwerp", "tekst": "Test tekst"},
+    )
+    assert verstuurde_mails[0]["bcc"] == ["eigenaar@example.com", "justin@example.com"]
+
+
+def test_bcc_zonder_extra_bcc_bevat_alleen_globaal_adres(tmp_path, monkeypatch, verstuurde_mails):
+    client = _app_client(tmp_path, monkeypatch, email_bcc=["eigenaar@example.com"])
+    client.post(
+        "/pand/mahoniestraat/kamers/3/email/herinnering",
+        data={"onderwerp": "Test onderwerp", "tekst": "Test tekst"},
+    )
+    assert verstuurde_mails[0]["bcc"] == ["eigenaar@example.com"]

@@ -16,7 +16,10 @@ class MailError(RuntimeError):
     """SMTP niet (volledig) geconfigureerd, of versturen is mislukt."""
 
 
-def verstuur_email(config: Config, aan: str, onderwerp: str, tekst: str) -> None:
+def verstuur_email(config: Config, aan: str, onderwerp: str, tekst: str, bcc: list[str] | None = None) -> None:
+    """Verstuurt de mail. `bcc` overschrijft (indien gegeven) config.email_bcc -
+    zo kan de aanroeper per pand extra BCC-adressen toevoegen (bv. een
+    mede-eigenaar van alleen dat pand) zonder dat die voor alle panden gelden."""
     if not (config.smtp_host and config.smtp_username and config.smtp_password and config.smtp_from_email):
         raise MailError(
             "E-mail versturen is nog niet ingesteld - vul SMTP_HOST, SMTP_PORT, "
@@ -28,8 +31,9 @@ def verstuur_email(config: Config, aan: str, onderwerp: str, tekst: str) -> None
     afzender = f"{config.smtp_from_naam} <{config.smtp_from_email}>" if config.smtp_from_naam else config.smtp_from_email
     msg["From"] = afzender
     msg["To"] = aan
-    if config.email_bcc:
-        msg["Bcc"] = ", ".join(config.email_bcc)
+    bcc_adressen = bcc if bcc is not None else config.email_bcc
+    if bcc_adressen:
+        msg["Bcc"] = ", ".join(bcc_adressen)
     msg.set_content(tekst)
 
     try:

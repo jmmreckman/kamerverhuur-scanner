@@ -76,6 +76,10 @@ class Pand:
     google_drive_folder_id: str | None
     bunq_rekening_iban: str
     aanmeldingen_worksheet: str = "Aanmeldingen"
+    # Extra BCC-adressen die alleen voor dít pand meegaan bij herinnering/
+    # ingebrekestelling-mails (bv. een mede-eigenaar van alleen dit pand) -
+    # naast de adressen in EMAIL_BCC (.env), die voor alle panden gelden.
+    extra_bcc: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

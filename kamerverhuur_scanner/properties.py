@@ -13,6 +13,17 @@ class PropertiesError(RuntimeError):
     pass
 
 
+def _normaliseer_extra_bcc(waarde) -> list[str]:
+    """extra_bcc mag in properties.json een lijst zijn (normale vorm, zoals
+    zet_pand 'm opslaat) of - bij handmatig bewerken - een komma-gescheiden
+    string."""
+    if not waarde:
+        return []
+    if isinstance(waarde, str):
+        return [e.strip() for e in waarde.split(",") if e.strip()]
+    return [str(e).strip() for e in waarde if str(e).strip()]
+
+
 def load_properties(path: str) -> list[Pand]:
     file_path = Path(path)
     if not file_path.exists():
@@ -41,6 +52,7 @@ def load_properties(path: str) -> list[Pand]:
                     google_drive_folder_id=item.get("google_drive_folder_id") or None,
                     bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
                     aanmeldingen_worksheet=item.get("aanmeldingen_worksheet", "Aanmeldingen"),
+                    extra_bcc=_normaliseer_extra_bcc(item.get("extra_bcc")),
                 )
             )
         except KeyError as exc:

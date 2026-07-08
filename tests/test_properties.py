@@ -35,6 +35,37 @@ def test_zet_pand_werkt_bestaand_pand_bij_op_basis_van_slug(tmp_path):
     assert panden[0].naam == "Mahoniestraat 15 (bijgewerkt)"
 
 
+def test_extra_bcc_als_lijst_uit_zet_pand(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x",
+        "bunq_rekening_iban": "NL81BUNQ2163127125", "extra_bcc": ["justin@example.com"],
+    })
+    panden = load_properties(str(path))
+    assert panden[0].extra_bcc == ["justin@example.com"]
+
+
+def test_extra_bcc_ontbreekt_geeft_lege_lijst(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "baumannlaan", "naam": "Baumannlaan 70b", "google_sheet_id": "y",
+         "bunq_rekening_iban": "NL00TEST0000000000"},
+    ]))
+    panden = load_properties(str(path))
+    assert panden[0].extra_bcc == []
+
+
+def test_extra_bcc_als_komma_string_wordt_genormaliseerd(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "x",
+         "bunq_rekening_iban": "NL81BUNQ2163127125", "extra_bcc": "justin@example.com, extra@example.com"},
+    ]))
+    panden = load_properties(str(path))
+    assert panden[0].extra_bcc == ["justin@example.com", "extra@example.com"]
+
+
 def test_verwijder_pand(tmp_path):
     path = tmp_path / "properties.json"
     path.write_text(json.dumps([

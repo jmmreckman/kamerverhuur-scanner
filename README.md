@@ -219,13 +219,19 @@ SMTP_USERNAME=info@steenhub.nl
 SMTP_PASSWORD=jouw-wachtwoord-of-app-wachtwoord
 SMTP_FROM_EMAIL=info@steenhub.nl
 SMTP_FROM_NAAM=Steenhub
-EMAIL_BCC=jouw-eigen-email@voorbeeld.nl,justin@voorbeeld.nl
+EMAIL_BCC=jouw-eigen-email@voorbeeld.nl
 ```
 
-`EMAIL_BCC` is een komma-gescheiden lijst - elke verstuurde herinnering/
-ingebrekestelling gaat automatisch ook (blind kopie) naar die adressen.
+`EMAIL_BCC` is een komma-gescheiden lijst en geldt voor **alle** panden - zet
+hier dus alleen adressen in die overal mogen meelezen (bv. je eigen adres).
 Zonder deze instellingen blijven de knoppen gewoon zichtbaar, maar krijg je
 bij het versturen een nette foutmelding in plaats van een crash.
+
+Wil je dat een mede-eigenaar alleen bij één specifiek pand wordt meegekopieerd
+(bv. Justin, die alleen mede-eigenaar is van Mahoniestraat en niet van je
+andere panden)? Vul dat adres dan in bij "Extra BCC" op de bewerkpagina van
+dát pand (Panden > Bewerken) in plaats van in `EMAIL_BCC` - die adressen gaan
+alléén mee bij mails van dat ene pand, naast de adressen uit `EMAIL_BCC`.
 
 > De ingebrekestelling-tekst is een standaardformulering (redelijke termijn
 > om alsnog te betalen, art. 6:82 BW) - geen juridisch advies. Je kunt de
