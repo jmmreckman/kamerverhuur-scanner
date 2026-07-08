@@ -30,6 +30,13 @@ class FakeWorksheet:
         self.appended_rows.extend(rows)
         self._rows.extend(rows)
 
+    def append_row(self, row, value_input_option="USER_ENTERED"):
+        self.appended_rows.append(row)
+        self._rows.append(row)
+
+    def clear(self):
+        self._rows = []
+
 
 def _sheet_client(rows) -> tuple[SheetClient, FakeWorksheet]:
     client = object.__new__(SheetClient)
@@ -198,3 +205,64 @@ def test_get_geschiedenis_negeert_oud_datumformaat():
     assert len(geschiedenis) == 1
     assert geschiedenis[0].maand == "2026-07"
     assert geschiedenis[0].betaaldatum == date(2026, 7, 3)
+
+
+def test_upsert_history_meerdere_bestaande_maanden_update_juiste_rij():
+    # Regressietest: bij meerdere bestaande maanden voor dezelfde kamer moest
+    # upsert_history de rij bijwerken die echt bij de opgegeven maand hoort -
+    # eerder werd (door alleen op kamer te sleutelen) soms de verkeerde/
+    # laatst geziene rij vergeleken, waardoor er per ongeluk een dubbele rij
+    # bijkwam in plaats van de bestaande bijgewerkt te worden.
+    bestaand = [
+        HISTORIE_HEADER,
+        ["2026-04", "1", "Jan", "650,00", "650,00", "Betaald", "03-04-2026"],
+        ["2026-05", "1", "Jan", "650,00", "0,00", "Nog niet ontvangen", ""],
+        ["2026-06", "1", "Jan", "650,00", "1300,00", "Te veel ontvangen", "10-06-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(bestaand)
+
+    resultaat = _result(betaaldatum=date(2026, 4, 8))
+    client.upsert_history([resultaat], maand="2026-04")
+
+    assert ws.appended_rows == []  # geen dubbele rij - de bestaande aprilrij is bijgewerkt
+    assert len(ws.batch_updates) == 1
+    bijgewerkte_rij = ws.batch_updates[0][0]["values"][0]
+    assert bijgewerkte_rij[0] == "2026-04"
+    assert bijgewerkte_rij[6] == "08-04-2026"
+    # mei- en junirij blijven ongemoeid staan
+    assert ws.get_all_values()[2][0] == "2026-05"
+    assert ws.get_all_values()[3][0] == "2026-06"
+
+
+def test_dedupliceer_geschiedenis_houdt_laatste_regel_en_verwijdert_rest():
+    rows = [
+        HISTORIE_HEADER,
+        ["2026-05", "1", "Jan", "650,00", "0,00", "Nog niet ontvangen", ""],  # dubbel, oud
+        ["2026-06", "1", "Jan", "650,00", "1300,00", "Te veel ontvangen", "10-06-2026"],  # dubbel, oud
+        ["2026-05", "1", "Jan", "650,00", "650,00", "Betaald", "10-06-2026"],  # dubbel, nieuw (correct)
+        ["2026-06", "1", "Jan", "650,00", "650,00", "Betaald", "10-06-2026"],  # dubbel, nieuw (correct)
+        ["2026-05", "2", "Piet", "700,00", "700,00", "Betaald", "02-05-2026"],  # geen duplicaat
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    verwijderd = client.dedupliceer_geschiedenis()
+
+    assert verwijderd == 2
+    overgebleven = ws.get_all_values()
+    assert len(overgebleven) == 4  # koprij + 3 unieke (kamer, maand)-combinaties
+    kamer1_mei = next(r for r in overgebleven[1:] if r[1] == "1" and r[0] == "2026-05")
+    assert kamer1_mei[5] == "Betaald"  # de nieuwe/onderste variant is bewaard, niet de oude
+
+
+def test_dedupliceer_geschiedenis_zonder_duplicaten_doet_niets():
+    rows = [
+        HISTORIE_HEADER,
+        ["2026-05", "1", "Jan", "650,00", "650,00", "Betaald", "02-05-2026"],
+        ["2026-06", "1", "Jan", "650,00", "650,00", "Betaald", "03-06-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    verwijderd = client.dedupliceer_geschiedenis()
+
+    assert verwijderd == 0
+    assert ws.get_all_values() == rows

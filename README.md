@@ -56,7 +56,10 @@ nodig.
   maanden - met de datum van de inhaalbetaling als betaaldatum voor de
   oudere maand, zodat zichtbaar blijft dat die laat was - in plaats van de
   oudere maand als "Nog niet ontvangen" en de nieuwere als "Te veel
-  ontvangen" te laten staan.
+  ontvangen" te laten staan. Ruimt bij elke druk op de knop ook automatisch
+  eventuele dubbele Historie-regels voor dezelfde (kamer, maand)-combinatie
+  op (kon ontstaan door een inmiddels gefixte bug) - je hoeft dit dus nooit
+  zelf met de hand in de sheet te doen.
 - **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
   "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
   herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"

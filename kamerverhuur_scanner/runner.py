@@ -125,6 +125,9 @@ def backfill_geschiedenis(
 
     logger.info("[%s] Geschiedenis aanvullen sinds %s...", pand.slug, zoek_vanaf)
     sheet = SheetClient(config, pand)
+    verwijderd = sheet.dedupliceer_geschiedenis()
+    if verwijderd:
+        logger.info("[%s] %d dubbele historieregel(s) opgeschoond.", pand.slug, verwijderd)
     tenants = sheet.get_tenants()
 
     bunq = BunqClient(config)

@@ -228,8 +228,12 @@ class SheetClient:
         controleren binnen dezelfde maand."""
         ws = self._history_worksheet()
         bestaande = ws.get_all_values()
-        rij_voor_kamer = {
-            row[1].strip(): i
+        # Sleutel op (kamer, maand) samen - alleen op kamer sleutelen liet bij
+        # meerdere bestaande maanden voor dezelfde kamer alleen de laatst
+        # geziene rij over, waardoor eerdere maanden niet meer gevonden
+        # werden en er per ongeluk dubbele regels bijkwamen.
+        rij_voor_kamer_maand = {
+            (row[1].strip(), row[0].strip()): i
             for i, row in enumerate(bestaande[1:], start=2)
             if len(row) > 1
         }
@@ -247,9 +251,8 @@ class SheetClient:
                 r.status.value,
                 betaaldatum.strftime("%d-%m-%Y") if betaaldatum else "",
             ]
-            rij_index = rij_voor_kamer.get(r.tenant.kamer)
-            bestaande_maand = bestaande[rij_index - 1][0].strip() if rij_index else None
-            if rij_index and bestaande_maand == maand:
+            rij_index = rij_voor_kamer_maand.get((r.tenant.kamer, maand))
+            if rij_index:
                 updates.append({"range": f"A{rij_index}:G{rij_index}", "values": [rij]})
             else:
                 nieuwe_rijen.append(rij)
@@ -258,6 +261,35 @@ class SheetClient:
             ws.batch_update(updates, value_input_option="USER_ENTERED")
         if nieuwe_rijen:
             ws.append_rows(nieuwe_rijen, value_input_option="USER_ENTERED")
+
+    def dedupliceer_geschiedenis(self) -> int:
+        """Verwijdert dubbele Historie-regels voor dezelfde (kamer, maand) -
+        combinatie (kon ontstaan door een bug in upsert_history) en houdt de
+        ONDERSTE (dus laatst weggeschreven, meest recente) regel. Geeft het
+        aantal verwijderde regels terug."""
+        ws = self._history_worksheet()
+        rows = ws.get_all_values()
+        if len(rows) <= 1:
+            return 0
+        header, data_rows = rows[0], rows[1:]
+
+        laatste_per_sleutel: dict[tuple[str, str], list[str]] = {}
+        volgorde: list[tuple[str, str]] = []
+        for row in data_rows:
+            row = row + [""] * (7 - len(row))
+            sleutel = (row[1].strip(), row[0].strip())
+            if sleutel not in laatste_per_sleutel:
+                volgorde.append(sleutel)
+            laatste_per_sleutel[sleutel] = row  # overschrijft met de laatst geziene (= onderste) rij
+
+        schoon = [laatste_per_sleutel[sleutel] for sleutel in volgorde]
+        verwijderd = len(data_rows) - len(schoon)
+        if verwijderd > 0:
+            ws.clear()
+            ws.append_row(header, value_input_option="USER_ENTERED")
+            if schoon:
+                ws.append_rows(schoon, value_input_option="USER_ENTERED")
+        return verwijderd
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
         ws = self._history_worksheet()

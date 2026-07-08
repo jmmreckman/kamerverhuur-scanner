@@ -101,12 +101,17 @@ def _config() -> Config:
 class FakeSheetClient:
     def __init__(self, _config, _pand):
         self.upsert_calls = []
+        self.dedupliceer_aangeroepen = False
 
     def get_tenants(self):
         return [Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))]
 
     def upsert_history(self, results, maand):
         self.upsert_calls.append((maand, results))
+
+    def dedupliceer_geschiedenis(self):
+        self.dedupliceer_aangeroepen = True
+        return 0
 
 
 class FakeBunqClient:
@@ -134,6 +139,22 @@ def test_backfill_geschiedenis_slaat_huidige_maand_over(monkeypatch):
     assert aantal == 3
     # since moet op de vroegste maand (april) beginnen
     assert FakeBunqClient.laatste_since == date(2026, 4, 1)
+
+
+def test_backfill_geschiedenis_ruimt_eerst_dubbele_regels_op(monkeypatch):
+    sheet_instances = []
+
+    def _sheet_factory(config, pand):
+        instance = FakeSheetClient(config, pand)
+        sheet_instances.append(instance)
+        return instance
+
+    monkeypatch.setattr(runner, "SheetClient", _sheet_factory)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClient)
+
+    backfill_geschiedenis(_config(), _pand(), aantal_maanden=3, vandaag=date(2026, 7, 8))
+
+    assert sheet_instances[0].dedupliceer_aangeroepen is True
 
 
 def test_backfill_geschiedenis_verdeelt_inhaalbetaling_cumulatief(monkeypatch):
