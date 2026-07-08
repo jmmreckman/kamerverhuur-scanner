@@ -62,6 +62,13 @@ def main() -> None:
         logger.error("Configuratiefout: %s", exc)
         raise SystemExit(1)
 
+    # Meteen bij opstarten ook een controle uitvoeren (bv. na elke nieuwe
+    # deploy) - anders reset elke herstart de wachttijd tot 06:00, en kan de
+    # dagelijkse controle bij vaker deployen op een dag helemaal overgeslagen
+    # worden totdat de container een keer een volle nacht blijft draaien.
+    logger.info("Container gestart - meteen een controle uitvoeren, naast het dagelijkse 06:00-schema.")
+    _draai_alle_panden(config)
+
     while True:
         wachttijd = _seconden_tot_volgende_run()
         logger.info("Volgende automatische controle over %.0f minuten (06:00 Nederlandse tijd).", wachttijd / 60)

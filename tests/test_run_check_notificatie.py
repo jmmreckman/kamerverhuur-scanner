@@ -157,3 +157,25 @@ def test_melding_gebruikt_ook_pand_specifieke_extra_bcc(monkeypatch, tmp_path, v
     run_check(_config(tmp_path), _pand(extra_bcc=["justin@example.com"]), dry_run=False)
 
     assert verstuurde_mails[0]["aan"] == "eigenaar@example.com, justin@example.com"
+
+
+class FakeSheetClientHistorieFaalt(FakeSheetClient):
+    """Simuleert een falende Historie-sheet-schrijfactie (bv. een tijdelijke
+    Google Sheets-hapering), terwijl write_results wel gewoon lukt."""
+
+    def upsert_history(self, results, maand):
+        raise RuntimeError("Google Sheets tijdelijk niet bereikbaar")
+
+
+def test_falende_historie_schrijfactie_stopt_de_rest_van_run_check_niet(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientHistorieFaalt)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClient)
+
+    from kamerverhuur_scanner import state
+
+    tenants, results, unmatched = run_check(_config(tmp_path), _pand(), dry_run=False)
+
+    assert len(results) == 1
+    cache = state.load("mahoniestraat", state_dir=str(tmp_path))
+    assert cache is not None
+    assert cache["resultaten"][0]["kamer"] == "1"

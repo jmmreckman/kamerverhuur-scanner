@@ -52,7 +52,15 @@ def run_check(
     if not dry_run:
         maand = vandaag.strftime("%Y-%m")
         sheet.write_results(results)
-        sheet.upsert_history(results, maand)
+        try:
+            sheet.upsert_history(results, maand)
+        except Exception:
+            # De actuele status (hierboven, en state.save() hieronder) is al
+            # opgeslagen - een hapering bij het wegschrijven van de Historie-
+            # sheet mag de rest van de controle niet laten mislukken. De
+            # kamerpagina vult de lopende maand zo nodig zelf aan vanuit de
+            # state-cache (zie webapp/reliability.py:voeg_actuele_maand_toe).
+            logger.exception("[%s] Bijwerken van de Historie-sheet voor %s is mislukt.", pand.slug, maand)
         state.save(pand.slug, results, len(unmatched), config.state_dir)
         logger.info("[%s] Sheet en geschiedenis bijgewerkt.", pand.slug)
         _meld_indien_alles_betaald(config, pand, results, maand)

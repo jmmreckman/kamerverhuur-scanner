@@ -38,7 +38,10 @@ nodig.
   met een andere einddatum voor die kamer is.
 - **Kamers** - overzicht van alle kamers van het gekozen pand, klik door naar een
   kamer voor huurder, huurprijs, contract(en), betaalgeschiedenis en een
-  betrouwbaarheidsscore (% van de controles op tijd/correct betaald).
+  betrouwbaarheidsscore (% van de controles op tijd/correct betaald). De
+  lopende kalendermaand staat vanaf de 1e gewoon in die lijst (op basis van
+  de laatste "Nu controleren"-uitkomst), ook al is de Historie-sheet zelf nog
+  niet bijgewerkt.
 - **Huurders** - toont en bewerkt de kamer-/huurdersgegevens (Google Sheet blijft
   de opslag op de achtergrond, maar bewerken kan gewoon op de site - geen aparte
   Google-toegang nodig voor medegebruikers).
@@ -49,12 +52,19 @@ nodig.
   06:00 (Nederlandse tijd) vanzelf dezelfde controle voor alle panden, zodat
   de lijst altijd up-to-date is zonder dat er iemand op de knop hoeft te
   drukken (zie `scripts/dagelijkse_controle.py` en de `dagelijkse-check`-
-  service in `deploy/docker-compose.yml`). De "Nu controleren"-knop blijft
-  gewoon werken voor tussendoor. Zodra alle kamers van een pand voor de
-  huidige maand "Betaald" staan, gaat er - eenmalig die maand - een mailtje
-  naar de beheerder(s) (`EMAIL_BCC` + eventuele pand-specifieke "Extra BCC")
-  met de melding dat de huur compleet binnen is. Geen SMTP ingesteld? Dan
-  wordt die melding gewoon overgeslagen (de rest van de controle werkt door).
+  service in `deploy/docker-compose.yml`). Draait ook meteen één keer bij het
+  opstarten van de container (dus ook na elke nieuwe deploy), zodat een
+  herstart de 06:00-controle nooit per ongeluk overslaat. De "Nu
+  controleren"-knop blijft gewoon werken voor tussendoor. Zodra alle kamers
+  van een pand voor de huidige maand "Betaald" staan, gaat er - eenmalig die
+  maand - een mailtje naar de beheerder(s) (`EMAIL_BCC` + eventuele
+  pand-specifieke "Extra BCC") met de melding dat de huur compleet binnen is.
+  Geen SMTP ingesteld? Dan wordt die melding gewoon overgeslagen (de rest van
+  de controle werkt door). Lukt het wegschrijven van de Historie-sheet een
+  keer niet (bv. een tijdelijke Google Sheets-hapering), dan wordt dat alleen
+  gelogd - de actuele status blijft gewoon bijgewerkt, en de lopende maand
+  verschijnt dan alsnog in de betaalgeschiedenis op de kamerpagina (zie
+  hieronder).
 - **Betaalgeschiedenis aanvullen** - knop op de Betalingen-pagina die in één
   keer de 12 kalendermaanden vóór de huidige maand ophaalt bij bunq en per
   maand een Historie-regel wegschrijft (op basis van de huidige

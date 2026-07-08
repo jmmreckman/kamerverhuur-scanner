@@ -32,7 +32,7 @@ from . import ads, contracts
 from .aanmeldingen import AanmeldingFout, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
-from .reliability import bereken_betrouwbaarheid
+from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
 from .reminders import bouw_herinnering, bouw_ingebrekestelling
 
 load_dotenv()
@@ -560,13 +560,16 @@ def create_app(config: Config | None = None) -> Flask:
     def kamer_detail(pand_slug: str, kamer_naam: str):
         sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
+        cache_status = state.status_voor_kamer(state.load(pand_slug, config.state_dir), kamer_naam)
         geschiedenis = sheet.get_geschiedenis(kamer_naam)
+        if kamer.naam:
+            geschiedenis = voeg_actuele_maand_toe(geschiedenis, cache_status, kamer_naam, kamer.naam)
         return render_template(
             "kamer_detail.html",
             kamer=kamer,
             geschiedenis=list(reversed(geschiedenis)),
             betrouwbaarheid=bereken_betrouwbaarheid(geschiedenis),
-            cache_status=state.status_voor_kamer(state.load(pand_slug, config.state_dir), kamer_naam),
+            cache_status=cache_status,
             contracten=contracts.list_contracten_voor_kamer(pand_slug, kamer_naam),
             aanzeg_status=bereken_aanzeg_status(kamer.contract_einddatum),
         )
