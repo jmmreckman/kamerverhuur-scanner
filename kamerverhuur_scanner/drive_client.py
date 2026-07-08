@@ -91,9 +91,15 @@ class DriveClient:
         return self.vind_map(naam, folder_id) or self.maak_map(naam, folder_id)
 
     def upload_bestand(self, bestandsnaam: str, mimetype: str, inhoud: bytes, folder_id: str | None = None) -> str:
-        media = MediaIoBaseUpload(io.BytesIO(inhoud), mimetype=mimetype or "application/octet-stream", resumable=False)
+        # resumable=True (i.p.v. één enkele upload-request) en num_retries, zodat
+        # grotere foto's/video's (mobiele telefoons produceren al snel 5-15MB per
+        # foto) niet in één keer hoeven te lukken - anders faalt de upload met
+        # een onbeholpen "Internal Server Error" bij een haperende verbinding.
+        media = MediaIoBaseUpload(
+            io.BytesIO(inhoud), mimetype=mimetype or "application/octet-stream", resumable=True
+        )
         metadata = {"name": bestandsnaam, "parents": [folder_id or self.root_folder_id]}
-        resultaat = self._service.files().create(body=metadata, media_body=media, fields="id").execute()
+        resultaat = self._service.files().create(body=metadata, media_body=media, fields="id").execute(num_retries=3)
         return resultaat["id"]
 
     def verwijder_bestand(self, file_id: str) -> None:

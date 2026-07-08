@@ -1,0 +1,101 @@
+"""Tests dat een falende Google Drive-upload (bv. een netwerkfout of een te
+groot bestand) een nette foutmelding geeft in plaats van een onbeholpen
+Internal Server Error."""
+import json
+from decimal import Decimal
+from io import BytesIO
+
+import pytest
+from werkzeug.security import generate_password_hash
+
+from kamerverhuur_scanner.config import Config
+from kamerverhuur_scanner.models import Tenant
+from webapp.app import create_app
+
+KAMER_1 = Tenant(
+    row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"),
+    beschikbaar=True, advertentie_map_id="map123",
+)
+
+
+class FakeSheetClient:
+    def __init__(self, _config, _pand):
+        pass
+
+    def get_kamers(self):
+        return [KAMER_1]
+
+    def update_aanbod(self, *args, **kwargs):
+        pass
+
+    def add_aanmelding(self, *args, **kwargs):
+        pass
+
+
+class FalendeDriveClient:
+    """Simuleert een Google Drive-fout (bv. een time-out bij een groot bestand)."""
+    def __init__(self, _config, _pand):
+        pass
+
+    def vind_of_maak_map(self, naam, folder_id=None):
+        return "map123"
+
+    def upload_bestand(self, *args, **kwargs):
+        raise RuntimeError("simulated Google Drive-fout (bv. time-out bij een groot bestand)")
+
+    def list_bestanden(self, *args, **kwargs):
+        return []
+
+    def get_pad(self, *args, **kwargs):
+        return []
+
+
+@pytest.fixture
+def app_client(tmp_path, monkeypatch):
+    import webapp.app as appmodule
+    monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
+    monkeypatch.setattr(appmodule, "DriveClient", FalendeDriveClient)
+    monkeypatch.chdir(tmp_path)
+
+    properties_file = tmp_path / "properties.json"
+    properties_file.write_text(json.dumps([
+        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
+         "google_drive_folder_id": "drive-root", "bunq_rekening_iban": "NL81BUNQ2163127125"},
+    ]))
+    users_file = tmp_path / "users.json"
+    users_file.write_text(json.dumps({
+        "beheerder": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": []},
+    }))
+    config = Config(
+        google_service_account_file="fake.json", properties_file=str(properties_file),
+        bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
+        users_file=str(users_file), flask_secret_key="test-secret",
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+    )
+    app = create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    return client
+
+
+def test_falende_aanbod_upload_geeft_nette_foutmelding_geen_500(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod/upload",
+        data={"bestand": (BytesIO(b"fake-image-bytes"), "foto.jpg")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "mislukt" in resp.get_data(as_text=True).lower()
+
+
+def test_falende_documenten_upload_geeft_nette_foutmelding_geen_500(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/documenten/upload",
+        data={"bestand": (BytesIO(b"fake-doc-bytes"), "document.pdf")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "mislukt" in resp.get_data(as_text=True).lower()

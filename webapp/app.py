@@ -580,17 +580,21 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Foto's/video's uploaden kan pas als er een Drive-map voor dit pand is ingesteld (zie properties.json).")
             return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
         drive = DriveClient(config, g.pand)
-        map_id = kamer.advertentie_map_id
-        if not map_id:
-            aanbod_map = drive.vind_of_maak_map("Aanbod")
-            map_id = drive.vind_of_maak_map(kamer_naam, aanbod_map)
-            sheet.update_aanbod(kamer.row_index, kamer.beschikbaar, kamer.advertentie_omschrijving, map_id)
-        aantal = 0
-        for bestand in request.files.getlist("bestand"):
-            if bestand and bestand.filename:
-                drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=map_id)
-                aantal += 1
-        flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        try:
+            map_id = kamer.advertentie_map_id
+            if not map_id:
+                aanbod_map = drive.vind_of_maak_map("Aanbod")
+                map_id = drive.vind_of_maak_map(kamer_naam, aanbod_map)
+                sheet.update_aanbod(kamer.row_index, kamer.beschikbaar, kamer.advertentie_omschrijving, map_id)
+            aantal = 0
+            for bestand in request.files.getlist("bestand"):
+                if bestand and bestand.filename:
+                    drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=map_id)
+                    aantal += 1
+            flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        except Exception:
+            app.logger.exception("Uploaden van aanbod-foto/video voor kamer %s is mislukt.", kamer_naam)
+            flash("Uploaden is helaas mislukt (probeer het opnieuw, of met een kleiner bestand).")
         return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/aanbod/<file_id>/verwijderen", methods=["POST"])
@@ -747,12 +751,16 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Documenten zijn nog niet ingesteld (google_drive_folder_id ontbreekt in properties.json).")
             return redirect(_documenten_url(pand_slug, folder_id))
         drive = DriveClient(config, g.pand)
-        aantal = 0
-        for bestand in request.files.getlist("bestand"):
-            if bestand and bestand.filename:
-                drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=folder_id)
-                aantal += 1
-        flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        try:
+            aantal = 0
+            for bestand in request.files.getlist("bestand"):
+                if bestand and bestand.filename:
+                    drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=folder_id)
+                    aantal += 1
+            flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
+        except Exception:
+            app.logger.exception("Uploaden van een document is mislukt (pand %s).", pand_slug)
+            flash("Uploaden is helaas mislukt (probeer het opnieuw, of met een kleiner bestand).")
         return redirect(_documenten_url(pand_slug, folder_id))
 
     @app.route("/pand/<pand_slug>/documenten/nieuwe-map", methods=["POST"])
@@ -844,10 +852,17 @@ def create_app(config: Config | None = None) -> Flask:
             except AanmeldingFout as exc:
                 return render_template("aanbod_apply.html", kamer=kamer, fout=str(exc)), 400
             drive = DriveClient(config, g.pand)
-            aanmeldingen_map = drive.vind_of_maak_map("Aanmeldingen")
-            kamer_map = drive.vind_of_maak_map(kamer_naam, aanmeldingen_map)
-            bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
-            file_id = drive.upload_bestand(bestandsnaam, bestand.mimetype, bestand.read(), folder_id=kamer_map)
+            try:
+                aanmeldingen_map = drive.vind_of_maak_map("Aanmeldingen")
+                kamer_map = drive.vind_of_maak_map(kamer_naam, aanmeldingen_map)
+                bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
+                file_id = drive.upload_bestand(bestandsnaam, bestand.mimetype, bestand.read(), folder_id=kamer_map)
+            except Exception:
+                app.logger.exception("Uploaden van bewijs inschrijving is mislukt (pand %s, kamer %s).", pand_slug, kamer_naam)
+                return render_template(
+                    "aanbod_apply.html", kamer=kamer,
+                    fout="Sorry, uploading your file failed. Please try again with a smaller file, or contact us directly.",
+                ), 500
             aanmelding = dataclasses.replace(
                 aanmelding, bewijs_inschrijving_link=f"https://drive.google.com/file/d/{file_id}/view"
             )

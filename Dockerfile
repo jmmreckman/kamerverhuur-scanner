@@ -11,4 +11,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "webapp.app:create_app()"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "--timeout", "120", "webapp.app:create_app()"]
