@@ -83,6 +83,31 @@ def test_kamer_die_over_6_maanden_afloopt_toont_geen_tegel(app_client):
     assert "contracten lopen binnenkort af" in body.lower()
 
 
+def test_meerdere_aflopende_contracten_krijgen_elk_een_eigen_tegel(app_client):
+    client, _config = app_client
+    einddatum_1 = (date.today() + timedelta(days=20)).strftime("%d-%m-%Y")
+    einddatum_2 = (date.today() + timedelta(days=40)).strftime("%d-%m-%Y")
+    FakeSheetClient.kamers = [
+        _kamer(kamer="1", naam="Henri", einddatum=einddatum_1),
+        _kamer(kamer="2", naam="Matias", einddatum=einddatum_2),
+    ]
+    resp = client.get("/pand/mahoniestraat/")
+    body = resp.get_data(as_text=True)
+    assert "verloopt kamer 1" in body.lower()
+    assert "verloopt kamer 2" in body.lower()
+    assert "+ 1 meer" not in body.lower()
+
+
+def test_opnieuw_controleren_knop_staat_niet_meer_op_dashboard(app_client):
+    client, config = app_client
+    resultaat = TenantResult(tenant=_kamer(), ontvangen_bedrag=Decimal("650.00"), status=Status.BETAALD)
+    state.save("mahoniestraat", [resultaat], 0, state_dir=config.state_dir)
+
+    resp = client.get("/pand/mahoniestraat/")
+    body = resp.get_data(as_text=True)
+    assert "opnieuw controleren" not in body.lower()
+
+
 def test_mail_snelkoppeling_staat_altijd_op_dashboard(app_client):
     client, _config = app_client
     resp = client.get("/pand/mahoniestraat/")

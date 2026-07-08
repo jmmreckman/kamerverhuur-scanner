@@ -4,16 +4,15 @@
 
 {% macro overige_tegels() %}
   {% if aflopende_contracten %}
-  {% set eerstvolgende = aflopende_contracten[0] %}
-  <a class="stat-card" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=eerstvolgende[0].kamer) }}">
+  {% for kamer, status in aflopende_contracten %}
+  <a class="stat-card" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
     <div class="stat-icon warn">{{ icon_contracten() }}</div>
     <div>
-      <div class="stat-value">Binnen {{ eerstvolgende[1].dagen_tot_einddatum // 7 }} weken</div>
-      <div class="stat-label">
-        verloopt kamer {{ eerstvolgende[0].kamer }} ({{ eerstvolgende[0].naam }}){% if aflopende_contracten|length > 1 %} + {{ aflopende_contracten|length - 1 }} meer{% endif %}
-      </div>
+      <div class="stat-value">Binnen {{ status.dagen_tot_einddatum // 7 }} weken</div>
+      <div class="stat-label">verloopt kamer {{ kamer.kamer }} ({{ kamer.naam }})</div>
     </div>
   </a>
+  {% endfor %}
   {% else %}
   <div class="stat-card">
     <div class="stat-icon ok">{{ icon_check() }}</div>
@@ -94,12 +93,11 @@
   {{ overige_tegels() }}
 </div>
 
+{% if cache["niet_gekoppelde_betalingen"] %}
 <div class="card">
-  {% if cache["niet_gekoppelde_betalingen"] %}
   <p class="muted">{{ cache["niet_gekoppelde_betalingen"] }} inkomende betaling(en) konden niet gekoppeld worden - zie de betalingenpagina.</p>
-  {% endif %}
-  <a class="btn" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Opnieuw controleren</a>
 </div>
+{% endif %}
 
 {% if problemen %}
 <div class="card">
