@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import calendar
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from decimal import Decimal
 
@@ -26,16 +26,41 @@ _MAAND_NAMEN_NL = [
 _ALLES_BETAALD_KAMER_SLEUTEL = "__alle_kamers__"
 _ALLES_BETAALD_SOORT = "alles-betaald"
 
+# Harde grens voor welke kalendermaand een betaling telt: 1e t/m 17e van de
+# maand = die maand zelf, 18e t/m einde van de maand = de maand erna (bv. een
+# huurder die halverwege de maand al vooruitbetaalt voor de volgende maand).
+# Vervangt het vroegere losse "vooruitbetaling_dagen"-giswerk, dat structureel
+# vroeg/laat betalende huurders soms als "te veel"/"niet ontvangen" door
+# elkaar liet zien in de betaalgeschiedenis.
+_EFFECTIEVE_MAAND_GRENSDAG = 17
+
+
+def _effectieve_maand(datum: date) -> tuple[int, int]:
+    if datum.day <= _EFFECTIEVE_MAAND_GRENSDAG:
+        return (datum.year, datum.month)
+    if datum.month == 12:
+        return (datum.year + 1, 1)
+    return (datum.year, datum.month + 1)
+
+
+def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
+    return (jaar - 1, 12) if maand == 1 else (jaar, maand - 1)
+
+
+def _zoek_vanaf_voor_maand(vandaag: date) -> date:
+    """Startpunt van de bunq-zoekopdracht voor de controle van `vandaag`s
+    maand: de 18e van de vorige maand, want vanaf die dag tellen betalingen
+    al voor de huidige maand (zie _effectieve_maand)."""
+    vorig_jaar, vorige_maand = _vorige_maand(vandaag.year, vandaag.month)
+    return date(vorig_jaar, vorige_maand, _EFFECTIEVE_MAAND_GRENSDAG + 1)
+
 
 def run_check(
     config: Config, pand: Pand, dry_run: bool = False
 ) -> tuple[list[Tenant], list[TenantResult], list[Payment]]:
     vandaag = date.today()
-    start_van_de_maand = vandaag.replace(day=1)
-    # Sommige huurders betalen ruim vooruit (soms al vanaf de 20e voor de maand
-    # erna) - zoek daarom ook een stuk voor de 1e, zodat die betalingen niet
-    # gemist worden.
-    zoek_vanaf = start_van_de_maand - timedelta(days=config.vooruitbetaling_dagen)
+    huidige_maand_sleutel = (vandaag.year, vandaag.month)
+    zoek_vanaf = _zoek_vanaf_voor_maand(vandaag)
 
     logger.info("[%s] Kamers ophalen uit Google Sheet...", pand.slug)
     sheet = SheetClient(config, pand)
@@ -44,7 +69,11 @@ def run_check(
 
     logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
     bunq = BunqClient(config)
-    payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
+    alle_payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
+    # Betalingen die (per de 17e-grens) eigenlijk voor een andere maand
+    # tellen (bv. al vroeg vooruitbetaald voor volgende maand) horen niet bij
+    # déze controle - die komen vanzelf mee bij de controle van die maand.
+    payments = [p for p in alle_payments if _effectieve_maand(p.datum) == huidige_maand_sleutel]
     logger.info("[%s] %d inkomende betalingen gevonden deze maand", pand.slug, len(payments))
 
     results, unmatched = match_tenants_to_payments(tenants, payments, config.bedrag_tolerantie)
@@ -105,7 +134,7 @@ def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantR
 def _voorgaande_maanden(vandaag: date, aantal: int) -> list[tuple[int, int]]:
     """Geeft `aantal` kalendermaanden vóór (dus exclusief) de maand van
     `vandaag` terug, oudste eerst. De huidige maand wordt bewust overgeslagen -
-    die wordt al door run_check() bijgehouden (met de vooruitbetaling-marge)."""
+    die wordt al door run_check() bijgehouden."""
     maanden = []
     jaar, maand = vandaag.year, vandaag.month
     for _ in range(aantal):
@@ -123,51 +152,33 @@ def _verdeel_over_maanden(
     maanden: list[tuple[int, int]],
     tolerantie: Decimal,
 ) -> dict[str, tuple[Decimal, Status, date | None]]:
-    """Bepaalt per maand het ontvangen bedrag/status op basis van wat er ECHT
-    in die kalendermaand is binnengekomen - met één gerichte uitzondering:
-    als een maand niets ontvangen heeft én de eropvolgende maand ongeveer het
-    dubbele bedrag ontving (een inhaalbetaling), telt dat als 'Betaald' voor
-    allebei de maanden - de oudere met de datum van de inhaalbetaling als
-    betaaldatum (dus zichtbaar dat het laat was), in plaats van de oudere
-    maand als 'Nog niet ontvangen' en de nieuwere als 'Te veel ontvangen' te
-    laten staan.
+    """Bepaalt per maand het ontvangen bedrag/status op basis van de
+    'effectieve maand' van elke betaling (zie _effectieve_maand: 1e t/m 17e
+    telt voor die maand, 18e t/m einde van de maand voor de maand erna) - een
+    vaste regel in plaats van per-kalendermaand giswerk, zodat een huurder
+    die structureel vroeg/laat betaalt niet als "te veel"/"niet ontvangen"
+    door elkaar heen wordt weergegeven.
 
     Bewust GEEN cumulatieve verrekening over de hele periode: een
     huurverhoging halverwege de teruggezochte maanden zou dan het
     verwachte/ontvangen bedrag van alle latere maanden laten verschuiven en
-    fout weergeven (de sheet houdt geen historische huurbedragen bij). Deze
-    aanpak kijkt daarom alleen naar dit ene aangrenzende-maandenpatroon, dus
-    andere maanden blijven onaangetast door wat er verderop gebeurt."""
-    per_maand: dict[tuple[int, int], tuple[Decimal, date | None]] = {}
-    for jaar, maand in maanden:
-        maand_start = date(jaar, maand, 1)
-        maand_eind = date(jaar, maand, calendar.monthrange(jaar, maand)[1])
-        maand_betalingen = [p for p in betalingen if maand_start <= p.datum <= maand_eind]
-        ontvangen = sum((p.bedrag for p in maand_betalingen), Decimal("0"))
-        laatste_datum = max((p.datum for p in maand_betalingen), default=None)
-        per_maand[(jaar, maand)] = (ontvangen, laatste_datum)
+    fout weergeven (de sheet houdt geen historische huurbedragen bij). Elke
+    maand wordt hier onafhankelijk beoordeeld op basis van precies de
+    betalingen met die effectieve maand."""
+    per_maand: dict[tuple[int, int], tuple[Decimal, date | None]] = {sleutel: (Decimal("0"), None) for sleutel in maanden}
+    for p in betalingen:
+        sleutel = _effectieve_maand(p.datum)
+        if sleutel not in per_maand:
+            continue  # buiten de teruggezochte periode (bv. voor de eerstvolgende maand)
+        bedrag, laatste_datum = per_maand[sleutel]
+        nieuwe_datum = max(laatste_datum, p.datum) if laatste_datum else p.datum
+        per_maand[sleutel] = (bedrag + p.bedrag, nieuwe_datum)
 
     resultaat: dict[str, tuple[Decimal, Status, date | None]] = {}
-    overgeslagen: set[tuple[int, int]] = set()
-
-    for i, sleutel in enumerate(maanden):
-        if sleutel in overgeslagen:
-            continue
+    for sleutel in maanden:
         ontvangen, laatste_datum = per_maand[sleutel]
         maand_key = f"{sleutel[0]}-{sleutel[1]:02d}"
-
-        if ontvangen <= tolerantie and i + 1 < len(maanden):
-            volgende_sleutel = maanden[i + 1]
-            volgende_ontvangen, volgende_datum = per_maand[volgende_sleutel]
-            if volgende_ontvangen >= 2 * verwacht_bedrag - tolerantie:
-                volgende_maand_key = f"{volgende_sleutel[0]}-{volgende_sleutel[1]:02d}"
-                resultaat[maand_key] = (verwacht_bedrag, Status.BETAALD, volgende_datum)
-                resultaat[volgende_maand_key] = (verwacht_bedrag, Status.BETAALD, volgende_datum)
-                overgeslagen.add(volgende_sleutel)
-                continue
-
-        status = _bepaal_status(ontvangen, verwacht_bedrag, tolerantie)
-        resultaat[maand_key] = (ontvangen, status, laatste_datum)
+        resultaat[maand_key] = (ontvangen, _bepaal_status(ontvangen, verwacht_bedrag, tolerantie), laatste_datum)
 
     return resultaat
 
@@ -188,7 +199,11 @@ def backfill_geschiedenis(
     if not maanden:
         return 0
     oudste_jaar, oudste_maand = maanden[0]
-    zoek_vanaf = date(oudste_jaar, oudste_maand, 1)
+    # Ook een vroege betaling vlak vóór de oudste teruggezochte maand kan al
+    # voor die maand tellen (zie _effectieve_maand) - zoek daarom net als bij
+    # run_check() vanaf de 18e van de maand ervoor.
+    vorig_jaar, vorige_maand = _vorige_maand(oudste_jaar, oudste_maand)
+    zoek_vanaf = date(vorig_jaar, vorige_maand, _EFFECTIEVE_MAAND_GRENSDAG + 1)
     nieuwste_jaar, nieuwste_maand = maanden[-1]
     zoek_tot = date(nieuwste_jaar, nieuwste_maand, calendar.monthrange(nieuwste_jaar, nieuwste_maand)[1])
 

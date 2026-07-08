@@ -38,6 +38,10 @@ class Config:
     flask_secret_key: str
 
     bedrag_tolerantie: Decimal
+    # Niet meer gebruikt door de matchlogica zelf (die hanteert nu een vaste
+    # regel: 1e t/m 17e van de maand telt voor die maand, 18e t/m einde van de
+    # maand voor de maand erna - zie runner.py:_effectieve_maand). Blijft hier
+    # staan zodat een bestaande .env met VOORUITBETALING_DAGEN niet stukloopt.
     vooruitbetaling_dagen: int
 
     # Map waar de "laatste controle"-cache (laatste_resultaat_<pand>.json) in

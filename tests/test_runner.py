@@ -1,11 +1,10 @@
 """Tests voor runner.backfill_geschiedenis: vult de Historie-tab in één keer
 aan met zoveel mogelijk voorgaande maanden, op basis van de huidige
-huurderslijst - en de maand-voor-maand verdeling (met één gerichte
-uitzondering voor een inhaalbetaling na een gemiste maand) die voorkomt dat
-zo'n inhaalbetaling de ene maand als 'Te veel' en de andere als 'Nog niet
-ontvangen' laat zien terwijl de huurder gewoon laat was. Bewust GEEN
-cumulatieve/lopende-balans-aanpak over de hele periode - dat zou een
-huurverhoging halverwege de reeks alle latere maanden laten verschuiven."""
+huurderslijst - en de maand-voor-maand verdeling op basis van de vaste
+"effectieve maand"-regel (1e t/m 17e van de maand telt voor die maand, 18e
+t/m einde van de maand voor de maand erna). Bewust GEEN cumulatieve/lopende-
+balans-aanpak over de hele periode - dat zou een huurverhoging halverwege de
+reeks alle latere maanden laten verschuiven."""
 from datetime import date
 from decimal import Decimal
 
@@ -49,19 +48,45 @@ def test_verdeel_over_maanden_altijd_op_tijd():
     assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 6, 4))
 
 
-def test_verdeel_over_maanden_inhaalbetaling_schuift_terug_ipv_te_veel():
-    # april op tijd, mei gemist, juni een dubbele betaling (inhalen van mei + juni ineens)
-    betalingen = [
-        _betaling("650.00", date(2026, 4, 3)),
-        _betaling("1300.00", date(2026, 6, 10)),
-    ]
+def test_verdeel_over_maanden_op_de_17e_telt_nog_voor_die_maand():
+    betalingen = [_betaling("650.00", date(2026, 5, 17))]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
 
-    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 4, 3))
-    # mei is met terugwerkende kracht 'Betaald' (laat) op de datum van de inhaalbetaling
-    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 6, 10))
-    # juni is dus gewoon 'Betaald', NIET 'Te veel ontvangen'
-    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 6, 10))
+    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 17))
+    assert resultaat["2026-06"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
+
+
+def test_verdeel_over_maanden_vanaf_de_18e_telt_voor_volgende_maand():
+    # een huurder die halverwege de maand al vooruitbetaalt voor de maand erna
+    betalingen = [_betaling("650.00", date(2026, 5, 18))]
+    resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
+
+    assert resultaat["2026-05"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
+    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 5, 18))
+
+
+def test_verdeel_over_maanden_wisselend_vroeg_laat_betalen_geeft_geen_valse_meldingen():
+    # Regressie voor een huurder die de ene maand vroeg (eind vorige maand) en
+    # de andere maand laat (begin de maand zelf) betaalt - dat mag niet als
+    # "niet ontvangen"/"te veel ontvangen" door elkaar heen verschijnen.
+    betalingen = [
+        _betaling("650.00", date(2026, 3, 20)),  # vroeg voor april
+        _betaling("650.00", date(2026, 5, 10)),  # "laat" voor mei, maar nog binnen de 17e
+    ]
+    maanden = [(2026, 3), (2026, 4), (2026, 5)]
+    resultaat = _verdeel_over_maanden(VERWACHT, betalingen, maanden, TOLERANTIE)
+
+    assert resultaat["2026-03"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
+    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 3, 20))
+    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 10))
+
+
+def test_verdeel_over_maanden_buiten_de_teruggezochte_periode_wordt_genegeerd():
+    betalingen = [_betaling("650.00", date(2026, 7, 3))]  # niet in MAANDEN_3
+    resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
+
+    for maand_key in ("2026-04", "2026-05", "2026-06"):
+        assert resultaat[maand_key][1] == Status.NIET_ONTVANGEN
 
 
 def test_verdeel_over_maanden_nooit_betaald():
@@ -163,8 +188,9 @@ class FakeBunqClient:
     def get_incoming_payments(self, pand, since):
         FakeBunqClient.laatste_since = since
         return [
-            _betaling("650.00", date(2026, 4, 3)),
-            _betaling("1300.00", date(2026, 6, 10)),
+            _betaling("650.00", date(2026, 4, 3)),   # op tijd voor april
+            _betaling("650.00", date(2026, 5, 20)),  # vroeg voor juni (na de 17e van mei)
+            # mei heeft dus geen eigen betaling - blijft "niet ontvangen"
             # betaling in de huidige maand (juli) hoort NIET meegenomen te worden door backfill
             _betaling("650.00", date(2026, 7, 3)),
         ]
@@ -177,8 +203,9 @@ def test_backfill_geschiedenis_slaat_huidige_maand_over(monkeypatch):
     aantal = backfill_geschiedenis(_config(), _pand(), aantal_maanden=3, vandaag=date(2026, 7, 8))
 
     assert aantal == 3
-    # since moet op de vroegste maand (april) beginnen
-    assert FakeBunqClient.laatste_since == date(2026, 4, 1)
+    # since moet vanaf de 18e van de maand vóór de vroegste teruggezochte
+    # maand (april) beginnen, dus de 18e maart
+    assert FakeBunqClient.laatste_since == date(2026, 3, 18)
 
 
 def test_backfill_geschiedenis_ruimt_eerst_dubbele_regels_op(monkeypatch):
@@ -197,7 +224,7 @@ def test_backfill_geschiedenis_ruimt_eerst_dubbele_regels_op(monkeypatch):
     assert sheet_instances[0].dedupliceer_aangeroepen is True
 
 
-def test_backfill_geschiedenis_verdeelt_inhaalbetaling_naar_vorige_maand(monkeypatch):
+def test_backfill_geschiedenis_gebruikt_effectieve_maand_per_betaling(monkeypatch):
     sheet_instances = []
 
     def _sheet_factory(config, pand):
@@ -214,12 +241,15 @@ def test_backfill_geschiedenis_verdeelt_inhaalbetaling_naar_vorige_maand(monkeyp
     per_maand = dict(sheet.upsert_calls)
     assert list(per_maand.keys()) == ["2026-04", "2026-05", "2026-06"]
 
-    for maand_key in per_maand:
-        resultaat = per_maand[maand_key][0]
-        assert resultaat.status == Status.BETAALD
-        assert resultaat.ontvangen_bedrag == Decimal("650.00")
+    april_resultaat = per_maand["2026-04"][0]
+    assert april_resultaat.status == Status.BETAALD
+    assert april_resultaat.gematchte_betalingen[0].datum == date(2026, 4, 3)
 
-    # mei en juni zijn allebei via de inhaalbetaling van 10 juni afgehandeld
-    assert per_maand["2026-05"][0].gematchte_betalingen[0].datum == date(2026, 6, 10)
-    assert per_maand["2026-06"][0].gematchte_betalingen[0].datum == date(2026, 6, 10)
-    assert per_maand["2026-04"][0].gematchte_betalingen[0].datum == date(2026, 4, 3)
+    mei_resultaat = per_maand["2026-05"][0]
+    assert mei_resultaat.status == Status.NIET_ONTVANGEN
+    assert mei_resultaat.ontvangen_bedrag == Decimal("0")
+
+    # de betaling van 20 mei (na de 17e) telt voor juni, niet voor mei
+    juni_resultaat = per_maand["2026-06"][0]
+    assert juni_resultaat.status == Status.BETAALD
+    assert juni_resultaat.gematchte_betalingen[0].datum == date(2026, 5, 20)

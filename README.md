@@ -606,12 +606,14 @@ docker run --rm -p 8000:8000 \
   sheet niet met de daadwerkelijke afzender (bijv. een typefout, of iemand
   anders betaalt namens de huurder), dan valt de site automatisch terug op
   naam-matching in plaats van niets te vinden.
-- **Vooruitbetalingen**: er wordt ook gekeken naar betalingen die tot
-  `VOORUITBETALING_DAGEN` (standaard 14) vóór de 1e van de maand binnenkomen,
-  voor huurders die ruim van tevoren betalen. Als iemand wel érg vroeg in de
-  vorige maand al voor de maand erna betaalt, kan dat er in de vorige maand
-  even uitzien als "te veel ontvangen" - dat is onschuldig (gewoon
-  vooruitbetaald), geen fout.
+- **Welke maand telt een betaling mee, bij vroeg/laat betalen?** Een vaste
+  regel: komt een betaling binnen op de **1e t/m de 17e** van de maand, dan
+  telt hij voor díe maand. Komt hij binnen vanaf de **18e t/m het einde** van
+  de maand, dan telt hij voor de **maand erna** (bv. een huurder die al op de
+  20e vooruitbetaalt voor volgende maand). Dit geldt zowel voor de
+  actuele controle als voor "Betaalgeschiedenis aanvullen", zodat een
+  huurder die structureel vroeg of laat betaalt niet om en om als "te veel"/
+  "niet ontvangen" verschijnt.
 - **Aanzeg-waarschuwing is alleen een herinnering.** De site stuurt zelf nog
   geen aanzeggingsbrief naar de huurder - die verstuur je nog zelf. De
   waarschuwing op het dashboard/kamerpagina is puur op de einddatum in de
