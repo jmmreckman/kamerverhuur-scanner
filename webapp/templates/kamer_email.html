@@ -7,7 +7,7 @@
 </div>
 
 <div class="card">
-  <p>Aan: <strong>{{ kamer.naam }}</strong> ({{ kamer.email }}) - kamer {{ kamer.kamer }}</p>
+  <p>Aan: <strong><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ kamer.naam }}</a></strong> ({{ kamer.email }}) - kamer {{ kamer.kamer }}</p>
   <p class="muted">BCC gaat automatisch mee naar de ingestelde beheerders (zie .env). Je kunt onderwerp en
      tekst hieronder nog aanpassen voordat je 'm verstuurt.</p>
 

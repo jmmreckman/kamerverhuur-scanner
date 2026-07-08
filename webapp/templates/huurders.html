@@ -20,7 +20,7 @@
     {% for k in kamers %}
     <tr>
       <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
-      <td>{{ k.naam or "(leegstaand)" }}</td>
+      <td>{% if k.naam %}<a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.naam }}</a>{% else %}(leegstaand){% endif %}</td>
       <td>{% if k.email %}<a href="mailto:{{ k.email }}">{{ k.email }}</a>{% else %}-{% endif %}</td>
       <td>{% if k.telefoonnummer %}<a href="tel:{{ k.telefoonnummer }}">{{ k.telefoonnummer }}</a>{% else %}-{% endif %}</td>
       <td>{{ k.verwacht_bedrag|eur }}</td>

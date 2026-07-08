@@ -37,7 +37,7 @@
     {% for r in net_gecontroleerd["results"] %}
     <tr>
       <td>{{ r.tenant.kamer }}</td>
-      <td>{{ r.tenant.naam }}</td>
+      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r.tenant.kamer) }}">{{ r.tenant.naam }}</a></td>
       <td>{{ r.tenant.verwacht_bedrag|eur }}</td>
       <td>{{ r.ontvangen_bedrag|eur }}</td>
       <td><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span></td>
@@ -73,7 +73,7 @@
     {% for r in cache["resultaten"] %}
     <tr>
       <td>{{ r["kamer"] }}</td>
-      <td>{{ r["naam"] }}</td>
+      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r["naam"] }}</a></td>
       <td>{{ r["verwacht_bedrag"]|eur }}</td>
       <td>{{ r["ontvangen_bedrag"]|eur }}</td>
       <td><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
