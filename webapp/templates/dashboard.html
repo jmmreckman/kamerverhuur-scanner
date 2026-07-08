@@ -76,20 +76,20 @@
 {% set alles_ok = problemen|length == 0 %}
 
 <div class="stat-grid">
-  <div class="stat-card">
+  <a class="stat-card" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">
     <div class="stat-icon {{ 'ok' if alles_ok else 'warn' }}">{{ icon_check() if alles_ok else icon_alert() }}</div>
     <div>
       <div class="stat-value">{{ resultaten|length - problemen|length }} / {{ resultaten|length }}</div>
       <div class="stat-label">huurpenningen ontvangen</div>
     </div>
-  </div>
-  <div class="stat-card">
+  </a>
+  <a class="stat-card" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">
     <div class="stat-icon">{{ icon_euro() }}</div>
     <div>
       <div class="stat-value">{{ totalen.ontvangen|eur }}</div>
       <div class="stat-label">van {{ totalen.verwacht|eur }} ontvangen</div>
     </div>
-  </div>
+  </a>
   {{ overige_tegels() }}
 </div>
 

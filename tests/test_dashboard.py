@@ -152,3 +152,15 @@ def test_huurpenningen_tegel_toont_betaalstatus(app_client):
     body = resp.get_data(as_text=True)
     assert "1 / 1" in body
     assert "huurpenningen ontvangen" in body.lower()
+
+
+def test_huurpenningen_en_euro_tegels_linken_naar_betalingen(app_client):
+    client, config = app_client
+    resultaat = TenantResult(tenant=_kamer(), ontvangen_bedrag=Decimal("650.00"), status=Status.BETAALD)
+    state.save("mahoniestraat", [resultaat], 0, state_dir=config.state_dir)
+
+    resp = client.get("/pand/mahoniestraat/")
+    body = resp.get_data(as_text=True)
+    betalingen_link = '/pand/mahoniestraat/betalingen'
+    # allebei de tegels moeten als link naar Betalingen wijzen
+    assert body.count(f'<a class="stat-card" href="{betalingen_link}"') == 2

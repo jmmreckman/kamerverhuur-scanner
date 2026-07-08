@@ -58,4 +58,4 @@ def test_geschiedenis_aanvullen_roept_backfill_aan_en_flasht(app_client):
     resp = client.post("/pand/mahoniestraat/betalingen/geschiedenis-aanvullen", follow_redirects=True)
     assert resp.status_code == 200
     assert aangeroepen == [("mahoniestraat", 12)]
-    assert "aangevuld voor de laatste 12 maanden" in resp.get_data(as_text=True)
+    assert "aangevuld voor in totaal 12 maand" in resp.get_data(as_text=True)

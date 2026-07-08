@@ -62,8 +62,13 @@
     <label>Relatie borgsteller tot huurder
       <input type="text" name="borgsteller_relatie" value="{{ kamer.borgsteller_relatie or '' if kamer else '' }}" placeholder="bv. Vader">
     </label>
-    <label>Contract startdatum
+    <label>Contract startdatum (formaat dd-mm-jjjj) - wordt ook gebruikt om te bepalen vanaf
+      welke maand "Betaalgeschiedenis aanvullen" voor deze kamer terugzoekt
       <input type="text" name="contract_startdatum" value="{{ kamer.contract_startdatum or '' if kamer else '' }}" placeholder="dd-mm-jjjj">
+    </label>
+    <label>Waarborgsom (EUR, optioneel) - wordt in de instapmaand bovenop de huur verwacht,
+      zodat die maand niet als "te veel ontvangen" wordt gezien
+      <input type="text" name="borg_bedrag" value="{{ kamer.borg_bedrag|eur if kamer and kamer.borg_bedrag is not none else '' }}">
     </label>
 
     <button class="btn" type="submit">Opslaan</button>

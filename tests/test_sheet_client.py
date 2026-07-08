@@ -96,7 +96,8 @@ def test_get_kamers_leest_contractvelden():
     rows = [
         HEADER,
         ["1", "Jan", "", "", "650,00", "", "", "", "", "", "", "", "", "", "", "", "",
-         "27-11-2000", "Tatabánya, Hungary", "1124601", "Consultancy", "Tamás Neumayer", "Vader", "01-07-2026"],
+         "27-11-2000", "Tatabánya, Hungary", "1124601", "Consultancy", "Tamás Neumayer", "Vader", "01-07-2026",
+         "1000,00"],
     ]
     client, _ = _sheet_client(rows)
     kamer = client.get_kamers()[0]
@@ -107,6 +108,7 @@ def test_get_kamers_leest_contractvelden():
     assert kamer.borgsteller_naam == "Tamás Neumayer"
     assert kamer.borgsteller_relatie == "Vader"
     assert kamer.contract_startdatum == "01-07-2026"
+    assert kamer.borg_bedrag == Decimal("1000.00")
 
 
 def test_update_kamer_schrijft_contractvelden():
@@ -116,7 +118,7 @@ def test_update_kamer_schrijft_contractvelden():
         row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"), iban=None, zoekwoord=None,
         geboortedatum="27-11-2000", geboorteplaats="Tatabánya, Hungary", studentnummer="1124601",
         studierichting="Consultancy", borgsteller_naam="Tamás Neumayer", borgsteller_relatie="Vader",
-        contract_startdatum="01-07-2026",
+        contract_startdatum="01-07-2026", borg_bedrag=Decimal("1000.00"),
     )
     ranges = {u["range"]: u["values"][0][0] for u in ws.batch_updates[0]}
     assert ranges["R2"] == "27-11-2000"
@@ -126,6 +128,7 @@ def test_update_kamer_schrijft_contractvelden():
     assert ranges["V2"] == "Tamás Neumayer"
     assert ranges["W2"] == "Vader"
     assert ranges["X2"] == "01-07-2026"
+    assert ranges["Y2"] == "1000,00"
 
 
 def test_get_kamers_werkt_ook_met_korte_rijen_zonder_nieuwe_kolommen():
@@ -153,10 +156,10 @@ def test_add_kamer_voegt_lege_aanbod_kolommen_toe():
     appended = []
     ws.append_row = lambda row, value_input_option="USER_ENTERED": appended.append(row)
     client.add_kamer(naam="Piet", kamer="3", verwacht_bedrag=Decimal("700.00"), iban=None, zoekwoord=None)
-    assert len(appended[0]) == 24  # kolom A t/m X
+    assert len(appended[0]) == 25  # kolom A t/m Y
     assert appended[0][12:15] == ["", "", ""]  # Beschikbaar/Omschrijving/Map ID nog leeg
     assert appended[0][15:17] == ["", ""]  # Mail/Telefoonnummer nog leeg
-    assert appended[0][17:] == ["", "", "", "", "", "", ""]  # contractvelden nog leeg
+    assert appended[0][17:] == ["", "", "", "", "", "", "", ""]  # contractvelden + borg nog leeg
 
 
 def test_add_kamer_met_contactgegevens():

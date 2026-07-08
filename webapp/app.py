@@ -393,6 +393,7 @@ def create_app(config: Config | None = None) -> Flask:
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()
         servicekosten = form.get("servicekosten", "").strip()
+        borg_bedrag = form.get("borg_bedrag", "").strip()
         return {
             "naam": form.get("naam", "").strip(),
             "kamer": form.get("kamer", "").strip(),
@@ -412,6 +413,7 @@ def create_app(config: Config | None = None) -> Flask:
             "borgsteller_naam": form.get("borgsteller_naam", "").strip() or None,
             "borgsteller_relatie": form.get("borgsteller_relatie", "").strip() or None,
             "contract_startdatum": form.get("contract_startdatum", "").strip() or None,
+            "borg_bedrag": parse_bedrag(borg_bedrag) if borg_bedrag else None,
         }
 
     @app.route("/pand/<pand_slug>/huurders/nieuw", methods=["GET", "POST"])
@@ -506,9 +508,9 @@ def create_app(config: Config | None = None) -> Flask:
     def geschiedenis_aanvullen(pand_slug: str):
         aantal = backfill_geschiedenis(config, g.pand)
         flash(
-            f"Betaalgeschiedenis aangevuld voor de laatste {aantal} maanden "
-            "(op basis van de huidige huurderslijst - kamers die pas onlangs "
-            "verhuurd zijn, kunnen voor oudere maanden leeg blijven)."
+            f"Betaalgeschiedenis aangevuld voor in totaal {aantal} maand(en) - per kamer vanaf de "
+            "bekende contract-startdatum (kolom 'Contract startdatum'), of anders de standaard "
+            "12 maanden terug."
         )
         return redirect(url_for("betalingen", pand_slug=pand_slug))
 
@@ -700,6 +702,7 @@ def create_app(config: Config | None = None) -> Flask:
             if bestaande is not None:
                 kale = request.form.get("kale_huurprijs", "").strip()
                 service = request.form.get("servicekosten", "").strip()
+                borg = request.form.get("borg", "").strip()
                 sheet.update_kamer(
                     row_index=bestaande.row_index,
                     naam=request.form.get("huurder_naam", "").strip() or bestaande.naam,
@@ -720,6 +723,7 @@ def create_app(config: Config | None = None) -> Flask:
                     borgsteller_naam=request.form.get("borgsteller_naam", "").strip() or bestaande.borgsteller_naam,
                     borgsteller_relatie=request.form.get("borgsteller_relatie", "").strip() or bestaande.borgsteller_relatie,
                     contract_startdatum=request.form.get("ingangsdatum", "").strip() or bestaande.contract_startdatum,
+                    borg_bedrag=parse_bedrag(borg) if borg else bestaande.borg_bedrag,
                 )
             return redirect(url_for("contract_bekijken", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1

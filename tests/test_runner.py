@@ -43,17 +43,17 @@ def test_verdeel_over_maanden_altijd_op_tijd():
     ]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
 
-    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 4, 3))
-    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 2))
-    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 6, 4))
+    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 4, 3), VERWACHT)
+    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 2), VERWACHT)
+    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 6, 4), VERWACHT)
 
 
 def test_verdeel_over_maanden_op_de_17e_telt_nog_voor_die_maand():
     betalingen = [_betaling("650.00", date(2026, 5, 17))]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
 
-    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 17))
-    assert resultaat["2026-06"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
+    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 17), VERWACHT)
+    assert resultaat["2026-06"] == (Decimal("0"), Status.NIET_ONTVANGEN, None, VERWACHT)
 
 
 def test_verdeel_over_maanden_vanaf_de_18e_telt_voor_volgende_maand():
@@ -61,8 +61,8 @@ def test_verdeel_over_maanden_vanaf_de_18e_telt_voor_volgende_maand():
     betalingen = [_betaling("650.00", date(2026, 5, 18))]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
 
-    assert resultaat["2026-05"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
-    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 5, 18))
+    assert resultaat["2026-05"] == (Decimal("0"), Status.NIET_ONTVANGEN, None, VERWACHT)
+    assert resultaat["2026-06"] == (VERWACHT, Status.BETAALD, date(2026, 5, 18), VERWACHT)
 
 
 def test_verdeel_over_maanden_wisselend_vroeg_laat_betalen_geeft_geen_valse_meldingen():
@@ -76,9 +76,9 @@ def test_verdeel_over_maanden_wisselend_vroeg_laat_betalen_geeft_geen_valse_meld
     maanden = [(2026, 3), (2026, 4), (2026, 5)]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, maanden, TOLERANTIE)
 
-    assert resultaat["2026-03"] == (Decimal("0"), Status.NIET_ONTVANGEN, None)
-    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 3, 20))
-    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 10))
+    assert resultaat["2026-03"] == (Decimal("0"), Status.NIET_ONTVANGEN, None, VERWACHT)
+    assert resultaat["2026-04"] == (VERWACHT, Status.BETAALD, date(2026, 3, 20), VERWACHT)
+    assert resultaat["2026-05"] == (VERWACHT, Status.BETAALD, date(2026, 5, 10), VERWACHT)
 
 
 def test_verdeel_over_maanden_buiten_de_teruggezochte_periode_wordt_genegeerd():
@@ -93,17 +93,18 @@ def test_verdeel_over_maanden_nooit_betaald():
     resultaat = _verdeel_over_maanden(VERWACHT, [], MAANDEN_3, TOLERANTIE)
 
     for maand_key in ("2026-04", "2026-05", "2026-06"):
-        ontvangen, status, betaaldatum = resultaat[maand_key]
+        ontvangen, status, betaaldatum, verwacht_deze_maand = resultaat[maand_key]
         assert ontvangen == Decimal("0")
         assert status == Status.NIET_ONTVANGEN
         assert betaaldatum is None
+        assert verwacht_deze_maand == VERWACHT
 
 
 def test_verdeel_over_maanden_gedeeltelijke_betaling_blijft_open():
     betalingen = [_betaling("300.00", date(2026, 4, 5))]
     resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
 
-    ontvangen, status, betaaldatum = resultaat["2026-04"]
+    ontvangen, status, betaaldatum, _verwacht_deze_maand = resultaat["2026-04"]
     assert status == Status.TE_WEINIG
     assert ontvangen == Decimal("300.00")
     # er is wel degelijk iets ontvangen die maand, dus de datum blijft zichtbaar
@@ -134,14 +135,14 @@ def test_verdeel_over_maanden_huurverhoging_beinvloedt_andere_maanden_niet():
     # "volledig betaald tegen het nieuwe bedrag" of weggehaalde/verschoven
     # bedragen door latere maanden.
     for maand_key in ("2026-01", "2026-02", "2026-03"):
-        ontvangen, status, _betaaldatum = resultaat[maand_key]
+        ontvangen, status, _betaaldatum, _verwacht_deze_maand = resultaat[maand_key]
         assert ontvangen == oude_huur
         assert status == Status.TE_WEINIG
 
     # de maanden na de verhoging zijn gewoon "Betaald" en blijven dat ook -
     # geen achterstand die van de oudere maanden wordt "doorgeschoven".
     for maand_key in ("2026-04", "2026-05"):
-        ontvangen, status, _betaaldatum = resultaat[maand_key]
+        ontvangen, status, _betaaldatum, _verwacht_deze_maand = resultaat[maand_key]
         assert ontvangen == nieuwe_huur
         assert status == Status.BETAALD
 

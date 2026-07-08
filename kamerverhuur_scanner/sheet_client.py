@@ -15,7 +15,12 @@ op de bestaande huuradministratie-sheet:
     U Studierichting (nieuw, optioneel, tbv huurcontract) |
     V Borgsteller naam (nieuw, optioneel, tbv huurcontract) |
     W Borgsteller relatie (nieuw, optioneel, tbv huurcontract) |
-    X Contract startdatum (nieuw, optioneel, tbv huurcontract)
+    X Contract startdatum (nieuw, optioneel, tbv huurcontract EN de
+      betaalgeschiedenis: backfill_geschiedenis() vult vanaf deze maand aan
+      i.p.v. een vast aantal maanden terug) |
+    Y Borg (nieuw, optioneel) - waarborgsom die in de instapmaand naast de
+      (eventueel pro-rata) huur binnenkomt, zodat die maand niet als "te veel
+      ontvangen" wordt gezien
 
 "Totale huur" (kolom E) is het bedrag dat via bunq moet binnenkomen. Een rij met
 een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
@@ -70,6 +75,7 @@ COL_STUDIERICHTING = 21
 COL_BORGSTELLER_NAAM = 22
 COL_BORGSTELLER_RELATIE = 23
 COL_CONTRACT_STARTDATUM = 24
+COL_BORG = 25
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
@@ -114,7 +120,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_CONTRACT_STARTDATUM - len(row))
+            row = row + [""] * (COL_BORG - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -142,6 +148,7 @@ class SheetClient:
                     borgsteller_naam=_optioneel(row[COL_BORGSTELLER_NAAM - 1]),
                     borgsteller_relatie=_optioneel(row[COL_BORGSTELLER_RELATIE - 1]),
                     contract_startdatum=_optioneel(row[COL_CONTRACT_STARTDATUM - 1]),
+                    borg_bedrag=parse_bedrag(row[COL_BORG - 1]) if row[COL_BORG - 1].strip() else None,
                 )
             )
         return kamers
@@ -171,6 +178,7 @@ class SheetClient:
         borgsteller_naam: str | None = None,
         borgsteller_relatie: str | None = None,
         contract_startdatum: str | None = None,
+        borg_bedrag: Decimal | None = None,
     ) -> None:
         updates = [
             {"range": self._a1(row_index, COL_KAMER), "values": [[kamer]]},
@@ -194,6 +202,7 @@ class SheetClient:
             {"range": self._a1(row_index, COL_BORGSTELLER_NAAM), "values": [[borgsteller_naam or ""]]},
             {"range": self._a1(row_index, COL_BORGSTELLER_RELATIE), "values": [[borgsteller_relatie or ""]]},
             {"range": self._a1(row_index, COL_CONTRACT_STARTDATUM), "values": [[contract_startdatum or ""]]},
+            {"range": self._a1(row_index, COL_BORG), "values": [[self._bedrag_of_leeg(borg_bedrag)]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
@@ -217,6 +226,7 @@ class SheetClient:
         borgsteller_naam: str | None = None,
         borgsteller_relatie: str | None = None,
         contract_startdatum: str | None = None,
+        borg_bedrag: Decimal | None = None,
     ) -> None:
         row = [
             kamer,
@@ -243,6 +253,7 @@ class SheetClient:
             borgsteller_naam or "",
             borgsteller_relatie or "",
             contract_startdatum or "",
+            self._bedrag_of_leeg(borg_bedrag),
         ]
         self._worksheet.append_row(row, value_input_option="USER_ENTERED")
 

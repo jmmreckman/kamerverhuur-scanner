@@ -41,6 +41,10 @@ class Tenant:
     borgsteller_naam: str | None = None
     borgsteller_relatie: str | None = None  # bv. "Father"
     contract_startdatum: str | None = None
+    # Waarborgsom die bij de instapmaand betaald is (naast de eerste
+    # huur/pro-rata huur) - gebruikt door backfill_geschiedenis()/run_check()
+    # om te voorkomen dat de instapmaand als "te veel ontvangen" verschijnt.
+    borg_bedrag: Decimal | None = None
 
 
 @dataclass(frozen=True)

@@ -73,29 +73,30 @@ nodig.
   gelogd - de actuele status blijft gewoon bijgewerkt, en de lopende maand
   verschijnt dan alsnog in de betaalgeschiedenis op de kamerpagina (zie
   hieronder).
-- **Betaalgeschiedenis aanvullen** - knop op de Betalingen-pagina die in één
-  keer de 12 kalendermaanden vóór de huidige maand ophaalt bij bunq en per
-  maand een Historie-regel wegschrijft (op basis van de huidige
-  huurderslijst - werkt dus het beste voor kamers die al een tijd dezelfde
-  huurder hebben). Handig om de betrouwbaarheidsscore meteen met meer
-  geschiedenis te vullen in plaats van pas vanaf nu op te bouwen. bunq zelf
-  legt geen harde limiet op hoe ver terug je transacties kunt ophalen (zolang
-  de rekening bestaat), dus dit kan in principe nog verder teruggezet worden
-  door `aantal_maanden` in `backfill_geschiedenis()` aan te passen. Elke
-  maand wordt onafhankelijk beoordeeld op basis van wat er die kalendermaand
-  ECHT is binnengekomen (vergeleken met het HUIDIGE verwachte bedrag - de
-  sheet houdt geen historische huurbedragen bij, dus rond een huurverhoging
-  kunnen oudere maanden om die reden "Te weinig" tonen, ook al was er op dat
-  moment gewoon correct betaald tegen het toen geldende bedrag). Eén gerichte
-  uitzondering: een gemiste maand die de maand erna in één keer wordt
-  ingehaald (een dubbele betaling) telt dan als "Betaald" voor beide
-  maanden - met de datum van de inhaalbetaling als betaaldatum voor de
-  oudere maand, zodat zichtbaar blijft dat die laat was - in plaats van de
-  oudere maand als "Nog niet ontvangen" en de nieuwere als "Te veel
-  ontvangen" te laten staan. Ruimt bij elke druk op de knop ook automatisch
-  eventuele dubbele Historie-regels voor dezelfde (kamer, maand)-combinatie
-  op (kon ontstaan door een inmiddels gefixte bug) - je hoeft dit dus nooit
-  zelf met de hand in de sheet te doen.
+- **Betaalgeschiedenis aanvullen** - knop op de Betalingen-pagina die de
+  betaalgeschiedenis ophaalt bij bunq en per maand een Historie-regel
+  wegschrijft, op basis van de huidige huurderslijst. **Per kamer**: heeft die
+  kamer een bekende **"Contract startdatum"** (kolom X)? Dan wordt teruggezocht
+  vanaf díe instapmaand - geen jaar aan "Nog niet ontvangen" meer voor maanden
+  van vóórdat de huurder er woonde. Geen bekende startdatum? Dan geldt de
+  standaard van 12 kalendermaanden terug (aanpasbaar via `aantal_maanden` in
+  `backfill_geschiedenis()` - bunq zelf legt geen harde limiet op hoe ver terug
+  je kunt ophalen, zolang de rekening bestaat). Elke maand wordt onafhankelijk
+  beoordeeld op basis van wat er die kalendermaand ECHT is binnengekomen
+  (vergeleken met het HUIDIGE verwachte bedrag - de sheet houdt geen
+  historische huurbedragen bij, dus rond een huurverhoging kunnen oudere
+  maanden om die reden "Te weinig" tonen, ook al was er op dat moment gewoon
+  correct betaald tegen het toen geldende bedrag).
+  **Instapmaand:** in de kalendermaand van de "Contract startdatum" wordt niet
+  de volle maandhuur verwacht, maar de **pro-rata huur** over de resterende
+  dagen van die maand (bij een start op de 1e is dat gewoon de volle
+  maandhuur) **plus de waarborgsom** uit kolom Y ("Borg") - huurders betalen
+  die vaak in één keer samen met de eerste (deel)maand, en dat mag niet als
+  "Te veel ontvangen" verschijnen. Zie ook "Welke maand telt een betaling mee"
+  hieronder voor de 1e/17e/18e-regel die ná de instapmaand blijft gelden.
+  Ruimt bij elke druk op de knop ook automatisch eventuele dubbele
+  Historie-regels voor dezelfde (kamer, maand)-combinatie op - je hoeft dit
+  dus nooit zelf met de hand in de sheet te doen.
 - **Betaalherinnering / ingebrekestelling** - bij elke kamer die niet
   "Betaald" staat, verschijnen op de Betalingen-pagina twee knoppen: "Stuur
   herinnering" (vriendelijke betaalherinnering) en "Stuur ingebrekestelling"
@@ -196,9 +197,10 @@ daadwerkelijk laat ondertekenen.
   kamer (vult automatisch de gegevens in die al bekend zijn bij Huurders) en
   vul de rest aan (geboortedatum, studentnummer, borgsteller, huurprijs,
   waarborgsom, ingangs-/einddatum, etc.). Bij het opslaan worden deze gegevens
-  ook teruggeschreven naar de Huurders-sheet (kolommen R t/m X), zodat ze bij
-  een volgend contract - of gewoon op de Huurders-pagina - meteen weer
-  klaarstaan.
+  ook teruggeschreven naar de Huurders-sheet (kolommen R t/m Y, inclusief de
+  waarborgsom), zodat ze bij een volgend contract - of gewoon op de
+  Huurders-pagina - meteen weer klaarstaan, én meteen meetellen bij de
+  eerstvolgende "Betaalgeschiedenis aanvullen".
 - **PDF-export**: elk gegenereerd contract heeft een **"Download als PDF"**-
   link (op de Contracten-pagina en bovenaan het contract zelf) - handig om
   direct te uploaden naar DocHub voor de handtekeningaanvraag. Er is ook nog
@@ -213,9 +215,9 @@ daadwerkelijk laat ondertekenen.
 Elk pand heeft zijn eigen tabblad/sheet, aangesloten op je bestaande
 huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 
-| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID | P Mail | Q Telefoonnummer | R Geboortedatum | S Geboorteplaats | T Studentnummer | U Studierichting | V Borgsteller naam | W Borgsteller relatie | X Contract startdatum |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | | | | | | | | | | |
+| A Kamer | B Huurder | C Kale huurprijs | D Servicekosten | E Totale huur | F Contract einddatum | G Opmerking | H IBAN | I Zoekwoord | J Status | K Ontvangen bedrag | L Laatst gecontroleerd | M Beschikbaar | N Advertentie omschrijving | O Advertentie map-ID | P Mail | Q Telefoonnummer | R Geboortedatum | S Geboorteplaats | T Studentnummer | U Studierichting | V Borgsteller naam | W Borgsteller relatie | X Contract startdatum | Y Borg |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| BG straatkant | Henri Maarten Slendebroek | 700,94 | 44,06 | 745,00 | 31-07-2026 | gaat er per 31-07-2026 uit | | | | | | | | | | | | | | | | | | |
 
 - Kolom **A t/m G** zijn je bestaande kolommen, die pas je zelf aan (of via de
   site, zie hieronder).
@@ -233,10 +235,16 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   site en zichtbaar op de kamerpagina (met directe mailto:/tel:-links).
 - Kolom **R t/m X** (Geboortedatum, Geboorteplaats, Studentnummer,
   Studierichting, Borgsteller naam, Borgsteller relatie, Contract
-  startdatum) zijn nieuw en optioneel - puur bedoeld om een huurcontract mee
-  voor te vullen (zie "Huurcontracten genereren" hieronder). Te bewerken via
-  de Huurders-pagina; worden ook automatisch bijgewerkt zodra je voor die
-  kamer een contract genereert.
+  startdatum) zijn nieuw en optioneel - bedoeld om een huurcontract mee voor
+  te vullen (zie "Huurcontracten genereren" hieronder) én, specifiek kolom
+  **X (Contract startdatum)**, om te bepalen vanaf welke maand
+  "Betaalgeschiedenis aanvullen" voor die kamer terugzoekt (zie hierboven).
+  Formaat dd-mm-jjjj. Te bewerken via de Huurders-pagina; worden ook
+  automatisch bijgewerkt zodra je voor die kamer een contract genereert.
+- Kolom **Y (Borg)** is nieuw en optioneel - de waarborgsom die de huurder in
+  de instapmaand betaalt (naast de eerste huur). Wordt gebruikt bij
+  "Betaalgeschiedenis aanvullen" en de actuele controle om te voorkomen dat
+  de instapmaand als "Te veel ontvangen" verschijnt (zie hierboven).
 - **Totale huur** (kolom E) is het bedrag dat de site verwacht via bunq binnen
   te zien komen (kale huur + servicekosten).
 - Een lege **Huurder** met een ingevulde **Kamer** betekent: kamer staat leeg.
