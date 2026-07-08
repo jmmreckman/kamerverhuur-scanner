@@ -29,6 +29,13 @@
       <div class="stat-label">het hele huishouden</div>
     </div>
   </a>
+  <a class="stat-card" href="{{ url_for('huuropzegging_doorgeven', pand_slug=huidig_pand.slug) }}">
+    <div class="stat-icon">{{ icon_clock() }}</div>
+    <div>
+      <div class="stat-value">Opzegging</div>
+      <div class="stat-label">geef huuropzegging door</div>
+    </div>
+  </a>
 {% endmacro %}
 
 {% block content %}

@@ -115,6 +115,13 @@ def test_mail_snelkoppeling_staat_altijd_op_dashboard(app_client):
     assert "/pand/mahoniestraat/huurders/mailen" in body
 
 
+def test_huuropzegging_snelkoppeling_staat_altijd_op_dashboard(app_client):
+    client, _config = app_client
+    resp = client.get("/pand/mahoniestraat/")
+    body = resp.get_data(as_text=True)
+    assert "/pand/mahoniestraat/huuropzegging" in body
+
+
 def test_aanzegging_afhandelen_verbergt_waarschuwing_maar_niet_de_leegkomt_tegel(app_client):
     client, config = app_client
     # binnen de wettelijke aanzegtermijn (1-3 maanden voor einddatum)

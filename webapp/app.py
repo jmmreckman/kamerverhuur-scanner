@@ -380,6 +380,41 @@ def create_app(config: Config | None = None) -> Flask:
             flash(f"Aanzegging voor kamer {kamer} gemarkeerd als afgehandeld.")
         return redirect(url_for("dashboard", pand_slug=pand_slug))
 
+    def _kamer_snapshot_velden(kamer: Tenant) -> dict:
+        """Alle bewerkbare velden van een kamer als kwargs voor
+        sheet.update_kamer(), zodat een gerichte wijziging (bv. alleen de
+        einddatum) niet per ongeluk de rest van de rij leegmaakt."""
+        return {
+            "naam": kamer.naam, "kamer": kamer.kamer, "verwacht_bedrag": kamer.verwacht_bedrag,
+            "iban": kamer.iban, "zoekwoord": kamer.zoekwoord, "kale_huurprijs": kamer.kale_huurprijs,
+            "servicekosten": kamer.servicekosten, "contract_einddatum": kamer.contract_einddatum,
+            "opmerking": kamer.opmerking, "email": kamer.email, "telefoonnummer": kamer.telefoonnummer,
+            "geboortedatum": kamer.geboortedatum, "geboorteplaats": kamer.geboorteplaats,
+            "studentnummer": kamer.studentnummer, "studierichting": kamer.studierichting,
+            "borgsteller_naam": kamer.borgsteller_naam, "borgsteller_relatie": kamer.borgsteller_relatie,
+            "contract_startdatum": kamer.contract_startdatum, "borg_bedrag": kamer.borg_bedrag,
+        }
+
+    @app.route("/pand/<pand_slug>/huuropzegging", methods=["GET", "POST"])
+    @login_required
+    def huuropzegging_doorgeven(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        tenants = sheet.get_tenants()
+        if request.method == "POST":
+            kamer_naam = request.form.get("kamer", "").strip()
+            einddatum = request.form.get("einddatum", "").strip()
+            kamer = next((k for k in tenants if k.kamer == kamer_naam), None)
+            if not kamer or not einddatum:
+                flash("Kies een huurder en een einddatum.")
+            else:
+                einddatum_nl = contracts._datum_lang(einddatum)
+                velden = _kamer_snapshot_velden(kamer)
+                velden["contract_einddatum"] = einddatum_nl
+                sheet.update_kamer(row_index=kamer.row_index, **velden)
+                flash(f"Huuropzegging verwerkt: kamer {kamer.kamer} ({kamer.naam}) loopt af op {einddatum_nl}.")
+                return redirect(url_for("dashboard", pand_slug=pand_slug))
+        return render_template("huuropzegging.html", tenants=tenants)
+
     # --- Huurders ---
 
     @app.route("/pand/<pand_slug>/huurders")

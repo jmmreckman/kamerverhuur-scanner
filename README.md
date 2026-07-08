@@ -27,18 +27,25 @@ nodig.
 - **Panden beheren** - nieuwe panden toevoegen, bewerken of verwijderen kan
   via de "Panden"-knop in de site zelf (voor beheerders met toegang tot alle
   panden) - geen `properties.json` meer met de hand bewerken op de server.
-- **Dashboard** - tegels per pand: "X/Y huurpenningen ontvangen" (deze
-  kalendermaand), het ontvangen bedrag, per kamer die binnenkort (binnen ~2
-  maanden) leegkomt een eigen tegel ("Binnen X weken komt kamer Y leeg"), en
-  een snelkoppeling naar "Mail het hele huishouden". Daarboven staat, indien
-  van toepassing, een aparte waarschuwing als een tijdelijk huurcontract
-  binnenkort (of al) aangezegd moet worden (wettelijk verplicht 1-3 maanden
-  voor de einddatum, art. 7:271 BW) - eenmaal aangezegd kun je die
-  waarschuwing wegklikken ("Afgehandeld"); ze verdwijnt dan totdat er een
-  nieuw contract met een andere einddatum voor die kamer is. De "komt leeg"-
-  tegel blijft daarna gewoon staan (aangezegd hebben betekent niet dat de
-  kamer al weer verhuurd is) - die verdwijnt vanzelf zodra de kamer een
-  nieuwe huurder (en dus een nieuwe einddatum) heeft.
+- **Dashboard** - tegels per pand: "X/Y huurpenningen ontvangen" en het
+  ontvangen bedrag (allebei linken naar de Betalingen-pagina), per kamer die
+  binnenkort (binnen ~2 maanden) leegkomt een eigen tegel ("Binnen X weken
+  komt kamer Y leeg"), en snelkoppelingen naar "Mail het hele huishouden" en
+  "Huuropzegging doorgeven". Daarboven staat, indien van toepassing, een
+  aparte waarschuwing als een tijdelijk huurcontract binnenkort (of al)
+  aangezegd moet worden (wettelijk verplicht 1-3 maanden voor de einddatum,
+  art. 7:271 BW) - eenmaal aangezegd kun je die waarschuwing wegklikken
+  ("Afgehandeld"); ze verdwijnt dan totdat er een nieuw contract met een
+  andere einddatum voor die kamer is. De "komt leeg"-tegel blijft daarna
+  gewoon staan (aangezegd hebben betekent niet dat de kamer al weer verhuurd
+  is) - die verdwijnt vanzelf zodra de kamer een nieuwe huurder (en dus een
+  nieuwe einddatum) heeft.
+- **Huuropzegging doorgeven** - knop op het dashboard: kies een huurder uit een
+  dropdown, geef de nieuwe einddatum op en sla op. Die einddatum wordt direct
+  weggeschreven naar kolom F ("Contract einddatum") van de Huurders-sheet -
+  precies dezelfde kolom die de aanzeg-waarschuwing en de "komt leeg"-tegel al
+  gebruiken, dus die reageren er automatisch op. De rest van de kamergegevens
+  (huurprijs, contactgegevens, contractvelden) blijft ongewijzigd.
 - **Kamers** - overzicht van alle kamers van het gekozen pand, klik door naar een
   kamer voor huurder, huurprijs, contract(en), betaalgeschiedenis en een
   betrouwbaarheidsscore (% van de controles op tijd/correct betaald). De
