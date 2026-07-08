@@ -322,6 +322,8 @@ def create_app(config: Config | None = None) -> Flask:
 
     # --- Dashboard ---
 
+    _AANZEG_TEGEL_DAGEN = 60  # ~2 maanden, voor de "loopt binnenkort af"-tegel
+
     @app.route("/pand/<pand_slug>/")
     @login_required
     def dashboard(pand_slug: str):
@@ -333,18 +335,42 @@ def create_app(config: Config | None = None) -> Flask:
                 "ontvangen": sum(Decimal(r["ontvangen_bedrag"]) for r in cache["resultaten"]),
             }
         sheet = SheetClient(config, g.pand)
-        aanzeg_waarschuwingen = [
+        kamer_statussen = [
             (kamer, bereken_aanzeg_status(kamer.contract_einddatum))
             for kamer in sheet.get_kamers()
+            if kamer.naam
+        ]
+        kamer_statussen = [
+            (kamer, status)
+            for kamer, status in kamer_statussen
+            if status
+            and not state.aanzegging_is_afgehandeld(pand_slug, kamer.kamer, status.einddatum.isoformat(), config.state_dir)
         ]
         aanzeg_waarschuwingen = [
-            (kamer, status)
-            for kamer, status in aanzeg_waarschuwingen
-            if status and (status.moet_nu_aanzeggen or status.venster_verstreken)
+            (kamer, status) for kamer, status in kamer_statussen if status.moet_nu_aanzeggen or status.venster_verstreken
         ]
-        return render_template(
-            "dashboard.html", cache=cache, totalen=totalen, aanzeg_waarschuwingen=aanzeg_waarschuwingen
+        aflopende_contracten = sorted(
+            (
+                (kamer, status)
+                for kamer, status in kamer_statussen
+                if 0 <= status.dagen_tot_einddatum <= _AANZEG_TEGEL_DAGEN
+            ),
+            key=lambda ks: ks[1].dagen_tot_einddatum,
         )
+        return render_template(
+            "dashboard.html", cache=cache, totalen=totalen,
+            aanzeg_waarschuwingen=aanzeg_waarschuwingen, aflopende_contracten=aflopende_contracten,
+        )
+
+    @app.route("/pand/<pand_slug>/dashboard/aanzegging-afhandelen", methods=["POST"])
+    @login_required
+    def aanzegging_afhandelen(pand_slug: str):
+        kamer = request.form.get("kamer", "").strip()
+        einddatum = request.form.get("einddatum", "").strip()
+        if kamer and einddatum:
+            state.markeer_aanzegging_afgehandeld(pand_slug, kamer, einddatum, config.state_dir)
+            flash(f"Aanzegging voor kamer {kamer} gemarkeerd als afgehandeld.")
+        return redirect(url_for("dashboard", pand_slug=pand_slug))
 
     # --- Huurders ---
 

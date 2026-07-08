@@ -27,9 +27,15 @@ nodig.
 - **Panden beheren** - nieuwe panden toevoegen, bewerken of verwijderen kan
   via de "Panden"-knop in de site zelf (voor beheerders met toegang tot alle
   panden) - geen `properties.json` meer met de hand bewerken op de server.
-- **Dashboard** - overzicht van de laatste betaalcontrole per pand, plus een
-  waarschuwing als een tijdelijk huurcontract binnenkort (of al) aangezegd moet
-  worden (wettelijk verplicht 1-3 maanden voor de einddatum, art. 7:271 BW).
+- **Dashboard** - vier tegels per pand: "X/Y huurpenningen ontvangen" (deze
+  kalendermaand), het ontvangen bedrag, of er binnenkort (binnen ~2 maanden)
+  een contract afloopt (en zo ja, welke kamer als eerste), en een
+  snelkoppeling naar "Mail het hele huishouden". Daarboven staat, indien van
+  toepassing, een waarschuwing als een tijdelijk huurcontract binnenkort (of
+  al) aangezegd moet worden (wettelijk verplicht 1-3 maanden voor de
+  einddatum, art. 7:271 BW) - eenmaal aangezegd kun je die waarschuwing
+  wegklikken ("Afgehandeld"), ze verdwijnt dan totdat er een nieuw contract
+  met een andere einddatum voor die kamer is.
 - **Kamers** - overzicht van alle kamers van het gekozen pand, klik door naar een
   kamer voor huurder, huurprijs, contract(en), betaalgeschiedenis en een
   betrouwbaarheidsscore (% van de controles op tijd/correct betaald).

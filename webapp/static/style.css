@@ -258,6 +258,9 @@ h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
 .stat-value { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
 .stat-label { color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
 
+a.stat-card { text-decoration: none; color: inherit; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+a.stat-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+
 /* ---------- Tabellen ---------- */
 
 .tabel-scroll { overflow-x: auto; }
@@ -323,6 +326,29 @@ td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, t
   cursor: pointer;
   text-decoration: underline;
 }
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.btn-link:hover { color: var(--text); }
+
+.aanzeg-lijst { list-style: none; padding: 0; margin: 0; }
+.aanzeg-lijst li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+}
+.aanzeg-lijst li + li { border-top: 1px solid var(--border); }
 
 .btn-xs {
   padding: 0.3rem 0.7rem;

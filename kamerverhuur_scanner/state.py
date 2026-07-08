@@ -72,3 +72,27 @@ def email_verzonden_op(pand_slug: str, kamer: str, soort: str, maand: str, state
         return None
     data = json.loads(p.read_text())
     return data.get(f"{kamer}|{soort}|{maand}")
+
+
+def _aanzeggingen_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"afgehandelde_aanzeggingen_{veilige_slug}.json"
+
+
+def markeer_aanzegging_afgehandeld(pand_slug: str, kamer: str, einddatum: str, state_dir: str = ".") -> None:
+    """Onthoudt dat de aanzeg-waarschuwing voor deze kamer/einddatum is
+    weggeklikt (de aanzegging is al gedaan). Gesleuteld op (kamer, einddatum)
+    zodat een nieuw contract met een andere einddatum vanzelf weer een
+    (nieuwe) waarschuwing geeft."""
+    p = _aanzeggingen_bestandsnaam(pand_slug, state_dir)
+    data = json.loads(p.read_text()) if p.exists() else {}
+    data[f"{kamer}|{einddatum}"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    p.write_text(json.dumps(data, indent=2))
+
+
+def aanzegging_is_afgehandeld(pand_slug: str, kamer: str, einddatum: str, state_dir: str = ".") -> bool:
+    p = _aanzeggingen_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return False
+    data = json.loads(p.read_text())
+    return f"{kamer}|{einddatum}" in data

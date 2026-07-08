@@ -1,6 +1,37 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro %}
+{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro, icon_contracten, icon_inbox %}
 {% block title %}Dashboard - {{ huidig_pand.naam }}{% endblock %}
+
+{% macro overige_tegels() %}
+  {% if aflopende_contracten %}
+  {% set eerstvolgende = aflopende_contracten[0] %}
+  <a class="stat-card" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=eerstvolgende[0].kamer) }}">
+    <div class="stat-icon warn">{{ icon_contracten() }}</div>
+    <div>
+      <div class="stat-value">Binnen {{ eerstvolgende[1].dagen_tot_einddatum // 7 }} weken</div>
+      <div class="stat-label">
+        verloopt kamer {{ eerstvolgende[0].kamer }} ({{ eerstvolgende[0].naam }}){% if aflopende_contracten|length > 1 %} + {{ aflopende_contracten|length - 1 }} meer{% endif %}
+      </div>
+    </div>
+  </a>
+  {% else %}
+  <div class="stat-card">
+    <div class="stat-icon ok">{{ icon_check() }}</div>
+    <div>
+      <div class="stat-value">Geen</div>
+      <div class="stat-label">contracten lopen binnenkort af</div>
+    </div>
+  </div>
+  {% endif %}
+  <a class="stat-card" href="{{ url_for('huishouden_mailen', pand_slug=huidig_pand.slug) }}">
+    <div class="stat-icon">{{ icon_inbox() }}</div>
+    <div>
+      <div class="stat-value">Mail</div>
+      <div class="stat-label">het hele huishouden</div>
+    </div>
+  </a>
+{% endmacro %}
+
 {% block content %}
 <div class="page-header">
   <h1>Dashboard</h1>
@@ -11,13 +42,21 @@
 <div class="card warning-box">
   <h2>Contracten die aangezegd moeten worden</h2>
   <p class="muted">Bij tijdelijke huurcontracten moet je 1-3 maanden voor de einddatum schriftelijk
-     laten weten dat het contract afloopt, anders wordt het automatisch voor onbepaalde tijd.</p>
-  <ul>
+     laten weten dat het contract afloopt, anders wordt het automatisch voor onbepaalde tijd. Al
+     aangezegd? Klik 'm dan weg.</p>
+  <ul class="aanzeg-lijst">
     {% for kamer, status in aanzeg_waarschuwingen %}
     <li>
-      <a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Kamer {{ kamer.kamer }} ({{ kamer.naam }})</a>
-      - einddatum {{ status.einddatum.strftime("%d-%m-%Y") }}
-      {% if status.venster_verstreken %}<strong>- de aanzegtermijn loopt al, actie nodig!</strong>{% else %}- aanzeggen vóór {{ status.venster_einde.strftime("%d-%m-%Y") }}{% endif %}
+      <span>
+        <a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Kamer {{ kamer.kamer }} ({{ kamer.naam }})</a>
+        - einddatum {{ status.einddatum.strftime("%d-%m-%Y") }}
+        {% if status.venster_verstreken %}<strong>- de aanzegtermijn loopt al, actie nodig!</strong>{% else %}- aanzeggen vóór {{ status.venster_einde.strftime("%d-%m-%Y") }}{% endif %}
+      </span>
+      <form method="post" action="{{ url_for('aanzegging_afhandelen', pand_slug=huidig_pand.slug) }}">
+        <input type="hidden" name="kamer" value="{{ kamer.kamer }}">
+        <input type="hidden" name="einddatum" value="{{ status.einddatum.isoformat() }}">
+        <button class="btn-link" type="submit" title="Al aangezegd - wegklikken">&times; Afgehandeld</button>
+      </form>
     </li>
     {% endfor %}
   </ul>
@@ -25,6 +64,9 @@
 {% endif %}
 
 {% if not cache %}
+<div class="stat-grid">
+  {{ overige_tegels() }}
+</div>
 <div class="card">
   <p>Nog geen betaalcontrole uitgevoerd.</p>
   <a class="btn" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Nu controleren</a>
@@ -39,7 +81,7 @@
     <div class="stat-icon {{ 'ok' if alles_ok else 'warn' }}">{{ icon_check() if alles_ok else icon_alert() }}</div>
     <div>
       <div class="stat-value">{{ resultaten|length - problemen|length }} / {{ resultaten|length }}</div>
-      <div class="stat-label">kamers in orde</div>
+      <div class="stat-label">huurpenningen ontvangen</div>
     </div>
   </div>
   <div class="stat-card">
@@ -49,13 +91,7 @@
       <div class="stat-label">van {{ totalen.verwacht|eur }} ontvangen</div>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="stat-icon">{{ icon_clock() }}</div>
-    <div>
-      <div class="stat-value">{{ cache["gecontroleerd_op"] }}</div>
-      <div class="stat-label">laatst gecontroleerd</div>
-    </div>
-  </div>
+  {{ overige_tegels() }}
 </div>
 
 <div class="card">
