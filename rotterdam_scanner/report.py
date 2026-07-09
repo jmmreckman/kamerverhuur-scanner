@@ -11,8 +11,11 @@ _STYLE = """
 body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; }
 h1 { font-size: 20px; }
 h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; table-layout: fixed; }
+th, td {
+  text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px;
+  vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+}
 th { background: #f4f4f4; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 .badge-nieuw { background: #d7f0d7; color: #1a5c1a; }
@@ -21,6 +24,12 @@ th { background: #f4f4f4; }
 .actie { display: inline-block; white-space: nowrap; }
 .actie-verwijder { color: #a12b2b; }
 """
+
+# Sommige e-mailclients (o.a. Gmail-mobiel) negeren <style>-blokken deels of geheel, dus
+# de meest kwetsbare cel (lange, aaneengesloten monumentenregister-URL's zonder
+# afbreekpunten) krijgt de word-break/max-width ook als inline style -- dat voorkomt dat
+# die ene kolom de rest van de tabel scheeftrekt, ook als de <style> genegeerd wordt.
+_OPSLAG_TD_STYLE = "word-break: break-word; overflow-wrap: anywhere; max-width: 260px;"
 
 _VERWIJDER_BODY = (
     "Automatisch gegenereerd -- niet aanpassen. Verstuur deze mail om dit huis uit "
@@ -79,7 +88,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
       <td>{prijs_per_m2_tekst}</td>
       <td>{dagen} dag{'en' if dagen != 1 else ''}</td>
       <td>{' '.join(badges)}{opmerking_html}</td>
-      <td>{opslag_html}</td>
+      <td style="{_OPSLAG_TD_STYLE}">{opslag_html}</td>
       <td>{_acties_html(item, scanner_email)}</td>
     </tr>
     """
@@ -87,8 +96,11 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
 _ACTIEF_TABEL_HEADER = """
     <tr>
-      <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
-      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
+      <th style="width:16%">Adres</th><th style="width:9%">Wijk</th>
+      <th style="width:8%">Vraagprijs</th><th style="width:9%">Oppervlakte</th>
+      <th style="width:7%">€/m²</th><th style="width:8%">Dagen bekend</th>
+      <th style="width:12%">Nog te checken</th><th style="width:20%">Mogelijke huurprijsopslag</th>
+      <th style="width:11%">Acties</th>
     </tr>
 """
 
