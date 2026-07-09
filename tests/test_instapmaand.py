@@ -165,6 +165,43 @@ def test_run_check_instapmaand_exacte_pro_rata_plus_borg_is_betaald(monkeypatch,
     assert results[0].ontvangen_bedrag == Decimal("1600.00")
 
 
+class FakeSheetClientInstapperAfronding(FakeSheetClientInstapper):
+    def get_tenants(self):
+        return [_tenant(verwacht_bedrag=Decimal("745.00"), contract_startdatum="13-07-2026", borg_bedrag=Decimal("1000.00"))]
+
+
+class FakeBunqClientInstapperTweeBetalingen:
+    """Huurder betaalt de borg en de eerste huur los, in twee betalingen -
+    samen net iets minder dan de exacte pro-rata + borg door een klein
+    afrondingsverschil (bv. een dag anders gerekend bij de ingangsdatum)."""
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("1000.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg", datum=date(2026, 7, 13)),
+            Payment(bedrag=Decimal("447.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="eerste huur", datum=date(2026, 7, 14)),
+        ]
+
+
+def test_run_check_instapmaand_twee_betalingen_binnen_10_procent_is_betaald(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie: borg + eerste huur in 2
+    # losse overschrijvingen van dezelfde huurder, samen €1.447,00 tegen een
+    # exact-berekende verwachting (pro-rata huur vanaf 13 juli + €1.000 borg)
+    # van €1.456,61 - een verschil van maar €9,61 (0,7%), typisch het gevolg
+    # van een dag verschil in de ingangsberekening. Dat moet dus gewoon
+    # "Betaald" zijn, niet "Te weinig ontvangen".
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientInstapperAfronding)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientInstapperTweeBetalingen)
+
+    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True)
+
+    assert results[0].ontvangen_bedrag == Decimal("1447.00")
+    assert results[0].status == Status.BETAALD
+
+
 # --- backfill_geschiedenis(): per-kamer terugzoeken vanaf de startdatum ---
 
 
@@ -258,6 +295,49 @@ def test_backfill_geschiedenis_per_kamer_vanaf_startdatum(monkeypatch):
     # historieregels opgeschoond - Luisa heeft geen bekende startdatum, dus
     # geen enkele maand is "te vroeg" om op te schonen.
     assert sheet.opgeschoond_voor == [("1", "Henri", "2026-05")]
+
+
+class FakeBunqClientBackfillAfronding(FakeBunqClientBackfill):
+    def get_incoming_payments(self, pand, since):
+        return [
+            # mei (instapmaand van Henri): €14,52 minder dan de exacte
+            # pro-rata (384,52) - binnen de 10%-marge voor de instapmaand.
+            Payment(bedrag=Decimal("370.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="huur", datum=date(2026, 5, 16)),
+            # juni (gewone maand): zelfde afwijking van €14,52, maar dat is
+            # hier GEEN instapmaand meer, dus moet gewoon "Te weinig" blijven.
+            Payment(bedrag=Decimal("730.48"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="huur", datum=date(2026, 6, 2)),
+            Payment(bedrag=Decimal("650.00"), valuta="EUR", tegenpartij_naam="Luisa", tegenpartij_iban=None,
+                    omschrijving="huur", datum=date(2026, 1, 3)),
+        ]
+
+
+def test_backfill_geschiedenis_instapmaand_binnen_10_procent_is_betaald(monkeypatch):
+    sheet_instances = []
+
+    def _sheet_factory(config, pand):
+        instance = FakeSheetClientBackfill(config, pand)
+        sheet_instances.append(instance)
+        return instance
+
+    monkeypatch.setattr(runner, "SheetClient", _sheet_factory)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientBackfillAfronding)
+
+    config = Config(
+        google_service_account_file="fake.json", properties_file="properties.json",
+        bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
+        users_file="users.json", flask_secret_key="test-secret",
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=".",
+    )
+    backfill_geschiedenis(config, _pand(), aantal_maanden=12, vandaag=date(2026, 7, 8))
+
+    per_maand = dict(sheet_instances[0].upsert_calls)
+    mei_resultaat = next(r for r in per_maand["2026-05"] if r.tenant.kamer == "1")
+    assert mei_resultaat.status == Status.BETAALD  # instapmaand: binnen 10%-marge
+
+    juni_resultaat = next(r for r in per_maand["2026-06"] if r.tenant.kamer == "1")
+    assert juni_resultaat.status == Status.TE_WEINIG  # gewone maand: geen ruimere marge
 
 
 class FakeSheetClientBackfillIso(FakeSheetClientBackfill):

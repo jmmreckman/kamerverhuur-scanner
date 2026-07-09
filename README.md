@@ -99,8 +99,13 @@ nodig.
   dagen van die maand (bij een start op de 1e is dat gewoon de volle
   maandhuur) **plus de waarborgsom** uit kolom Y ("Borg") - huurders betalen
   die vaak in één keer samen met de eerste (deel)maand, en dat mag niet als
-  "Te veel ontvangen" verschijnen. Zie ook "Welke maand telt een betaling mee"
-  hieronder voor de 1e/17e/18e-regel die ná de instapmaand blijft gelden.
+  "Te veel ontvangen" verschijnen. Voor de instapmaand geldt bovendien een
+  ruimere tolerantie van **10%** i.p.v. de normale (bijna exacte) tolerantie
+  in centen - de pro-rata berekening wijkt vaker een paar euro af door
+  afrondingsverschillen (bv. een dag verschil in de ingangsdatum), en borg +
+  eerste huur worden ook vaak in 2 losse overschrijvingen betaald in plaats
+  van 1. Zie ook "Welke maand telt een betaling mee" hieronder voor de
+  1e/17e/18e-regel die ná de instapmaand blijft gelden.
   Ruimt bij elke druk op de knop ook automatisch eventuele dubbele
   Historie-regels voor dezelfde (kamer, maand)-combinatie op, én (voor kamers
   met een bekende "Contract startdatum") regels van vóór die instapdatum die

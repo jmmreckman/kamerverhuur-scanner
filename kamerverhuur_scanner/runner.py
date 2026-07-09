@@ -14,7 +14,7 @@ from . import state
 from .bunq_client import BunqClient
 from .config import Config
 from .mailer import MailError, verstuur_email
-from .matcher import _bepaal_status, match_tenants_to_payments
+from .matcher import _INSTAPMAAND_TOLERANTIE_PERCENTAGE, _bepaal_status, match_tenants_to_payments
 from .models import Pand, Payment, Status, Tenant, TenantResult
 from .sheet_client import SheetClient
 
@@ -129,6 +129,11 @@ def run_check(
         dataclasses.replace(t, verwacht_bedrag=_verwacht_bedrag_voor_maand(t, huidige_maand_sleutel))
         for t in tenants
     ]
+    instapmaand_kamers = {
+        t.kamer for t in tenants
+        if (start := _parse_datum_dmy(t.contract_startdatum) if t.contract_startdatum else None)
+        and (start.year, start.month) == huidige_maand_sleutel
+    }
 
     logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
     bunq = BunqClient(config)
@@ -139,7 +144,9 @@ def run_check(
     payments = [p for p in alle_payments if _effectieve_maand(p.datum) == huidige_maand_sleutel]
     logger.info("[%s] %d inkomende betalingen gevonden deze maand", pand.slug, len(payments))
 
-    results, unmatched = match_tenants_to_payments(tenants_voor_match, payments, config.bedrag_tolerantie)
+    results, unmatched = match_tenants_to_payments(
+        tenants_voor_match, payments, config.bedrag_tolerantie, instapmaand_kamers
+    )
 
     if not dry_run:
         maand = vandaag.strftime("%Y-%m")
@@ -228,6 +235,10 @@ def _verdeel_over_maanden(
     _verwacht_bedrag_voor_maand()) - het teruggegeven bedrag komt terug als
     4e element van de tuple, zodat de Historie-sheet ook voor die maand een
     kloppend "Verwacht bedrag" laat zien in plaats van de volle maandhuur.
+    Voor zo'n maand geldt bovendien een ruimere tolerantie van 10% i.p.v. de
+    normale tolerantie in centen, want de pro-rata berekening wijkt vaker een
+    paar euro af door afrondingsverschillen (bv. een dag verschil in de
+    ingangsdatum) dan een normale volle-maand huur.
 
     Bewust GEEN cumulatieve verrekening over de hele periode: een
     huurverhoging halverwege de teruggezochte maanden zou dan het
@@ -247,10 +258,12 @@ def _verdeel_over_maanden(
     resultaat: dict[str, tuple[Decimal, Status, date | None, Decimal]] = {}
     for sleutel in maanden:
         ontvangen, laatste_datum = per_maand[sleutel]
+        is_instapmaand = sleutel in (verwacht_per_maand or {})
         verwacht_deze_maand = (verwacht_per_maand or {}).get(sleutel, verwacht_bedrag)
         maand_key = f"{sleutel[0]}-{sleutel[1]:02d}"
+        percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if is_instapmaand else Decimal("0")
         resultaat[maand_key] = (
-            ontvangen, _bepaal_status(ontvangen, verwacht_deze_maand, tolerantie), laatste_datum, verwacht_deze_maand,
+            ontvangen, _bepaal_status(ontvangen, verwacht_deze_maand, tolerantie, percentage), laatste_datum, verwacht_deze_maand,
         )
 
     return resultaat

@@ -124,6 +124,36 @@ def test_matcht_op_deel_van_koppelnaam():
     assert unmatched == []
 
 
+def test_ruimere_tolerantie_kamer_accepteert_afwijking_binnen_10_procent():
+    # De instapmaand (pro-rata huur + borg) wijkt vaker een paar euro af door
+    # afrondingsverschillen (bv. een dag verschil in de ingangsdatum) - voor
+    # zo'n kamer geldt daarom een tolerantie van 10% i.p.v. bijna exact.
+    tenant = _tenant(kamer="1", bedrag="1471.83")
+    payments = [_payment(bedrag="1447.00")]  # 1,7% minder dan verwacht
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, {"1"})
+
+    assert results[0].status == Status.BETAALD
+
+
+def test_ruimere_tolerantie_geldt_niet_voor_andere_kamers():
+    tenant = _tenant(kamer="2", bedrag="1471.83")
+    payments = [_payment(bedrag="1447.00")]
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, {"1"})
+
+    assert results[0].status == Status.TE_WEINIG
+
+
+def test_ruimere_tolerantie_accepteert_geen_afwijking_boven_10_procent():
+    tenant = _tenant(kamer="1", bedrag="1471.83")
+    payments = [_payment(bedrag="1300.00")]  # ruim 10% minder dan verwacht
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, {"1"})
+
+    assert results[0].status == Status.TE_WEINIG
+
+
 def test_betaling_wordt_niet_dubbel_toegekend():
     # "Vries" matcht ook op de betaling van "Jan de Vries" -> test dat de betaling
     # niet aan beide huurders tegelijk wordt toegekend.

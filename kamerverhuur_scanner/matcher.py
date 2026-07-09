@@ -19,13 +19,27 @@ from decimal import Decimal
 
 from .models import Payment, Status, Tenant, TenantResult
 
+# Procentuele tolerantie voor de instapmaand (pro-rata huur + borg): die
+# berekening is gevoeliger voor kleine afrondingsverschillen (bv. een dag
+# verschil in de ingangsdatum, of een maand met een ander aantal dagen dan
+# aangenomen) dan een normale volle-maand huur, dus daar geldt een ruimere
+# marge dan de normale (bijna exacte) tolerantie in centen.
+_INSTAPMAAND_TOLERANTIE_PERCENTAGE = Decimal("0.10")
+
 
 def match_tenants_to_payments(
     tenants: list[Tenant],
     payments: list[Payment],
     tolerantie: Decimal = Decimal("0.01"),
+    ruimere_tolerantie_kamers: set[str] | None = None,
 ) -> tuple[list[TenantResult], list[Payment]]:
-    """Geeft (resultaten per huurder, niet-gekoppelde betalingen) terug."""
+    """Geeft (resultaten per huurder, niet-gekoppelde betalingen) terug.
+
+    `ruimere_tolerantie_kamers` (kameromers) krijgen een procentuele tolerantie
+    van 10% i.p.v. de normale (bijna exacte) tolerantie in centen - bedoeld
+    voor de instapmaand, waar de pro-rata huur + borg vaker een paar euro
+    afwijkt door afrondingsverschillen (bv. een dag verschil in de
+    ingangsdatum) dan een normale volle-maand huur."""
     remaining = list(payments)
     results: list[TenantResult] = []
 
@@ -34,7 +48,8 @@ def match_tenants_to_payments(
         for payment in matched:
             remaining.remove(payment)
         ontvangen = sum((p.bedrag for p in matched), Decimal("0"))
-        status = _bepaal_status(ontvangen, tenant.verwacht_bedrag, tolerantie)
+        percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if tenant.kamer in (ruimere_tolerantie_kamers or set()) else Decimal("0")
+        status = _bepaal_status(ontvangen, tenant.verwacht_bedrag, tolerantie, percentage)
         results.append(
             TenantResult(tenant=tenant, ontvangen_bedrag=ontvangen, status=status, gematchte_betalingen=matched)
         )
@@ -78,10 +93,13 @@ def _naam_delen(naam: str) -> list[str]:
     return delen
 
 
-def _bepaal_status(ontvangen: Decimal, verwacht: Decimal, tolerantie: Decimal) -> Status:
+def _bepaal_status(
+    ontvangen: Decimal, verwacht: Decimal, tolerantie: Decimal, tolerantie_percentage: Decimal = Decimal("0")
+) -> Status:
     if ontvangen <= 0:
         return Status.NIET_ONTVANGEN
+    effectieve_tolerantie = max(tolerantie, verwacht * tolerantie_percentage)
     verschil = ontvangen - verwacht
-    if abs(verschil) <= tolerantie:
+    if abs(verschil) <= effectieve_tolerantie:
         return Status.BETAALD
     return Status.TE_VEEL if verschil > 0 else Status.TE_WEINIG
