@@ -12,11 +12,13 @@ class FakeWorksheet:
         self._rows = rows
         self.batch_updates = []
         self.appended_rows = []
+        self.laatste_value_input_option = None
 
     def get_all_values(self):
         return self._rows
 
     def batch_update(self, updates, value_input_option="USER_ENTERED"):
+        self.laatste_value_input_option = value_input_option
         self.batch_updates.append(updates)
         for u in updates:
             # simuleer het effect op _rows, zodat opeenvolgende aanroepen
@@ -27,10 +29,12 @@ class FakeWorksheet:
             self._rows[rij - 1] = u["values"][0]
 
     def append_rows(self, rows, value_input_option="USER_ENTERED"):
+        self.laatste_value_input_option = value_input_option
         self.appended_rows.extend(rows)
         self._rows.extend(rows)
 
     def append_row(self, row, value_input_option="USER_ENTERED"):
+        self.laatste_value_input_option = value_input_option
         self.appended_rows.append(row)
         self._rows.append(row)
 
@@ -231,6 +235,81 @@ def test_upsert_history_maakt_nieuwe_regel_voor_nieuwe_maand_zelfde_kamer():
     assert ws.appended_rows[0][0] == "2026-07"
     # De juni-regel blijft ongemoeid staan.
     assert ws.get_all_values()[1][0] == "2026-06"
+
+
+def test_upsert_history_herkent_bestaande_rij_ondanks_google_sheets_datumconversie():
+    # Regressietest voor een echt gemelde situatie: Google Sheets herkende een
+    # eerder geschreven "2026-06" zelf als datum en sloeg 'm op/toonde 'm als
+    # "01-06-2026" - zonder normalisatie vond upsert_history de bestaande rij
+    # dan niet meer terug en bleef een nieuwe regel toevoegen i.p.v. bijwerken.
+    bestaand = [
+        HISTORIE_HEADER,
+        ["01-06-2026", "1", "Jan", "650,00", "0,00", "Nog niet ontvangen", ""],
+    ]
+    client, ws = _sheet_client_met_historie(bestaand)
+
+    resultaat = _result(betaaldatum=date(2026, 6, 15))
+    client.upsert_history([resultaat], maand="2026-06")
+
+    assert ws.appended_rows == []  # geen dubbele rij - de bestaande regel is bijgewerkt
+    assert len(ws.batch_updates) == 1
+    bijgewerkte_rij = ws.batch_updates[0][0]["values"][0]
+    assert bijgewerkte_rij[5] == "Betaald"
+
+
+def test_upsert_history_schrijft_met_raw_input_option():
+    # value_input_option=RAW voorkomt dat Google Sheets "2026-07" zelf als
+    # datum gaat interpreteren en omzetten naar "01-07-2026".
+    client, ws = _sheet_client_met_historie([HISTORIE_HEADER])
+    resultaat = _result(betaaldatum=date(2026, 7, 3))
+    client.upsert_history([resultaat], maand="2026-07")
+    assert ws.laatste_value_input_option == "RAW"
+
+
+def test_dedupliceer_geschiedenis_herstelt_door_sheets_omgezette_maandwaarden():
+    # Zelfde datumconversie-scenario als hierboven, maar dan in combinatie
+    # met een echte duplicaat - dedupliceer_geschiedenis moet beide rijen als
+    # dezelfde (kamer, maand) herkennen én de overblijvende rij genezen.
+    rows = [
+        HISTORIE_HEADER,
+        ["01-06-2026", "1", "Jan", "650,00", "0,00", "Nog niet ontvangen", ""],
+        ["2026-06", "1", "Jan", "650,00", "650,00", "Betaald", "15-06-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    verwijderd = client.dedupliceer_geschiedenis()
+
+    assert verwijderd == 1
+    overgebleven = ws.get_all_values()
+    assert len(overgebleven) == 2  # koprij + 1
+    assert overgebleven[1][0] == "2026-06"  # genezen naar het canonieke formaat
+    assert overgebleven[1][5] == "Betaald"  # de onderste (meest recente) regel is bewaard
+
+
+def test_dedupliceer_geschiedenis_geneest_ook_zonder_duplicaten():
+    rows = [
+        HISTORIE_HEADER,
+        ["01-06-2026", "1", "Jan", "650,00", "650,00", "Betaald", "15-06-2026"],
+    ]
+    client, ws = _sheet_client_met_historie(rows)
+
+    client.dedupliceer_geschiedenis()
+
+    assert ws.get_all_values()[1][0] == "2026-06"
+
+
+def test_get_geschiedenis_herkent_door_sheets_omgezette_maandwaarde():
+    rows = [
+        HISTORIE_HEADER,
+        ["01-06-2026", "1", "Stefania", "1471,83", "1447,00", "Betaald", "15-06-2026"],
+    ]
+    client, _ = _sheet_client_met_historie(rows)
+
+    geschiedenis = client.get_geschiedenis("1")
+
+    assert len(geschiedenis) == 1
+    assert geschiedenis[0].maand == "2026-06"
+    assert geschiedenis[0].ontvangen_bedrag == Decimal("1447.00")
 
 
 def test_get_geschiedenis_negeert_oud_datumformaat():

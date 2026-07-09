@@ -82,6 +82,40 @@ _SOMRIJ_LABELS = {"totalen", "totaal"}
 
 _HISTORIE_HEADER = ["Maand", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status", "Betaaldatum"]
 _MAAND_PATROON = re.compile(r"\d{4}-\d{2}")
+# Specifiek dag "01": zo slaat Google Sheets een geschreven "jjjj-mm" soms
+# zelf op als datum (de dag wordt daarbij altijd op de 1e gezet). Een ANDERE
+# dag (bv. "03-07-2026") is dus geen slachtoffer van die auto-conversie, maar
+# een echt oud/onherkenbaar rijformaat - dat moet nog steeds genegeerd worden.
+_MAAND_ALS_DATUM_PATROON = re.compile(r"01-(\d{2})-(\d{4})")
+
+
+def _normaliseer_maand(tekst: str) -> str | None:
+    """Zet een 'Maand'-waarde uit de Historie-sheet om naar het canonieke
+    'jjjj-mm'-formaat. Nodig omdat Google Sheets een geschreven waarde als
+    "2026-06" soms zelf herkent als datum en opslaat/toont als "01-06-2026"
+    (ondanks value_input_option=RAW bij nieuwe schrijfacties, voor rijen die
+    van vóór die fix dateren) - zonder deze normalisatie worden zulke rijen
+    onterecht als 'onherkenbaar oud formaat' overgeslagen. Geeft None terug
+    als de tekst geen van beide formaten is."""
+    tekst = tekst.strip()
+    if _MAAND_PATROON.fullmatch(tekst):
+        return tekst
+    match = _MAAND_ALS_DATUM_PATROON.fullmatch(tekst)
+    if match:
+        maand, jaar = match.groups()
+        return f"{jaar}-{maand}"
+    return None
+
+
+def _genezen_maand_kolom(row: list[str]) -> list[str]:
+    """Vervangt de 'Maand'-cel van een Historie-rij door de genormaliseerde
+    'jjjj-mm'-vorm, als die herkend wordt - laat de rij ongewijzigd als de
+    tekst geen van beide bekende formaten is (voorkomt dataverlies bij een
+    echt onherkenbare/handmatig aangepaste rij)."""
+    genormaliseerd = _normaliseer_maand(row[0]) if row else None
+    if not genormaliseerd:
+        return row
+    return [genormaliseerd, *row[1:]]
 
 _AANMELDINGEN_HEADER = [
     "Datum", "Kamer", "Naam", "Email", "Telefoon", "Huidig adres", "Studie",
@@ -285,7 +319,15 @@ class SheetClient:
         """Werkt de historieregel van elke huurder voor deze kalendermaand bij
         (of maakt 'm aan als die nog niet bestaat) - nooit een tweede regel
         voor dezelfde (kamer, maand)-combinatie, ook niet bij vaker
-        controleren binnen dezelfde maand."""
+        controleren binnen dezelfde maand.
+
+        Schrijft met value_input_option=RAW (i.p.v. USER_ENTERED), anders
+        herkent Google Sheets een waarde als "2026-06" soms zelf als datum en
+        slaat 'm op (en toont 'm) als "01-06-2026" - dan vindt deze functie
+        bij een volgende aanroep de bestaande rij niet meer terug (andere
+        tekst) en blijven er dubbele regels bijkomen. Bestaande rijen die al
+        zo'n datum-vermomming hebben (van vóór deze fix) worden bij het
+        opzoeken alsnog herkend via _normaliseer_maand()."""
         ws = self._history_worksheet()
         bestaande = ws.get_all_values()
         # Sleutel op (kamer, maand) samen - alleen op kamer sleutelen liet bij
@@ -293,9 +335,9 @@ class SheetClient:
         # geziene rij over, waardoor eerdere maanden niet meer gevonden
         # werden en er per ongeluk dubbele regels bijkwamen.
         rij_voor_kamer_maand = {
-            (row[1].strip(), row[0].strip()): i
+            (row[1].strip(), genormaliseerd): i
             for i, row in enumerate(bestaande[1:], start=2)
-            if len(row) > 1
+            if len(row) > 1 and (genormaliseerd := _normaliseer_maand(row[0]))
         }
 
         updates = []
@@ -318,9 +360,9 @@ class SheetClient:
                 nieuwe_rijen.append(rij)
 
         if updates:
-            ws.batch_update(updates, value_input_option="USER_ENTERED")
+            ws.batch_update(updates, value_input_option="RAW")
         if nieuwe_rijen:
-            ws.append_rows(nieuwe_rijen, value_input_option="USER_ENTERED")
+            ws.append_rows(nieuwe_rijen, value_input_option="RAW")
 
     def verwijder_geschiedenis_voor_instapdatum(self, kamer: str, huurder: str, oudste_geldige_maand: str) -> int:
         """Verwijdert Historie-regels van déze huurder op déze kamer van vóór
@@ -338,25 +380,27 @@ class SheetClient:
         header, data_rows = rows[0], rows[1:]
 
         schoon = [
-            row for row in data_rows
+            _genezen_maand_kolom(row) for row in data_rows
             if not (
                 len(row) > 2 and row[1].strip() == kamer and row[2].strip() == huurder
-                and row[0].strip() < oudste_geldige_maand
+                and (genormaliseerd := _normaliseer_maand(row[0])) and genormaliseerd < oudste_geldige_maand
             )
         ]
         verwijderd = len(data_rows) - len(schoon)
         if verwijderd > 0:
             ws.clear()
-            ws.append_row(header, value_input_option="USER_ENTERED")
+            ws.append_row(header, value_input_option="RAW")
             if schoon:
-                ws.append_rows(schoon, value_input_option="USER_ENTERED")
+                ws.append_rows(schoon, value_input_option="RAW")
         return verwijderd
 
     def dedupliceer_geschiedenis(self) -> int:
         """Verwijdert dubbele Historie-regels voor dezelfde (kamer, maand) -
         combinatie (kon ontstaan door een bug in upsert_history) en houdt de
         ONDERSTE (dus laatst weggeschreven, meest recente) regel. Geeft het
-        aantal verwijderde regels terug."""
+        aantal verwijderde regels terug. Herstelt daarbij ook meteen de
+        'Maand'-kolom van rijen die Google Sheets ooit als datum heeft
+        opgeslagen (bv. "01-06-2026" i.p.v. "2026-06"), zie _normaliseer_maand()."""
         ws = self._history_worksheet()
         rows = ws.get_all_values()
         if len(rows) <= 1:
@@ -366,7 +410,7 @@ class SheetClient:
         laatste_per_sleutel: dict[tuple[str, str], list[str]] = {}
         volgorde: list[tuple[str, str]] = []
         for row in data_rows:
-            row = row + [""] * (7 - len(row))
+            row = _genezen_maand_kolom(row + [""] * (7 - len(row)))
             sleutel = (row[1].strip(), row[0].strip())
             if sleutel not in laatste_per_sleutel:
                 volgorde.append(sleutel)
@@ -374,11 +418,12 @@ class SheetClient:
 
         schoon = [laatste_per_sleutel[sleutel] for sleutel in volgorde]
         verwijderd = len(data_rows) - len(schoon)
-        if verwijderd > 0:
+        moest_genezen = any(row[0].strip() != _normaliseer_maand(row[0]) for row in data_rows if _normaliseer_maand(row[0]))
+        if verwijderd > 0 or moest_genezen:
             ws.clear()
-            ws.append_row(header, value_input_option="USER_ENTERED")
+            ws.append_row(header, value_input_option="RAW")
             if schoon:
-                ws.append_rows(schoon, value_input_option="USER_ENTERED")
+                ws.append_rows(schoon, value_input_option="RAW")
         return verwijderd
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
@@ -387,12 +432,13 @@ class SheetClient:
         regels: list[HistorieRegel] = []
         for row in rows:
             row = row + [""] * (7 - len(row))
-            if row[1].strip() != kamer or not _MAAND_PATROON.fullmatch(row[0].strip()):
+            genormaliseerde_maand = _normaliseer_maand(row[0])
+            if row[1].strip() != kamer or not genormaliseerde_maand:
                 continue  # andere kamer, of een regel van vóór deze indeling (oud datumformaat)
             try:
                 regels.append(
                     HistorieRegel(
-                        maand=row[0].strip(),
+                        maand=genormaliseerde_maand,
                         kamer=row[1].strip(),
                         huurder=row[2].strip(),
                         verwacht_bedrag=parse_bedrag(row[3]),

@@ -305,6 +305,13 @@ betrouwbaarheidsscore op de kamerpagina's.
 > koprij: Datum | Kamer | Huurder | Verwacht bedrag | Ontvangen bedrag |
 > Status)? De site laat die oude regels dan gewoon met rust (ze crashen niets,
 > maar worden ook niet meer getoond) en telt vanaf nu opnieuw per maand mee.
+
+De kolom "Maand" wordt weggeschreven als platte tekst (`value_input_option=RAW`),
+niet als datum - Google Sheets herkende een waarde als "2026-06" anders soms zelf
+als datum en zette 'm om naar "01-06-2026", waardoor de site zijn eigen regels
+niet meer terugvond en er dubbele regels bijkwamen. Regels die al zo omgezet
+waren (van vóór deze fix) worden bij het lezen/opschonen gewoon herkend en
+teruggezet naar het normale "jjjj-mm"-formaat.
 > Wil je een nette overgang, werk dan zelf de koprij bij naar **Maand | Kamer
 > | Huurder | Verwacht bedrag | Ontvangen bedrag | Status | Betaaldatum** (voeg
 > kolom G toe) - nieuwe tabbladen krijgen deze koprij automatisch.
