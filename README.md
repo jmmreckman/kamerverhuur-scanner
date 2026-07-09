@@ -38,16 +38,17 @@ Elke ochtend om 09:00:
 8. Checkt automatisch op mogelijke **huurprijsopslagen** (WWS-puntensysteem) die de
    taxatiewaarde/huurprijs flink kunnen beïnvloeden — zie "Mogelijke huurprijsopslag"
    verderop in dit document voor de details en betrouwbaarheid per categorie.
-9. Kan **niet** automatisch checken (en vraagt dit in het rapport aan jou):
+9. Kan **niet** automatisch checken (staat niet als losse melding in het rapport, op
+   verzoek verwijderd, maar blijft de moeite waard om zelf in de gaten te houden):
    - **Zelfbewoningsplicht in de advertentietekst** — funda blokkeert geautomatiseerd
      bezoek aan advertentiepagina's (Akamai bot-detectie + verplichte CAPTCHA), dus dit
-     vraagt het rapport je de advertentietekst zelf even (10 sec) door te lezen. Dit
-     staat bij elk overgebleven huis, maar dat zijn er dankzij de eerdere checks nog
-     maar een handjevol per dag.
+     kun je alleen zien door de advertentietekst zelf even door te lezen.
    - **Provinciaal monument** (15% huurprijsopslag) — geen bevraagbare open data
      gevonden bij de provincie; komt in Rotterdam bovendien vrijwel nooit voor.
-10. Mailt een dagoverzicht naar `jmmreckman@gmail.com` met alle nog openstaande
-    kansen, hoe lang ze al bekend zijn, en welke (weinige) handmatige check nog nodig is.
+10. Mailt een dagoverzicht naar `jmmreckman@gmail.com`, met bovenaan een apart blokje
+    met alleen de **nieuwe kansen van vandaag**, en daaronder de volledige lijst met
+    alle nog openstaande kansen (inclusief die nieuwe, met een groen "nieuw
+    vandaag"-badge) en hoe lang ze al bekend zijn.
 
 **Over "verkocht"/"onder bod":** funda's dagelijkse zoekopdracht-alert meldt alleen
 NIEUWE woningen, nooit dat een eerder geziene woning van status is veranderd. Funda
@@ -168,8 +169,13 @@ Verwijderen/opnieuw instellen kan met `scripts\verwijder_taakplanner.ps1`.
 
 ## Het dagrapport lezen
 
-"Openstaande kansen" is gesorteerd op **vraagprijs per m² (laagste eerst)**, op basis
-van de officiële BAG-oppervlakte. Elke rij toont:
+Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
+woningen die dit systeem voor het eerst zag in de meest recente Funda-alertmail, zodat
+je in één oogopslag ziet wat er is bijgekomen zonder de hele lijst door te hoeven.
+Daaronder volgt de volledige lijst **"Openstaande kansen"**, gesorteerd op
+**vraagprijs per m² (laagste eerst)**, op basis van de officiële BAG-oppervlakte —
+inclusief de woningen uit het "Nieuwe kansen"-blokje, herkenbaar aan de groene "nieuw
+vandaag"-badge. Elke rij toont:
 
 - **Adres, wijk, vraagprijs, oppervlakte** (`... m² (BAG)`, de officiële maat, niet de
   advertentietekst) **en €/m²** — als de prijs een keer niet herkend kon worden uit de
@@ -185,8 +191,6 @@ van de officiële BAG-oppervlakte. Elke rij toont:
     `OPKOOPBESCHERMING_WOZ_GRENS`, valt het huis niet af). De badge duikt alleen op
     als de opvraging een keer mislukte of geen data teruggaf — kijk dan naar de
     opmerking eronder voor de reden.
-  - `check zelfbewoningsplicht` — staat altijd, want dit kan niet automatisch.
-    Open de link en zoek (Ctrl+F) op "zelfbewoning".
 - **Mogelijke huurprijsopslag** — automatische check op signalen die de WWS-huurprijs
   (en daarmee de taxatiewaarde) flink kunnen beïnvloeden:
   - **Rijksmonument (35%)** en **rijksbeschermd stads-/dorpsgezicht (5%, alleen als het

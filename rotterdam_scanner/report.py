@@ -61,7 +61,6 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
         badges.append('<span class="badge badge-nieuw">nieuw vandaag</span>')
     if item.woz_check_nodig:
         badges.append('<span class="badge badge-check">check WOZ-waarde</span>')
-    badges.append('<span class="badge badge-check">check zelfbewoningsplicht</span>')
 
     opmerking_html = f'<br><span class="small">{escape(item.opmerking)}</span>' if item.opmerking else ""
     oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "onbekend"
@@ -86,6 +85,14 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
     """
 
 
+_ACTIEF_TABEL_HEADER = """
+    <tr>
+      <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
+      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
+    </tr>
+"""
+
+
 def _afvallen_row(item: ListingState) -> str:
     return f"""
     <tr>
@@ -97,6 +104,9 @@ def _afvallen_row(item: ListingState) -> str:
 
 def build_html_report(result: RunResult, today: date, scanner_email: str, expiry_days: int = 30) -> str:
     nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
+    nieuwe_kansen_rows = "".join(
+        _row(item, today, scanner_email) for item in result.alle_actief if item.object_id in nieuw_actief_ids
+    )
     actieve_rows = "".join(_row(item, today, scanner_email) for item in result.alle_actief)
     nieuw_afgevallen_rows = "".join(_afvallen_row(item) for item in result.nieuw_afgevallen)
     handmatig_verwijderd_rows = "".join(_afvallen_row(item) for item in result.handmatig_verwijderd)
@@ -117,6 +127,12 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     {len(result.nieuw_afgevallen)} vandaag afgevallen op de geo-checks.
   </p>
 
+  <h2>Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
+  <table>
+    {_ACTIEF_TABEL_HEADER}
+    {nieuwe_kansen_rows or '<tr><td colspan="9">Geen nieuwe kansen vandaag.</td></tr>'}
+  </table>
+
   <h2>Openstaande kansen ({len(result.alle_actief)})</h2>
   <p class="small">
     Deze huizen zijn NIET afgevallen op nul-quotumgebied, de 50-meter kamerverhuurvergunning-check of
@@ -129,10 +145,7 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     Klik "Verwijderen" om een huis er zelf direct uit te halen (bijv. als het toch niet voldoet).
   </p>
   <table>
-    <tr>
-      <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
-      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
-    </tr>
+    {_ACTIEF_TABEL_HEADER}
     {actieve_rows or '<tr><td colspan="9">Geen openstaande kansen.</td></tr>'}
   </table>
 
@@ -161,8 +174,6 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     Herinnering: de WOZ-waarde wordt normaal automatisch opgehaald (via de WOZ-API) en huizen
     boven de opkoopbeschermingsgrens vallen dan al niet meer af — de badge "check WOZ-waarde"
     verschijnt alleen als dat een keer niet is gelukt (zie eventuele opmerking bij het huis).
-    "check zelfbewoningsplicht" staat er altijd bij: dit kan niet automatisch, funda blokkeert
-    geautomatiseerd bezoek aan advertentiepagina's, dus lees de tekst zelf even door op dat woord.
     Vraagprijs komt uit de opmaak van je Funda-mail zelf en is daardoor iets kwetsbaarder dan de
     rest — klopt een prijs een keer niet, meld dat dan even. "Verwijderen" opent een kant-en-klare
     e-mail; gewoon versturen (niet aanpassen) en het huis is er de volgende run uit.
@@ -183,28 +194,45 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
 """
 
 
+def _item_regels(item: ListingState, today: date, scanner_email: str) -> list[str]:
+    dagen = _dagen_bekend(item, today)
+    extra = []
+    if item.woz_check_nodig:
+        extra.append("check WOZ-waarde")
+    oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "oppervlakte onbekend"
+    prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
+    regels = [
+        f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)",
+        f"    bekijk: {item.url}",
+        f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}",
+        f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}",
+    ]
+    if extra:
+        regels.append(f"    nog te checken: {', '.join(extra)}")
+    if item.huurprijsopslag_signalen:
+        regels.append("    mogelijke huurprijsopslag:")
+        for signaal in item.huurprijsopslag_signalen:
+            regels.append(f"      - {signaal}")
+    if item.opmerking:
+        regels.append(f"    let op: {item.opmerking}")
+    return regels
+
+
 def build_text_report(result: RunResult, today: date, scanner_email: str) -> str:
+    nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
     lines = [f"Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}", ""]
+
+    lines.append(f"Nieuwe kansen vandaag ({len(nieuw_actief_ids)}):")
+    nieuwe_kansen = [item for item in result.alle_actief if item.object_id in nieuw_actief_ids]
+    for item in nieuwe_kansen:
+        lines.extend(_item_regels(item, today, scanner_email))
+    if not nieuwe_kansen:
+        lines.append("  (geen)")
+
+    lines.append("")
     lines.append(f"Openstaande kansen ({len(result.alle_actief)}), gesorteerd op €/m²:")
     for item in result.alle_actief:
-        dagen = _dagen_bekend(item, today)
-        extra = []
-        if item.woz_check_nodig:
-            extra.append("check WOZ-waarde")
-        extra.append("check zelfbewoningsplicht")
-        oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "oppervlakte onbekend"
-        prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
-        lines.append(f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)")
-        lines.append(f"    bekijk: {item.url}")
-        lines.append(f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}")
-        lines.append(f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}")
-        lines.append(f"    nog te checken: {', '.join(extra)}")
-        if item.huurprijsopslag_signalen:
-            lines.append("    mogelijke huurprijsopslag:")
-            for signaal in item.huurprijsopslag_signalen:
-                lines.append(f"      - {signaal}")
-        if item.opmerking:
-            lines.append(f"    let op: {item.opmerking}")
+        lines.extend(_item_regels(item, today, scanner_email))
     if not result.alle_actief:
         lines.append("  (geen)")
 
