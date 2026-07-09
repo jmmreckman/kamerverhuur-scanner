@@ -126,6 +126,12 @@ def create_app(config: Config | None = None) -> Flask:
                 return kamer
         abort(404, f"Kamer '{kamer_naam}' niet gevonden.")
 
+    def _aanbod_media(pand=None) -> LokaleMediaClient:
+        return LokaleMediaClient(config, pand or g.pand, "aanbod")
+
+    def _aanmeldingen_media(pand=None) -> LokaleMediaClient:
+        return LokaleMediaClient(config, pand or g.pand, "aanmeldingen")
+
     def admin_required(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
@@ -640,7 +646,7 @@ def create_app(config: Config | None = None) -> Flask:
             sheet.update_aanbod(kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id)
             flash("Aanbod bijgewerkt.")
             return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
-        media = LokaleMediaClient(config, g.pand, "aanbod").list_bestanden(kamer_naam)
+        media = _aanbod_media().list_bestanden(kamer_naam)
         standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
         return render_template("kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving)
 
@@ -648,7 +654,7 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def kamer_aanbod_upload(pand_slug: str, kamer_naam: str):
         _kamer_of_404(SheetClient(config, g.pand), kamer_naam)
-        media_client = LokaleMediaClient(config, g.pand, "aanbod")
+        media_client = _aanbod_media()
         try:
             aantal = 0
             for bestand in request.files.getlist("bestand"):
@@ -665,7 +671,7 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def kamer_aanbod_media_verwijderen(pand_slug: str, kamer_naam: str, file_id: str):
         _kamer_of_404(SheetClient(config, g.pand), kamer_naam)
-        LokaleMediaClient(config, g.pand, "aanbod").verwijder_bestand(kamer_naam, file_id)
+        _aanbod_media().verwijder_bestand(kamer_naam, file_id)
         flash("Bestand verwijderd.")
         return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
@@ -675,7 +681,7 @@ def create_app(config: Config | None = None) -> Flask:
         """Toont een aanbod-foto/video inline (geen Content-Disposition: attachment,
         anders tonen <img>/<video>-tags op de 'Aanbod beheren'-pagina niets)."""
         _kamer_of_404(SheetClient(config, g.pand), kamer_naam)
-        gevonden = LokaleMediaClient(config, g.pand, "aanbod").lees_bestand(kamer_naam, file_id)
+        gevonden = _aanbod_media().lees_bestand(kamer_naam, file_id)
         if not gevonden:
             abort(404)
         _naam, mimetype, inhoud = gevonden
@@ -860,7 +866,7 @@ def create_app(config: Config | None = None) -> Flask:
         kaarten = []
         for pand in _properties():
             sheet = SheetClient(config, pand)
-            media_client = LokaleMediaClient(config, pand, "aanbod")
+            media_client = _aanbod_media(pand)
             for kamer in sheet.get_kamers():
                 if not kamer.beschikbaar:
                     continue
@@ -872,7 +878,7 @@ def create_app(config: Config | None = None) -> Flask:
     def aanbod_detail(pand_slug: str, kamer_naam: str):
         sheet = SheetClient(config, g.pand)
         kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
-        media = LokaleMediaClient(config, g.pand, "aanbod").list_bestanden(kamer_naam)
+        media = _aanbod_media().list_bestanden(kamer_naam)
         omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
         return render_template("aanbod_detail.html", kamer=kamer, media=media, omschrijving=omschrijving)
 
@@ -880,7 +886,7 @@ def create_app(config: Config | None = None) -> Flask:
     def aanbod_media(pand_slug: str, kamer_naam: str, file_id: str):
         sheet = SheetClient(config, g.pand)
         _beschikbare_kamer_of_404(sheet, kamer_naam)
-        gevonden = LokaleMediaClient(config, g.pand, "aanbod").lees_bestand(kamer_naam, file_id)
+        gevonden = _aanbod_media().lees_bestand(kamer_naam, file_id)
         if not gevonden:
             abort(404)
         _naam, mimetype, inhoud = gevonden
@@ -896,7 +902,7 @@ def create_app(config: Config | None = None) -> Flask:
                 aanmelding = valideer_en_bouw(request.form, heeft_bestand=bool(bestand and bestand.filename))
             except AanmeldingFout as exc:
                 return render_template("aanbod_apply.html", kamer=kamer, fout=str(exc)), 400
-            media_client = LokaleMediaClient(config, g.pand, "aanmeldingen")
+            media_client = _aanmeldingen_media()
             try:
                 bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
                 file_id = media_client.upload_bestand(kamer_naam, bestandsnaam, bestand.mimetype, bestand.read())
@@ -922,7 +928,7 @@ def create_app(config: Config | None = None) -> Flask:
         """Bewijs van inschrijving bij een aanmelding - alleen voor
         ingelogde beheerders van dit pand, geen publieke link (bevat
         persoonsgegevens)."""
-        gevonden = LokaleMediaClient(config, g.pand, "aanmeldingen").lees_bestand(kamer_naam, file_id)
+        gevonden = _aanmeldingen_media().lees_bestand(kamer_naam, file_id)
         if not gevonden:
             abort(404)
         naam, mimetype, inhoud = gevonden

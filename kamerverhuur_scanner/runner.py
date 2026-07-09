@@ -49,6 +49,13 @@ def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
     return (jaar - 1, 12) if maand == 1 else (jaar, maand - 1)
 
 
+def _maand_sleutel_naar_string(sleutel: tuple[int, int]) -> str:
+    """(jaar, maand) -> 'jjjj-mm', het formaat waarin de Historie-sheet en
+    de rest van de matchlogica een kalendermaand als tekst opslaan."""
+    jaar, maand = sleutel
+    return f"{jaar}-{maand:02d}"
+
+
 def _zoek_vanaf_voor_maand(vandaag: date) -> date:
     """Startpunt van de bunq-zoekopdracht voor de controle van `vandaag`s
     maand: de 18e van de vorige maand, want vanaf die dag tellen betalingen
@@ -86,6 +93,12 @@ def _parse_datum_dmy(tekst: str) -> date | None:
     return None
 
 
+def _tenant_startdatum(tenant: Tenant) -> date | None:
+    """De ingelezen 'Contract startdatum' van deze huurder, of None als die
+    leeg of niet (herkenbaar) is."""
+    return _parse_datum_dmy(tenant.contract_startdatum) if tenant.contract_startdatum else None
+
+
 def _pro_rata_huur(verwacht_bedrag: Decimal, start: date) -> Decimal:
     """Huur voor de instapmaand naar rato van het aantal dagen dat de
     huurder daadwerkelijk in die maand huurt (vanaf de startdatum, die dag
@@ -102,7 +115,7 @@ def _verwacht_bedrag_voor_maand(tenant: Tenant, maand_sleutel: tuple[int, int]) 
     'Borg') - huurders betalen die vaak in één keer samen met (een deel van)
     de eerste huur, en dat mag niet als "te veel ontvangen" verschijnen. Voor
     elke andere maand blijft het gewoon de volle maandhuur."""
-    start = _parse_datum_dmy(tenant.contract_startdatum) if tenant.contract_startdatum else None
+    start = _tenant_startdatum(tenant)
     if not start or (start.year, start.month) != maand_sleutel:
         return tenant.verwacht_bedrag
     return _pro_rata_huur(tenant.verwacht_bedrag, start) + (tenant.borg_bedrag or Decimal("0"))
@@ -131,8 +144,7 @@ def run_check(
     ]
     instapmaand_kamers = {
         t.kamer for t in tenants
-        if (start := _parse_datum_dmy(t.contract_startdatum) if t.contract_startdatum else None)
-        and (start.year, start.month) == huidige_maand_sleutel
+        if (start := _tenant_startdatum(t)) and (start.year, start.month) == huidige_maand_sleutel
     }
 
     logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
@@ -260,7 +272,7 @@ def _verdeel_over_maanden(
         ontvangen, laatste_datum = per_maand[sleutel]
         is_instapmaand = sleutel in (verwacht_per_maand or {})
         verwacht_deze_maand = (verwacht_per_maand or {}).get(sleutel, verwacht_bedrag)
-        maand_key = f"{sleutel[0]}-{sleutel[1]:02d}"
+        maand_key = _maand_sleutel_naar_string(sleutel)
         percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if is_instapmaand else Decimal("0")
         resultaat[maand_key] = (
             ontvangen, _bepaal_status(ontvangen, verwacht_deze_maand, tolerantie, percentage), laatste_datum, verwacht_deze_maand,
@@ -310,14 +322,14 @@ def backfill_geschiedenis(
     maanden_per_kamer: dict[str, list[tuple[int, int]]] = {}
     start_per_kamer: dict[str, date] = {}
     for tenant in tenants:
-        start = _parse_datum_dmy(tenant.contract_startdatum) if tenant.contract_startdatum else None
+        start = _tenant_startdatum(tenant)
         if start:
             start_per_kamer[tenant.kamer] = start
             maanden_per_kamer[tenant.kamer] = _maanden_vanaf((start.year, start.month), vandaag)
             # Ruimt regels op die een eerdere run (vóórdat de startdatum kon
             # worden gelezen, bv. een toen nog onherkend datumformaat) al
             # verkeerd had teruggerekend tot vóór de werkelijke instapmaand.
-            start_maand_sleutel = f"{start.year}-{start.month:02d}"
+            start_maand_sleutel = _maand_sleutel_naar_string((start.year, start.month))
             opgeschoond = sheet.verwijder_geschiedenis_voor_instapdatum(tenant.kamer, tenant.naam, start_maand_sleutel)
             if opgeschoond:
                 logger.info(
@@ -348,7 +360,7 @@ def backfill_geschiedenis(
 
     resultaten, _unmatched = match_tenants_to_payments(tenants, betalingen_in_venster, config.bedrag_tolerantie)
 
-    per_maand: dict[str, list[TenantResult]] = {f"{j}-{m:02d}": [] for j, m in alle_maanden}
+    per_maand: dict[str, list[TenantResult]] = {_maand_sleutel_naar_string(m): [] for m in alle_maanden}
     for resultaat in resultaten:
         tenant = resultaat.tenant
         tenant_maanden = maanden_per_kamer.get(tenant.kamer, standaard_maanden)

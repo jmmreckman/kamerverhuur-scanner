@@ -117,6 +117,19 @@ def _genezen_maand_kolom(row: list[str]) -> list[str]:
         return row
     return [genormaliseerd, *row[1:]]
 
+
+def _herschrijf_historie(ws, header: list[str], data_rows: list[list[str]]) -> None:
+    """Overschrijft de hele Historie-worksheet met deze koprij + databegin -
+    gebruikt door dedupliceer_geschiedenis() en
+    verwijder_geschiedenis_voor_instapdatum() om regels te verwijderen/
+    genezen (gspread heeft geen 'verwijder deze rij'-aanroep). RAW voorkomt
+    dat Google Sheets een waarde als "2026-06" zelf als datum omzet."""
+    ws.clear()
+    ws.append_row(header, value_input_option="RAW")
+    if data_rows:
+        ws.append_rows(data_rows, value_input_option="RAW")
+
+
 _AANMELDINGEN_HEADER = [
     "Datum", "Kamer", "Naam", "Email", "Telefoon", "Huidig adres", "Studie",
     "Studentnummer", "Gewenste ingangsdatum", "Gewenste huurduur",
@@ -388,10 +401,7 @@ class SheetClient:
         ]
         verwijderd = len(data_rows) - len(schoon)
         if verwijderd > 0:
-            ws.clear()
-            ws.append_row(header, value_input_option="RAW")
-            if schoon:
-                ws.append_rows(schoon, value_input_option="RAW")
+            _herschrijf_historie(ws, header, schoon)
         return verwijderd
 
     def dedupliceer_geschiedenis(self) -> int:
@@ -420,10 +430,7 @@ class SheetClient:
         verwijderd = len(data_rows) - len(schoon)
         moest_genezen = any(row[0].strip() != _normaliseer_maand(row[0]) for row in data_rows if _normaliseer_maand(row[0]))
         if verwijderd > 0 or moest_genezen:
-            ws.clear()
-            ws.append_row(header, value_input_option="RAW")
-            if schoon:
-                ws.append_rows(schoon, value_input_option="RAW")
+            _herschrijf_historie(ws, header, schoon)
         return verwijderd
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
