@@ -17,6 +17,16 @@ class Config:
     funda_mail_folder: str
     listing_expiry_days: int
     opkoopbescherming_woz_grens: int
+    # Funda-alertmails worden altijd via het Gmail-scanner-account (hierboven) gelezen.
+    # Het dagrapport versturen kan via diezelfde Gmail SMTP, of desgewenst via een eigen
+    # domein/mailbox (bijv. via de hostingpartij van je eigen website) -- vandaar deze
+    # aparte, optionele SMTP-instellingen die bij leeg gewoon op Gmail terugvallen.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_naam: str = ""
     state_path: Path = field(default_factory=lambda: BASE_DIR / "data" / "state.json")
 
     @property
@@ -24,12 +34,22 @@ class Config:
         return "imap.gmail.com"
 
     @property
-    def smtp_host(self) -> str:
-        return "smtp.gmail.com"
+    def effective_smtp_username(self) -> str:
+        return self.smtp_username or self.gmail_address
 
     @property
-    def smtp_port(self) -> int:
-        return 465
+    def effective_smtp_password(self) -> str:
+        return self.smtp_password or self.gmail_app_password
+
+    @property
+    def effective_from_email(self) -> str:
+        return self.smtp_from_email or self.effective_smtp_username
+
+    @property
+    def effective_from_header(self) -> str:
+        if self.smtp_from_naam:
+            return f"{self.smtp_from_naam} <{self.effective_from_email}>"
+        return self.effective_from_email
 
 
 def load_config(env_path: Path | None = None) -> Config:
@@ -47,6 +67,12 @@ def load_config(env_path: Path | None = None) -> Config:
         funda_mail_folder=os.environ.get("FUNDA_MAIL_FOLDER", "INBOX"),
         listing_expiry_days=int(os.environ.get("LISTING_EXPIRY_DAYS", "30")),
         opkoopbescherming_woz_grens=int(os.environ.get("OPKOOPBESCHERMING_WOZ_GRENS", "470000")),
+        smtp_host=os.environ.get("SMTP_HOST", "smtp.gmail.com"),
+        smtp_port=int(os.environ.get("SMTP_PORT", "465")),
+        smtp_username=os.environ.get("SMTP_USERNAME", ""),
+        smtp_password=os.environ.get("SMTP_PASSWORD", ""),
+        smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", ""),
+        smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
     )
 
 

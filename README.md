@@ -119,7 +119,19 @@ notepad .env
 Vul in `.env` in:
 - `SCANNER_GMAIL_ADDRESS` — het nieuwe Gmail-adres.
 - `SCANNER_GMAIL_APP_PASSWORD` — het appwachtwoord uit stap 3.
-- `REPORT_TO_ADDRESS` — `jmmreckman@gmail.com` (staat al goed als default).
+- `REPORT_TO_ADDRESS` — `jmmreckman@gmail.com` (staat al goed als default; meerdere
+  adressen mag ook, komma-gescheiden, bijv. `jmmreckman@gmail.com,winkellink@gmail.com`).
+
+**Rapport versturen via een eigen mailbox in plaats van Gmail:** het Funda-alertmailtje
+wordt altijd via het Gmail-account hierboven gelezen (IMAP), maar het uitgaande
+dagrapport kan ook via een andere mailbox verstuurd worden (bijv. hetzelfde postvak dat
+je eigen website al gebruikt om mail te versturen). Vul daarvoor de optionele
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM_EMAIL`/`SMTP_FROM_NAAM`
+in `.env` in (zie `.env.example` voor een voorbeeld) — vraag je hostingpartij naar de
+SMTP-gegevens van dat postvak (host, poort, gebruikersnaam/wachtwoord; bij 2FA/moderne
+authenticatie is dat net als bij Gmail een apart app-wachtwoord). Poort 465 gebruikt
+automatisch SSL, elke andere poort (meestal 587) gebruikt STARTTLS. Laat deze velden
+leeg om gewoon via Gmail te blijven versturen.
 
 ### 5. Eerst handmatig testen
 
