@@ -100,7 +100,13 @@ nodig.
   (vergeleken met het HUIDIGE verwachte bedrag - de sheet houdt geen
   historische huurbedragen bij, dus rond een huurverhoging kunnen oudere
   maanden om die reden "Te weinig" tonen, ook al was er op dat moment gewoon
-  correct betaald tegen het toen geldende bedrag).
+  correct betaald tegen het toen geldende bedrag). **Inhaalbetaling:** een
+  overschot in een maand lost eerst een nog openstaand tekort van eerdere
+  maand(en) af (bv. een gemiste maand die in de maand erna in één keer wordt
+  ingehaald) - pas de rest telt mee als "Te veel ontvangen" voor die maand
+  zelf. Zo tonen zowel "Nu controleren" als "Betaalgeschiedenis aanvullen"
+  na zo'n inhaalbetaling "Betaald" in plaats van dat de gemiste maand "Nog
+  niet ontvangen" en de inhaalmaand "Te veel ontvangen" door elkaar tonen.
   **Instapmaand:** in de kalendermaand van de "Contract startdatum" wordt niet
   de volle maandhuur verwacht, maar de **pro-rata huur** over de resterende
   dagen van die maand (bij een start op de 1e is dat gewoon de volle

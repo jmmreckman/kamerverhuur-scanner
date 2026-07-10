@@ -14,7 +14,12 @@ from . import state
 from .bunq_client import BunqClient
 from .config import Config
 from .mailer import MailError, verstuur_email
-from .matcher import _INSTAPMAAND_TOLERANTIE_PERCENTAGE, _bepaal_status, match_tenants_to_payments
+from .matcher import (
+    _INSTAPMAAND_TOLERANTIE_PERCENTAGE,
+    _verwerk_maand,
+    match_tenants_to_payments,
+    openstaand_tekort_uit_geschiedenis,
+)
 from .models import Pand, Payment, Status, Tenant, TenantResult
 from .sheet_client import SheetClient
 
@@ -147,6 +152,15 @@ def run_check(
         if (start := _tenant_startdatum(t)) and (start.year, start.month) == huidige_maand_sleutel
     }
 
+    # Een eventuele nog openstaande achterstand van eerdere maand(en) - zodat
+    # een inhaalbetaling deze maand die eerst aflost i.p.v. als 'te veel
+    # ontvangen' te tellen (zie openstaand_tekort_uit_geschiedenis()).
+    huidige_maand_string = _maand_sleutel_naar_string(huidige_maand_sleutel)
+    openstaand_tekort = {
+        t.kamer: openstaand_tekort_uit_geschiedenis(sheet.get_geschiedenis(t.kamer), huidige_maand_string)
+        for t in tenants
+    }
+
     logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
     bunq = BunqClient(config)
     alle_payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
@@ -157,7 +171,7 @@ def run_check(
     logger.info("[%s] %d inkomende betalingen gevonden deze maand", pand.slug, len(payments))
 
     results, unmatched = match_tenants_to_payments(
-        tenants_voor_match, payments, config.bedrag_tolerantie, instapmaand_kamers
+        tenants_voor_match, payments, config.bedrag_tolerantie, instapmaand_kamers, openstaand_tekort
     )
 
     if not dry_run:
@@ -252,12 +266,14 @@ def _verdeel_over_maanden(
     paar euro af door afrondingsverschillen (bv. een dag verschil in de
     ingangsdatum) dan een normale volle-maand huur.
 
-    Bewust GEEN cumulatieve verrekening over de hele periode: een
-    huurverhoging halverwege de teruggezochte maanden zou dan het
-    verwachte/ontvangen bedrag van alle latere maanden laten verschuiven en
-    fout weergeven (de sheet houdt geen historische huurbedragen bij). Elke
-    maand wordt hier onafhankelijk beoordeeld op basis van precies de
-    betalingen met die effectieve maand."""
+    Geen cumulatieve verrekening van structurele huurverhogingen over de
+    hele periode (elke maand blijft vergeleken worden met het HUIDIGE
+    verwachte bedrag - de sheet houdt geen historische huurbedragen bij).
+    Een overschot in een maand lost wél eerst een nog openstaande achterstand
+    van eerdere maand(en) af, vóórdat de rest als 'te veel ontvangen' voor
+    die maand zelf telt (zie _verwerk_maand()) - zo laat een latere
+    inhaalbetaling niet zowel de gemiste maand als de betaalmaand ten
+    onrechte als fout zien."""
     per_maand: dict[tuple[int, int], tuple[Decimal, date | None]] = {sleutel: (Decimal("0"), None) for sleutel in maanden}
     for p in betalingen:
         sleutel = _effectieve_maand(p.datum)
@@ -268,15 +284,15 @@ def _verdeel_over_maanden(
         per_maand[sleutel] = (bedrag + p.bedrag, nieuwe_datum)
 
     resultaat: dict[str, tuple[Decimal, Status, date | None, Decimal]] = {}
+    lopend_tekort = Decimal("0")
     for sleutel in maanden:
         ontvangen, laatste_datum = per_maand[sleutel]
         is_instapmaand = sleutel in (verwacht_per_maand or {})
         verwacht_deze_maand = (verwacht_per_maand or {}).get(sleutel, verwacht_bedrag)
         maand_key = _maand_sleutel_naar_string(sleutel)
         percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if is_instapmaand else Decimal("0")
-        resultaat[maand_key] = (
-            ontvangen, _bepaal_status(ontvangen, verwacht_deze_maand, tolerantie, percentage), laatste_datum, verwacht_deze_maand,
-        )
+        status, lopend_tekort = _verwerk_maand(ontvangen, verwacht_deze_maand, tolerantie, percentage, lopend_tekort)
+        resultaat[maand_key] = (ontvangen, status, laatste_datum, verwacht_deze_maand)
 
     return resultaat
 

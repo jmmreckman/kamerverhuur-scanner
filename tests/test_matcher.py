@@ -1,8 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
-from kamerverhuur_scanner.matcher import match_tenants_to_payments
-from kamerverhuur_scanner.models import Payment, Status, Tenant
+from kamerverhuur_scanner.matcher import _verwerk_maand, match_tenants_to_payments, openstaand_tekort_uit_geschiedenis
+from kamerverhuur_scanner.models import HistorieRegel, Payment, Status, Tenant
 
 TOL = Decimal("0.01")
 
@@ -166,3 +166,107 @@ def test_betaling_wordt_niet_dubbel_toegekend():
     assert results[0].status == Status.BETAALD
     assert results[1].status == Status.NIET_ONTVANGEN
     assert unmatched == []
+
+
+# --- inhaalbetaling lost eerst een openstaande achterstand af ---
+
+def test_inhaalbetaling_lost_eerst_openstaand_tekort_af_dan_pas_deze_maand():
+    # Henri miste vorige maand (745 verwacht, niks ontvangen) en betaalt deze
+    # maand in één keer 2x de huur (1490) - dat mag niet als "te veel
+    # ontvangen" verschijnen, want hij is daarmee gewoon weer bij.
+    tenant = _tenant(bedrag="745.00")
+    payments = [_payment(bedrag="1490.00")]
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, openstaand_tekort={"1": Decimal("745.00")})
+
+    assert results[0].status == Status.BETAALD
+
+
+def test_overschot_na_aflossen_tekort_telt_alsnog_als_te_veel():
+    tenant = _tenant(bedrag="745.00")
+    payments = [_payment(bedrag="1600.00")]  # 745 tekort aflossen + 110 te veel
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, openstaand_tekort={"1": Decimal("745.00")})
+
+    assert results[0].status == Status.TE_VEEL
+
+
+def test_betaling_die_zelfs_deze_maand_niet_dekt_blijft_te_weinig_ondanks_tekort():
+    # Deze maand zelf wordt niet eens gehaald - dan is er niks om het oude
+    # tekort mee af te lossen, en telt het gewoon als "te weinig" voor deze
+    # maand (het openstaande tekort wordt alleen maar groter).
+    tenant = _tenant(bedrag="745.00")
+    payments = [_payment(bedrag="700.00")]
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, openstaand_tekort={"1": Decimal("745.00")})
+
+    assert results[0].status == Status.TE_WEINIG
+
+
+def test_overschot_dat_deze_maand_dekt_plus_deel_van_tekort_telt_als_betaald():
+    # De huidige maand zelf is gedekt (745) en de resterende 55 lost een deel
+    # van de oude achterstand af - deze maand mag dan gewoon "Betaald" tonen,
+    # ook al is de oude achterstand nog niet helemaal weg.
+    tenant = _tenant(bedrag="745.00")
+    payments = [_payment(bedrag="800.00")]
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, openstaand_tekort={"1": Decimal("745.00")})
+
+    assert results[0].status == Status.BETAALD
+
+
+def test_geen_openstaand_tekort_gedraagt_zich_als_voorheen():
+    tenant = _tenant(bedrag="745.00")
+    payments = [_payment(bedrag="745.00")]
+
+    results, _ = match_tenants_to_payments([tenant], payments, TOL, openstaand_tekort={"1": Decimal("0")})
+
+    assert results[0].status == Status.BETAALD
+
+
+def test_verwerk_maand_zonder_tekort_gedraagt_zich_als_bepaal_status():
+    status, nieuw_tekort = _verwerk_maand(Decimal("650.00"), Decimal("650.00"), TOL, Decimal("0"), Decimal("0"))
+    assert status == Status.BETAALD
+    assert nieuw_tekort == Decimal("0")
+
+
+def test_verwerk_maand_bouwt_tekort_op_bij_niet_ontvangen():
+    status, nieuw_tekort = _verwerk_maand(Decimal("0"), Decimal("650.00"), TOL, Decimal("0"), Decimal("0"))
+    assert status == Status.NIET_ONTVANGEN
+    assert nieuw_tekort == Decimal("650.00")
+
+
+# --- openstaand_tekort_uit_geschiedenis ---
+
+def _regel(maand, verwacht="745.00", ontvangen="0.00", status=Status.NIET_ONTVANGEN):
+    return HistorieRegel(
+        maand=maand, kamer="1", huurder="Henri",
+        verwacht_bedrag=Decimal(verwacht), ontvangen_bedrag=Decimal(ontvangen), status=status,
+    )
+
+
+def test_tekort_som_van_opeenvolgende_openstaande_maanden():
+    geschiedenis = [
+        _regel("2026-05", status=Status.BETAALD, ontvangen="745.00"),
+        _regel("2026-06", status=Status.NIET_ONTVANGEN, ontvangen="0.00"),
+    ]
+    assert openstaand_tekort_uit_geschiedenis(geschiedenis, "2026-07") == Decimal("745.00")
+
+
+def test_tekort_stopt_bij_eerste_volledig_betaalde_maand_terugkijkend():
+    geschiedenis = [
+        _regel("2026-04", status=Status.NIET_ONTVANGEN, ontvangen="0.00"),  # al lang geleden opgelost/irrelevant
+        _regel("2026-05", status=Status.BETAALD, ontvangen="745.00"),
+        _regel("2026-06", status=Status.TE_WEINIG, ontvangen="200.00"),
+    ]
+    assert openstaand_tekort_uit_geschiedenis(geschiedenis, "2026-07") == Decimal("545.00")
+
+
+def test_geen_tekort_als_laatste_maand_al_betaald_was():
+    geschiedenis = [_regel("2026-06", status=Status.BETAALD, ontvangen="745.00")]
+    assert openstaand_tekort_uit_geschiedenis(geschiedenis, "2026-07") == Decimal("0")
+
+
+def test_tekort_negeert_de_huidige_maand_zelf():
+    geschiedenis = [_regel("2026-07", status=Status.NIET_ONTVANGEN, ontvangen="0.00")]
+    assert openstaand_tekort_uit_geschiedenis(geschiedenis, "2026-07") == Decimal("0")

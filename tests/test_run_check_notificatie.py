@@ -47,6 +47,9 @@ class FakeSheetClient:
     def get_tenants(self):
         return self._tenants
 
+    def get_geschiedenis(self, kamer):
+        return []
+
     def write_results(self, results):
         self.write_results_calls.append(results)
 

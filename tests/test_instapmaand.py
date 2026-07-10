@@ -102,6 +102,9 @@ class FakeSheetClientInstapper:
     def get_tenants(self):
         return [_tenant(contract_startdatum="03-07-2026", borg_bedrag=Decimal("1000.00"))]
 
+    def get_geschiedenis(self, kamer):
+        return []
+
     def write_results(self, results):
         self.write_results_calls.append(results)
 

@@ -147,6 +147,29 @@ def test_verdeel_over_maanden_huurverhoging_beinvloedt_andere_maanden_niet():
         assert status == Status.BETAALD
 
 
+def test_verdeel_over_maanden_inhaalbetaling_lost_gemiste_maand_af():
+    # Henri mist april (niks ontvangen) en betaalt in mei in één keer 2x de
+    # huur - dat mag niet als "te veel ontvangen" voor mei verschijnen, want
+    # hij is daarmee gewoon weer helemaal bij.
+    betalingen = [_betaling("1300.00", date(2026, 5, 5))]
+    resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
+
+    assert resultaat["2026-04"] == (Decimal("0"), Status.NIET_ONTVANGEN, None, VERWACHT)
+    ontvangen, status, betaaldatum, _verwacht = resultaat["2026-05"]
+    assert status == Status.BETAALD
+    assert ontvangen == Decimal("1300.00")  # het ontvangen bedrag zelf blijft zichtbaar zoals het echt binnenkwam
+    assert betaaldatum == date(2026, 5, 5)
+    assert resultaat["2026-06"] == (Decimal("0"), Status.NIET_ONTVANGEN, None, VERWACHT)
+
+
+def test_verdeel_over_maanden_inhaalbetaling_met_extra_overschot_telt_als_te_veel():
+    betalingen = [_betaling("1400.00", date(2026, 5, 5))]  # 650 tekort april aflossen + 100 te veel
+    resultaat = _verdeel_over_maanden(VERWACHT, betalingen, MAANDEN_3, TOLERANTIE)
+
+    assert resultaat["2026-04"][1] == Status.NIET_ONTVANGEN
+    assert resultaat["2026-05"][1] == Status.TE_VEEL
+
+
 def _pand() -> Pand:
     return Pand(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="x",
