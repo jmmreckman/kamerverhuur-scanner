@@ -21,13 +21,6 @@
       <input type="password" name="wachtwoord" {{ 'required' if not gebruiker }} minlength="8">
     </label>
 
-    <label>E-mailadres (optioneel - bv. jurian@steenhub.nl)
-      <input type="email" name="email" value="{{ gebruiker.email if gebruiker else '' }}">
-    </label>
-    <p class="muted" style="margin-top:-0.6rem">Is dit ingevuld, dan verstuurt deze gebruiker mails (contract
-       mailen, ondertekenverzoek, herinneringen, "mail het hele huishouden") vanaf dit adres i.p.v. het
-       algemene SMTP_FROM_EMAIL uit .env. Leeg laten = altijd het algemene adres.</p>
-
     <label>
       <input type="checkbox" id="alle_panden" name="alle_panden" style="width:auto; display:inline-block"
              {{ 'checked' if gebruiker and gebruiker.alle_panden }}>

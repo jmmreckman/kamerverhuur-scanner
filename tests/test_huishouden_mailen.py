@@ -35,8 +35,8 @@ class FakeSheetClient:
 def verstuurde_mails(monkeypatch):
     verstuurd = []
 
-    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, afzender_email=None):
-        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc, "afzender_email": afzender_email})
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None):
+        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
 
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
@@ -118,50 +118,10 @@ def test_leeg_onderwerp_of_tekst_wordt_geweigerd(app_client, verstuurde_mails):
     assert "verplicht" in resp.get_data(as_text=True).lower()
 
 
-def test_afzender_email_van_ingelogde_beheerder_gaat_mee(tmp_path, monkeypatch, verstuurde_mails):
-    import webapp.app as appmodule
-    monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
-    monkeypatch.chdir(tmp_path)
-
-    properties_file = tmp_path / "properties.json"
-    properties_file.write_text(json.dumps([
-        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125",
-         "extra_bcc": []},
-    ]))
-    users_file = tmp_path / "users.json"
-    users_file.write_text(json.dumps({
-        "jurian": {
-            "wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": [],
-            "email": "jurian@steenhub.nl",
-        },
-    }))
-    config = Config(
-        google_service_account_file="fake.json", properties_file=str(properties_file),
-        bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
-        users_file=str(users_file), flask_secret_key="test-secret",
-        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
-        email_bcc=[],
-    )
-    app = create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"username": "jurian", "password": "geheim123"})
-
-    client.post(
-        "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
-    )
-
-    assert len(verstuurde_mails) == 2
-    for mail in verstuurde_mails:
-        assert mail["afzender_email"] == "jurian@steenhub.nl"
-
-
 def test_mailerror_bij_1_huurder_stopt_de_rest_niet(app_client, monkeypatch):
     import webapp.app as appmodule
 
-    def _wisselvallige_mailer(config, aan, onderwerp, tekst, bcc=None, afzender_email=None):
+    def _wisselvallige_mailer(config, aan, onderwerp, tekst, bcc=None):
         if aan == "luisa@example.com":
             raise MailError("SMTP tijdelijk niet bereikbaar")
 

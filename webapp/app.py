@@ -241,8 +241,7 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Gebruik een wachtwoord van minimaal 8 tekens.")
             else:
                 alle_panden, panden = _panden_uit_form(request.form)
-                email = request.form.get("email", "").strip() or None
-                zet_gebruiker(users, username, wachtwoord, alle_panden, panden, email)
+                zet_gebruiker(users, username, wachtwoord, alle_panden, panden)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' aangemaakt.")
                 return redirect(url_for("gebruikers_overzicht"))
@@ -264,8 +263,7 @@ def create_app(config: Config | None = None) -> Flask:
             elif username == current_user.id and not alle_panden:
                 flash("Je kunt jezelf niet de toegang tot alle panden ontnemen.")
             else:
-                email = request.form.get("email", "").strip() or None
-                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden, email)
+                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' bijgewerkt.")
                 return redirect(url_for("gebruikers_overzicht"))
@@ -589,7 +587,7 @@ def create_app(config: Config | None = None) -> Flask:
             verzonden, mislukt = 0, []
             for tenant in tenants_met_mail:
                 try:
-                    verstuur_email(config, tenant.email, onderwerp, tekst, bcc=bcc, afzender_email=current_user.email)
+                    verstuur_email(config, tenant.email, onderwerp, tekst, bcc=bcc)
                     verzonden += 1
                 except MailError:
                     mislukt.append(tenant.naam)
@@ -670,7 +668,7 @@ def create_app(config: Config | None = None) -> Flask:
             tekst = request.form.get("tekst", "").strip()
             bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
             try:
-                verstuur_email(config, kamer.email, onderwerp, tekst, bcc=bcc, afzender_email=current_user.email)
+                verstuur_email(config, kamer.email, onderwerp, tekst, bcc=bcc)
             except MailError as exc:
                 flash(str(exc))
                 return render_template(
@@ -930,7 +928,7 @@ def create_app(config: Config | None = None) -> Flask:
             pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
             try:
                 verstuur_email(
-                    config, aan, onderwerp, tekst, bcc=bcc_adressen, afzender_email=current_user.email,
+                    config, aan, onderwerp, tekst, bcc=bcc_adressen,
                     bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
                 )
             except MailError as exc:
@@ -987,7 +985,7 @@ def create_app(config: Config | None = None) -> Flask:
             else:
                 mail = ondertekenen.bouw_tekenmail_overig(o["rol"], o["naam"], g.pand, metadata, teken_url)
             try:
-                verstuur_email(config, o["email"], mail["onderwerp"], mail["tekst"], afzender_email=current_user.email)
+                verstuur_email(config, o["email"], mail["onderwerp"], mail["tekst"])
             except MailError:
                 app.logger.exception("Ondertekenverzoek-mail naar %s is mislukt.", o["email"])
                 mislukt.append(o["email"])
@@ -1011,10 +1009,6 @@ def create_app(config: Config | None = None) -> Flask:
             return
         mail = ondertekenen.bouw_getekend_contract_mail(pand, metadata)
         pdf_bestandsnaam = Path(getekend_bestandsnaam).with_suffix(".pdf").name
-        # Geen afzender_email hier: dit wordt getriggerd door wie er als
-        # laatste tekent via de publieke /tekenen/<token>-pagina (geen
-        # login) - dus geen current_user beschikbaar, en het is sowieso geen
-        # bewuste actie van een specifieke beheerder.
         for adres in dict.fromkeys(o["email"] for o in ronde["ondertekenaars"] if o["email"]):
             try:
                 verstuur_email(
