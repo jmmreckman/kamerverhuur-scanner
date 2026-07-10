@@ -53,6 +53,13 @@ def _verwijder_mailto(scanner_email: str, object_id: str) -> str:
     return f"mailto:{scanner_email}?subject={subject}&body={body}"
 
 
+def _maps_zoeklink(plaatsnaam: str) -> str:
+    # Ook de wijknaam moet al in een eigen link staan: Gmail's adres-auto-linking laat
+    # tekst die al in een <a> zit met rust, maar springt anders naar de eerstvolgende
+    # ongelinkte tekst (precies wat er met de wijknaam-cel gebeurde, zie report.py-log).
+    return f"https://www.google.com/maps/search/{quote(f'{plaatsnaam}, Rotterdam')}"
+
+
 def _acties_html(item: ListingState, scanner_email: str) -> str:
     verwijder_url = _verwijder_mailto(scanner_email, item.object_id)
     return (
@@ -78,10 +85,16 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
         or f'<span style="{_SMALL_STYLE}">geen gevonden</span>'
     )
 
+    wijk_html = (
+        f'<a href="{escape(_maps_zoeklink(item.wijknaam))}">{escape(item.wijknaam)}</a>'
+        if item.wijknaam
+        else "-"
+    )
+
     return f"""
     <tr>
       <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
-      <td style="{_TD_STYLE}">{escape(item.wijknaam or '-')}</td>
+      <td style="{_TD_STYLE}">{wijk_html}</td>
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
       <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>

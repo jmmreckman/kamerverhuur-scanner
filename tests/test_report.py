@@ -32,6 +32,28 @@ def test_html_report_adres_staat_in_eigen_link():
     assert f'<a href="{item.url}">Nieuwstraat 1, Rotterdam</a>' in html
 
 
+def test_html_report_wijknaam_staat_ook_in_eigen_link():
+    # Zelfde reden als hierboven: bleek in de praktijk nodig, want Gmail sprong na het
+    # linken van het adres gewoon door naar de eerstvolgende ongelinkte tekst (de
+    # wijknaam-cel) en injecteerde daar alsnog een kapotte extra <td>.
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", wijknaam="Heijplaat")
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert '<a href="https://www.google.com/maps/search/Heijplaat%2C%20Rotterdam">Heijplaat</a>' in html
+
+
+def test_html_report_zonder_wijknaam_geeft_streepje_zonder_link():
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", wijknaam=None)
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "google.com/maps/search" not in html
+    assert ">-</td>" in html
+
+
 def test_html_report_toont_alleen_nieuwe_woningen_in_nieuwe_kansen_blok():
     nieuw = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09")
     oud = _listing("OLD-1", "Oudstraat 2, Rotterdam", "2026-06-20")
