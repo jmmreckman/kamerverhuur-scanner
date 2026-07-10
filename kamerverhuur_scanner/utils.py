@@ -23,3 +23,10 @@ def parse_bedrag(raw: str | None) -> Decimal:
         return Decimal(text)
     except InvalidOperation as exc:
         raise ValueError(f"Kon bedrag '{raw}' niet interpreteren") from exc
+
+
+def format_bedrag_nl(bedrag: Decimal) -> str:
+    """Het omgekeerde van parse_bedrag(): een Decimal naar NL-notatie
+    ("1234.56" -> "1.234,56"), zonder €-teken (roep dat er zelf voor als
+    dat nodig is)."""
+    return f"{bedrag:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

@@ -28,7 +28,7 @@ from kamerverhuur_scanner.models import Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
 from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
-from kamerverhuur_scanner.utils import parse_bedrag
+from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import ads, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, valideer_en_bouw
@@ -71,9 +71,7 @@ def create_app(config: Config | None = None) -> Flask:
 
     @app.template_filter("eur")
     def eur(value) -> str:
-        bedrag = f"{Decimal(str(value)):,.2f}"  # bv. "4,209.56"
-        bedrag = bedrag.replace(",", "X").replace(".", ",").replace("X", ".")  # -> "4.209,56"
-        return f"€{bedrag}"
+        return f"€{format_bedrag_nl(Decimal(str(value)))}"
 
     @app.template_filter("status_klasse")
     def status_klasse(status_tekst: str) -> str:

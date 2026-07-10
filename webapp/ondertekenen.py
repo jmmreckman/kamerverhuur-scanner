@@ -33,6 +33,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from kamerverhuur_scanner.models import Pand
+from kamerverhuur_scanner.utils import format_bedrag_nl
 
 from . import contracts
 from .reminders import AFZENDER_NAAM
@@ -117,15 +118,6 @@ def bereken_betaalverzoek(huurprijs: Decimal, borg: Decimal, ingangsdatum: date)
         "laatste_dag_maand": laatste_dag, "dagen_resterend": dagen_resterend,
         "totaal": borg + pro_rata_huur,
     }
-
-
-def bereken_betaalverzoek_bedrag(huurprijs: Decimal, borg: Decimal, ingangsdatum: date) -> Decimal:
-    """Alleen het totaalbedrag - zie bereken_betaalverzoek() voor de opbouw."""
-    return bereken_betaalverzoek(huurprijs, borg, ingangsdatum)["totaal"]
-
-
-def _eur(bedrag: Decimal) -> str:
-    return f"{bedrag:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _nieuwe_ondertekenaar(id_: str, rol: str, naam: str, email: str) -> dict:
@@ -299,10 +291,10 @@ def bouw_betaal_en_tekenmail(pand: Pand, metadata: dict, teken_url: str, betaalv
         f"Dear {naam},\n\n"
         f"Thank you for confirming the draft rental agreement for room {kamer} at {pand.naam}. "
         f"Two things are needed to finalize it:\n\n"
-        f"1) Payment of EUR {_eur(betaalverzoek['totaal'])} in total, made up of:\n"
-        f"   - Security deposit: EUR {_eur(betaalverzoek['borg'])}\n"
+        f"1) Payment of EUR {format_bedrag_nl(betaalverzoek['totaal'])} in total, made up of:\n"
+        f"   - Security deposit: EUR {format_bedrag_nl(betaalverzoek['borg'])}\n"
         f"   - Pro-rated rent from {ingangsdatum} to {laatste_dag} "
-        f"({betaalverzoek['dagen_resterend']} days): EUR {_eur(betaalverzoek['pro_rata_huur'])}\n\n"
+        f"({betaalverzoek['dagen_resterend']} days): EUR {format_bedrag_nl(betaalverzoek['pro_rata_huur'])}\n\n"
         f"   To be paid to:\n"
         f"   IBAN: {pand.bunq_rekening_iban}\n"
         f"   Account holder: {pand.rekeninghouder_naam or pand.naam}\n\n"

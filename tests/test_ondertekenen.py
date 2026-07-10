@@ -32,31 +32,22 @@ def _metadata(**overrides) -> dict:
     return basis
 
 
-# --- bereken_betaalverzoek_bedrag ---
+# --- bereken_betaalverzoek ---
 
 
-def test_bereken_betaalverzoek_bedrag_pro_rata_plus_borg():
-    # juli heeft 31 dagen, ingangsdatum 10 juli -> 22 dagen resterend (10 t/m 31)
-    totaal = ondertekenen.bereken_betaalverzoek_bedrag(
-        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
-    )
-    verwachte_pro_rata = (Decimal("930.00") * 22 / 31).quantize(Decimal("0.01"))
-    assert totaal == Decimal("1000.00") + verwachte_pro_rata
-
-
-def test_bereken_betaalverzoek_bedrag_ingangsdatum_op_de_eerste_telt_hele_maand():
-    totaal = ondertekenen.bereken_betaalverzoek_bedrag(
+def test_bereken_betaalverzoek_ingangsdatum_op_de_eerste_telt_hele_maand():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
         huurprijs=Decimal("900.00"), borg=Decimal("0"), ingangsdatum=date(2026, 2, 1)
     )
-    assert totaal == Decimal("900.00")  # februari 2026 heeft 28 dagen, volledige maand
+    assert betaalverzoek["totaal"] == Decimal("900.00")  # februari 2026 heeft 28 dagen, volledige maand
 
 
-def test_bereken_betaalverzoek_bedrag_ingangsdatum_op_laatste_dag_telt_1_dag():
-    totaal = ondertekenen.bereken_betaalverzoek_bedrag(
+def test_bereken_betaalverzoek_ingangsdatum_op_laatste_dag_telt_1_dag():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
         huurprijs=Decimal("930.00"), borg=Decimal("500.00"), ingangsdatum=date(2026, 7, 31)
     )
     verwachte_pro_rata = (Decimal("930.00") * 1 / 31).quantize(Decimal("0.01"))
-    assert totaal == Decimal("500.00") + verwachte_pro_rata
+    assert betaalverzoek["totaal"] == Decimal("500.00") + verwachte_pro_rata
 
 
 def test_bereken_betaalverzoek_geeft_volledige_opbouw():
