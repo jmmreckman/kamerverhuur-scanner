@@ -8,6 +8,9 @@
 
 <div class="card">
   <a class="btn" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuw huurcontract</a>
+  {% if current_user.mag_gebruikers_beheren() %}
+  <a class="btn btn-secondary" href="{{ url_for('contractsjabloon_bewerken') }}">Contractsjabloon aanpassen</a>
+  {% endif %}
 </div>
 
 <div class="card">

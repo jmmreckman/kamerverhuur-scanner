@@ -254,6 +254,16 @@ daadwerkelijk laat ondertekenen.
   aan te passen voordat je 'm verstuurt. De PDF van het contract gaat
   automatisch als bijlage mee, verzonden vanaf info@steenhub.nl, met de
   beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) zichtbaar in CC.
+- **Contractsjabloon aanpassen** (alleen voor beheerders met toegang tot alle
+  panden): via **Contracten > Contractsjabloon aanpassen** pas je de
+  basistekst - alle artikelen - van het huurcontract zelf aan, in gewone HTML
+  met Jinja2-variabelen ertussen (bv. `{{ huurprijs }}`). Geldt voor **alle**
+  panden. De pagina valideert de Jinja2-syntax vóór het opslaan (een kapotte
+  `{% if %}` wordt geweigerd, de vorige versie blijft dan gewoon actief), en
+  er staat een "Terugzetten naar standaardsjabloon"-knop voor als je toch
+  iets wilt herstellen. De aanpassing wordt in `STATE_DIR` opgeslagen, overleeft
+  dus een herbuild/redeploy. Test een wijziging altijd eerst met een
+  proefcontract voordat je 'm naar een echte huurder stuurt.
 - De WWS-puntentelling (Annex 1, verplicht volgens de Wet goed
   verhuurderschap) wordt niet automatisch gegenereerd - reken deze zelf uit
   en voeg 'm apart toe als bijlage.

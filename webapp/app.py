@@ -327,6 +327,39 @@ def create_app(config: Config | None = None) -> Flask:
         flash(f"Pand '{slug}' verwijderd (gebruikerstoegang tot dit pand blijft ongebruikt in users.json staan, maar heeft geen effect meer).")
         return redirect(url_for("panden_overzicht"))
 
+    # --- Contractsjabloon (basistekst/artikelen, geldt voor alle panden) ---
+
+    @app.route("/beheer/contractsjabloon", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def contractsjabloon_bewerken():
+        if request.method == "POST":
+            inhoud = request.form.get("sjabloon", "")
+            try:
+                contracts.schrijf_sjabloon(config.state_dir, inhoud)
+            except contracts.SjabloonFout as exc:
+                flash(str(exc))
+                return render_template(
+                    "contractsjabloon.html", sjabloon=inhoud,
+                    variabelen=contracts.SJABLOON_VARIABELEN,
+                    aangepast=contracts.heeft_aangepast_sjabloon(config.state_dir),
+                )
+            flash("Contractsjabloon opgeslagen - geldt voor alle nieuw te genereren contracten.")
+            return redirect(url_for("contractsjabloon_bewerken"))
+        return render_template(
+            "contractsjabloon.html", sjabloon=contracts.lees_sjabloon(config.state_dir),
+            variabelen=contracts.SJABLOON_VARIABELEN,
+            aangepast=contracts.heeft_aangepast_sjabloon(config.state_dir),
+        )
+
+    @app.route("/beheer/contractsjabloon/terugzetten", methods=["POST"])
+    @login_required
+    @admin_required
+    def contractsjabloon_terugzetten():
+        contracts.verwijder_sjabloon_override(config.state_dir)
+        flash("Contractsjabloon teruggezet naar de standaardtekst.")
+        return redirect(url_for("contractsjabloon_bewerken"))
+
     # --- Dashboard ---
 
     _AANZEG_TEGEL_DAGEN = 60  # ~2 maanden, voor de "loopt binnenkort af"-tegel
@@ -716,7 +749,7 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         kamers = sheet.get_kamers()
         if request.method == "POST":
-            bestandsnaam = contracts.genereer_contract(pand_slug, g.pand, request.form)
+            bestandsnaam = contracts.genereer_contract(pand_slug, g.pand, request.form, config.state_dir)
             # Gegevens ook terugschrijven naar de Huurders-sheet, zodat ze bij een
             # volgend contract (of op de Huurders-pagina) meteen weer klaarstaan.
             kamer_naam = request.form.get("kamer", "").strip()

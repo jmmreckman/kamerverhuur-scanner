@@ -194,3 +194,68 @@ def test_contract_mailen_zonder_emailadres_geeft_foutmelding(app_client):
 def test_contract_mailen_onbekend_bestand_geeft_404(app_client):
     resp = app_client.get("/pand/mahoniestraat/contracten/bestaat-niet.html/mailen")
     assert resp.status_code == 404
+
+
+# --- Contractsjabloon aanpassen (alleen voor beheerders met alle_panden) ---
+
+
+def test_contractsjabloon_bewerken_toont_standaardtekst(app_client):
+    import webapp.contracts as contracts
+    resp = app_client.get("/beheer/contractsjabloon")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Article 1" in body  # uit de standaardtekst
+    assert "Terugzetten naar standaardsjabloon" not in body  # nog geen aanpassing actief
+
+
+def test_contractsjabloon_opslaan_en_gebruikt_bij_nieuw_contract(app_client):
+    resp = app_client.post(
+        "/beheer/contractsjabloon",
+        data={"sjabloon": "<p>Speciaal artikel voor {{ huurder_naam }}, kamer {{ kamer }}</p>"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "opgeslagen" in resp.get_data(as_text=True).lower()
+
+    # een nieuw contract gebruikt nu meteen het aangepaste sjabloon
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    contract_resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}")
+    assert "Speciaal artikel voor Bence Neumayer, kamer 1" in contract_resp.get_data(as_text=True)
+
+    # en het bewerkscherm toont nu de "terugzetten"-optie
+    bewerk_resp = app_client.get("/beheer/contractsjabloon")
+    assert "Terugzetten naar standaardsjabloon" in bewerk_resp.get_data(as_text=True)
+
+
+def test_contractsjabloon_ongeldige_syntax_wordt_niet_opgeslagen(app_client):
+    resp = app_client.post(
+        "/beheer/contractsjabloon",
+        data={"sjabloon": "<p>{% if kapot %}geen endif</p>"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "ongeldige" in resp.get_data(as_text=True).lower()
+
+    bewerk_resp = app_client.get("/beheer/contractsjabloon")
+    assert "Terugzetten naar standaardsjabloon" not in bewerk_resp.get_data(as_text=True)
+
+
+def test_contractsjabloon_terugzetten(app_client):
+    app_client.post("/beheer/contractsjabloon", data={"sjabloon": "<p>Aangepast</p>"})
+    resp = app_client.post("/beheer/contractsjabloon/terugzetten", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "teruggezet" in resp.get_data(as_text=True).lower()
+    bewerk_resp = app_client.get("/beheer/contractsjabloon")
+    assert "Terugzetten naar standaardsjabloon" not in bewerk_resp.get_data(as_text=True)
+
+
+def test_contractsjabloon_vereist_alle_panden_toegang(app_client, tmp_path):
+    users_file = tmp_path / "users.json"
+    users_file.write_text(json.dumps({
+        "beheerder": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": []},
+        "justin": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": False, "panden": ["mahoniestraat"]},
+    }))
+    app_client.get("/logout")
+    app_client.post("/login", data={"username": "justin", "password": "geheim123"})
+    resp = app_client.get("/beheer/contractsjabloon", follow_redirects=True)
+    assert "geen toegang" in resp.get_data(as_text=True).lower()

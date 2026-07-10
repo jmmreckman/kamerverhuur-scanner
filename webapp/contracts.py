@@ -2,6 +2,12 @@
 xhtml2pdf) op basis van het sjabloon in contract_templates/. Elk pand heeft
 zijn eigen submap onder gegenereerde_contracten/.
 
+Het sjabloon (basistekst + artikelen, geldt voor alle panden) is via de site
+zelf aan te passen ("Contractsjabloon aanpassen", zie lees_sjabloon()/
+schrijf_sjabloon() hieronder) - de aangepaste versie wordt in STATE_DIR
+opgeslagen (overleeft dus een herbuild/redeploy) en overschrijft dan de
+meegeleverde standaardtekst uit contract_templates/.
+
 BELANGRIJK: het meegeleverde sjabloon is gebaseerd op een echt gebruikt
 huurcontract, maar is geen juridisch gecontroleerde huurovereenkomst op zich.
 Laat de inhoud van contract_templates/huurovereenkomst_voorbeeld.html
@@ -16,7 +22,7 @@ from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader, TemplateSyntaxError, select_autoescape
 from werkzeug.datastructures import ImmutableMultiDict
 from xhtml2pdf import pisa
 
@@ -26,8 +32,65 @@ from .reminders import AFZENDER_NAAM
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "contract_templates"
 BASIS_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "gegenereerde_contracten"
+STANDAARD_SJABLOON_NAAM = "huurovereenkomst_voorbeeld.html"
 
 _env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=select_autoescape())
+
+# Namen van de variabelen die in het sjabloon gebruikt kunnen worden (zie
+# _bouw_context() hieronder) - getoond op het "Contractsjabloon aanpassen"-
+# scherm zodat een beheerder weet welke velden beschikbaar zijn.
+SJABLOON_VARIABELEN = [
+    "pand", "kamer", "kamer_omschrijving", "huurder_naam", "geboortedatum",
+    "geboorteplaats", "studentnummer", "studierichting", "borgsteller_naam",
+    "borgsteller_relatie", "kale_huurprijs", "servicekosten", "huurprijs",
+    "borg", "aantal_bewoners", "ingangsdatum", "einddatum", "bijzonderheden",
+    "gegenereerd_op", "pdf_url",
+]
+
+
+class SjabloonFout(RuntimeError):
+    """Het opgegeven sjabloon is geen geldige Jinja2-template (bv. een niet-
+    gesloten {% if %} of een tikfout in een {{ variabele }})."""
+
+
+def _sjabloon_override_pad(state_dir: str) -> Path:
+    return Path(state_dir) / "contract_sjabloon.html"
+
+
+def lees_standaard_sjabloon() -> str:
+    """De meegeleverde standaardtekst (contract_templates/), ongeacht of er
+    een aangepaste versie bestaat - gebruikt voor "Terugzetten naar
+    standaard" en om op het bewerkscherm te vergelijken."""
+    return (TEMPLATE_DIR / STANDAARD_SJABLOON_NAAM).read_text()
+
+
+def lees_sjabloon(state_dir: str) -> str:
+    """De tekst die daadwerkelijk gebruikt wordt om een contract te
+    genereren: de aangepaste versie als die bestaat, anders de standaard."""
+    override = _sjabloon_override_pad(state_dir)
+    if override.is_file():
+        return override.read_text()
+    return lees_standaard_sjabloon()
+
+
+def heeft_aangepast_sjabloon(state_dir: str) -> bool:
+    return _sjabloon_override_pad(state_dir).is_file()
+
+
+def schrijf_sjabloon(state_dir: str, inhoud: str) -> None:
+    """Slaat een aangepast sjabloon op - valideert eerst of het geldige
+    Jinja2-syntax is (ontbrekende {% endif %}'s e.d.), zodat een tikfout niet
+    alle toekomstige contractgeneraties kapotmaakt."""
+    try:
+        _env.from_string(inhoud)
+    except TemplateSyntaxError as exc:
+        raise SjabloonFout(f"Ongeldige sjabloon-syntax: {exc}") from exc
+    _sjabloon_override_pad(state_dir).write_text(inhoud)
+
+
+def verwijder_sjabloon_override(state_dir: str) -> None:
+    """Zet het sjabloon terug naar de meegeleverde standaardtekst."""
+    _sjabloon_override_pad(state_dir).unlink(missing_ok=True)
 
 
 def _slugify(tekst: str) -> str:
@@ -48,7 +111,7 @@ def _datum_lang(iso_datum: str) -> str:
         return iso_datum
 
 
-def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict) -> str:
+def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, state_dir: str = ".") -> str:
     output_dir = _output_dir(pand_slug)
     output_dir.mkdir(parents=True, exist_ok=True)
     context = _bouw_context(pand, form)
@@ -57,7 +120,7 @@ def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict) -> s
     bestandsnaam = f"{date.today():%Y-%m-%d}_{slug}.html"
     context["pdf_url"] = f"/pand/{pand_slug}/contracten/{bestandsnaam}/pdf"
 
-    html = _env.get_template("huurovereenkomst_voorbeeld.html").render(**context)
+    html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
     (output_dir / bestandsnaam).write_text(html)
     _schrijf_metadata(output_dir, bestandsnaam, {
         "email": form.get("email", "").strip(),

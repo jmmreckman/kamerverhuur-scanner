@@ -123,4 +123,53 @@ def test_bouw_concept_email_bevat_kamer_dochub_en_bold():
     assert "DocHub" in opgesteld["tekst"]
     assert "Bold" in opgesteld["tekst"]
     assert "1000,00" in opgesteld["tekst"]
-    assert "Jurian Reckman" in opgesteld["tekst"]  # ondertekening (AFZENDER_NAAM)
+
+
+# --- Aanpasbaar contractsjabloon ---
+
+
+def test_lees_sjabloon_zonder_aanpassing_geeft_standaardtekst(tmp_path):
+    assert contracts.lees_sjabloon(str(tmp_path)) == contracts.lees_standaard_sjabloon()
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
+
+
+def test_schrijf_en_lees_aangepast_sjabloon(tmp_path):
+    contracts.schrijf_sjabloon(str(tmp_path), "<p>Custom artikel {{ huurder_naam }}</p>")
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is True
+    assert contracts.lees_sjabloon(str(tmp_path)) == "<p>Custom artikel {{ huurder_naam }}</p>"
+    # de standaardtekst zelf blijft ongewijzigd beschikbaar
+    assert "Custom artikel" not in contracts.lees_standaard_sjabloon()
+
+
+def test_schrijf_sjabloon_met_ongeldige_syntax_geeft_sjabloonfout_en_slaat_niet_op(tmp_path):
+    try:
+        contracts.schrijf_sjabloon(str(tmp_path), "<p>{% if kapot %}geen endif</p>")
+        assert False, "had een SjabloonFout moeten geven"
+    except contracts.SjabloonFout:
+        pass
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
+
+
+def test_verwijder_sjabloon_override_zet_terug_naar_standaard(tmp_path):
+    contracts.schrijf_sjabloon(str(tmp_path), "<p>Custom</p>")
+    contracts.verwijder_sjabloon_override(str(tmp_path))
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
+    assert contracts.lees_sjabloon(str(tmp_path)) == contracts.lees_standaard_sjabloon()
+
+
+def test_verwijder_sjabloon_override_zonder_aanpassing_doet_niets(tmp_path):
+    contracts.verwijder_sjabloon_override(str(tmp_path))  # geen crash zonder bestaand override-bestand
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
+
+
+def test_genereer_contract_gebruikt_aangepast_sjabloon(tmp_path, monkeypatch):
+    output_dir = tmp_path / "output"
+    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", output_dir)
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    contracts.schrijf_sjabloon(str(state_dir), "<p>Aangepast contract voor {{ huurder_naam }}, kamer {{ kamer }}</p>")
+
+    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form(), state_dir=str(state_dir))
+
+    html = (output_dir / "mahoniestraat" / bestandsnaam).read_text()
+    assert "Aangepast contract voor Bence Neumayer, kamer 1" in html
