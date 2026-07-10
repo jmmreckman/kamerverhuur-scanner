@@ -88,6 +88,7 @@ def load_properties(path: str) -> list[Pand]:
                     gedeelde_ruimtes=item.get("gedeelde_ruimtes", ""),
                     bijzondere_bepalingen=item.get("bijzondere_bepalingen", ""),
                     gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
+                    heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
                 )
             )
         except KeyError as exc:

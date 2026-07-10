@@ -238,14 +238,20 @@ def bouw_concept_email(pand: Pand, metadata: dict) -> dict[str, str]:
     naam = metadata.get("huurder_naam") or "there"
     kamer = metadata.get("kamer", "")
     onderwerp = f"Draft rental agreement - room {kamer}, {pand.naam}".strip()
+    if pand.heeft_bold_slot:
+        afronding = (
+            "your digital key (Bold) will be activated - it becomes valid from the start date of "
+            "your rental agreement"
+        )
+    else:
+        afronding = "the rental agreement takes effect from its start date"
     tekst = (
         f"Dear {naam},\n\n"
         f"Please find attached the draft rental agreement for room {kamer} at {pand.naam}.\n\n"
         f"Please take your time to review it, and let us know if you have any questions.\n\n"
         f"Once you confirm you are happy with the terms, we will send you a payment request and a "
         f"link to sign the agreement electronically. As soon as the payment and all signatures have "
-        f"been received, your digital key (Bold) will be activated - it becomes valid from the start "
-        f"date of your rental agreement.\n\n"
+        f"been received, {afronding}.\n\n"
         f"Kind regards,\n{AFZENDER_NAAM}"
     )
     return {"onderwerp": onderwerp, "tekst": tekst}

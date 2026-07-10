@@ -169,6 +169,14 @@ def test_bouw_concept_email_bevat_kamer_en_bold():
     assert "Bold" in opgesteld["tekst"]
 
 
+def test_bouw_concept_email_zonder_bold_slot_noemt_bold_niet():
+    pand = _pand(heeft_bold_slot=False)
+    metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1", "borg": "1000,00"}
+    opgesteld = contracts.bouw_concept_email(pand, metadata)
+    assert "Bold" not in opgesteld["tekst"]
+    assert "rental agreement takes effect from its start date" in opgesteld["tekst"]
+
+
 # --- Aanpasbaar contractsjabloon ---
 
 

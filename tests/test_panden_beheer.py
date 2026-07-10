@@ -149,6 +149,40 @@ def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
     assert pand["gemeente_meldpunt"] == "www.rotterdam.nl/ongewenst-verhuurgedrag-melden"
 
 
+def test_nieuw_pand_toont_bold_slot_vinkje_standaard_aangevinkt(client):
+    c, _properties_file = client
+    _login(c, "beheerder")
+    resp = c.get("/beheer/panden/nieuw")
+    assert resp.status_code == 200
+    assert 'name="heeft_bold_slot" checked' in resp.get_data(as_text=True)
+
+
+def test_beheerder_kan_bold_slot_vinkje_uitzetten(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        # heeft_bold_slot NIET meegestuurd - simuleert een uitgevinkte checkbox
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    pand = json.loads(properties_file.read_text())[0]
+    assert pand["heeft_bold_slot"] is False
+
+    bewerk_resp = c.get("/beheer/panden/mahoniestraat/bewerken")
+    assert 'name="heeft_bold_slot" checked' not in bewerk_resp.get_data(as_text=True)
+
+
+def test_beheerder_kan_bold_slot_vinkje_weer_aanzetten(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "heeft_bold_slot": "on",
+    })
+    pand = json.loads(properties_file.read_text())[0]
+    assert pand["heeft_bold_slot"] is True
+
+
 def test_verhuurders_met_komma_i_p_v_pipe_wordt_ook_correct_gesplitst(client):
     # Regressietest voor een echt gemelde situatie: een huurder typt de naam
     # en het adres met een komma i.p.v. het "Naam | Adres"-formaat.

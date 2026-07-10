@@ -125,6 +125,11 @@ class Pand:
     gedeelde_ruimtes: str = ""  # bv. "keuken, badkamer, woonkamer, tuin"
     bijzondere_bepalingen: str = ""  # huisregels/extra bepalingen, vrije tekst
     gemeente_meldpunt: str = ""  # meldpunt ongewenst verhuurgedrag van de gemeente
+    # Bepaalt of de contract-/ondertekenmails de Bold digitale sleutel noemen
+    # (zie webapp/contracts.py: bouw_concept_email() en
+    # webapp/ondertekenen.py: bouw_betaal_en_tekenmail()) - niet elk pand
+    # heeft een Bold slim slot.
+    heeft_bold_slot: bool = True
 
 
 @dataclass(frozen=True)

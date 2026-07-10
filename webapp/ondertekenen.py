@@ -288,6 +288,13 @@ def bouw_betaal_en_tekenmail(pand: Pand, metadata: dict, teken_url: str, betaalv
     wie_nog = "the landlord(s)" + (" and guarantor" if metadata.get("borgsteller_naam") else "")
     ingangsdatum = betaalverzoek["ingangsdatum"].strftime("%d-%m-%Y")
     laatste_dag = betaalverzoek["laatste_dag_maand"].strftime("%d-%m-%Y")
+    if pand.heeft_bold_slot:
+        afronding = (
+            "we will send you the fully signed agreement, and your digital key (Bold) will be "
+            "activated - it becomes valid from the start date of your rental agreement"
+        )
+    else:
+        afronding = "we will send you the fully signed agreement"
     tekst = (
         f"Dear {naam},\n\n"
         f"Thank you for confirming the draft rental agreement for room {kamer} at {pand.naam}. "
@@ -302,8 +309,7 @@ def bouw_betaal_en_tekenmail(pand: Pand, metadata: dict, teken_url: str, betaalv
         f"2) Signing the rental agreement electronically via this link:\n"
         f"   {teken_url}\n\n"
         f"Once the payment has been received and everyone has signed ({wie_nog} still need to sign "
-        f"as well), we will send you the fully signed agreement, and your digital key (Bold) will be "
-        f"activated - it becomes valid from the start date of your rental agreement.\n\n"
+        f"as well), {afronding}.\n\n"
         f"Kind regards,\n{AFZENDER_NAAM}"
     )
     return {"onderwerp": onderwerp, "tekst": tekst}

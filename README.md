@@ -243,9 +243,12 @@ daadwerkelijk laat ondertekenen.
   bewerken** en vul onderaan de contractvelden in: verhuurder(s) (naam +
   adres, één per regel), postcode/plaats, naam rekeninghouder, gedeelde
   ruimtes, bijzondere bepalingen/huisregels (vrije tekst, komt letterlijk in
-  het contract) en het gemeentelijk meldpunt ongewenst verhuurgedrag. Zonder
-  deze gegevens blijven er `[fill in]`-plekken in het gegenereerde contract
-  staan.
+  het contract), het gemeentelijk meldpunt ongewenst verhuurgedrag, en het
+  vinkje **"Dit pand heeft een Bold digitale sleutel/slim slot"** (standaard
+  aan) - bepaalt of de concept- en betaalverzoek-mails de Bold-sleutel
+  noemen; voor panden zonder Bold-slot zet je dit vinkje uit. Zonder de
+  overige gegevens ingevuld blijven er `[fill in]`-plekken in het
+  gegenereerde contract staan.
 - **Contract genereren**: ga naar **Contracten > Nieuw huurcontract**, kies een
   kamer (vult automatisch de gegevens in die al bekend zijn bij Huurders) en
   vul de rest aan (geboortedatum, studentnummer, borgsteller, huurprijs,

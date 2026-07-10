@@ -318,6 +318,7 @@ def create_app(config: Config | None = None) -> Flask:
             "gedeelde_ruimtes": form.get("gedeelde_ruimtes", "").strip(),
             "bijzondere_bepalingen": form.get("bijzondere_bepalingen", "").strip(),
             "gemeente_meldpunt": form.get("gemeente_meldpunt", "").strip(),
+            "heeft_bold_slot": form.get("heeft_bold_slot") == "on",
         }
 
     @app.route("/beheer/panden")

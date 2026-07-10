@@ -79,6 +79,11 @@
     <label>Gemeentelijk meldpunt ongewenst verhuurgedrag (naam/website, optioneel)
       <input type="text" name="gemeente_meldpunt" value="{{ pand.gemeente_meldpunt if pand else '' }}">
     </label>
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="heeft_bold_slot" {{ 'checked' if not pand or pand.heeft_bold_slot }} style="width:auto">
+      Dit pand heeft een Bold digitale sleutel/slim slot (bepaalt of de contract- en ondertekenmails
+      de Bold-sleutel noemen)
+    </label>
 
     <button class="btn" type="submit">Opslaan</button>
     <a class="btn btn-secondary" href="{{ url_for('panden_overzicht') }}">Annuleren</a>
