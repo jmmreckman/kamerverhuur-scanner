@@ -228,6 +228,7 @@
 <!-- ARTIKELEN:EINDE -->
 
 <h2>Signatures</h2>
+<!-- HANDTEKENINGEN:START -->
 <table class="handtekeningen">
   {% for verhuurder in pand.verhuurders %}
   <tr><td>{{ verhuurder.naam }} (landlord)</td></tr>
@@ -242,6 +243,7 @@
   <tr><td>{{ borgsteller_naam }} (guarantor)</td></tr>
   {% endif %}
 </table>
+<!-- HANDTEKENINGEN:EINDE -->
 
 <p style="margin-top:2rem"><em>Annex 1: Housing Valuation System (WWS) Point Rating - attach separately.</em></p>
 

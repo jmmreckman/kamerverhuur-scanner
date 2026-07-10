@@ -6,8 +6,8 @@
 <div class="warning-box">
   <p>Dit genereert een <strong>concepttekst</strong> op basis van het contractsjabloon
      (contract_templates/huurovereenkomst_voorbeeld.html) - geen juridisch gecontroleerd
-     document. Laat de bepalingen controleren voordat je dit ter ondertekening aanbiedt (bv. via
-     DocHub). Vul eerst de verhuurder(s), het adres en de gedeelde ruimtes van dit pand in bij
+     document. Laat de bepalingen controleren voordat je dit ter ondertekening aanbiedt. Vul eerst de
+     verhuurder(s), het adres en de gedeelde ruimtes van dit pand in bij
      <a href="{{ url_for('pand_bewerken', slug=huidig_pand.slug) }}">Panden beheren</a> als dat nog
      niet is gebeurd, anders blijven die velden leeg in het contract.</p>
 </div>
@@ -71,6 +71,9 @@
     </label>
     <label>Relatie tot huurder
       <input type="text" name="borgsteller_relatie" id="veld-borgstellerrelatie" placeholder="bv. Vader">
+    </label>
+    <label>E-mailadres borgsteller (voor het verzoek tot ondertekenen, alleen nodig als er een borgsteller is)
+      <input type="email" name="borgsteller_email" id="veld-borgstelleremail">
     </label>
 
     <h2>Kamer en huurprijs</h2>

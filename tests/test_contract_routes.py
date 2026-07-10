@@ -191,7 +191,7 @@ def test_contract_mailen_vult_emailadres_en_engelse_tekst_voor(app_client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert 'value="bence@example.com"' in body
-    assert "DocHub" in body
+    assert "sign the agreement electronically" in body
     assert "Bold" in body
 
 

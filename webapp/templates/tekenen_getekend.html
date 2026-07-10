@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Signed{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Thank you, you've signed</h1>
+</div>
+<div class="card">
+  <p>You ({{ ondertekenaar.getekende_naam or ondertekenaar.naam }}) signed this rental agreement on
+     {{ ondertekenaar.ondertekend_op }}.</p>
+  <p class="muted">Once all parties have signed, you'll automatically receive the fully signed
+     agreement by email - you'll need it to register (inschrijven) at the municipality.</p>
+</div>
+{% endblock %}

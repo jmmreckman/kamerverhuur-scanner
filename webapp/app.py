@@ -17,6 +17,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
@@ -29,7 +30,7 @@ from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import parse_bedrag
 
-from . import ads, contracts
+from . import ads, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
@@ -41,6 +42,11 @@ load_dotenv()
 
 def create_app(config: Config | None = None) -> Flask:
     app = Flask(__name__)
+    # Achter Caddy (reverse proxy) staat request.remote_addr anders op het
+    # interne Docker-IP van Caddy i.p.v. het echte bezoekers-IP - cruciaal
+    # voor de audit-trail bij het elektronisch ondertekenen van contracten
+    # (zie webapp/ondertekenen.py). x_for=1 vertrouwt precies één hop.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     if config is None:
         try:
@@ -754,7 +760,14 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/pand/<pand_slug>/contracten")
     @login_required
     def contracten_overzicht(pand_slug: str):
-        return render_template("contracten.html", contracten=contracts.list_contracten(pand_slug, config.state_dir))
+        contracten = []
+        for bestandsnaam in contracts.list_contracten(pand_slug, config.state_dir):
+            contracten.append({
+                "bestandsnaam": bestandsnaam,
+                "getekend": contracts.is_getekend_contract(bestandsnaam),
+                "ronde": ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir),
+            })
+        return render_template("contracten.html", contracten=contracten)
 
     @app.route("/pand/<pand_slug>/contracten/nieuw", methods=["GET", "POST"])
     @login_required
@@ -887,6 +900,168 @@ def create_app(config: Config | None = None) -> Flask:
         contracts.verwijder_contract(pand_slug, bestandsnaam, config.state_dir)
         flash(f"Contract '{bestandsnaam}' verwijderd.")
         return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
+    # --- Elektronisch ondertekenen ---
+
+    def _teken_url(token: str) -> str:
+        return url_for("tekenen", token=token, _external=True)
+
+    def _verstuur_tekenverzoek_mails(ronde: dict, metadata: dict) -> list[str]:
+        """Mailt (opnieuw) elke nog niet getekende ondertekenaar in `ronde` -
+        de huurder krijgt het betaalverzoek + tekenlink, de rest alleen de
+        tekenlink. Geeft de e-mailadressen terug waarvoor het versturen
+        mislukte (best-effort, net als bij 'mail het hele huishouden')."""
+        mislukt = []
+        for o in ronde["ondertekenaars"]:
+            if not o["email"] or o["ondertekend_op"]:
+                continue
+            teken_url = _teken_url(o["token"])
+            if o["rol"] == "huurder":
+                huurprijs = parse_bedrag(metadata.get("huurprijs"))
+                borg = parse_bedrag(metadata.get("borg"))
+                try:
+                    ingangsdatum = date.fromisoformat(metadata.get("ingangsdatum_iso") or "")
+                except ValueError:
+                    ingangsdatum = date.today()
+                totaal = ondertekenen.bereken_betaalverzoek_bedrag(huurprijs, borg, ingangsdatum)
+                mail = ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, totaal)
+            else:
+                mail = ondertekenen.bouw_tekenmail_overig(o["rol"], o["naam"], g.pand, metadata, teken_url)
+            try:
+                verstuur_email(config, o["email"], mail["onderwerp"], mail["tekst"])
+            except MailError:
+                app.logger.exception("Ondertekenverzoek-mail naar %s is mislukt.", o["email"])
+                mislukt.append(o["email"])
+        return mislukt
+
+    def _rond_ondertekening_af(pand_slug: str, bestandsnaam: str, pand) -> None:
+        """Wordt aangeroepen zodra de laatste partij getekend heeft: maakt de
+        definitieve, ondertekende contractversie en mailt die (als PDF) naar
+        iedereen die getekend heeft."""
+        ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+        handtekeningen_html = ondertekenen.bouw_handtekeningen_html(ronde)
+        getekend_bestandsnaam = contracts.genereer_getekend_contract(
+            pand_slug, bestandsnaam, handtekeningen_html, config.state_dir
+        )
+        ondertekenen.markeer_afgerond(pand_slug, bestandsnaam, config.state_dir, getekend_bestandsnaam)
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        try:
+            pdf = contracts.genereer_pdf(pand_slug, getekend_bestandsnaam, config.state_dir)
+        except contracts.PdfGenerationError:
+            app.logger.exception("PDF-generatie van het ondertekende contract %s is mislukt.", getekend_bestandsnaam)
+            return
+        mail = ondertekenen.bouw_getekend_contract_mail(pand, metadata)
+        pdf_bestandsnaam = Path(getekend_bestandsnaam).with_suffix(".pdf").name
+        for adres in dict.fromkeys(o["email"] for o in ronde["ondertekenaars"] if o["email"]):
+            try:
+                verstuur_email(
+                    config, adres, mail["onderwerp"], mail["tekst"],
+                    bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
+                )
+            except MailError:
+                app.logger.exception("Mail met ondertekend contract naar %s is mislukt.", adres)
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/tekenverzoek", methods=["POST"])
+    @login_required
+    def contract_tekenverzoek(pand_slug: str, bestandsnaam: str):
+        if contracts.is_getekend_contract(bestandsnaam):
+            flash("Dit is al een ondertekend contract.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        try:
+            contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            abort(404)
+        if ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir) is not None:
+            flash("Er loopt al een ondertekenverzoek voor dit contract.")
+            return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        if not metadata.get("email"):
+            flash("Geen e-mailadres van de huurder bekend voor dit contract - kan geen ondertekenverzoek versturen.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
+        verhuurder_emails = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        ronde = ondertekenen.start_ondertekenronde(
+            g.pand, pand_slug, bestandsnaam, metadata, verhuurder_emails, config.state_dir
+        )
+        mislukt = _verstuur_tekenverzoek_mails(ronde, metadata)
+        if mislukt:
+            flash(f"Ondertekenverzoek verstuurd, maar mislukt voor: {', '.join(mislukt)}.")
+        else:
+            flash("Ondertekenverzoek verstuurd naar alle partijen.")
+        return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/ondertekenstatus")
+    @login_required
+    def contract_ondertekenstatus(pand_slug: str, bestandsnaam: str):
+        ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+        if ronde is None:
+            abort(404)
+        return render_template("contract_ondertekenstatus.html", bestandsnaam=bestandsnaam, ronde=ronde)
+
+    @app.route(
+        "/pand/<pand_slug>/contracten/<bestandsnaam>/ondertekenstatus/<ondertekenaar_id>/opnieuw-mailen",
+        methods=["POST"],
+    )
+    @login_required
+    def contract_tekenverzoek_opnieuw(pand_slug: str, bestandsnaam: str, ondertekenaar_id: str):
+        ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+        if ronde is None:
+            abort(404)
+        doelwit = next((o for o in ronde["ondertekenaars"] if o["id"] == ondertekenaar_id), None)
+        if doelwit is None:
+            abort(404)
+        if doelwit["ondertekend_op"]:
+            flash(f"{doelwit['naam']} had al getekend.")
+        else:
+            metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+            mislukt = _verstuur_tekenverzoek_mails({"ondertekenaars": [doelwit]}, metadata)
+            flash(f"Mail naar {doelwit['naam']} is mislukt." if mislukt else f"Opnieuw gemaild naar {doelwit['naam']}.")
+        return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+
+    @app.route("/tekenen/<token>", methods=["GET", "POST"])
+    def tekenen(token: str):
+        gevonden = ondertekenen.zoek_via_token(token, config.state_dir)
+        if gevonden is None:
+            abort(404)
+        pand_slug, bestandsnaam, ondertekenaar = gevonden
+        pand = find_pand(_properties(), pand_slug)
+        if pand is None:
+            abort(404)
+
+        if ondertekenaar["ondertekend_op"]:
+            return render_template("tekenen_getekend.html", ondertekenaar=ondertekenaar)
+
+        if request.method == "POST":
+            getekende_naam = request.form.get("getekende_naam", "").strip()
+            akkoord = request.form.get("akkoord") == "on"
+            if not getekende_naam or not akkoord:
+                flash("Please fill in your full name and tick the checkbox to sign.")
+                return render_template("tekenen.html", pand=pand, bestandsnaam=bestandsnaam, ondertekenaar=ondertekenaar)
+            ronde = ondertekenen.markeer_ondertekend(
+                pand_slug, bestandsnaam, ondertekenaar["id"], config.state_dir,
+                request.remote_addr or "", request.user_agent.string or "", getekende_naam,
+            )
+            if ondertekenen.alles_getekend(ronde):
+                _rond_ondertekening_af(pand_slug, bestandsnaam, pand)
+            bijgewerkt = next(o for o in ronde["ondertekenaars"] if o["id"] == ondertekenaar["id"])
+            return render_template("tekenen_getekend.html", ondertekenaar=bijgewerkt)
+
+        return render_template("tekenen.html", pand=pand, bestandsnaam=bestandsnaam, ondertekenaar=ondertekenaar)
+
+    @app.route("/tekenen/<token>/contract")
+    def tekenen_contract(token: str):
+        """De volledige contracttekst, om in een iframe te tonen op de
+        ondertekenpagina - publiek (geen login), maar alleen bereikbaar met
+        een geldige, niet te raden token."""
+        gevonden = ondertekenen.zoek_via_token(token, config.state_dir)
+        if gevonden is None:
+            abort(404)
+        pand_slug, bestandsnaam, _ondertekenaar = gevonden
+        try:
+            html_inhoud = contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            abort(404)
+        return Response(html_inhoud, mimetype="text/html")
 
     # --- Documenten ---
 

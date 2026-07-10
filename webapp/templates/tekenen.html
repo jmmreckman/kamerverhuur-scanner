@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Sign rental agreement{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Sign rental agreement</h1>
+  <p class="muted">{{ pand.naam }} - signing as {{ {"huurder": "tenant", "verhuurder": "landlord", "borgsteller": "guarantor"}[ondertekenaar.rol] }}</p>
+</div>
+
+<div class="card">
+  <p>Please review the full rental agreement below, then confirm and sign at the bottom of this page.</p>
+  <iframe src="{{ url_for('tekenen_contract', token=ondertekenaar.token) }}"
+          style="width:100%; height:60vh; border:1px solid var(--border); border-radius: var(--radius-sm); background:#fff;"></iframe>
+</div>
+
+<div class="card">
+  <form method="post">
+    <label>Your full legal name
+      <input type="text" name="getekende_naam" value="{{ ondertekenaar.naam }}" required>
+    </label>
+    <label style="display:flex; align-items:flex-start; gap:0.5rem">
+      <input type="checkbox" name="akkoord" required style="width:auto; margin-top:0.3rem">
+      <span>I have read and agree to the rental agreement above, and I am electronically signing it
+        as {{ ondertekenaar.naam }}. I understand that my name, the time, and my IP address will be
+        recorded as proof of this electronic signature.</span>
+    </label>
+    <button class="btn" type="submit">Sign</button>
+  </form>
+</div>
+{% endblock %}

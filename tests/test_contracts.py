@@ -113,29 +113,60 @@ def test_verwijder_contract_van_onbekend_bestand_doet_niets(tmp_path):
 
 def test_genereer_contract_bewaart_metadata_voor_mailen(tmp_path):
     bestandsnaam = contracts.genereer_contract(
-        "mahoniestraat", _pand(), _form(email="bence@example.com"), state_dir=str(tmp_path)
+        "mahoniestraat", _pand(),
+        _form(email="bence@example.com", borgsteller_email="tamas@example.com"), state_dir=str(tmp_path)
     )
     metadata = contracts.lees_metadata("mahoniestraat", bestandsnaam, state_dir=str(tmp_path))
     assert metadata["email"] == "bence@example.com"
     assert metadata["huurder_naam"] == "Bence Neumayer"
     assert metadata["kamer"] == "1"
     assert metadata["borg"] == "1000,00"
+    assert metadata["huurprijs"] == "919,00"
+    assert metadata["ingangsdatum_iso"] == "2026-07-01"
+    assert metadata["borgsteller_naam"] == "Tamás Neumayer"
+    assert metadata["borgsteller_email"] == "tamas@example.com"
 
 
 def test_lees_metadata_zonder_bestand_geeft_lege_dict(tmp_path):
     assert contracts.lees_metadata("mahoniestraat", "bestaat-niet.html", state_dir=str(tmp_path)) == {}
 
 
-def test_bouw_concept_email_bevat_kamer_dochub_en_bold():
+# --- Elektronisch ondertekenen: definitieve, ondertekende contractversie ---
+
+
+def test_is_getekend_contract_herkent_achtervoegsel():
+    assert contracts.is_getekend_contract("2026-07-10_1-bence-neumayer-getekend.html") is True
+    assert contracts.is_getekend_contract("2026-07-10_1-bence-neumayer.html") is False
+
+
+def test_genereer_getekend_contract_vervangt_handtekeningenblok(tmp_path):
+    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form(), state_dir=str(tmp_path))
+
+    getekend_bestandsnaam = contracts.genereer_getekend_contract(
+        "mahoniestraat", bestandsnaam, "<p>ECHTE HANDTEKENINGEN HIER</p>", state_dir=str(tmp_path)
+    )
+
+    assert getekend_bestandsnaam == bestandsnaam.replace(".html", "-getekend.html")
+    assert contracts.is_getekend_contract(getekend_bestandsnaam)
+    html = (tmp_path / "gegenereerde_contracten" / "mahoniestraat" / getekend_bestandsnaam).read_text()
+    assert "ECHTE HANDTEKENINGEN HIER" in html
+    assert "(landlord)" not in html  # het lege handtekeningenblok is vervangen
+    # de rest van het contract blijft ongewijzigd staan
+    assert "Bence Neumayer" in html
+    assert "919,00" in html
+    # het concept zelf blijft ook gewoon bestaan
+    assert (tmp_path / "gegenereerde_contracten" / "mahoniestraat" / bestandsnaam).is_file()
+
+
+def test_bouw_concept_email_bevat_kamer_en_bold():
     pand = _pand()
     metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1", "borg": "1000,00"}
     opgesteld = contracts.bouw_concept_email(pand, metadata)
     assert "1" in opgesteld["onderwerp"]
     assert pand.naam in opgesteld["onderwerp"]
     assert "Bence Neumayer" in opgesteld["tekst"]
-    assert "DocHub" in opgesteld["tekst"]
+    assert "sign the agreement electronically" in opgesteld["tekst"]
     assert "Bold" in opgesteld["tekst"]
-    assert "1000,00" in opgesteld["tekst"]
 
 
 # --- Aanpasbaar contractsjabloon ---

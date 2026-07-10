@@ -13,7 +13,10 @@ schrijf_artikelen() hieronder) in een simpel tekstverwerker-scherm (geen HTML/
 CSS-code te zien) - de aangepaste versie wordt in STATE_DIR opgeslagen
 (overleeft dus een herbuild/redeploy) en overschrijft dan de meegeleverde
 standaardartikelen. De vaste opmaak eromheen (CSS, kop met partijengegevens,
-handtekeningenblok) blijft ongewijzigd en is niet via de site te bewerken.
+handtekeningenblok) blijft ongewijzigd en is niet via de site te bewerken -
+het handtekeningenblok (tussen HANDTEKENINGEN:START/EINDE) wordt door
+webapp/ondertekenen.py automatisch ingevuld zodra een contract elektronisch
+volledig ondertekend is (zie genereer_getekend_contract() hieronder).
 
 BELANGRIJK: het meegeleverde sjabloon is gebaseerd op een echt gebruikt
 huurcontract, maar is geen juridisch gecontroleerde huurovereenkomst op zich.
@@ -56,6 +59,15 @@ SJABLOON_VARIABELEN = [
 
 _ARTIKELEN_START = "<!-- ARTIKELEN:START -->"
 _ARTIKELEN_EINDE = "<!-- ARTIKELEN:EINDE -->"
+
+_HANDTEKENINGEN_START = "<!-- HANDTEKENINGEN:START -->"
+_HANDTEKENINGEN_EINDE = "<!-- HANDTEKENINGEN:EINDE -->"
+
+# Achtervoegsel van de bestandsnaam van een volledig ondertekend contract
+# (zie genereer_getekend_contract() en webapp/ondertekenen.py) - zo is op de
+# Contracten-pagina in één oogopslag te zien of het om het concept of de
+# definitieve, ondertekende versie gaat.
+GETEKEND_ACHTERVOEGSEL = "-getekend"
 
 
 class SjabloonFout(RuntimeError):
@@ -143,6 +155,13 @@ def _output_dir(pand_slug: str, state_dir: str) -> Path:
     return Path(state_dir) / "gegenereerde_contracten" / _slugify(pand_slug)
 
 
+def output_dir(pand_slug: str, state_dir: str) -> Path:
+    """Publieke variant van _output_dir() - gebruikt door webapp/ondertekenen.py
+    om de ondertekenronde-JSON in dezelfde map als het contract zelf te
+    bewaren."""
+    return _output_dir(pand_slug, state_dir)
+
+
 def _datum_lang(iso_datum: str) -> str:
     """Zet een datum in "jjjj-mm-dd"-formaat (HTML date-input) om naar
     "dd-mm-jjjj". Geeft de invoer ongewijzigd terug als het formaat afwijkt
@@ -169,6 +188,10 @@ def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, stat
         "huurder_naam": context["huurder_naam"],
         "kamer": context["kamer"],
         "borg": context["borg"],
+        "huurprijs": context["huurprijs"],
+        "ingangsdatum_iso": form.get("ingangsdatum", "").strip(),
+        "borgsteller_naam": context["borgsteller_naam"],
+        "borgsteller_email": form.get("borgsteller_email", "").strip(),
     })
     return bestandsnaam
 
@@ -202,18 +225,14 @@ def bouw_concept_email(pand: Pand, metadata: dict) -> dict[str, str]:
     reminders.py kan de beheerder dit nog aanpassen op het voorbeeldscherm."""
     naam = metadata.get("huurder_naam") or "there"
     kamer = metadata.get("kamer", "")
-    borg = metadata.get("borg", "")
     onderwerp = f"Draft rental agreement - room {kamer}, {pand.naam}".strip()
-    borg_zin = f"the security deposit (EUR {borg})" if borg else "the security deposit"
     tekst = (
         f"Dear {naam},\n\n"
         f"Please find attached the draft rental agreement for room {kamer} at {pand.naam}.\n\n"
         f"Please take your time to review it, and let us know if you have any questions.\n\n"
-        f"Once you confirm you are happy with the terms, we will send the agreement via DocHub "
-        f"for final signature.\n\n"
-        f"After that, the first payment is due: {borg_zin} plus the remaining (pro-rated) rent "
-        f"for the first month. As soon as both the signed agreement and this payment have been "
-        f"received, your digital key (Bold) will be activated - it becomes valid from the start "
+        f"Once you confirm you are happy with the terms, we will send you a payment request and a "
+        f"link to sign the agreement electronically. As soon as the payment and all signatures have "
+        f"been received, your digital key (Bold) will be activated - it becomes valid from the start "
         f"date of your rental agreement.\n\n"
         f"Kind regards,\n{AFZENDER_NAAM}"
     )
@@ -278,6 +297,30 @@ def verwijder_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") 
     output_dir = _output_dir(pand_slug, state_dir)
     (output_dir / veilige_naam).unlink(missing_ok=True)
     _metadata_pad(output_dir, veilige_naam).unlink(missing_ok=True)
+
+
+def is_getekend_contract(bestandsnaam: str) -> bool:
+    """Herkent aan de bestandsnaam of dit het volledig ondertekende contract
+    is (i.p.v. het concept) - zie genereer_getekend_contract()."""
+    return Path(bestandsnaam).stem.endswith(GETEKEND_ACHTERVOEGSEL)
+
+
+def genereer_getekend_contract(pand_slug: str, bestandsnaam: str, handtekeningen_html: str, state_dir: str = ".") -> str:
+    """Maakt van een (al volledig ondertekend) concept-contract de
+    definitieve versie: neemt de eerder gegenereerde contracttekst en
+    vervangt het lege handtekeningenblok door de echte ondertekeningen (naam,
+    rol, moment, IP-adres - zie webapp/ondertekenen.py). Slaat op onder een
+    naam die eindigt op "-getekend", zodat concept en definitief duidelijk te
+    onderscheiden zijn op de Contracten-pagina."""
+    html = lees_contract(pand_slug, bestandsnaam, state_dir)
+    voor, _, rest = html.partition(_HANDTEKENINGEN_START)
+    _oorspronkelijke_tabel, _, na = rest.partition(_HANDTEKENINGEN_EINDE)
+    nieuwe_html = voor + handtekeningen_html + na
+
+    getekend_bestandsnaam = f"{Path(bestandsnaam).stem}{GETEKEND_ACHTERVOEGSEL}.html"
+    output_dir = _output_dir(pand_slug, state_dir)
+    (output_dir / getekend_bestandsnaam).write_text(nieuwe_html)
+    return getekend_bestandsnaam
 
 
 def lees_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> str:

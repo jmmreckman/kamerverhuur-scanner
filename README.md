@@ -264,14 +264,38 @@ daadwerkelijk laat ondertekenen.
   elk contract op de Contracten-pagina) - met het e-mailadres van de huurder
   al ingevuld (uit het "E-mailadres huurder"-veld van het formulier) en een
   kant-en-klare Engelstalige tekst: het concept ter beoordeling, met vragen
-  welkom, en uitleg dat het na akkoord via DocHub ter definitieve
-  ondertekening gaat, gevolgd door de eerste betaling (waarborgsom + het
-  resterende deel van de eerste maand huur) en tot slot de digitale
-  Bold-sleutel (actief vanaf de ingangsdatum). Onderwerp en tekst zijn nog
-  aan te passen voordat je 'm verstuurt. De PDF van het contract gaat
-  automatisch als bijlage mee, verzonden vanaf info@steenhub.nl, met de
+  welkom, en uitleg dat er na akkoord een betaalverzoek en een link om
+  elektronisch te tekenen volgt (zie hieronder), gevolgd tot slot door de
+  digitale Bold-sleutel (actief vanaf de ingangsdatum). Onderwerp en tekst
+  zijn nog aan te passen voordat je 'm verstuurt. De PDF van het contract
+  gaat automatisch als bijlage mee, verzonden vanaf info@steenhub.nl, met de
   beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) blind (BCC)
   meegenomen - de huurder ziet deze adressen niet.
+- **Elektronisch ondertekenen** (in plaats van DocHub): op de Contracten-
+  pagina staat bij elk concept-contract een knop **"Verzoek tot tekenen"**.
+  Daarmee:
+  1. krijgt de huurder een mail met een **betaalverzoek** (waarborgsom + de
+     pro-rata huur vanaf de ingangsdatum t/m het einde van die kalendermaand,
+     automatisch berekend en opgeteld tot één bedrag) én een link om het
+     contract op de site zelf te tekenen;
+  2. krijgen alle verhuurder(s) van het pand (dezelfde adressen als
+     EMAIL_BCC + het pand-specifieke `extra_bcc`) en, als er een
+     borgsteller met e-mailadres is opgegeven, ook de borgsteller elk een
+     eigen tekenlink;
+  3. toont elke link het volledige contract plus een ondertekenformulier
+     (volledige naam + een akkoordvakje) - bij het tekenen wordt tijdstip,
+     IP-adres en de getypte naam vastgelegd als audit-trail (een "gewone"
+     elektronische handtekening, SES onder de eIDAS-verordening - voor een
+     tijdelijk kamerhuurcontract in Nederland rechtsgeldig);
+  4. zodra **iedereen** getekend heeft, wordt automatisch de definitieve
+     versie gemaakt (bestandsnaam eindigt op `-getekend`, met een groene
+     "Getekend"-badge op de Contracten-pagina, ter onderscheid van het
+     "Concept") en als PDF gemaild aan alle partijen, met de vermelding dat
+     dit document nodig is om bij de gemeente in te schrijven op het adres.
+
+  De voortgang ("Ondertekenstatus") is op elk moment te bekijken via de link
+  naast een concept-contract - daar kan ook per persoon opnieuw gemaild
+  worden, mocht een link kwijtgeraakt zijn.
 - **Contractsjabloon aanpassen** (alleen voor beheerders met toegang tot alle
   panden): via **Contracten > Contractsjabloon aanpassen** pas je de
   artikelen van het huurcontract zelf aan, in een simpel tekstverwerker-
