@@ -6,9 +6,9 @@
   <h1>Huurders</h1>
   <p class="muted">Wijzigingen worden direct in de sheet opgeslagen</p>
 </div>
-<div class="card">
-  <a class="btn btn-secondary" href="{{ url_for('huishouden_mailen', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Mail het hele huishouden</a>
-</div>
+<p style="margin: -0.75rem 0 1.5rem">
+  <a class="btn" href="{{ url_for('huishouden_mailen', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Mail het hele huishouden</a>
+</p>
 
 <div class="card">
   <div class="tabel-scroll">
