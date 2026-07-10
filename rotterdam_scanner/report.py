@@ -11,12 +11,12 @@ _STYLE = """
 body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; }
 h1 { font-size: 20px; }
 h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-table { border-collapse: collapse; width: 100%; margin-top: 8px; table-layout: fixed; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; }
 th, td {
   text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px;
-  vertical-align: top; word-break: break-word; overflow-wrap: anywhere;
+  vertical-align: top;
 }
-th { background: #f4f4f4; }
+th { background: #f4f4f4; white-space: nowrap; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
 .badge-nieuw { background: #d7f0d7; color: #1a5c1a; }
 .badge-check { background: #fff3cd; color: #7a5c00; }
@@ -96,11 +96,8 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
 _ACTIEF_TABEL_HEADER = """
     <tr>
-      <th style="width:16%">Adres</th><th style="width:9%">Wijk</th>
-      <th style="width:8%">Vraagprijs</th><th style="width:9%">Oppervlakte</th>
-      <th style="width:7%">€/m²</th><th style="width:8%">Dagen bekend</th>
-      <th style="width:12%">Nog te checken</th><th style="width:20%">Mogelijke huurprijsopslag</th>
-      <th style="width:11%">Acties</th>
+      <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
+      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
     </tr>
 """
 
