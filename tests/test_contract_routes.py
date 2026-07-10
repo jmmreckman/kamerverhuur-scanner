@@ -77,6 +77,45 @@ def test_contract_nieuw_toont_kamerselectie(app_client):
     assert "Kamer 1" in resp.get_data(as_text=True)
 
 
+def test_contract_nieuw_vult_gegevens_van_aanmelding_vooraf_in(app_client):
+    # KAMER_1 heeft zelf geen huurder-data (naam "Bence Neumayer" komt van een
+    # eerdere/huidige huurder) - komt iemand net binnen via een aanmelding
+    # (zie Aanmeldingen > "Contract maken"), dan moeten diens eigen gegevens
+    # in het formulier staan, niet die van de huidige/vorige huurder.
+    resp = app_client.get(
+        "/pand/mahoniestraat/contracten/nieuw",
+        query_string={
+            "kamer": "1", "huurder_naam": "Jane Doe", "studentnummer": "123456",
+            "studierichting": "Computer Science", "email": "jane@example.com",
+            "ingangsdatum": "2026-09-01", "borgsteller_naam": "John Doe",
+            "borgsteller_relatie": "Father", "borgsteller_email": "john@example.com",
+        },
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert 'value="Jane Doe"' in body
+    assert 'value="123456"' in body
+    assert 'value="Computer Science"' in body
+    assert 'value="jane@example.com"' in body
+    assert 'value="2026-09-01"' in body
+    assert 'value="John Doe"' in body
+    assert 'value="Father"' in body
+    assert 'value="john@example.com"' in body
+    # De JS mag deze velden niet overschrijven met de gegevens van kamer 1 zelf
+    vergrendeld_json = body.split("vergrendeld = ")[1].split(";")[0]
+    vergrendeld = json.loads(vergrendeld_json)
+    assert set(vergrendeld) == {
+        "naam", "studentnummer", "studierichting", "email",
+        "borgstellernaam", "borgstellerrelatie", "startdatum",
+    }
+
+
+def test_contract_nieuw_zonder_aanmelding_vergrendelt_niets(app_client):
+    resp = app_client.get("/pand/mahoniestraat/contracten/nieuw", query_string={"kamer": "1"})
+    body = resp.get_data(as_text=True)
+    assert "vergrendeld = []" in body
+
+
 def test_contract_genereren_schrijft_gegevens_terug_naar_sheet(app_client):
     FakeSheetClient.archiveer_aangeroepen_met = None
     resp = app_client.post(

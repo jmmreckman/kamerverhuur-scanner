@@ -857,8 +857,18 @@ def create_app(config: Config | None = None) -> Flask:
                 _schrijf_contract_terug_naar_sheet(sheet, kamers, kamer_naam, request.form)
             return redirect(url_for("contract_mailen", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1
+        # Query-param -> JS-attribuutnaam (zie de "velden"-map in contract_nieuw.html) van
+        # velden die al zijn vooringevuld vanuit een aanmelding (Aanmeldingen > "Contract
+        # maken") - die mogen niet worden overschreven door de gegevens van de kamer zelf.
+        param_naar_attr = {
+            "huurder_naam": "naam", "studentnummer": "studentnummer", "studierichting": "studierichting",
+            "email": "email", "borgsteller_naam": "borgstellernaam", "borgsteller_relatie": "borgstellerrelatie",
+            "ingangsdatum": "startdatum",
+        }
+        vooringevulde_velden = [attr for param, attr in param_naar_attr.items() if request.args.get(param, "").strip()]
         return render_template(
-            "contract_nieuw.html", kamers=kamers, vandaag=date.today(), aantal_bewoners=aantal_bewoners
+            "contract_nieuw.html", kamers=kamers, vandaag=date.today(), aantal_bewoners=aantal_bewoners,
+            vooringevulde_velden=vooringevulde_velden,
         )
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>")

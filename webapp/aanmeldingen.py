@@ -20,6 +20,13 @@ VEREISTE_VELDEN = {
     "viewing_preference": "Viewing preference",
 }
 
+# Alleen verplicht als "guarantor" == "Yes" - zie valideer_en_bouw().
+VEREISTE_BORGSTELLER_VELDEN = {
+    "guarantor_name": "Guarantor name",
+    "guarantor_relation": "Guarantor relation to you",
+    "guarantor_email": "Guarantor email address",
+}
+
 
 class AanmeldingFout(ValueError):
     pass
@@ -31,6 +38,11 @@ def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
     ontbrekend = [label for veld, label in VEREISTE_VELDEN.items() if not form.get(veld, "").strip()]
     if form.get("viewing_preference") == "video_call" and not form.get("video_call_number", "").strip():
         ontbrekend.append("Video call phone number")
+    heeft_borgsteller = form.get("guarantor") == "Yes"
+    if heeft_borgsteller:
+        for veld, label in VEREISTE_BORGSTELLER_VELDEN.items():
+            if not form.get(veld, "").strip():
+                ontbrekend.append(label)
     if form.get("agree_rules") != "on":
         ontbrekend.append("Agreement to the house rules")
     if not heeft_bestand:
@@ -53,4 +65,7 @@ def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
         bezichtiging="Video call" if form.get("viewing_preference") == "video_call" else "In person",
         videobel_nummer=form.get("video_call_number", "").strip(),
         bewijs_inschrijving_link="",
+        borgsteller_naam=form.get("guarantor_name", "").strip() if heeft_borgsteller else "",
+        borgsteller_relatie=form.get("guarantor_relation", "").strip() if heeft_borgsteller else "",
+        borgsteller_email=form.get("guarantor_email", "").strip() if heeft_borgsteller else "",
     )

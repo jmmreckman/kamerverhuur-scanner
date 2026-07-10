@@ -3,8 +3,8 @@ Sheets-verbinding: we bouwen een SheetClient met een neppe worksheet."""
 from datetime import date, timedelta
 from decimal import Decimal
 
-from kamerverhuur_scanner.models import Pand, Payment, Status, Tenant, TenantResult
-from kamerverhuur_scanner.sheet_client import SheetClient
+from kamerverhuur_scanner.models import Aanmelding, Pand, Payment, Status, Tenant, TenantResult
+from kamerverhuur_scanner.sheet_client import _AANMELDINGEN_HEADER, SheetClient
 
 
 class FakeWorksheet:
@@ -510,3 +510,67 @@ def test_get_recent_vertrokken_huurders_sorteert_meest_recent_eerst():
     resultaat = client.get_recent_vertrokken_huurders()
 
     assert [v.naam for v in resultaat] == ["Nieuwste", "Oudste"]
+
+
+# --- Aanmeldingen (incl. borgsteller-velden) ---
+
+class FakeSpreadsheet:
+    def __init__(self, worksheet):
+        self._worksheet = worksheet
+
+    def worksheet(self, title):
+        return self._worksheet
+
+
+def _sheet_client_met_aanmeldingen(rows) -> tuple[SheetClient, FakeWorksheet]:
+    client = object.__new__(SheetClient)
+    client._pand = Pand(
+        slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
+        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+    )
+    ws = FakeWorksheet(rows)
+    client._spreadsheet = FakeSpreadsheet(ws)
+    return client, ws
+
+
+def _aanmelding(**overrides) -> Aanmelding:
+    basis = dict(
+        naam="Jane Doe", email="jane@example.com", telefoon="+31612345678",
+        huidig_adres="Somestreet 1", studie="Computer Science", studentnummer="123456",
+        gewenste_ingangsdatum="2026-09-01", gewenste_huurduur="12 months",
+        inkomstenbron="Parents", inkomsten_bedrag="1200", borgsteller="Yes",
+        bezichtiging="In person", videobel_nummer="", bewijs_inschrijving_link="/link",
+        borgsteller_naam="John Doe", borgsteller_relatie="Father", borgsteller_email="john@example.com",
+    )
+    basis.update(overrides)
+    return Aanmelding(**basis)
+
+
+def test_add_aanmelding_schrijft_borgstellervelden_weg():
+    client, ws = _sheet_client_met_aanmeldingen([_AANMELDINGEN_HEADER])
+    client.add_aanmelding("1", _aanmelding())
+
+    rij = ws.appended_rows[0]
+    assert rij[-3:] == ["John Doe", "Father", "john@example.com"]
+
+
+def test_get_aanmeldingen_geeft_borgstellervelden_terug():
+    client, _ = _sheet_client_met_aanmeldingen([_AANMELDINGEN_HEADER])
+    client.add_aanmelding("1", _aanmelding())
+
+    rijen = client.get_aanmeldingen()
+
+    assert len(rijen) == 1
+    assert rijen[0][16:19] == ["John Doe", "Father", "john@example.com"]
+
+
+def test_get_aanmeldingen_padt_oudere_rijen_zonder_borgstellerkolommen():
+    # Rij van vóór de borgsteller-uitbreiding (16 kolommen i.p.v. 19)
+    oude_rij = ["10-07-2026", "1", "Piet", "piet@example.com"] + [""] * 12
+    client, _ = _sheet_client_met_aanmeldingen([_AANMELDINGEN_HEADER, oude_rij])
+
+    rijen = client.get_aanmeldingen()
+
+    assert len(rijen) == 1
+    assert len(rijen[0]) == len(_AANMELDINGEN_HEADER)
+    assert rijen[0][16:19] == ["", "", ""]

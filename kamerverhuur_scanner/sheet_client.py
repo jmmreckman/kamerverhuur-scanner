@@ -147,6 +147,7 @@ _AANMELDINGEN_HEADER = [
     "Studentnummer", "Gewenste ingangsdatum", "Gewenste huurduur",
     "Inkomstenbron", "Inkomsten (bedrag)", "Borgsteller", "Bezichtiging",
     "Video-bel nummer", "Bewijs inschrijving",
+    "Borgsteller naam", "Borgsteller relatie", "Borgsteller email",
 ]
 
 _VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
@@ -461,13 +462,20 @@ class SheetClient:
             aanmelding.bezichtiging,
             aanmelding.videobel_nummer,
             aanmelding.bewijs_inschrijving_link,
+            aanmelding.borgsteller_naam,
+            aanmelding.borgsteller_relatie,
+            aanmelding.borgsteller_email,
         ]
         ws.append_row(row, value_input_option="USER_ENTERED")
 
     def get_aanmeldingen(self) -> list[list[str]]:
         ws = self._aanmeldingen_worksheet()
         rows = ws.get_all_values()[1:]  # koprij overslaan
-        return [row for row in rows if any(cel.strip() for cel in row)]
+        aantal_kolommen = len(_AANMELDINGEN_HEADER)
+        return [
+            row + [""] * (aantal_kolommen - len(row))
+            for row in rows if any(cel.strip() for cel in row)
+        ]
 
     def wis_aanmeldingen(self) -> None:
         ws = self._aanmeldingen_worksheet()

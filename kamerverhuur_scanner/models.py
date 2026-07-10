@@ -149,3 +149,6 @@ class Aanmelding:
     bezichtiging: str
     videobel_nummer: str
     bewijs_inschrijving_link: str
+    borgsteller_naam: str = ""
+    borgsteller_relatie: str = ""
+    borgsteller_email: str = ""

@@ -201,8 +201,11 @@ zijn.
   ingangsdatum/huurduur, inkomsten, borgsteller ja/nee, voorkeur voor een
   fysieke bezichtiging of videobellen, en een verplichte upload van hun bewijs
   van inschrijving). Bewust een aantal extra vragen, zodat vooral serieus
-  geïnteresseerden de moeite nemen te reageren. Het bewijs van inschrijving
-  wordt lokaal op de server opgeslagen (zie "Lokale opslag van foto's/video's/
+  geïnteresseerden de moeite nemen te reageren. Kiest iemand "borgsteller: ja",
+  dan verschijnen er direct 3 extra velden: naam, relatie tot de huurder en
+  e-mailadres van de borgsteller - nodig voor het huurcontract en om die later
+  te mailen voor het ondertekenverzoek. Het bewijs van inschrijving wordt
+  lokaal op de server opgeslagen (zie "Lokale opslag van foto's/video's/
   bewijsstukken" hieronder) en is alleen te bekijken via een besloten link
   voor ingelogde beheerders van dat pand - dus nergens publiek te downloaden.
 - **Aanmeldingen bekijken**: ga naar **"Aanmeldingen"** in de site-navigatie
@@ -210,8 +213,16 @@ zijn.
   een overzicht van alle reacties, met een link naar het geuploade bewijs van
   inschrijving. Heb je een huurder gekozen? Klik op **"Lijst wissen"** om
   helemaal opnieuw te beginnen voor de volgende keer dat de kamer vrijkomt.
-- Vanuit een aanmelding kun je wel direct op **"Contract maken"** klikken - dat
-  opent "Nieuw huurcontract" met naam, studentnummer en kamer al ingevuld.
+- Vanuit een aanmelding kun je direct op **"Contract maken"** klikken - dat
+  opent "Nieuw huurcontract" met alle gegevens die de aanmelder zelf heeft
+  ingevuld al vooraf ingevuld (naam, studentnummer, studierichting, e-mail,
+  gewenste ingangsdatum en - indien opgegeven - de borgstellergegevens). Kies
+  je daarna nog een kamer uit de lijst, dan vult dat alleen de kamer-specifieke
+  velden aan (huurprijs, eerdere contractdata e.d.) - de gegevens van de
+  aanmelder zelf blijven staan en worden niet overschreven door een eerdere/
+  huidige huurder van die kamer. Het vinkje "Gegevens ook terugschrijven naar
+  de Huurders-sheet" (onderaan het formulier) bepaalt of dit ook echt de
+  huidige huurder van die kamer vervangt.
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 

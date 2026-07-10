@@ -59,21 +59,21 @@
       <input type="text" name="studentnummer" id="veld-studentnummer" value="{{ request.args.get('studentnummer', '') }}">
     </label>
     <label>Studierichting
-      <input type="text" name="studierichting" id="veld-studierichting">
+      <input type="text" name="studierichting" id="veld-studierichting" value="{{ request.args.get('studierichting', '') }}">
     </label>
     <label>E-mailadres huurder (voor het versturen van het concept-contract)
-      <input type="email" name="email" id="veld-email">
+      <input type="email" name="email" id="veld-email" value="{{ request.args.get('email', '') }}">
     </label>
 
     <h2>Borgsteller (optioneel)</h2>
     <label>Naam borgsteller
-      <input type="text" name="borgsteller_naam" id="veld-borgstellernaam">
+      <input type="text" name="borgsteller_naam" id="veld-borgstellernaam" value="{{ request.args.get('borgsteller_naam', '') }}">
     </label>
     <label>Relatie tot huurder
-      <input type="text" name="borgsteller_relatie" id="veld-borgstellerrelatie" placeholder="bv. Vader">
+      <input type="text" name="borgsteller_relatie" id="veld-borgstellerrelatie" placeholder="bv. Vader" value="{{ request.args.get('borgsteller_relatie', '') }}">
     </label>
     <label>E-mailadres borgsteller (voor het verzoek tot ondertekenen, alleen nodig als er een borgsteller is)
-      <input type="email" name="borgsteller_email" id="veld-borgstelleremail">
+      <input type="email" name="borgsteller_email" id="veld-borgstelleremail" value="{{ request.args.get('borgsteller_email', '') }}">
     </label>
 
     <h2>Kamer en huurprijs</h2>
@@ -98,7 +98,7 @@
 
     <h2>Duur</h2>
     <label>Ingangsdatum
-      <input type="date" name="ingangsdatum" id="veld-startdatum" value="{{ vandaag.isoformat() }}" required>
+      <input type="date" name="ingangsdatum" id="veld-startdatum" value="{{ request.args.get('ingangsdatum') or vandaag.isoformat() }}" required>
     </label>
     <label>Einddatum (leeg = onbepaalde tijd)
       <input type="date" name="einddatum" id="veld-einddatum">
@@ -131,10 +131,16 @@
     kale: "veld-kale", service: "veld-service", totaal: "veld-totaal",
     startdatum: "veld-startdatum", einddatum: "veld-einddatum"
   };
+  // Velden die al vooraf zijn ingevuld vanuit een aanmelding (zie
+  // Aanmeldingen > "Contract maken") mogen niet door het kiezen van een
+  // kamer overschreven worden met de gegevens van de HUIDIGE (of vorige)
+  // huurder van die kamer.
+  var vergrendeld = {{ vooringevulde_velden|tojson }};
   function vulIn() {
     var optie = select.options[select.selectedIndex];
     if (!optie) return;
     Object.keys(velden).forEach(function (attr) {
+      if (vergrendeld.indexOf(attr) !== -1) return;
       var waarde = optie.getAttribute("data-" + attr);
       var input = document.getElementById(velden[attr]);
       if (waarde && input) {

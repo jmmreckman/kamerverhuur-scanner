@@ -14,6 +14,9 @@ VOLLEDIG_FORMULIER = {
     "income_source": "Parents",
     "income_amount": "€1200",
     "guarantor": "Yes",
+    "guarantor_name": "John Doe",
+    "guarantor_relation": "Father",
+    "guarantor_email": "john@example.com",
     "viewing_preference": "in_person",
     "agree_rules": "on",
 }
@@ -24,6 +27,25 @@ def test_volledig_formulier_met_bestand_is_geldig():
     assert aanmelding.naam == "Jane Doe"
     assert aanmelding.bezichtiging == "In person"
     assert aanmelding.bewijs_inschrijving_link == ""
+    assert aanmelding.borgsteller_naam == "John Doe"
+    assert aanmelding.borgsteller_relatie == "Father"
+    assert aanmelding.borgsteller_email == "john@example.com"
+
+
+def test_borgsteller_nee_vereist_geen_borgstellergegevens():
+    form = {**VOLLEDIG_FORMULIER, "guarantor": "No"}
+    del form["guarantor_name"], form["guarantor_relation"], form["guarantor_email"]
+    aanmelding = valideer_en_bouw(form, heeft_bestand=True)
+    assert aanmelding.borgsteller_naam == ""
+    assert aanmelding.borgsteller_relatie == ""
+    assert aanmelding.borgsteller_email == ""
+
+
+def test_borgsteller_ja_zonder_borgstellergegevens_geeft_fout():
+    form = dict(VOLLEDIG_FORMULIER)
+    del form["guarantor_name"]
+    with pytest.raises(AanmeldingFout, match="Guarantor name"):
+        valideer_en_bouw(form, heeft_bestand=True)
 
 
 def test_video_call_vereist_telefoonnummer():

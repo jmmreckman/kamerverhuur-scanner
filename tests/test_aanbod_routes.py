@@ -40,7 +40,16 @@ class FakeSheetClient:
         self.aanmeldingen.append((kamer, aanmelding))
 
     def get_aanmeldingen(self):
-        return [[a.naam, a.email] for _kamer, a in self.aanmeldingen]
+        # zelfde kolomvolgorde als SheetClient.add_aanmelding()
+        return [
+            [
+                "10-07-2026", kamer, a.naam, a.email, a.telefoon, a.huidig_adres, a.studie,
+                a.studentnummer, a.gewenste_ingangsdatum, a.gewenste_huurduur, a.inkomstenbron,
+                a.inkomsten_bedrag, a.borgsteller, a.bezichtiging, a.videobel_nummer,
+                a.bewijs_inschrijving_link, a.borgsteller_naam, a.borgsteller_relatie, a.borgsteller_email,
+            ]
+            for kamer, a in self.aanmeldingen
+        ]
 
     def wis_aanmeldingen(self):
         self.aanmeldingen = []
@@ -107,6 +116,9 @@ VOLLEDIG_FORMULIER = {
     "income_source": "Parents",
     "income_amount": "1200",
     "guarantor": "Yes",
+    "guarantor_name": "John Doe",
+    "guarantor_relation": "Father",
+    "guarantor_email": "john@example.com",
     "viewing_preference": "in_person",
     "agree_rules": "on",
 }
@@ -211,7 +223,16 @@ def test_aanmeldingen_overzicht_en_wissen(app_client):
     app_client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
 
     resp = app_client.get("/pand/mahoniestraat/aanmeldingen")
-    assert b"Jane Doe" in resp.data
+    body = resp.get_data(as_text=True)
+    assert "Jane Doe" in body
+    # "Contract maken" moet ALLE gegevens van de aanmelding (incl. borgsteller) meegeven
+    assert "huurder_naam=Jane+Doe" in body
+    assert "studentnummer=123456" in body
+    assert "studierichting=Computer+Science" in body
+    assert "email=jane@example.com" in body
+    assert "borgsteller_naam=John+Doe" in body
+    assert "borgsteller_relatie=Father" in body
+    assert "borgsteller_email=john@example.com" in body
 
     app_client.post("/pand/mahoniestraat/aanmeldingen/wissen")
     resp = app_client.get("/pand/mahoniestraat/aanmeldingen")

@@ -51,11 +51,20 @@
       <input type="text" name="income_amount" placeholder="e.g. €1200" required value="{{ request.form.get('income_amount', '') }}">
     </label>
     <label>Do you have a guarantor?
-      <select name="guarantor" required>
+      <select name="guarantor" id="guarantor" required>
         <option value="">Select...</option>
         <option value="Yes" {{ 'selected' if request.form.get('guarantor') == 'Yes' }}>Yes</option>
         <option value="No" {{ 'selected' if request.form.get('guarantor') == 'No' }}>No</option>
       </select>
+    </label>
+    <label id="guarantor_name_label">Guarantor name
+      <input type="text" name="guarantor_name" id="guarantor_name" value="{{ request.form.get('guarantor_name', '') }}">
+    </label>
+    <label id="guarantor_relation_label">Guarantor's relation to you
+      <input type="text" name="guarantor_relation" id="guarantor_relation" placeholder="e.g. Father" value="{{ request.form.get('guarantor_relation', '') }}">
+    </label>
+    <label id="guarantor_email_label">Guarantor email address
+      <input type="email" name="guarantor_email" id="guarantor_email" value="{{ request.form.get('guarantor_email', '') }}">
     </label>
     <label>Viewing preference
       <select name="viewing_preference" id="viewing_preference" required>
@@ -84,5 +93,17 @@
   function toggleVideoField() { label.style.display = pref.value === 'video_call' ? 'block' : 'none'; }
   pref.addEventListener('change', toggleVideoField);
   toggleVideoField();
+
+  const guarantor = document.getElementById('guarantor');
+  const guarantorLabels = [
+    document.getElementById('guarantor_name_label'),
+    document.getElementById('guarantor_relation_label'),
+    document.getElementById('guarantor_email_label'),
+  ];
+  function toggleGuarantorFields() {
+    guarantorLabels.forEach(function (l) { l.style.display = guarantor.value === 'Yes' ? 'block' : 'none'; });
+  }
+  guarantor.addEventListener('change', toggleGuarantorFields);
+  toggleGuarantorFields();
 </script>
 {% endblock %}
