@@ -12,14 +12,6 @@
   li { margin: 0.15rem 0; }
   table.partijen { width: 100%; border-collapse: collapse; margin: 0.8rem 0 1.2rem; }
   table.partijen td { vertical-align: top; padding: 0 1.5rem 0 0; }
-  .let-op {
-    border: 2px solid #b35900;
-    background: #fff4e5;
-    color: #7a4a00;
-    padding: 0.75rem 1rem;
-    font-size: 0.85rem;
-    margin-bottom: 1.5rem;
-  }
   table.handtekeningen { width: 100%; border-collapse: collapse; margin-top: 2.5rem; }
   table.handtekeningen td { padding: 2.2rem 1rem 0.3rem 0; border-top: 1px solid #111; }
   table.handtekeningen td.spacer { border-top: none; padding: 0; }
@@ -32,13 +24,6 @@
 <div class="print-knop">
   <button onclick="window.print()">Print / opslaan als PDF</button>
   {% if pdf_url %}<a href="{{ pdf_url }}">Download als PDF</a>{% endif %}
-</div>
-
-<div class="let-op">
-  <strong>Note - draft text:</strong> this is an automatically generated draft based on a template,
-  not a legally reviewed rental contract. Have a legal professional check the provisions below (or
-  compare against a recognised model contract, e.g. from the Dutch government / Woonbond) before
-  offering this for signature. Generated on {{ gegenereerd_op }}.
 </div>
 
 <h1>TEMPORARY RENTAL CONTRACT FOR A ROOM</h1>

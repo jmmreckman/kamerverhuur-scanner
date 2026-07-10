@@ -149,6 +149,28 @@ def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
     assert pand["gemeente_meldpunt"] == "www.rotterdam.nl/ongewenst-verhuurgedrag-melden"
 
 
+def test_verhuurders_met_komma_i_p_v_pipe_wordt_ook_correct_gesplitst(client):
+    # Regressietest voor een echt gemelde situatie: een huurder typt de naam
+    # en het adres met een komma i.p.v. het "Naam | Adres"-formaat.
+    c, properties_file = client
+    _login(c, "beheerder")
+    resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15",
+        "google_sheet_id": "fake",
+        "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "verhuurders": (
+            "Jurian Reckman, Batavierenplantsoen 33 2025CJ Haarlem\n"
+            "Justin Winkelman, Rijksstraatweg 98, 2022 DD Haarlem"
+        ),
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    panden = json.loads(properties_file.read_text())
+    assert panden[0]["verhuurders"] == [
+        {"naam": "Jurian Reckman", "adres": "Batavierenplantsoen 33 2025CJ Haarlem"},
+        {"naam": "Justin Winkelman", "adres": "Rijksstraatweg 98, 2022 DD Haarlem"},
+    ]
+
+
 def test_beheerder_kan_pand_verwijderen(client):
     c, properties_file = client
     _login(c, "beheerder")

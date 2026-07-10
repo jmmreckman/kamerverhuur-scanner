@@ -60,7 +60,7 @@
     <label>Plaats
       <input type="text" name="plaats" value="{{ pand.plaats if pand else '' }}">
     </label>
-    <label>Verhuurder(s) - één per regel, formaat "Naam | Adres" (adres is optioneel)
+    <label>Verhuurder(s) - één per regel, formaat "Naam | Adres" of "Naam, Adres" (adres is optioneel)
       <textarea name="verhuurders" rows="3">{% if pand %}{% for v in pand.verhuurders %}{{ v.naam }}{% if v.adres %} | {{ v.adres }}{% endif %}
 {% endfor %}{% endif %}</textarea>
     </label>

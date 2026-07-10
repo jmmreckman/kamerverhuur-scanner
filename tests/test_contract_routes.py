@@ -82,6 +82,7 @@ def test_contract_genereren_schrijft_gegevens_terug_naar_sheet(app_client):
             "borgsteller_relatie": "Vader", "kale_huurprijs": "711,49", "servicekosten": "207,51",
             "huurprijs": "919,00", "borg": "1000,00", "aantal_bewoners": "6",
             "ingangsdatum": "2026-07-01", "einddatum": "2028-07-01", "bijzonderheden": "",
+            "schrijf_terug_naar_sheet": "on",
         },
         follow_redirects=True,
     )
@@ -92,6 +93,21 @@ def test_contract_genereren_schrijft_gegevens_terug_naar_sheet(app_client):
     assert update["studentnummer"] == "1124601"
     assert update["borgsteller_naam"] == "Tamás Neumayer"
     assert update["contract_startdatum"] == "2026-07-01"
+
+
+def test_contract_genereren_zonder_vinkje_laat_sheet_ongemoeid(app_client):
+    FakeSheetClient.laatste_update = None
+    resp = app_client.post(
+        "/pand/mahoniestraat/contracten/nieuw",
+        data={
+            "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "919,00",
+            "ingangsdatum": "2026-07-01",
+            # geen "schrijf_terug_naar_sheet" veld - alsof het vinkje is uitgezet
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert FakeSheetClient.laatste_update is None
 
 
 def test_contract_bekijken_en_pdf_downloaden(app_client):

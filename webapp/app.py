@@ -252,9 +252,13 @@ def create_app(config: Config | None = None) -> Flask:
                 continue
             if "|" in regel:
                 naam, adres = regel.split("|", 1)
-                verhuurders.append({"naam": naam.strip(), "adres": adres.strip()})
+            elif "," in regel:
+                # bv. "Jurian Reckman, Batavierenplantsoen 33 2025CJ Haarlem" -
+                # naam en adres los van elkaar op de eerste komma splitsen.
+                naam, adres = regel.split(",", 1)
             else:
-                verhuurders.append({"naam": regel, "adres": ""})
+                naam, adres = regel, ""
+            verhuurders.append({"naam": naam.strip(), "adres": adres.strip()})
         return {
             "naam": form.get("naam", "").strip(),
             "google_sheet_id": form.get("google_sheet_id", "").strip(),
@@ -751,10 +755,12 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             bestandsnaam = contracts.genereer_contract(pand_slug, g.pand, request.form, config.state_dir)
             # Gegevens ook terugschrijven naar de Huurders-sheet, zodat ze bij een
-            # volgend contract (of op de Huurders-pagina) meteen weer klaarstaan.
+            # volgend contract (of op de Huurders-pagina) meteen weer klaarstaan -
+            # optioneel, sommige contracten zijn een proefversie waarvoor dat nog
+            # niet gewenst is (zie het vinkje op het formulier).
             kamer_naam = request.form.get("kamer", "").strip()
             bestaande = next((k for k in kamers if k.kamer == kamer_naam), None)
-            if bestaande is not None:
+            if bestaande is not None and request.form.get("schrijf_terug_naar_sheet") == "on":
                 kale = request.form.get("kale_huurprijs", "").strip()
                 service = request.form.get("servicekosten", "").strip()
                 borg = request.form.get("borg", "").strip()

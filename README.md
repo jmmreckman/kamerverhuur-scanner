@@ -236,7 +236,9 @@ daadwerkelijk laat ondertekenen.
   ook teruggeschreven naar de Huurders-sheet (kolommen R t/m Y, inclusief de
   waarborgsom), zodat ze bij een volgend contract - of gewoon op de
   Huurders-pagina - meteen weer klaarstaan, én meteen meetellen bij de
-  eerstvolgende "Betaalgeschiedenis aanvullen".
+  eerstvolgende "Betaalgeschiedenis aanvullen". Dit is een vinkje (standaard
+  aan) onderaan het formulier - zet 'm uit voor een proefcontract dat je nog
+  niet in de sheet wilt verwerken.
 - **PDF-export**: elk gegenereerd contract heeft een **"Download als PDF"**-
   link (op de Contracten-pagina en bovenaan het contract zelf) - handig om
   direct te uploaden naar DocHub voor de handtekeningaanvraag. Er is ook nog
