@@ -242,6 +242,18 @@ daadwerkelijk laat ondertekenen.
   direct te uploaden naar DocHub voor de handtekeningaanvraag. Er is ook nog
   een "Print / opslaan als PDF"-knop die de browser-eigen afdrukfunctie
   gebruikt, als alternatief.
+- **Concept-contract mailen**: na het genereren kom je direct op een
+  mailscherm terecht (ook later nog te vinden via "Mailen naar huurder" bij
+  elk contract op de Contracten-pagina) - met het e-mailadres van de huurder
+  al ingevuld (uit het "E-mailadres huurder"-veld van het formulier) en een
+  kant-en-klare Engelstalige tekst: het concept ter beoordeling, met vragen
+  welkom, en uitleg dat het na akkoord via DocHub ter definitieve
+  ondertekening gaat, gevolgd door de eerste betaling (waarborgsom + het
+  resterende deel van de eerste maand huur) en tot slot de digitale
+  Bold-sleutel (actief vanaf de ingangsdatum). Onderwerp en tekst zijn nog
+  aan te passen voordat je 'm verstuurt. De PDF van het contract gaat
+  automatisch als bijlage mee, verzonden vanaf info@steenhub.nl, met de
+  beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) zichtbaar in CC.
 - De WWS-puntentelling (Annex 1, verplicht volgens de Wet goed
   verhuurderschap) wordt niet automatisch gegenereerd - reken deze zelf uit
   en voeg 'm apart toe als bijlage.

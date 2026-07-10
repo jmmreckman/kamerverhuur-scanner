@@ -10,6 +10,7 @@ modelhuurovereenkomst) voordat je een gegenereerd contract laat ondertekenen.
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime
 from io import BytesIO
@@ -20,6 +21,8 @@ from werkzeug.datastructures import ImmutableMultiDict
 from xhtml2pdf import pisa
 
 from kamerverhuur_scanner.models import Pand
+
+from .reminders import AFZENDER_NAAM
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "contract_templates"
 BASIS_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "gegenereerde_contracten"
@@ -56,7 +59,60 @@ def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict) -> s
 
     html = _env.get_template("huurovereenkomst_voorbeeld.html").render(**context)
     (output_dir / bestandsnaam).write_text(html)
+    _schrijf_metadata(output_dir, bestandsnaam, {
+        "email": form.get("email", "").strip(),
+        "huurder_naam": context["huurder_naam"],
+        "kamer": context["kamer"],
+        "borg": context["borg"],
+    })
     return bestandsnaam
+
+
+def _metadata_pad(output_dir: Path, bestandsnaam: str) -> Path:
+    return output_dir / f"{bestandsnaam}.meta.json"
+
+
+def _schrijf_metadata(output_dir: Path, bestandsnaam: str, metadata: dict) -> None:
+    _metadata_pad(output_dir, bestandsnaam).write_text(json.dumps(metadata))
+
+
+def lees_metadata(pand_slug: str, bestandsnaam: str) -> dict:
+    """Gegevens die niet in de contracttekst zelf staan maar wel nodig zijn om
+    het concept te kunnen mailen (bv. het e-mailadres van de huurder) - lege
+    dict als er (nog) geen metadata-bestand is, bv. voor contracten die vóór
+    deze functie bestond zijn gegenereerd."""
+    veilige_naam = Path(bestandsnaam).name
+    pad = _metadata_pad(_output_dir(pand_slug), veilige_naam)
+    if not pad.is_file():
+        return {}
+    try:
+        return json.loads(pad.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def bouw_concept_email(pand: Pand, metadata: dict) -> dict[str, str]:
+    """Stelt de (Engelstalige) e-mailtekst op waarmee het concept-huurcontract
+    naar de kandidaat-huurder gemaild wordt - net als bouw_herinnering() in
+    reminders.py kan de beheerder dit nog aanpassen op het voorbeeldscherm."""
+    naam = metadata.get("huurder_naam") or "there"
+    kamer = metadata.get("kamer", "")
+    borg = metadata.get("borg", "")
+    onderwerp = f"Draft rental agreement - room {kamer}, {pand.naam}".strip()
+    borg_zin = f"the security deposit (EUR {borg})" if borg else "the security deposit"
+    tekst = (
+        f"Dear {naam},\n\n"
+        f"Please find attached the draft rental agreement for room {kamer} at {pand.naam}.\n\n"
+        f"Please take your time to review it, and let us know if you have any questions.\n\n"
+        f"Once you confirm you are happy with the terms, we will send the agreement via DocHub "
+        f"for final signature.\n\n"
+        f"After that, the first payment is due: {borg_zin} plus the remaining (pro-rated) rent "
+        f"for the first month. As soon as both the signed agreement and this payment have been "
+        f"received, your digital key (Bold) will be activated - it becomes valid from the start "
+        f"date of your rental agreement.\n\n"
+        f"Kind regards,\n{AFZENDER_NAAM}"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
 
 
 def _bouw_context(pand: Pand, form: ImmutableMultiDict) -> dict:

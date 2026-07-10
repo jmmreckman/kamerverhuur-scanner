@@ -32,6 +32,7 @@
           data-studierichting="{{ k.studierichting or '' }}"
           data-borgstellernaam="{{ k.borgsteller_naam or '' }}"
           data-borgstellerrelatie="{{ k.borgsteller_relatie or '' }}"
+          data-email="{{ k.email or '' }}"
         >
           Kamer {{ k.kamer }}{% if k.naam %} ({{ k.naam }}){% endif %}
         </option>
@@ -59,6 +60,9 @@
     </label>
     <label>Studierichting
       <input type="text" name="studierichting" id="veld-studierichting">
+    </label>
+    <label>E-mailadres huurder (voor het versturen van het concept-contract)
+      <input type="email" name="email" id="veld-email">
     </label>
 
     <h2>Borgsteller (optioneel)</h2>
@@ -110,7 +114,7 @@
   var select = document.getElementById("kamer-select");
   var velden = {
     naam: "veld-naam", geboortedatum: "veld-geboortedatum", geboorteplaats: "veld-geboorteplaats",
-    studentnummer: "veld-studentnummer", studierichting: "veld-studierichting",
+    studentnummer: "veld-studentnummer", studierichting: "veld-studierichting", email: "veld-email",
     borgstellernaam: "veld-borgstellernaam", borgstellerrelatie: "veld-borgstellerrelatie",
     kale: "veld-kale", service: "veld-service", totaal: "veld-totaal",
     startdatum: "veld-startdatum", einddatum: "veld-einddatum"

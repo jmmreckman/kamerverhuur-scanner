@@ -96,6 +96,52 @@ def test_verstuur_email_zonder_bcc_geen_reply_to(mock_smtp_cls):
     assert verzonden_bericht["Reply-To"] is None
 
 
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_met_cc(mock_smtp_cls):
+    # CC is (i.t.t. BCC) zichtbaar voor de ontvanger - gebruikt bv. bij het
+    # mailen van een concept-huurcontract, waarbij de beheerders bewust
+    # zichtbaar meegenomen worden.
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", cc=["jurian@steenhub.nl", "justin@steenhub.nl"])
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Cc"] == "jurian@steenhub.nl, justin@steenhub.nl"
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_zonder_cc_geen_cc_header(mock_smtp_cls):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst")
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["Cc"] is None
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_verstuur_email_met_bijlage(mock_smtp_cls):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    config = _config()
+
+    verstuur_email(
+        config, "huurder@example.com", "Onderwerp", "Tekst",
+        bijlagen=[("contract.pdf", "application/pdf", b"%PDF-fake-inhoud")],
+    )
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    bijlagen = list(verzonden_bericht.iter_attachments())
+    assert len(bijlagen) == 1
+    assert bijlagen[0].get_filename() == "contract.pdf"
+    assert bijlagen[0].get_content_type() == "application/pdf"
+    assert bijlagen[0].get_content() == b"%PDF-fake-inhoud"
+
+
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP_SSL")
 def test_verstuur_email_gebruikt_ssl_op_poort_465(mock_smtp_ssl_cls):
     smtp_instance = MagicMock()

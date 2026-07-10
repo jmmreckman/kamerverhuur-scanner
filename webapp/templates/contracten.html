@@ -17,6 +17,7 @@
       <li>
         <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a>
         - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Download als PDF</a>
+        - <a href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mailen naar huurder</a>
       </li>
     {% endfor %}
     </ul>

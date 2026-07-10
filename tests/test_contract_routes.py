@@ -1,7 +1,8 @@
 """Tests voor de contractroutes: nieuw contract genereren (incl. terugschrijven
-naar de Huurders-sheet) en PDF-download."""
+naar de Huurders-sheet), PDF-download en het mailen van het concept-contract."""
 import json
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -42,7 +43,7 @@ def app_client(tmp_path, monkeypatch):
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
          "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125",
          "postcode": "3077WD", "plaats": "Rotterdam", "rekeninghouder_naam": "JMM Reckman",
-         "gedeelde_ruimtes": "keuken, badkamer, tuin",
+         "gedeelde_ruimtes": "keuken, badkamer, tuin", "extra_bcc": ["justin@example.com"],
          "verhuurders": [{"naam": "Jurian Reckman", "adres": "Batavierenplantsoen 33, Haarlem"}]},
     ]))
     users_file = tmp_path / "users.json"
@@ -54,6 +55,9 @@ def app_client(tmp_path, monkeypatch):
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
         bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+        smtp_host="smtp.example.com", smtp_port=587, smtp_username="info@steenhub.nl",
+        smtp_password="geheim", smtp_from_email="info@steenhub.nl", smtp_from_naam="Steenhub",
+        email_bcc=["jurian@example.com"],
     )
     app = create_app(config)
     app.testing = True
@@ -112,3 +116,81 @@ def test_contract_bekijken_en_pdf_downloaden(app_client):
     assert pdf_resp.status_code == 200
     assert pdf_resp.mimetype == "application/pdf"
     assert pdf_resp.data.startswith(b"%PDF")
+
+
+def _genereer_en_haal_bestandsnaam(app_client, **overrides):
+    data = {
+        "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "919,00",
+        "ingangsdatum": "2026-07-01", "borg": "1000,00", "email": "bence@example.com",
+    }
+    data.update(overrides)
+    app_client.post("/pand/mahoniestraat/contracten/nieuw", data=data)
+    resp = app_client.get("/pand/mahoniestraat/contracten")
+    import re
+    match = re.search(r'contracten/([^/"]+\.html)/pdf', resp.get_data(as_text=True))
+    assert match
+    return match.group(1)
+
+
+def test_contract_genereren_stuurt_direct_door_naar_mailen(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/contracten/nieuw",
+        data={
+            "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "919,00",
+            "ingangsdatum": "2026-07-01", "email": "bence@example.com",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/mailen" in resp.headers["Location"]
+
+
+def test_contract_mailen_vult_emailadres_en_engelse_tekst_voor(app_client):
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}/mailen")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'value="bence@example.com"' in body
+    assert "DocHub" in body
+    assert "Bold" in body
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_contract_mailen_verstuurt_met_pdf_bijlage_en_cc(mock_smtp_cls, app_client):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/mailen",
+        data={"aan": "bence@example.com", "onderwerp": "Draft rental agreement", "tekst": "Dear Bence, ..."},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "gemaild naar bence@example.com" in resp.get_data(as_text=True)
+
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    assert verzonden_bericht["To"] == "bence@example.com"
+    # zowel het pand-specifieke extra_bcc (Justin) als het algemene EMAIL_BCC
+    # (Jurian) horen zichtbaar in CC te staan - niet als BCC.
+    assert verzonden_bericht["Cc"] == "jurian@example.com, justin@example.com"
+    bijlagen = list(verzonden_bericht.iter_attachments())
+    assert len(bijlagen) == 1
+    assert bijlagen[0].get_content_type() == "application/pdf"
+    assert bijlagen[0].get_content().startswith(b"%PDF")
+
+
+def test_contract_mailen_zonder_emailadres_geeft_foutmelding(app_client):
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/mailen",
+        data={"aan": "", "onderwerp": "Onderwerp", "tekst": "Tekst"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "vul een e-mailadres" in resp.get_data(as_text=True).lower()
+
+
+def test_contract_mailen_onbekend_bestand_geeft_404(app_client):
+    resp = app_client.get("/pand/mahoniestraat/contracten/bestaat-niet.html/mailen")
+    assert resp.status_code == 404

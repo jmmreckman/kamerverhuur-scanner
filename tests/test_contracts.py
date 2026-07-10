@@ -94,3 +94,33 @@ def test_genereer_pdf_onbekend_bestand_geeft_filenotfound(tmp_path, monkeypatch)
         assert False, "had een FileNotFoundError moeten geven"
     except FileNotFoundError:
         pass
+
+
+def test_genereer_contract_bewaart_metadata_voor_mailen(tmp_path, monkeypatch):
+    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+    bestandsnaam = contracts.genereer_contract(
+        "mahoniestraat", _pand(), _form(email="bence@example.com")
+    )
+    metadata = contracts.lees_metadata("mahoniestraat", bestandsnaam)
+    assert metadata["email"] == "bence@example.com"
+    assert metadata["huurder_naam"] == "Bence Neumayer"
+    assert metadata["kamer"] == "1"
+    assert metadata["borg"] == "1000,00"
+
+
+def test_lees_metadata_zonder_bestand_geeft_lege_dict(tmp_path, monkeypatch):
+    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+    assert contracts.lees_metadata("mahoniestraat", "bestaat-niet.html") == {}
+
+
+def test_bouw_concept_email_bevat_kamer_dochub_en_bold():
+    pand = _pand()
+    metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1", "borg": "1000,00"}
+    opgesteld = contracts.bouw_concept_email(pand, metadata)
+    assert "1" in opgesteld["onderwerp"]
+    assert pand.naam in opgesteld["onderwerp"]
+    assert "Bence Neumayer" in opgesteld["tekst"]
+    assert "DocHub" in opgesteld["tekst"]
+    assert "Bold" in opgesteld["tekst"]
+    assert "1000,00" in opgesteld["tekst"]
+    assert "Jurian Reckman" in opgesteld["tekst"]  # ondertekening (AFZENDER_NAAM)

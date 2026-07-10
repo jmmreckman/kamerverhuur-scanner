@@ -736,7 +736,7 @@ def create_app(config: Config | None = None) -> Flask:
                     servicekosten=parse_bedrag(service) if service else bestaande.servicekosten,
                     contract_einddatum=request.form.get("einddatum", "").strip() or bestaande.contract_einddatum,
                     opmerking=bestaande.opmerking,
-                    email=bestaande.email,
+                    email=request.form.get("email", "").strip() or bestaande.email,
                     telefoonnummer=bestaande.telefoonnummer,
                     geboortedatum=request.form.get("geboortedatum", "").strip() or bestaande.geboortedatum,
                     geboorteplaats=request.form.get("geboorteplaats", "").strip() or bestaande.geboorteplaats,
@@ -747,7 +747,7 @@ def create_app(config: Config | None = None) -> Flask:
                     contract_startdatum=request.form.get("ingangsdatum", "").strip() or bestaande.contract_startdatum,
                     borg_bedrag=parse_bedrag(borg) if borg else bestaande.borg_bedrag,
                 )
-            return redirect(url_for("contract_bekijken", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+            return redirect(url_for("contract_mailen", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1
         return render_template(
             "contract_nieuw.html", kamers=kamers, vandaag=date.today(), aantal_bewoners=aantal_bewoners
@@ -776,6 +776,56 @@ def create_app(config: Config | None = None) -> Flask:
         return Response(
             pdf, mimetype="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{pdf_bestandsnaam}"'},
+        )
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/mailen", methods=["GET", "POST"])
+    @login_required
+    def contract_mailen(pand_slug: str, bestandsnaam: str):
+        try:
+            contracts.lees_contract(pand_slug, bestandsnaam)
+        except FileNotFoundError:
+            abort(404)
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam)
+        cc_adressen = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+
+        if request.method == "POST":
+            aan = request.form.get("aan", "").strip()
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            if not aan:
+                flash("Vul een e-mailadres van de huurder in.")
+                return render_template(
+                    "contract_mailen.html", bestandsnaam=bestandsnaam,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                )
+            try:
+                pdf = contracts.genereer_pdf(pand_slug, bestandsnaam)
+            except contracts.PdfGenerationError:
+                flash("PDF-generatie is mislukt - het contract is niet gemaild.")
+                return render_template(
+                    "contract_mailen.html", bestandsnaam=bestandsnaam,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                )
+            pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
+            try:
+                verstuur_email(
+                    config, aan, onderwerp, tekst, cc=cc_adressen,
+                    bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
+                )
+            except MailError as exc:
+                flash(str(exc))
+                return render_template(
+                    "contract_mailen.html", bestandsnaam=bestandsnaam,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                )
+            flash(f"Concept-huurcontract gemaild naar {aan}.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
+        opgesteld = contracts.bouw_concept_email(g.pand, metadata)
+        return render_template(
+            "contract_mailen.html", bestandsnaam=bestandsnaam,
+            aan=metadata.get("email", ""), onderwerp=opgesteld["onderwerp"], tekst=opgesteld["tekst"],
+            cc_adressen=cc_adressen,
         )
 
     # --- Documenten ---

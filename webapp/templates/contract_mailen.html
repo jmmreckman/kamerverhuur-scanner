@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Concept-huurcontract mailen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Concept-huurcontract mailen</h1>
+</div>
+
+<div class="card">
+  <p>
+    <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}" target="_blank" rel="noopener">Bekijk contract</a>
+    - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}">Download als PDF</a>
+  </p>
+  <p class="muted">Het contract wordt automatisch als PDF-bijlage meegestuurd, verzonden vanaf info@steenhub.nl.
+     {% if cc_adressen %}In CC: {{ cc_adressen|join(', ') }}.{% endif %}
+     Je kunt onderwerp en tekst hieronder nog aanpassen voordat je 'm verstuurt.</p>
+
+  <form method="post" onsubmit="return confirm('Concept-huurcontract nu versturen naar ' + this.aan.value + '?');">
+    <label>Aan (e-mailadres huurder)
+      <input type="email" name="aan" value="{{ aan }}" required>
+    </label>
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
+    </label>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
