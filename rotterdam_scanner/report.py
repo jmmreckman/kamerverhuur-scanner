@@ -85,8 +85,13 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
         or f'<span style="{_SMALL_STYLE}">geen gevonden</span>'
     )
 
+    # "wijk: " ervoor is geen opmaak-grapje: zonder dat label leest "<adres>\n<wijknaam>"
+    # voor Gmail als regel 2 van een adres (straat+huisnr, postcode+plaats \n buurt), en
+    # linkt het dat zelf door naar Maps -- inclusief een kapotte lege <td> op de plek waar
+    # het de boel splitst, ook als beide teksten al in een eigen link staan. Dat label
+    # breekt het patroon zodat Gmail's detectie er niet meer op aanslaat.
     wijk_html = (
-        f'<a href="{escape(_maps_zoeklink(item.wijknaam))}">{escape(item.wijknaam)}</a>'
+        f'wijk: <a href="{escape(_maps_zoeklink(item.wijknaam))}">{escape(item.wijknaam)}</a>'
         if item.wijknaam
         else "-"
     )

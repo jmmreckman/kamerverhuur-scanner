@@ -44,6 +44,19 @@ def test_html_report_wijknaam_staat_ook_in_eigen_link():
     assert '<a href="https://www.google.com/maps/search/Heijplaat%2C%20Rotterdam">Heijplaat</a>' in html
 
 
+def test_html_report_wijk_heeft_label_zodat_gmail_geen_adres_meer_herkent():
+    # Zelfs met beide teksten al in een eigen link injecteerde Gmail in de praktijk nog
+    # steeds een lege spookcel tussen adres en wijknaam (gebaseerd op tekstdetectie die
+    # kennelijk voor het linken al draait). Een klein label breekt het "regel 2 van een
+    # adres"-patroon zodat de detectie er niet meer op aanslaat.
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", wijknaam="Heijplaat")
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "wijk: " in html
+
+
 def test_html_report_zonder_wijknaam_geeft_streepje_zonder_link():
     item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", wijknaam=None)
     result = RunResult(alle_actief=[item], nieuw_actief=[item])
