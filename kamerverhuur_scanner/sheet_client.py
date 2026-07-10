@@ -277,57 +277,6 @@ class SheetClient:
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
-    def add_kamer(
-        self,
-        naam: str,
-        kamer: str,
-        verwacht_bedrag: Decimal,
-        iban: str | None,
-        zoekwoord: str | None,
-        kale_huurprijs: Decimal | None = None,
-        servicekosten: Decimal | None = None,
-        contract_einddatum: str | None = None,
-        opmerking: str | None = None,
-        email: str | None = None,
-        telefoonnummer: str | None = None,
-        geboortedatum: str | None = None,
-        geboorteplaats: str | None = None,
-        studentnummer: str | None = None,
-        studierichting: str | None = None,
-        borgsteller_naam: str | None = None,
-        borgsteller_relatie: str | None = None,
-        contract_startdatum: str | None = None,
-        borg_bedrag: Decimal | None = None,
-    ) -> None:
-        row = [
-            kamer,
-            naam,
-            self._bedrag_of_leeg(kale_huurprijs),
-            self._bedrag_of_leeg(servicekosten),
-            f"{verwacht_bedrag:.2f}".replace(".", ","),
-            contract_einddatum or "",
-            opmerking or "",
-            iban or "",
-            zoekwoord or "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            email or "",
-            telefoonnummer or "",
-            geboortedatum or "",
-            geboorteplaats or "",
-            studentnummer or "",
-            studierichting or "",
-            borgsteller_naam or "",
-            borgsteller_relatie or "",
-            contract_startdatum or "",
-            self._bedrag_of_leeg(borg_bedrag),
-        ]
-        self._worksheet.append_row(row, value_input_option="USER_ENTERED")
-
     def update_aanbod(self, row_index: int, beschikbaar: bool, omschrijving: str | None, map_id: str | None) -> None:
         updates = [
             {"range": self._a1(row_index, COL_BESCHIKBAAR), "values": [[_naar_ja_nee(beschikbaar)]]},

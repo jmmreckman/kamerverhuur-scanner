@@ -165,30 +165,6 @@ def test_update_aanbod_schrijft_alleen_aanbod_kolommen():
     assert ranges["O2"] == "map456"
 
 
-def test_add_kamer_voegt_lege_aanbod_kolommen_toe():
-    rows = [HEADER]
-    client, ws = _sheet_client(rows)
-    appended = []
-    ws.append_row = lambda row, value_input_option="USER_ENTERED": appended.append(row)
-    client.add_kamer(naam="Piet", kamer="3", verwacht_bedrag=Decimal("700.00"), iban=None, zoekwoord=None)
-    assert len(appended[0]) == 25  # kolom A t/m Y
-    assert appended[0][12:15] == ["", "", ""]  # Beschikbaar/Omschrijving/Map ID nog leeg
-    assert appended[0][15:17] == ["", ""]  # Mail/Telefoonnummer nog leeg
-    assert appended[0][17:] == ["", "", "", "", "", "", "", ""]  # contractvelden + borg nog leeg
-
-
-def test_add_kamer_met_contactgegevens():
-    rows = [HEADER]
-    client, ws = _sheet_client(rows)
-    appended = []
-    ws.append_row = lambda row, value_input_option="USER_ENTERED": appended.append(row)
-    client.add_kamer(
-        naam="Piet", kamer="3", verwacht_bedrag=Decimal("700.00"), iban=None, zoekwoord=None,
-        email="piet@example.com", telefoonnummer="0698765432",
-    )
-    assert appended[0][15:17] == ["piet@example.com", "0698765432"]
-
-
 def test_update_kamer_schrijft_contactgegevens():
     rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
     client, ws = _sheet_client(rows)

@@ -540,16 +540,6 @@ def create_app(config: Config | None = None) -> Flask:
             "borg_bedrag": parse_bedrag(borg_bedrag) if borg_bedrag else None,
         }
 
-    @app.route("/pand/<pand_slug>/huurders/nieuw", methods=["GET", "POST"])
-    @login_required
-    def huurder_nieuw(pand_slug: str):
-        if request.method == "POST":
-            sheet = SheetClient(config, g.pand)
-            sheet.add_kamer(**_kamer_form_naar_velden(request.form))
-            flash("Nieuwe kamer toegevoegd.")
-            return redirect(url_for("huurders", pand_slug=pand_slug))
-        return render_template("huurder_bewerken.html", kamer=None)
-
     @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/bewerken", methods=["GET", "POST"])
     @login_required
     def huurder_bewerken(pand_slug: str, kamer_naam: str):
