@@ -19,6 +19,19 @@ def _listing(object_id, weergavenaam, eerst_gezien, wijknaam="Centrum", prijs=25
     )
 
 
+def test_html_report_adres_staat_in_eigen_link():
+    # Gmail linkt platte adrestekst automatisch door naar Google Maps, en doet dat over
+    # celgrenzen heen (adres + wijknaam samen), wat de tabelstructuur kapotmaakt (extra
+    # <td> ertussen). Door het adres zelf al in onze eigen <a> te wrappen, herkent Gmail
+    # het niet als "nog te linken" platte tekst en blijft de tabel intact.
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09")
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert f'<a href="{item.url}">Nieuwstraat 1, Rotterdam</a>' in html
+
+
 def test_html_report_toont_alleen_nieuwe_woningen_in_nieuwe_kansen_blok():
     nieuw = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09")
     oud = _listing("OLD-1", "Oudstraat 2, Rotterdam", "2026-06-20")

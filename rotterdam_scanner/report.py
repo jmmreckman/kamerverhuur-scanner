@@ -80,7 +80,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
     return f"""
     <tr>
-      <td style="{_TD_STYLE}">{escape(item.weergavenaam)}</td>
+      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
       <td style="{_TD_STYLE}">{escape(item.wijknaam or '-')}</td>
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
@@ -134,7 +134,7 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
 
     return f"""<!doctype html>
 <html lang="nl">
-<head><meta charset="utf-8"></head>
+<head><meta charset="utf-8"><meta name="format-detection" content="address=no, telephone=no, email=no"></head>
 <body style="{_BODY_STYLE}">
   <h1 style="{_H1_STYLE}">Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}</h1>
   <p style="{_SMALL_STYLE}">
