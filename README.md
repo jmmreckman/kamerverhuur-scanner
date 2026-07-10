@@ -500,6 +500,37 @@ alléén mee bij mails van dat ene pand, naast de adressen uit `EMAIL_BCC`.
 > laat 'm bij een echt geschil het beste even meelezen door een jurist/
 > rechtsbijstandsverzekeraar.
 
+### Eigen afzenderadres per beheerder (optioneel)
+
+Standaard gaat alle uitgaande mail (contract mailen, ondertekenverzoek,
+herinnering/ingebrekestelling, "mail het hele huishouden") uit `SMTP_FROM_EMAIL`
+(bv. `info@steenhub.nl`). Wil je dat mail van een ingelogde beheerder in plaats
+daarvan uit diens eigen adres komt (bv. `jurian@steenhub.nl` i.p.v.
+`justin@steenhub.nl`)? Vul dat adres in bij het veld "E-mailadres" op de
+gebruiker in **Gebruikers** (zie Stap 5) - zodra dat veld is ingevuld, gaat
+mail die die gebruiker verstuurt automatisch uit dat adres i.p.v. het
+algemene `SMTP_FROM_EMAIL`.
+
+Er is hiervoor **geen** aparte SMTP-login per mailbox nodig: er wordt nog
+steeds ingelogd met de bestaande `SMTP_USERNAME`/`SMTP_PASSWORD`, alleen het
+zichtbare "Van"-adres verandert. De nieuwe mailbox (bv. `jurian@steenhub.nl`)
+hoeft dus alleen te *bestaan* bij je mailprovider (voor het ontvangen van
+antwoorden) - er is geen extra DNS/SPF/DKIM-instelling per mailbox nodig, die
+staat al domeinbreed voor `steenhub.nl`.
+
+> Let op: sommige mailproviders (waaronder Strato) controleren of het
+> "Van"-adres overeenkomt met het ingelogde account, en kunnen mail met een
+> afwijkend "Van"-adres weigeren of als spam markeren. Test na het instellen
+> altijd of een mail vanuit zo'n beheerdersaccount goed aankomt. Werkt het
+> niet, dan is het alternatief om voor die mailbox een eigen
+> `SMTP_USERNAME`/`SMTP_PASSWORD` te gebruiken (vraag dan om een uitbreiding
+> hiervan naar per-gebruiker SMTP-credentials).
+
+Deze mail-flows worden **niet** beïnvloed door dit veld: de afrondingsmail die
+verstuurt zodra een contract door alle partijen is ondertekend (die start
+vanaf een publieke link zonder login) en de automatische dagelijkse
+betaalcontrole - die blijven uit `SMTP_FROM_EMAIL` komen.
+
 ## Stap 3: bunq API key aanmaken (eenmalig, voor alle rekeningen samen)
 
 1. bunq-app > API key aanmaken (Profiel > Instellingen > Developers/API keys).

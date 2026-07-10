@@ -34,7 +34,7 @@ class FakeSheetClient:
 def verstuurde_mails(monkeypatch):
     verstuurd = []
 
-    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None):
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, afzender_email=None):
         verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
 
     import webapp.app as appmodule
@@ -109,7 +109,7 @@ def test_versturen_roept_mailer_aan_en_flasht_bevestiging(app_client, verstuurde
 def test_mailerror_bij_versturen_toont_foutmelding_en_behoudt_formulier(app_client, monkeypatch):
     import webapp.app as appmodule
 
-    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None):
+    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None, afzender_email=None):
         raise MailError("SMTP niet ingesteld")
 
     monkeypatch.setattr(appmodule, "verstuur_email", _kapotte_mailer)
@@ -172,7 +172,7 @@ def test_verzonden_badge_blijft_weg_bij_mailerror(app_client, monkeypatch, tmp_p
     _seed_cache(tmp_path)
     import webapp.app as appmodule
 
-    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None):
+    def _kapotte_mailer(config, aan, onderwerp, tekst, bcc=None, afzender_email=None):
         raise MailError("SMTP niet ingesteld")
 
     monkeypatch.setattr(appmodule, "verstuur_email", _kapotte_mailer)

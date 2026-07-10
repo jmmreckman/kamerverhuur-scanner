@@ -24,6 +24,7 @@ def verstuur_email(
     bcc: list[str] | None = None,
     cc: list[str] | None = None,
     bijlagen: list[tuple[str, str, bytes]] | None = None,
+    afzender_email: str | None = None,
 ) -> None:
     """Verstuurt de mail. `bcc` overschrijft (indien gegeven) config.email_bcc -
     zo kan de aanroeper per pand extra BCC-adressen toevoegen (bv. een
@@ -31,7 +32,13 @@ def verstuur_email(
     `cc` is (in tegenstelling tot bcc) zichtbaar voor de ontvanger - gebruikt
     bv. bij het mailen van een concept-huurcontract, waar de beheerders bewust
     zichtbaar meegenomen worden. `bijlagen` is een lijst van
-    (bestandsnaam, mimetype, inhoud)-tuples."""
+    (bestandsnaam, mimetype, inhoud)-tuples. `afzender_email` overschrijft
+    (indien gegeven) config.smtp_from_email - zo verstuurt een ingelogde
+    beheerder met een eigen mailadres (zie webapp/auth.py: User.email) mail
+    vanaf zijn/haar eigen adres i.p.v. altijd het algemene SMTP_FROM_EMAIL,
+    zonder dat er per beheerder een eigen SMTP-login nodig is (er wordt nog
+    steeds met dezelfde SMTP-credentials ingelogd, alleen de From-header
+    wijzigt)."""
     if not (config.smtp_host and config.smtp_username and config.smtp_password and config.smtp_from_email):
         raise MailError(
             "E-mail versturen is nog niet ingesteld - vul SMTP_HOST, SMTP_PORT, "
@@ -40,7 +47,8 @@ def verstuur_email(
 
     msg = EmailMessage()
     msg["Subject"] = onderwerp
-    afzender = f"{config.smtp_from_naam} <{config.smtp_from_email}>" if config.smtp_from_naam else config.smtp_from_email
+    afzender_adres = afzender_email or config.smtp_from_email
+    afzender = f"{config.smtp_from_naam} <{afzender_adres}>" if config.smtp_from_naam else afzender_adres
     msg["From"] = afzender
     msg["To"] = aan
     if cc:

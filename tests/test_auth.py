@@ -52,3 +52,25 @@ def test_zet_gebruiker_zonder_wachtwoord_behoudt_bestaand_wachtwoord():
 def test_zet_gebruiker_zonder_wachtwoord_voor_nieuwe_gebruiker_geeft_fout():
     with pytest.raises(ValueError):
         zet_gebruiker({}, "nieuw", None, True, [])
+
+
+def test_zet_gebruiker_slaat_email_op():
+    users = zet_gebruiker({}, "jurian", "geheim123", True, [], email="jurian@steenhub.nl")
+    assert users["jurian"]["email"] == "jurian@steenhub.nl"
+
+
+def test_zet_gebruiker_zonder_email_slaat_none_op():
+    users = zet_gebruiker({}, "jurian", "geheim123", True, [])
+    assert users["jurian"]["email"] is None
+
+
+def test_user_uit_gegevens_leest_email():
+    gegevens = {"wachtwoord_hash": "x", "alle_panden": True, "panden": [], "email": "jurian@steenhub.nl"}
+    user = user_uit_gegevens("jurian", gegevens)
+    assert user.email == "jurian@steenhub.nl"
+
+
+def test_user_uit_gegevens_zonder_email_geeft_none():
+    gegevens = {"wachtwoord_hash": "x", "alle_panden": True, "panden": []}
+    user = user_uit_gegevens("jurian", gegevens)
+    assert user.email is None
