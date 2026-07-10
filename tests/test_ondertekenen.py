@@ -59,6 +59,32 @@ def test_bereken_betaalverzoek_bedrag_ingangsdatum_op_laatste_dag_telt_1_dag():
     assert totaal == Decimal("500.00") + verwachte_pro_rata
 
 
+def test_bereken_betaalverzoek_geeft_volledige_opbouw():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    assert betaalverzoek["borg"] == Decimal("1000.00")
+    assert betaalverzoek["pro_rata_huur"] == Decimal("660.00")
+    assert betaalverzoek["dagen_resterend"] == 22
+    assert betaalverzoek["ingangsdatum"] == date(2026, 7, 10)
+    assert betaalverzoek["laatste_dag_maand"] == date(2026, 7, 31)
+    assert betaalverzoek["totaal"] == Decimal("1660.00")
+
+
+# --- bouw_betaal_en_tekenmail ---
+
+
+def test_bouw_betaal_en_tekenmail_toont_het_sommetje():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_betaal_en_tekenmail(pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek)
+    assert "EUR 1.660,00 in total" in mail["tekst"]
+    assert "Security deposit: EUR 1.000,00" in mail["tekst"]
+    assert "Pro-rated rent from 10-07-2026 to 31-07-2026 (22 days): EUR 660,00" in mail["tekst"]
+
+
 # --- start_ondertekenronde ---
 
 

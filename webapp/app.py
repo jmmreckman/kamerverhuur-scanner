@@ -967,8 +967,8 @@ def create_app(config: Config | None = None) -> Flask:
             ingangsdatum = date.fromisoformat(metadata.get("ingangsdatum_iso") or "")
         except ValueError:
             ingangsdatum = date.today()
-        totaal = ondertekenen.bereken_betaalverzoek_bedrag(huurprijs, borg, ingangsdatum)
-        return ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, totaal)
+        betaalverzoek = ondertekenen.bereken_betaalverzoek(huurprijs, borg, ingangsdatum)
+        return ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, betaalverzoek)
 
     def _verstuur_tekenverzoek_mails(ronde: dict, metadata: dict, huurder_override: dict | None = None) -> list[str]:
         """Mailt (opnieuw) elke nog niet getekende ondertekenaar in `ronde` -

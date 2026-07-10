@@ -286,10 +286,13 @@ daadwerkelijk laat ondertekenen.
   Huurders-sheet"** (standaard aan, zoals bij het genereren van het
   contract) voor als dat nog niet gebeurd was. Pas na bevestigen wordt er
   echt gemaild:
-  1. de huurder krijgt de (evt. aangepaste) mail met een **betaalverzoek**
-     (waarborgsom + de pro-rata huur vanaf de ingangsdatum t/m het einde van
-     die kalendermaand, automatisch berekend en opgeteld tot één bedrag) én
-     een link om het contract op de site zelf te tekenen;
+  1. de huurder krijgt de (evt. aangepaste) mail met een **betaalverzoek**:
+     waarborgsom + de pro-rata huur vanaf de ingangsdatum t/m het einde van
+     die kalendermaand, met het sommetje er duidelijk bij uitgeschreven
+     (bv. "Security deposit: EUR 1.000,00" / "Pro-rated rent from
+     10-07-2026 to 31-07-2026 (22 days): EUR 660,00") in plaats van alleen
+     het opgetelde eindbedrag, plus een link om het contract op de site
+     zelf te tekenen;
   2. alle verhuurder(s) van het pand (dezelfde adressen als EMAIL_BCC + het
      pand-specifieke `extra_bcc`) en, als er een borgsteller met e-mailadres
      is opgegeven, ook de borgsteller krijgen elk een eigen (niet aan te

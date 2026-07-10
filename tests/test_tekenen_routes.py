@@ -124,8 +124,11 @@ def test_tekenverzoek_mailt_huurder_en_beide_verhuurders(mock_smtp_cls, app_clie
     )
     tekst = huurder_bericht.get_content()
     assert "/tekenen/" in tekst
-    # borg 1000 + pro-rata huur (930 * 22/31 dagen, 10-31 juli) = 1000 + 660,00 = 1660,00
+    # borg 1000 + pro-rata huur (930 * 22/31 dagen, 10-31 juli) = 1000 + 660,00 = 1660,00 -
+    # en het sommetje moet duidelijk uitgesplitst zijn, niet alleen het totaal
     assert "1.660,00" in tekst
+    assert "Security deposit: EUR 1.000,00" in tekst
+    assert "Pro-rated rent from 10-07-2026 to 31-07-2026 (22 days): EUR 660,00" in tekst
 
 
 def test_tekenverzoek_get_toont_voorbeeldscherm_zonder_te_mailen(app_client):

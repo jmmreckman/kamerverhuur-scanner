@@ -102,14 +102,30 @@ def _schrijf_ronde(pand_slug: str, bestandsnaam: str, state_dir: str, ronde: dic
     pad.write_text(json.dumps(ronde))
 
 
-def bereken_betaalverzoek_bedrag(huurprijs: Decimal, borg: Decimal, ingangsdatum: date) -> Decimal:
+def bereken_betaalverzoek(huurprijs: Decimal, borg: Decimal, ingangsdatum: date) -> dict:
     """Waarborgsom + de pro-rata huur vanaf de ingangsdatum t/m het einde van
-    die kalendermaand (beide dagen meegerekend)."""
+    die kalendermaand (beide dagen meegerekend) - geeft de volledige
+    opbouw terug (niet alleen het totaal), zodat het sommetje in de
+    betaalverzoek-mail voorgerekend kan worden i.p.v. alleen het eindbedrag
+    te tonen."""
     dagen_in_maand = calendar.monthrange(ingangsdatum.year, ingangsdatum.month)[1]
     laatste_dag = date(ingangsdatum.year, ingangsdatum.month, dagen_in_maand)
     dagen_resterend = (laatste_dag - ingangsdatum).days + 1
     pro_rata_huur = (huurprijs * dagen_resterend / dagen_in_maand).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return borg + pro_rata_huur
+    return {
+        "borg": borg, "pro_rata_huur": pro_rata_huur, "ingangsdatum": ingangsdatum,
+        "laatste_dag_maand": laatste_dag, "dagen_resterend": dagen_resterend,
+        "totaal": borg + pro_rata_huur,
+    }
+
+
+def bereken_betaalverzoek_bedrag(huurprijs: Decimal, borg: Decimal, ingangsdatum: date) -> Decimal:
+    """Alleen het totaalbedrag - zie bereken_betaalverzoek() voor de opbouw."""
+    return bereken_betaalverzoek(huurprijs, borg, ingangsdatum)["totaal"]
+
+
+def _eur(bedrag: Decimal) -> str:
+    return f"{bedrag:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _nieuwe_ondertekenaar(id_: str, rol: str, naam: str, email: str) -> dict:
@@ -262,20 +278,25 @@ def bouw_handtekeningen_html(ronde: dict) -> str:
     return '<table class="handtekeningen">' + "".join(rijen) + "</table>"
 
 
-def bouw_betaal_en_tekenmail(pand: Pand, metadata: dict, teken_url: str, totaalbedrag: Decimal) -> dict[str, str]:
-    """Mail naar de huurder: het betaalverzoek (borg + pro-rata huur) plus de
-    link om het contract elektronisch te tekenen."""
+def bouw_betaal_en_tekenmail(pand: Pand, metadata: dict, teken_url: str, betaalverzoek: dict) -> dict[str, str]:
+    """Mail naar de huurder: het betaalverzoek (borg + pro-rata huur, met het
+    sommetje erbij - zie bereken_betaalverzoek()) plus de link om het
+    contract elektronisch te tekenen."""
     naam = metadata.get("huurder_naam") or "there"
     kamer = metadata.get("kamer", "")
     onderwerp = f"Signature & payment request - room {kamer}, {pand.naam}".strip()
-    bedrag_tekst = f"{totaalbedrag:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     wie_nog = "the landlord(s)" + (" and guarantor" if metadata.get("borgsteller_naam") else "")
+    ingangsdatum = betaalverzoek["ingangsdatum"].strftime("%d-%m-%Y")
+    laatste_dag = betaalverzoek["laatste_dag_maand"].strftime("%d-%m-%Y")
     tekst = (
         f"Dear {naam},\n\n"
         f"Thank you for confirming the draft rental agreement for room {kamer} at {pand.naam}. "
         f"Two things are needed to finalize it:\n\n"
-        f"1) Payment of EUR {bedrag_tekst} (the security deposit plus the pro-rated rent for the "
-        f"remainder of the starting month), to be paid to:\n"
+        f"1) Payment of EUR {_eur(betaalverzoek['totaal'])} in total, made up of:\n"
+        f"   - Security deposit: EUR {_eur(betaalverzoek['borg'])}\n"
+        f"   - Pro-rated rent from {ingangsdatum} to {laatste_dag} "
+        f"({betaalverzoek['dagen_resterend']} days): EUR {_eur(betaalverzoek['pro_rata_huur'])}\n\n"
+        f"   To be paid to:\n"
         f"   IBAN: {pand.bunq_rekening_iban}\n"
         f"   Account holder: {pand.rekeninghouder_naam or pand.naam}\n\n"
         f"2) Signing the rental agreement electronically via this link:\n"
