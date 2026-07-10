@@ -6,19 +6,24 @@ webapp/app.py: /tekenen/<token>). Zodra iedereen getekend heeft, wordt
 automatisch de definitieve ondertekende versie gemaakt (zie
 contracts.genereer_getekend_contract()) en gemaild aan alle partijen.
 
-Elke ondertekening legt een audit-trail vast: tijdstip, IP-adres, user-agent
-en de expliciet getypte naam. Dit is een "gewone" elektronische handtekening
-(SES onder de eIDAS-verordening) - voor een tijdelijk kamerhuurcontract is
-dat in Nederland rechtsgeldig, mits goed gedocumenteerd zoals hier.
+Elke ondertekening legt een audit-trail vast: een met de muis/vinger/stylus
+getekende handtekening (canvas op de ondertekenpagina), tijdstip, IP-adres,
+user-agent en de expliciet getypte naam. Dit is een "gewone" elektronische
+handtekening (SES onder de eIDAS-verordening) - voor een tijdelijk
+kamerhuurcontract is dat in Nederland rechtsgeldig, mits goed gedocumenteerd
+zoals hier.
 
 De stand van zaken per contract (wie heeft al getekend) staat in een JSON-
 bestand naast het contract zelf (STATE_DIR/gegenereerde_contracten/<pand>/
-<bestandsnaam>.ondertekening.json). Een los indexbestand (STATE_DIR/
+<bestandsnaam>.ondertekening.json) - inclusief de getekende handtekening
+zelf, als base64-gecodeerde PNG. Een los indexbestand (STATE_DIR/
 ondertekentokens.json) koppelt elke token aan het bijbehorende pand/contract,
 zodat de publieke /tekenen/<token>-pagina die in één keer kan opzoeken zonder
 alle panden te hoeven doorzoeken."""
 from __future__ import annotations
 
+import base64
+import binascii
 import calendar
 import html
 import json
@@ -33,6 +38,29 @@ from . import contracts
 from .reminders import AFZENDER_NAAM
 
 _ROLNAMEN_EN = {"huurder": "tenant", "verhuurder": "landlord", "borgsteller": "guarantor"}
+
+_HANDTEKENING_DATA_URL_PREFIX = "data:image/png;base64,"
+# Ruim voldoende voor een getekende handtekening op een canvas van
+# realistische afmetingen (ter vergelijking: een 600x180px PNG met een
+# handtekening erop is doorgaans een paar KB) - voorkomt dat iemand een
+# absurd grote afbeelding als "handtekening" post.
+_MAX_HANDTEKENING_BYTES = 300_000
+
+
+def handtekening_base64_uit_data_url(data_url: str) -> str | None:
+    """Valideert en normaliseert een canvas-handtekening (data-URL, zie
+    tekenen.html) tot de kale base64-payload voor opslag. Geeft None terug
+    bij een ontbrekende, ongeldige of te grote afbeelding."""
+    if not data_url or not data_url.startswith(_HANDTEKENING_DATA_URL_PREFIX):
+        return None
+    payload = data_url[len(_HANDTEKENING_DATA_URL_PREFIX):]
+    try:
+        ruwe_bytes = base64.b64decode(payload, validate=True)
+    except (ValueError, binascii.Error):
+        return None
+    if not ruwe_bytes or len(ruwe_bytes) > _MAX_HANDTEKENING_BYTES:
+        return None
+    return payload
 
 
 def _ronde_pad(pand_slug: str, bestandsnaam: str, state_dir: str) -> Path:
@@ -88,6 +116,7 @@ def _nieuwe_ondertekenaar(id_: str, rol: str, naam: str, email: str) -> dict:
     return {
         "id": id_, "rol": rol, "naam": naam, "email": email, "token": secrets.token_urlsafe(32),
         "ondertekend_op": None, "ip_adres": None, "user_agent": None, "getekende_naam": None,
+        "handtekening_png_base64": None,
     }
 
 
@@ -103,7 +132,10 @@ def start_ondertekenronde(
 
     Idempotent: geeft de bestaande ronde terug als er al een loopt, zodat een
     dubbele klik geen nieuwe tokens/mails aanmaakt (wat de al verstuurde
-    links zou laten samenvallen met een nieuwe, verwarrende ronde)."""
+    links zou laten samenvallen met een nieuwe, verwarrende ronde). Deze
+    functie verstuurt zelf geen mail (dat gebeurt pas na bevestiging op het
+    voorbeeldscherm, zie markeer_verzonden() hieronder) - alleen zo al
+    aangemaakt zodat het voorbeeldscherm de echte ondertekenlinks kan tonen."""
     bestaand = lees_ondertekenronde(pand_slug, bestandsnaam, state_dir)
     if bestaand is not None:
         return bestaand
@@ -121,7 +153,8 @@ def start_ondertekenronde(
     ronde = {
         "pand_slug": pand_slug, "bestandsnaam": bestandsnaam,
         "aangemaakt_op": datetime.now().isoformat(timespec="seconds"),
-        "ondertekenaars": ondertekenaars, "afgerond_op": None, "getekend_bestandsnaam": None,
+        "ondertekenaars": ondertekenaars, "verzonden_op": None,
+        "afgerond_op": None, "getekend_bestandsnaam": None,
     }
     _schrijf_ronde(pand_slug, bestandsnaam, state_dir, ronde)
 
@@ -130,6 +163,18 @@ def start_ondertekenronde(
         index[ondertekenaar["token"]] = {"pand_slug": pand_slug, "bestandsnaam": bestandsnaam}
     _schrijf_index(state_dir, index)
 
+    return ronde
+
+
+def markeer_verzonden(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> dict:
+    """Markeert dat het ondertekenverzoek daadwerkelijk gemaild is (na
+    bevestiging op het voorbeeldscherm) - onderscheidt een 'voorbereide maar
+    nog niet verstuurde' ronde (bv. iemand die het voorbeeldscherm opende
+    maar niet bevestigde) van een echt verstuurde, zodat de Contracten-
+    pagina pas na het echte versturen naar de ondertekenstatus linkt."""
+    ronde = lees_ondertekenronde(pand_slug, bestandsnaam, state_dir)
+    ronde["verzonden_op"] = datetime.now().isoformat(timespec="seconds")
+    _schrijf_ronde(pand_slug, bestandsnaam, state_dir, ronde)
     return ronde
 
 
@@ -150,11 +195,12 @@ def zoek_via_token(token: str, state_dir: str = ".") -> tuple[str, str, dict] | 
 
 def markeer_ondertekend(
     pand_slug: str, bestandsnaam: str, ondertekenaar_id: str, state_dir: str,
-    ip_adres: str, user_agent: str, getekende_naam: str,
+    ip_adres: str, user_agent: str, getekende_naam: str, handtekening_png_base64: str | None = None,
 ) -> dict:
-    """Legt de handtekening vast (tijdstip, IP, user-agent, getypte naam) en
-    geeft de bijgewerkte ronde terug. Idempotent: is deze ondertekenaar al
-    gemarkeerd als getekend, dan blijft de eerste registratie staan."""
+    """Legt de handtekening vast (getekende afbeelding, tijdstip, IP, user-
+    agent, getypte naam) en geeft de bijgewerkte ronde terug. Idempotent: is
+    deze ondertekenaar al gemarkeerd als getekend, dan blijft de eerste
+    registratie staan."""
     ronde = lees_ondertekenronde(pand_slug, bestandsnaam, state_dir)
     if ronde is None:
         raise ValueError(f"Geen ondertekenronde gevonden voor '{bestandsnaam}'.")
@@ -164,6 +210,7 @@ def markeer_ondertekend(
             ondertekenaar["ip_adres"] = ip_adres
             ondertekenaar["user_agent"] = user_agent
             ondertekenaar["getekende_naam"] = getekende_naam
+            ondertekenaar["handtekening_png_base64"] = handtekening_png_base64
             break
     _schrijf_ronde(pand_slug, bestandsnaam, state_dir, ronde)
     return ronde
@@ -183,10 +230,13 @@ def markeer_afgerond(pand_slug: str, bestandsnaam: str, state_dir: str, getekend
 
 def bouw_handtekeningen_html(ronde: dict) -> str:
     """Het handtekeningenblok voor het definitieve, ondertekende contract:
-    per ondertekenaar naam, rol, moment en IP-adres. Alle waarden komen
-    (indirect) van publiek toegankelijke formuliervelden, dus expliciet
-    ge-escaped - dit wordt rechtstreeks in de contract-HTML geplakt, niet via
-    Jinja2 gerenderd."""
+    per ondertekenaar de getekende handtekening (afbeelding, indien gezet),
+    naam, rol, moment en IP-adres. Alle waarden komen (indirect) van publiek
+    toegankelijke formuliervelden, dus expliciet ge-escaped - dit wordt
+    rechtstreeks in de contract-HTML geplakt, niet via Jinja2 gerenderd. De
+    handtekening zelf staat al gevalideerd als kale base64-payload in de
+    ronde (zie handtekening_base64_uit_data_url() hierboven), dus die hoeft
+    niet nogmaals ge-escaped te worden."""
     rijen = []
     for o in ronde["ondertekenaars"]:
         rol_tekst = _ROLNAMEN_EN.get(o["rol"], o["rol"])
@@ -196,8 +246,15 @@ def bouw_handtekeningen_html(ronde: dict) -> str:
         except (TypeError, ValueError):
             moment = ""
         ip_adres = html.escape(o["ip_adres"] or "")
+        handtekening_html = ""
+        if o.get("handtekening_png_base64"):
+            handtekening_html = (
+                '<img src="data:image/png;base64,' + o["handtekening_png_base64"] + '" alt="signature" '
+                'style="max-height:70px; max-width:280px; display:block; margin-bottom:0.3rem;">'
+            )
         rijen.append(
             "<tr><td>"
+            f"{handtekening_html}"
             f"<strong>{naam}</strong> ({rol_tekst})<br>"
             f"Electronically signed on {moment} - IP address {ip_adres}"
             "</td></tr>"

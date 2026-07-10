@@ -11,22 +11,35 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from kamerverhuur_scanner.config import Config
+from kamerverhuur_scanner.models import Tenant
 from webapp import ondertekenen
 from webapp.app import create_app
 
+# minimale geldige 1x1-PNG (transparant), als data-URL - staat in voor een
+# echte canvas-handtekening in tests die de ondertekenpagina POSTen.
+TEST_HANDTEKENING_DATA_URL = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+KAMER_1 = Tenant(row_index=2, naam="Bence Neumayer", kamer="1", verwacht_bedrag=Decimal("930.00"))
+
 
 class FakeSheetClient:
+    laatste_update = None
+    archiveer_aangeroepen_met = None
+
     def __init__(self, _config, _pand):
         pass
 
     def get_kamers(self):
-        return []
+        return [KAMER_1]
 
     def update_kamer(self, **kwargs):
-        pass
+        FakeSheetClient.laatste_update = kwargs
 
     def archiveer_vertrokken_huurder(self, kamer):
-        pass
+        FakeSheetClient.archiveer_aangeroepen_met = kamer
 
     def get_recent_vertrokken_huurders(self):
         return []
@@ -37,6 +50,8 @@ def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
     monkeypatch.chdir(tmp_path)
+    FakeSheetClient.laatste_update = None
+    FakeSheetClient.archiveer_aangeroepen_met = None
 
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
@@ -113,6 +128,70 @@ def test_tekenverzoek_mailt_huurder_en_beide_verhuurders(mock_smtp_cls, app_clie
     assert "1.660,00" in tekst
 
 
+def test_tekenverzoek_get_toont_voorbeeldscherm_zonder_te_mailen(app_client):
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Verzoek tot tekenen" in body
+    assert "/tekenen/" in body  # de echte tekenlink van de huurder, voor het voorbeeld
+    assert "Jurian Reckman" in body
+    assert "Justin Winkelman" in body
+
+    # er is nog niets gemaild, en de Contracten-pagina toont dus nog de
+    # "Verzoek tot tekenen"-link i.p.v. een ondertekenstatus-link
+    overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
+    assert "Verzoek tot tekenen" in overzicht
+    assert "Ondertekenstatus" not in overzicht
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_tekenverzoek_post_gebruikt_aangepaste_tekst(mock_smtp_cls, app_client):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek",
+        data={"onderwerp": "Aangepast onderwerp", "tekst": "Aangepaste tekst met een link erin."},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+    huurder_bericht = next(
+        call.args[0] for call in smtp_instance.send_message.call_args_list if call.args[0]["To"] == "bence@example.com"
+    )
+    assert huurder_bericht["Subject"] == "Aangepast onderwerp"
+    assert "Aangepaste tekst met een link erin." in huurder_bericht.get_content()
+
+    # de Contracten-pagina schakelt nu wel over naar de ondertekenstatus-link
+    overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
+    assert "Ondertekenstatus" in overzicht
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_tekenverzoek_met_vinkje_schrijft_terug_naar_sheet(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek",
+        data={"schrijf_terug_naar_sheet": "on"},
+    )
+    assert FakeSheetClient.laatste_update is not None
+    assert FakeSheetClient.laatste_update["naam"] == "Bence Neumayer"
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_tekenverzoek_zonder_vinkje_laat_sheet_ongemoeid(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    assert FakeSheetClient.laatste_update is None
+
+
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
 def test_tekenverzoek_is_idempotent(mock_smtp_cls, app_client):
     smtp_instance = MagicMock()
@@ -184,7 +263,7 @@ def test_tekenen_post_registreert_handtekening(mock_smtp_cls, app_client):
 
     resp = app_client.post(
         f"/tekenen/{tokens['huurder']['token']}",
-        data={"getekende_naam": "Bence Neumayer", "akkoord": "on"},
+        data={"getekende_naam": "Bence Neumayer", "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
         environ_overrides={"REMOTE_ADDR": "203.0.113.5"},
     )
     assert resp.status_code == 200
@@ -195,6 +274,7 @@ def test_tekenen_post_registreert_handtekening(mock_smtp_cls, app_client):
     assert huurder["ondertekend_op"] is not None
     assert huurder["ip_adres"] == "203.0.113.5"
     assert huurder["getekende_naam"] == "Bence Neumayer"
+    assert huurder["handtekening_png_base64"]
     assert ondertekenen.alles_getekend(ronde) is False  # verhuurders nog niet
 
 
@@ -216,6 +296,24 @@ def test_tekenen_zonder_akkoordvakje_geeft_foutmelding(mock_smtp_cls, app_client
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_tekenen_zonder_handtekening_geeft_foutmelding(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+
+    resp = app_client.post(
+        f"/tekenen/{tokens['huurder']['token']}",
+        data={"getekende_naam": "Bence Neumayer", "akkoord": "on"},  # geen handtekening_data_url
+    )
+    assert resp.status_code == 200
+    assert "draw your signature" in resp.get_data(as_text=True).lower()
+    ronde = ondertekenen.lees_ondertekenronde("mahoniestraat", bestandsnaam, ".")
+    huurder = next(o for o in ronde["ondertekenaars"] if o["rol"] == "huurder")
+    assert huurder["ondertekend_op"] is None
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
 def test_tekenen_dubbel_indienen_blijft_bij_eerste_handtekening(mock_smtp_cls, app_client):
     mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
     bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
@@ -223,7 +321,10 @@ def test_tekenen_dubbel_indienen_blijft_bij_eerste_handtekening(mock_smtp_cls, a
     tokens = _tokens(bestandsnaam)
     token = tokens["huurder"]["token"]
 
-    app_client.post(f"/tekenen/{token}", data={"getekende_naam": "Bence Neumayer", "akkoord": "on"})
+    app_client.post(
+        f"/tekenen/{token}",
+        data={"getekende_naam": "Bence Neumayer", "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
+    )
     resp = app_client.get(f"/tekenen/{token}")
     assert resp.status_code == 200
     assert "you've signed" in resp.get_data(as_text=True).lower()
@@ -252,7 +353,8 @@ def test_alle_partijen_tekenen_rondt_af_met_getekend_contract_en_mail(mock_smtp_
 
     for rol_sleutel, naam in [("huurder", "Bence Neumayer"), ("verhuurder", "Jurian Reckman"), ("verhuurder-2", "Justin Winkelman")]:
         resp = app_client.post(
-            f"/tekenen/{tokens[rol_sleutel]['token']}", data={"getekende_naam": naam, "akkoord": "on"}
+            f"/tekenen/{tokens[rol_sleutel]['token']}",
+            data={"getekende_naam": naam, "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
         )
         assert resp.status_code == 200
 
@@ -265,6 +367,13 @@ def test_alle_partijen_tekenen_rondt_af_met_getekend_contract_en_mail(mock_smtp_
     overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
     assert getekend_bestandsnaam in overzicht
     assert "Getekend" in overzicht
+
+    # de getekende handtekeningen (canvas-afbeeldingen) staan in het definitieve contract
+    getekend_html = app_client.get(
+        f"/pand/mahoniestraat/contracten/{getekend_bestandsnaam}"
+    ).get_data(as_text=True)
+    assert "data:image/png;base64," in getekend_html
+    assert getekend_html.count("data:image/png;base64,") == 3  # huurder + 2 verhuurders
 
     # mail 3: het ondertekende contract als PDF-bijlage naar alle 3 partijen
     ontvangers = {call.args[0]["To"] for call in smtp_instance.send_message.call_args_list}
@@ -285,7 +394,10 @@ def test_tekenverzoek_op_al_getekend_contract_geeft_foutmelding(mock_smtp_cls, a
     app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
     tokens = _tokens(bestandsnaam)
     for rol_sleutel, naam in [("huurder", "Bence Neumayer"), ("verhuurder", "Jurian Reckman"), ("verhuurder-2", "Justin Winkelman")]:
-        app_client.post(f"/tekenen/{tokens[rol_sleutel]['token']}", data={"getekende_naam": naam, "akkoord": "on"})
+        app_client.post(
+            f"/tekenen/{tokens[rol_sleutel]['token']}",
+            data={"getekende_naam": naam, "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
+        )
     ronde = ondertekenen.lees_ondertekenronde("mahoniestraat", bestandsnaam, ".")
     getekend_bestandsnaam = ronde["getekend_bestandsnaam"]
 

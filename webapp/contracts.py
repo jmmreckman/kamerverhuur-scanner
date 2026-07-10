@@ -189,8 +189,20 @@ def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, stat
         "kamer": context["kamer"],
         "borg": context["borg"],
         "huurprijs": context["huurprijs"],
+        # onderstaande velden staan hier alleen zodat een later "Verzoek tot
+        # tekenen" (zie webapp/ondertekenen.py) de sheet nog kan bijwerken op
+        # basis van dít contract, ook al is de generatie zelf allang voorbij -
+        # zelfde velden/formaat als het huurcontract-formulier zelf.
+        "kale_huurprijs": form.get("kale_huurprijs", "").strip(),
+        "servicekosten": form.get("servicekosten", "").strip(),
         "ingangsdatum_iso": form.get("ingangsdatum", "").strip(),
+        "einddatum_iso": form.get("einddatum", "").strip(),
+        "geboortedatum": form.get("geboortedatum", "").strip(),
+        "geboorteplaats": form.get("geboorteplaats", "").strip(),
+        "studentnummer": form.get("studentnummer", "").strip(),
+        "studierichting": form.get("studierichting", "").strip(),
         "borgsteller_naam": context["borgsteller_naam"],
+        "borgsteller_relatie": form.get("borgsteller_relatie", "").strip(),
         "borgsteller_email": form.get("borgsteller_email", "").strip(),
     })
     return bestandsnaam

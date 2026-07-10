@@ -279,30 +279,39 @@ daadwerkelijk laat ondertekenen.
   beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) blind (BCC)
   meegenomen - de huurder ziet deze adressen niet.
 - **Elektronisch ondertekenen** (in plaats van DocHub): op de Contracten-
-  pagina staat bij elk concept-contract een knop **"Verzoek tot tekenen"**.
-  Daarmee:
-  1. krijgt de huurder een mail met een **betaalverzoek** (waarborgsom + de
-     pro-rata huur vanaf de ingangsdatum t/m het einde van die kalendermaand,
-     automatisch berekend en opgeteld tot één bedrag) én een link om het
-     contract op de site zelf te tekenen;
-  2. krijgen alle verhuurder(s) van het pand (dezelfde adressen als
-     EMAIL_BCC + het pand-specifieke `extra_bcc`) en, als er een
-     borgsteller met e-mailadres is opgegeven, ook de borgsteller elk een
-     eigen tekenlink;
-  3. toont elke link het volledige contract plus een ondertekenformulier
-     (volledige naam + een akkoordvakje) - bij het tekenen wordt tijdstip,
-     IP-adres en de getypte naam vastgelegd als audit-trail (een "gewone"
-     elektronische handtekening, SES onder de eIDAS-verordening - voor een
-     tijdelijk kamerhuurcontract in Nederland rechtsgeldig);
+  pagina staat bij elk concept-contract een link **"Verzoek tot tekenen"**,
+  die eerst een **voorbeeldscherm** toont (net als bij "Mailen naar
+  huurder") - onderwerp/tekst van de mail aan de huurder zijn nog aan te
+  passen, en er staat een vinkje **"Gegevens ook terugschrijven naar de
+  Huurders-sheet"** (standaard aan, zoals bij het genereren van het
+  contract) voor als dat nog niet gebeurd was. Pas na bevestigen wordt er
+  echt gemaild:
+  1. de huurder krijgt de (evt. aangepaste) mail met een **betaalverzoek**
+     (waarborgsom + de pro-rata huur vanaf de ingangsdatum t/m het einde van
+     die kalendermaand, automatisch berekend en opgeteld tot één bedrag) én
+     een link om het contract op de site zelf te tekenen;
+  2. alle verhuurder(s) van het pand (dezelfde adressen als EMAIL_BCC + het
+     pand-specifieke `extra_bcc`) en, als er een borgsteller met e-mailadres
+     is opgegeven, ook de borgsteller krijgen elk een eigen (niet aan te
+     passen) mail met alleen hun tekenlink;
+  3. elke link toont het volledige contract plus een ondertekenformulier:
+     volledige naam, een **met de vinger/muis/stylus getekende handtekening**
+     (canvas, verplicht) en een akkoordvakje - bij het tekenen wordt de
+     handtekening, tijdstip, IP-adres en de getypte naam vastgelegd als
+     audit-trail (een "gewone" elektronische handtekening, SES onder de
+     eIDAS-verordening - voor een tijdelijk kamerhuurcontract in Nederland
+     rechtsgeldig);
   4. zodra **iedereen** getekend heeft, wordt automatisch de definitieve
      versie gemaakt (bestandsnaam eindigt op `-getekend`, met een groene
      "Getekend"-badge op de Contracten-pagina, ter onderscheid van het
-     "Concept") en als PDF gemaild aan alle partijen, met de vermelding dat
-     dit document nodig is om bij de gemeente in te schrijven op het adres.
+     "Concept", en met de getekende handtekeningen zichtbaar in het
+     handtekeningenblok) en als PDF gemaild aan alle partijen, met de
+     vermelding dat dit document nodig is om bij de gemeente in te
+     schrijven op het adres.
 
   De voortgang ("Ondertekenstatus") is op elk moment te bekijken via de link
-  naast een concept-contract - daar kan ook per persoon opnieuw gemaild
-  worden, mocht een link kwijtgeraakt zijn.
+  naast een concept-contract (verschijnt pas ná het versturen) - daar kan
+  ook per persoon opnieuw gemaild worden, mocht een link kwijtgeraakt zijn.
 - **Contractsjabloon aanpassen** (alleen voor beheerders met toegang tot alle
   panden): via **Contracten > Contractsjabloon aanpassen** pas je de
   artikelen van het huurcontract zelf aan, in een simpel tekstverwerker-

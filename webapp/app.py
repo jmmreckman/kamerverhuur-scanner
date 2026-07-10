@@ -793,15 +793,63 @@ def create_app(config: Config | None = None) -> Flask:
 
     # --- Contracten ---
 
+    def _schrijf_contract_terug_naar_sheet(sheet: SheetClient, kamers, kamer_naam: str, velden) -> None:
+        """Schrijft contractgegevens terug naar de Huurders-sheet voor deze
+        kamer (archiveert eerst de vertrekkende huurder als de naam wijzigt) -
+        `velden` ondersteunt .get() net als request.form (huurder_naam, email,
+        kale_huurprijs, servicekosten, borg, geboortedatum, geboorteplaats,
+        studentnummer, studierichting, borgsteller_naam, borgsteller_relatie,
+        ingangsdatum, einddatum). Gebruikt door zowel het genereren van een
+        nieuw contract als het verzoek tot tekenen (met gegevens uit de
+        contractmetadata i.p.v. een live formulier), zodat een proefcontract
+        dat pas bij het tekenverzoek definitief wordt alsnog kan worden
+        teruggeschreven. Doet niets als de kamer niet (meer) bestaat."""
+        bestaande = next((k for k in kamers if k.kamer == kamer_naam), None)
+        if bestaande is None:
+            return
+        nieuwe_naam = velden.get("huurder_naam", "").strip()
+        if bestaande.naam and bestaande.naam != nieuwe_naam:
+            # een andere huurder komt voor deze kamer in de plaats - bewaar de
+            # vertrekkende huurder nog even (zie Huurders-pagina).
+            sheet.archiveer_vertrokken_huurder(bestaande)
+        kale = velden.get("kale_huurprijs", "").strip()
+        service = velden.get("servicekosten", "").strip()
+        borg = velden.get("borg", "").strip()
+        sheet.update_kamer(
+            row_index=bestaande.row_index,
+            naam=nieuwe_naam or bestaande.naam,
+            kamer=kamer_naam,
+            verwacht_bedrag=bestaande.verwacht_bedrag,
+            iban=bestaande.iban,
+            zoekwoord=bestaande.zoekwoord,
+            kale_huurprijs=parse_bedrag(kale) if kale else bestaande.kale_huurprijs,
+            servicekosten=parse_bedrag(service) if service else bestaande.servicekosten,
+            contract_einddatum=velden.get("einddatum", "").strip() or bestaande.contract_einddatum,
+            opmerking=bestaande.opmerking,
+            email=velden.get("email", "").strip() or bestaande.email,
+            telefoonnummer=bestaande.telefoonnummer,
+            geboortedatum=velden.get("geboortedatum", "").strip() or bestaande.geboortedatum,
+            geboorteplaats=velden.get("geboorteplaats", "").strip() or bestaande.geboorteplaats,
+            studentnummer=velden.get("studentnummer", "").strip() or bestaande.studentnummer,
+            studierichting=velden.get("studierichting", "").strip() or bestaande.studierichting,
+            borgsteller_naam=velden.get("borgsteller_naam", "").strip() or bestaande.borgsteller_naam,
+            borgsteller_relatie=velden.get("borgsteller_relatie", "").strip() or bestaande.borgsteller_relatie,
+            contract_startdatum=velden.get("ingangsdatum", "").strip() or bestaande.contract_startdatum,
+            borg_bedrag=parse_bedrag(borg) if borg else bestaande.borg_bedrag,
+        )
+
     @app.route("/pand/<pand_slug>/contracten")
     @login_required
     def contracten_overzicht(pand_slug: str):
         contracten = []
         for bestandsnaam in contracts.list_contracten(pand_slug, config.state_dir):
+            ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
             contracten.append({
                 "bestandsnaam": bestandsnaam,
                 "getekend": contracts.is_getekend_contract(bestandsnaam),
-                "ronde": ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir),
+                # alleen tonen als het ondertekenverzoek ook echt verstuurd is
+                # (niet bij een geopend maar niet bevestigd voorbeeldscherm)
+                "ronde": ronde if ronde and ronde.get("verzonden_op") else None,
             })
         return render_template("contracten.html", contracten=contracten)
 
@@ -817,38 +865,8 @@ def create_app(config: Config | None = None) -> Flask:
             # optioneel, sommige contracten zijn een proefversie waarvoor dat nog
             # niet gewenst is (zie het vinkje op het formulier).
             kamer_naam = request.form.get("kamer", "").strip()
-            bestaande = next((k for k in kamers if k.kamer == kamer_naam), None)
-            nieuwe_naam = request.form.get("huurder_naam", "").strip()
-            if bestaande is not None and request.form.get("schrijf_terug_naar_sheet") == "on":
-                if bestaande.naam and bestaande.naam != nieuwe_naam:
-                    # een andere huurder komt voor deze kamer in de plaats -
-                    # bewaar de vertrekkende huurder nog even (zie Huurders-pagina).
-                    sheet.archiveer_vertrokken_huurder(bestaande)
-                kale = request.form.get("kale_huurprijs", "").strip()
-                service = request.form.get("servicekosten", "").strip()
-                borg = request.form.get("borg", "").strip()
-                sheet.update_kamer(
-                    row_index=bestaande.row_index,
-                    naam=request.form.get("huurder_naam", "").strip() or bestaande.naam,
-                    kamer=kamer_naam,
-                    verwacht_bedrag=bestaande.verwacht_bedrag,
-                    iban=bestaande.iban,
-                    zoekwoord=bestaande.zoekwoord,
-                    kale_huurprijs=parse_bedrag(kale) if kale else bestaande.kale_huurprijs,
-                    servicekosten=parse_bedrag(service) if service else bestaande.servicekosten,
-                    contract_einddatum=request.form.get("einddatum", "").strip() or bestaande.contract_einddatum,
-                    opmerking=bestaande.opmerking,
-                    email=request.form.get("email", "").strip() or bestaande.email,
-                    telefoonnummer=bestaande.telefoonnummer,
-                    geboortedatum=request.form.get("geboortedatum", "").strip() or bestaande.geboortedatum,
-                    geboorteplaats=request.form.get("geboorteplaats", "").strip() or bestaande.geboorteplaats,
-                    studentnummer=request.form.get("studentnummer", "").strip() or bestaande.studentnummer,
-                    studierichting=request.form.get("studierichting", "").strip() or bestaande.studierichting,
-                    borgsteller_naam=request.form.get("borgsteller_naam", "").strip() or bestaande.borgsteller_naam,
-                    borgsteller_relatie=request.form.get("borgsteller_relatie", "").strip() or bestaande.borgsteller_relatie,
-                    contract_startdatum=request.form.get("ingangsdatum", "").strip() or bestaande.contract_startdatum,
-                    borg_bedrag=parse_bedrag(borg) if borg else bestaande.borg_bedrag,
-                )
+            if request.form.get("schrijf_terug_naar_sheet") == "on":
+                _schrijf_contract_terug_naar_sheet(sheet, kamers, kamer_naam, request.form)
             return redirect(url_for("contract_mailen", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1
         return render_template(
@@ -942,10 +960,21 @@ def create_app(config: Config | None = None) -> Flask:
     def _teken_url(token: str) -> str:
         return url_for("tekenen", token=token, _external=True)
 
-    def _verstuur_tekenverzoek_mails(ronde: dict, metadata: dict) -> list[str]:
+    def _bouw_huurder_tekenmail(metadata: dict, teken_url: str) -> dict[str, str]:
+        huurprijs = parse_bedrag(metadata.get("huurprijs"))
+        borg = parse_bedrag(metadata.get("borg"))
+        try:
+            ingangsdatum = date.fromisoformat(metadata.get("ingangsdatum_iso") or "")
+        except ValueError:
+            ingangsdatum = date.today()
+        totaal = ondertekenen.bereken_betaalverzoek_bedrag(huurprijs, borg, ingangsdatum)
+        return ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, totaal)
+
+    def _verstuur_tekenverzoek_mails(ronde: dict, metadata: dict, huurder_override: dict | None = None) -> list[str]:
         """Mailt (opnieuw) elke nog niet getekende ondertekenaar in `ronde` -
-        de huurder krijgt het betaalverzoek + tekenlink, de rest alleen de
-        tekenlink. Geeft de e-mailadressen terug waarvoor het versturen
+        de huurder krijgt het betaalverzoek + tekenlink (desgewenst met een
+        aangepaste onderwerp/tekst uit het voorbeeldscherm), de rest alleen
+        de tekenlink. Geeft de e-mailadressen terug waarvoor het versturen
         mislukte (best-effort, net als bij 'mail het hele huishouden')."""
         mislukt = []
         for o in ronde["ondertekenaars"]:
@@ -953,14 +982,7 @@ def create_app(config: Config | None = None) -> Flask:
                 continue
             teken_url = _teken_url(o["token"])
             if o["rol"] == "huurder":
-                huurprijs = parse_bedrag(metadata.get("huurprijs"))
-                borg = parse_bedrag(metadata.get("borg"))
-                try:
-                    ingangsdatum = date.fromisoformat(metadata.get("ingangsdatum_iso") or "")
-                except ValueError:
-                    ingangsdatum = date.today()
-                totaal = ondertekenen.bereken_betaalverzoek_bedrag(huurprijs, borg, ingangsdatum)
-                mail = ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, totaal)
+                mail = huurder_override or _bouw_huurder_tekenmail(metadata, teken_url)
             else:
                 mail = ondertekenen.bouw_tekenmail_overig(o["rol"], o["naam"], g.pand, metadata, teken_url)
             try:
@@ -997,7 +1019,7 @@ def create_app(config: Config | None = None) -> Flask:
             except MailError:
                 app.logger.exception("Mail met ondertekend contract naar %s is mislukt.", adres)
 
-    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/tekenverzoek", methods=["POST"])
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/tekenverzoek", methods=["GET", "POST"])
     @login_required
     def contract_tekenverzoek(pand_slug: str, bestandsnaam: str):
         if contracts.is_getekend_contract(bestandsnaam):
@@ -1007,7 +1029,8 @@ def create_app(config: Config | None = None) -> Flask:
             contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
-        if ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir) is not None:
+        bestaande_ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+        if bestaande_ronde is not None and bestaande_ronde.get("verzonden_op"):
             flash("Er loopt al een ondertekenverzoek voor dit contract.")
             return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
         metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
@@ -1015,16 +1038,36 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Geen e-mailadres van de huurder bekend voor dit contract - kan geen ondertekenverzoek versturen.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
 
+        # De ronde (en dus de echte, unieke tekenlinks) wordt al hier
+        # aangemaakt zodat het voorbeeldscherm de kloppende link kan tonen -
+        # er wordt pas gemaild na bevestiging hieronder (zie verzonden_op).
         verhuurder_emails = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
         ronde = ondertekenen.start_ondertekenronde(
             g.pand, pand_slug, bestandsnaam, metadata, verhuurder_emails, config.state_dir
         )
-        mislukt = _verstuur_tekenverzoek_mails(ronde, metadata)
-        if mislukt:
-            flash(f"Ondertekenverzoek verstuurd, maar mislukt voor: {', '.join(mislukt)}.")
-        else:
-            flash("Ondertekenverzoek verstuurd naar alle partijen.")
-        return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+        huurder = next(o for o in ronde["ondertekenaars"] if o["rol"] == "huurder")
+
+        if request.method == "POST":
+            if request.form.get("schrijf_terug_naar_sheet") == "on":
+                sheet = SheetClient(config, g.pand)
+                _schrijf_contract_terug_naar_sheet(sheet, sheet.get_kamers(), metadata.get("kamer", ""), metadata)
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            huurder_override = {"onderwerp": onderwerp, "tekst": tekst} if onderwerp and tekst else None
+            mislukt = _verstuur_tekenverzoek_mails(ronde, metadata, huurder_override)
+            ondertekenen.markeer_verzonden(pand_slug, bestandsnaam, config.state_dir)
+            if mislukt:
+                flash(f"Ondertekenverzoek verstuurd, maar mislukt voor: {', '.join(mislukt)}.")
+            else:
+                flash("Ondertekenverzoek verstuurd naar alle partijen.")
+            return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+
+        mail = _bouw_huurder_tekenmail(metadata, _teken_url(huurder["token"]))
+        overige_ontvangers = [o for o in ronde["ondertekenaars"] if o["rol"] != "huurder"]
+        return render_template(
+            "contract_tekenverzoek.html", bestandsnaam=bestandsnaam,
+            onderwerp=mail["onderwerp"], tekst=mail["tekst"], overige_ontvangers=overige_ontvangers,
+        )
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/ondertekenstatus")
     @login_required
@@ -1070,12 +1113,15 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             getekende_naam = request.form.get("getekende_naam", "").strip()
             akkoord = request.form.get("akkoord") == "on"
-            if not getekende_naam or not akkoord:
-                flash("Please fill in your full name and tick the checkbox to sign.")
+            handtekening = ondertekenen.handtekening_base64_uit_data_url(
+                request.form.get("handtekening_data_url", "")
+            )
+            if not getekende_naam or not akkoord or not handtekening:
+                flash("Please fill in your full name, draw your signature, and tick the checkbox to sign.")
                 return render_template("tekenen.html", pand=pand, bestandsnaam=bestandsnaam, ondertekenaar=ondertekenaar)
             ronde = ondertekenen.markeer_ondertekend(
                 pand_slug, bestandsnaam, ondertekenaar["id"], config.state_dir,
-                request.remote_addr or "", request.user_agent.string or "", getekende_naam,
+                request.remote_addr or "", request.user_agent.string or "", getekende_naam, handtekening,
             )
             if ondertekenen.alles_getekend(ronde):
                 _rond_ondertekening_af(pand_slug, bestandsnaam, pand)

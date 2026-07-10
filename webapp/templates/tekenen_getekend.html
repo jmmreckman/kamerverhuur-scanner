@@ -7,6 +7,10 @@
 <div class="card">
   <p>You ({{ ondertekenaar.getekende_naam or ondertekenaar.naam }}) signed this rental agreement on
      {{ ondertekenaar.ondertekend_op }}.</p>
+  {% if ondertekenaar.handtekening_png_base64 %}
+  <img src="data:image/png;base64,{{ ondertekenaar.handtekening_png_base64 }}" alt="your signature"
+       style="max-height:100px; border:1px solid var(--border); border-radius: var(--radius-sm); background:#fff; padding:0.5rem;">
+  {% endif %}
   <p class="muted">Once all parties have signed, you'll automatically receive the fully signed
      agreement by email - you'll need it to register (inschrijven) at the municipality.</p>
 </div>

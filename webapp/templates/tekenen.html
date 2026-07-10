@@ -13,17 +13,80 @@
 </div>
 
 <div class="card">
-  <form method="post">
+  <form method="post" id="teken-form">
     <label>Your full legal name
       <input type="text" name="getekende_naam" value="{{ ondertekenaar.naam }}" required>
     </label>
+
+    <label>Your signature (draw with your finger, stylus, or mouse)</label>
+    <canvas id="handtekening-canvas" width="600" height="180"
+            style="width:100%; max-width:600px; height:180px; border:1px solid var(--border); border-radius: var(--radius-sm); background:#fff; touch-action:none; display:block; cursor:crosshair;"></canvas>
+    <div style="margin:0.5rem 0 1rem">
+      <button type="button" class="btn btn-secondary" id="handtekening-wissen">Clear</button>
+    </div>
+    <input type="hidden" name="handtekening_data_url" id="handtekening-data-url">
+
     <label style="display:flex; align-items:flex-start; gap:0.5rem">
       <input type="checkbox" name="akkoord" required style="width:auto; margin-top:0.3rem">
       <span>I have read and agree to the rental agreement above, and I am electronically signing it
-        as {{ ondertekenaar.naam }}. I understand that my name, the time, and my IP address will be
-        recorded as proof of this electronic signature.</span>
+        as {{ ondertekenaar.naam }}. I understand that my name, signature, the time, and my IP address
+        will be recorded as proof of this electronic signature.</span>
     </label>
     <button class="btn" type="submit">Sign</button>
   </form>
 </div>
+
+<script>
+  (function () {
+    var canvas = document.getElementById("handtekening-canvas");
+    var ctx = canvas.getContext("2d");
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#111";
+    var tekenend = false;
+    var heeftGetekend = false;
+
+    function positie(event) {
+      var rect = canvas.getBoundingClientRect();
+      var schaalX = canvas.width / rect.width;
+      var schaalY = canvas.height / rect.height;
+      return {x: (event.clientX - rect.left) * schaalX, y: (event.clientY - rect.top) * schaalY};
+    }
+    function start(event) {
+      tekenend = true;
+      heeftGetekend = true;
+      var p = positie(event);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      event.preventDefault();
+    }
+    function teken(event) {
+      if (!tekenend) return;
+      var p = positie(event);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      event.preventDefault();
+    }
+    function stop() { tekenend = false; }
+
+    canvas.addEventListener("pointerdown", start);
+    canvas.addEventListener("pointermove", teken);
+    window.addEventListener("pointerup", stop);
+
+    document.getElementById("handtekening-wissen").addEventListener("click", function () {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      heeftGetekend = false;
+    });
+
+    document.getElementById("teken-form").addEventListener("submit", function (event) {
+      if (!heeftGetekend) {
+        event.preventDefault();
+        alert("Please draw your signature in the box above before signing.");
+        return;
+      }
+      document.getElementById("handtekening-data-url").value = canvas.toDataURL("image/png");
+    });
+  })();
+</script>
 {% endblock %}

@@ -1,6 +1,7 @@
 """Unit-tests voor webapp/ondertekenen.py: het berekenen van het
 betaalverzoek, het opzetten/bijhouden van een ondertekenronde, en het
 opbouwen van het handtekeningenblok."""
+import base64
 from datetime import date
 from decimal import Decimal
 
@@ -169,6 +170,39 @@ def test_alles_getekend_true_als_iedereen_getekend_heeft(tmp_path):
     assert ondertekenen.alles_getekend(ronde) is True
 
 
+# --- handtekening_base64_uit_data_url ---
+
+_GELDIGE_PNG_DATA_URL = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+def test_handtekening_base64_uit_data_url_geldig():
+    payload = ondertekenen.handtekening_base64_uit_data_url(_GELDIGE_PNG_DATA_URL)
+    assert payload is not None
+    assert payload in _GELDIGE_PNG_DATA_URL
+
+
+def test_handtekening_base64_uit_data_url_leeg_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("") is None
+    assert ondertekenen.handtekening_base64_uit_data_url(None) is None
+
+
+def test_handtekening_base64_uit_data_url_verkeerd_prefix_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("data:text/plain;base64,aGFsbG8=") is None
+    assert ondertekenen.handtekening_base64_uit_data_url("niet-een-data-url") is None
+
+
+def test_handtekening_base64_uit_data_url_ongeldige_base64_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("data:image/png;base64,!!!niet-valide!!!") is None
+
+
+def test_handtekening_base64_uit_data_url_te_groot_geeft_none():
+    groot_payload = base64.b64encode(b"x" * (ondertekenen._MAX_HANDTEKENING_BYTES + 1)).decode()
+    assert ondertekenen.handtekening_base64_uit_data_url("data:image/png;base64," + groot_payload) is None
+
+
 # --- bouw_handtekeningen_html ---
 
 
@@ -186,3 +220,47 @@ def test_bouw_handtekeningen_html_escaped_getypte_naam(tmp_path):
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
     assert "203.0.113.5" in html
+
+
+def test_bouw_handtekeningen_html_toont_getekende_afbeelding(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    payload = ondertekenen.handtekening_base64_uit_data_url(_GELDIGE_PNG_DATA_URL)
+    ronde = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path),
+        "203.0.113.5", "UA", "Bence Neumayer", payload,
+    )
+    html = ondertekenen.bouw_handtekeningen_html(ronde)
+    assert f'src="data:image/png;base64,{payload}"' in html
+
+
+def test_bouw_handtekeningen_html_zonder_afbeelding_toont_geen_img_tag(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    ronde = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path), "203.0.113.5", "UA", "Bence Neumayer",
+    )
+    html = ondertekenen.bouw_handtekeningen_html(ronde)
+    assert "<img" not in html
+
+
+# --- markeer_verzonden ---
+
+
+def test_markeer_verzonden_zet_tijdstip(tmp_path):
+    ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    assert ondertekenen.lees_ondertekenronde("mahoniestraat", "contract.html", str(tmp_path))["verzonden_op"] is None
+    ronde = ondertekenen.markeer_verzonden("mahoniestraat", "contract.html", str(tmp_path))
+    assert ronde["verzonden_op"] is not None
+    assert ondertekenen.lees_ondertekenronde(
+        "mahoniestraat", "contract.html", str(tmp_path)
+    )["verzonden_op"] == ronde["verzonden_op"]
