@@ -70,14 +70,15 @@ nodig.
   controleren" haalt inkomende betalingen van bunq op (alleen van de
   bunq-rekening die bij dat pand hoort), koppelt ze aan de huurders, toont
   het resultaat, en schrijft de sheet + geschiedenis bij.
-- **Dagelijkse automatische controle** - draait daarnaast elke ochtend om
-  06:00 (Nederlandse tijd) vanzelf dezelfde controle voor alle panden, zodat
+- **Automatische controle, elk uur** - draait daarnaast elk uur (op het hele
+  uur, Nederlandse tijd) vanzelf dezelfde controle voor alle panden, zodat
   de lijst altijd up-to-date is zonder dat er iemand op de knop hoeft te
   drukken (zie `scripts/dagelijkse_controle.py` en de `dagelijkse-check`-
-  service in `deploy/docker-compose.yml`). Draait ook meteen één keer bij het
-  opstarten van de container (dus ook na elke nieuwe deploy), zodat een
-  herstart de 06:00-controle nooit per ongeluk overslaat. De "Nu
-  controleren"-knop blijft gewoon werken voor tussendoor. Zodra alle kamers
+  service in `deploy/docker-compose.yml` - de naam is historisch, dit draaide
+  vroeger 1x per dag). Blijft ruim binnen de gratis quota van zowel de
+  Google Sheets API als bunq. Draait ook meteen één keer bij het opstarten
+  van de container (dus ook na elke nieuwe deploy). De "Nu controleren"-knop
+  blijft gewoon werken voor tussendoor. Zodra alle kamers
   van een pand voor de huidige maand "Betaald" staan, gaat er - eenmalig die
   maand - een mailtje naar de beheerder(s) (`EMAIL_BCC` + eventuele
   pand-specifieke "Extra BCC") met de melding dat de huur compleet binnen is.

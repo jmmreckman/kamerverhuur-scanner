@@ -16,10 +16,10 @@ services:
     expose:
       - "8000"
 
-  # Draait elke ochtend om 06:00 (Europe/Amsterdam) automatisch dezelfde
+  # Draait elk uur (op het hele uur, Europe/Amsterdam) automatisch dezelfde
   # betaalcontrole als de "Nu controleren"-knop, voor alle panden. Zelfde
   # image als 'app', alleen een ander opstartcommando - geen losse cron-
-  # daemon nodig. Zie scripts/dagelijkse_controle.py.
+  # daemon nodig. Zie scripts/dagelijkse_controle.py (naam is historisch).
   dagelijkse-check:
     build:
       context: ..

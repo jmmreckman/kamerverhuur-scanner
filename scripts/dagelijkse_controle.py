@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Draait dagelijks om 06:00 (Europe/Amsterdam) automatisch de betaalcontrole
-voor alle panden - zie deploy/docker-compose.yml (service 'dagelijkse-check').
+"""Draait elk uur (op het hele uur, Europe/Amsterdam) automatisch de
+betaalcontrole voor alle panden - zie deploy/docker-compose.yml (service
+'dagelijkse-check'; de naam is historisch, dit draait inmiddels elk uur).
 
 Geen losse cron-daemon nodig: dit proces blijft zelf draaien, wacht tot het
-volgende tijdstip, voert de controle uit voor elk pand uit properties.json,
+volgende hele uur, voert de controle uit voor elk pand uit properties.json,
 en begint daarna weer opnieuw te wachten. Eén pand dat faalt (bv. tijdelijk
-geen bunq-verbinding) stopt de rest niet - dat pand wordt gewoon de
-volgende dag opnieuw geprobeerd.
+geen bunq-verbinding) stopt de rest niet - dat pand wordt gewoon het
+volgende uur opnieuw geprobeerd. Dit blijft ruim binnen de gratis quota van
+zowel de Google Sheets API als bunq - geen reden om dit niet vaker te doen
+dan 1x per dag.
 
 De "Nu controleren"-knop op de site blijft daarnaast gewoon werken; dit
 script is puur een automatische aanvulling, geen vervanging.
@@ -25,17 +28,14 @@ from kamerverhuur_scanner.properties import PropertiesError, load_properties
 from kamerverhuur_scanner.runner import run_check
 
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
-_UUR = 6
-_MINUUT = 0
 
 logger = logging.getLogger(__name__)
 
 
 def _seconden_tot_volgende_run(nu: datetime | None = None) -> float:
+    """Tijd tot het eerstvolgende hele uur (bv. 14:23 -> 15:00)."""
     nu = nu or datetime.now(_TIJDZONE)
-    volgende = nu.replace(hour=_UUR, minute=_MINUUT, second=0, microsecond=0)
-    if volgende <= nu:
-        volgende += timedelta(days=1)
+    volgende = nu.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     return (volgende - nu).total_seconds()
 
 
@@ -47,10 +47,10 @@ def _draai_alle_panden(config: Config) -> None:
         return
     for pand in panden:
         try:
-            logger.info("[%s] Dagelijkse automatische controle starten...", pand.slug)
+            logger.info("[%s] Automatische controle starten...", pand.slug)
             run_check(config, pand, dry_run=False)
         except Exception:
-            logger.exception("[%s] Dagelijkse automatische controle mislukt", pand.slug)
+            logger.exception("[%s] Automatische controle mislukt", pand.slug)
 
 
 def main() -> None:
@@ -63,15 +63,13 @@ def main() -> None:
         raise SystemExit(1)
 
     # Meteen bij opstarten ook een controle uitvoeren (bv. na elke nieuwe
-    # deploy) - anders reset elke herstart de wachttijd tot 06:00, en kan de
-    # dagelijkse controle bij vaker deployen op een dag helemaal overgeslagen
-    # worden totdat de container een keer een volle nacht blijft draaien.
-    logger.info("Container gestart - meteen een controle uitvoeren, naast het dagelijkse 06:00-schema.")
+    # deploy) - zo hoeft er nooit tot het volgende hele uur gewacht te worden.
+    logger.info("Container gestart - meteen een controle uitvoeren, naast het uurlijkse schema.")
     _draai_alle_panden(config)
 
     while True:
         wachttijd = _seconden_tot_volgende_run()
-        logger.info("Volgende automatische controle over %.0f minuten (06:00 Nederlandse tijd).", wachttijd / 60)
+        logger.info("Volgende automatische controle over %.0f minuten (op het hele uur).", wachttijd / 60)
         time.sleep(wachttijd)
         _draai_alle_panden(config)
 
