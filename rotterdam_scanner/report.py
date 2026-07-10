@@ -7,29 +7,28 @@ from urllib.parse import quote
 from .pipeline import RunResult
 from .state import ListingState
 
-_STYLE = """
-body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; }
-h1 { font-size: 20px; }
-h2 { font-size: 16px; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-th, td {
-  text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px;
-  vertical-align: top;
-}
-th { background: #f4f4f4; white-space: nowrap; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
-.badge-nieuw { background: #d7f0d7; color: #1a5c1a; }
-.badge-check { background: #fff3cd; color: #7a5c00; }
-.small { color: #666; font-size: 12px; }
-.actie { display: inline-block; white-space: nowrap; }
-.actie-verwijder { color: #a12b2b; }
-"""
-
-# Sommige e-mailclients (o.a. Gmail-mobiel) negeren <style>-blokken deels of geheel, dus
-# de meest kwetsbare cel (lange, aaneengesloten monumentenregister-URL's zonder
-# afbreekpunten) krijgt de word-break/max-width ook als inline style -- dat voorkomt dat
-# die ene kolom de rest van de tabel scheeftrekt, ook als de <style> genegeerd wordt.
-_OPSLAG_TD_STYLE = "word-break: break-word; overflow-wrap: anywhere; max-width: 260px;"
+# Bewust GEEN <style>-blok: veel e-mailclients (o.a. de Gmail-app op mobiel) negeren
+# <style> in de <head> geheel of gedeeltelijk, waardoor opmaak wegvalt en de tabel
+# door elkaar heen kan gaan lopen. Alle opmaak staat daarom inline op elk element --
+# dat is de enige manier die betrouwbaar overal hetzelfde rendert.
+_BODY_STYLE = "font-family: Arial, Helvetica, sans-serif; color: #1a1a1a;"
+_H1_STYLE = "font-size: 20px;"
+_H2_STYLE = "font-size: 16px; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px;"
+_TABLE_STYLE = "border-collapse: collapse; width: 100%; margin-top: 8px;"
+_TH_STYLE = (
+    "text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px; "
+    "vertical-align: top; background: #f4f4f4; white-space: nowrap;"
+)
+_TD_STYLE = "text-align: left; padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 14px; vertical-align: top;"
+# De "Mogelijke huurprijsopslag"-cel bevat soms een lange, aaneengesloten URL zonder
+# afbreekpunten -- zonder begrenzing kan die ene cel de kolombreedte van de hele tabel
+# opblazen, waardoor andere cellen visueel niet meer bij hun kop lijken te horen.
+_TD_OPSLAG_STYLE = _TD_STYLE + " word-break: break-word; overflow-wrap: anywhere; max-width: 260px;"
+_SMALL_STYLE = "color: #666; font-size: 12px;"
+_BADGE_NIEUW_STYLE = "display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #d7f0d7; color: #1a5c1a;"
+_BADGE_CHECK_STYLE = "display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #fff3cd; color: #7a5c00;"
+_ACTIE_STYLE = "display: inline-block; white-space: nowrap;"
+_ACTIE_VERWIJDER_STYLE = _ACTIE_STYLE + " color: #a12b2b;"
 
 _VERWIJDER_BODY = (
     "Automatisch gegenereerd -- niet aanpassen. Verstuur deze mail om dit huis uit "
@@ -57,8 +56,8 @@ def _verwijder_mailto(scanner_email: str, object_id: str) -> str:
 def _acties_html(item: ListingState, scanner_email: str) -> str:
     verwijder_url = _verwijder_mailto(scanner_email, item.object_id)
     return (
-        f'<span class="actie"><a href="{escape(item.url)}">Bekijk advertentie &rarr;</a></span><br>'
-        f'<span class="actie actie-verwijder"><a href="{escape(verwijder_url)}">Verwijderen</a></span>'
+        f'<span style="{_ACTIE_STYLE}"><a href="{escape(item.url)}">Bekijk advertentie &rarr;</a></span><br>'
+        f'<span style="{_ACTIE_VERWIJDER_STYLE}"><a href="{escape(verwijder_url)}">Verwijderen</a></span>'
     )
 
 
@@ -67,52 +66,59 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
     is_nieuw = dagen == 0
     badges = []
     if is_nieuw:
-        badges.append('<span class="badge badge-nieuw">nieuw vandaag</span>')
+        badges.append(f'<span style="{_BADGE_NIEUW_STYLE}">nieuw vandaag</span>')
     if item.woz_check_nodig:
-        badges.append('<span class="badge badge-check">check WOZ-waarde</span>')
+        badges.append(f'<span style="{_BADGE_CHECK_STYLE}">check WOZ-waarde</span>')
 
-    opmerking_html = f'<br><span class="small">{escape(item.opmerking)}</span>' if item.opmerking else ""
+    opmerking_html = f'<br><span style="{_SMALL_STYLE}">{escape(item.opmerking)}</span>' if item.opmerking else ""
     oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "onbekend"
     prijs_per_m2_tekst = _euro(item.prijs_per_m2) + "/m²" if item.prijs_per_m2 else "-"
     opslag_html = (
-        "<br>".join(f'<span class="small">{escape(s)}</span>' for s in item.huurprijsopslag_signalen)
-        or '<span class="small">geen gevonden</span>'
+        "<br>".join(f'<span style="{_SMALL_STYLE}">{escape(s)}</span>' for s in item.huurprijsopslag_signalen)
+        or f'<span style="{_SMALL_STYLE}">geen gevonden</span>'
     )
 
     return f"""
     <tr>
-      <td>{escape(item.weergavenaam)}</td>
-      <td>{escape(item.wijknaam or '-')}</td>
-      <td>{_euro(item.prijs)}</td>
-      <td>{oppervlakte_tekst}</td>
-      <td>{prijs_per_m2_tekst}</td>
-      <td>{dagen} dag{'en' if dagen != 1 else ''}</td>
-      <td>{' '.join(badges)}{opmerking_html}</td>
-      <td style="{_OPSLAG_TD_STYLE}">{opslag_html}</td>
-      <td>{_acties_html(item, scanner_email)}</td>
+      <td style="{_TD_STYLE}">{escape(item.weergavenaam)}</td>
+      <td style="{_TD_STYLE}">{escape(item.wijknaam or '-')}</td>
+      <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
+      <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
+      <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>
+      <td style="{_TD_STYLE}">{dagen} dag{'en' if dagen != 1 else ''}</td>
+      <td style="{_TD_STYLE}">{' '.join(badges)}{opmerking_html}</td>
+      <td style="{_TD_OPSLAG_STYLE}">{opslag_html}</td>
+      <td style="{_TD_STYLE}">{_acties_html(item, scanner_email)}</td>
     </tr>
     """
 
 
-_ACTIEF_TABEL_HEADER = """
-    <tr>
-      <th>Adres</th><th>Wijk</th><th>Vraagprijs</th><th>Oppervlakte</th><th>€/m²</th>
-      <th>Dagen bekend</th><th>Nog te checken</th><th>Mogelijke huurprijsopslag</th><th>Acties</th>
-    </tr>
-"""
+def _actief_tabel_header() -> str:
+    koppen = [
+        "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "€/m²",
+        "Dagen bekend", "Nog te checken", "Mogelijke huurprijsopslag", "Acties",
+    ]  # fmt: skip
+    ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
+    return f"<tr>{ths}</tr>"
 
 
 def _afvallen_row(item: ListingState) -> str:
     return f"""
     <tr>
-      <td><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
-      <td>{escape(item.afvalreden or '-')}</td>
+      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
+      <td style="{_TD_STYLE}">{escape(item.afvalreden or '-')}</td>
     </tr>
     """
 
 
+def _eenvoudige_header(*koppen: str) -> str:
+    ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
+    return f"<tr>{ths}</tr>"
+
+
 def build_html_report(result: RunResult, today: date, scanner_email: str, expiry_days: int = 30) -> str:
     nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
+    actief_header = _actief_tabel_header()
     nieuwe_kansen_rows = "".join(
         _row(item, today, scanner_email) for item in result.alle_actief if item.object_id in nieuw_actief_ids
     )
@@ -128,22 +134,22 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
 
     return f"""<!doctype html>
 <html lang="nl">
-<head><meta charset="utf-8"><style>{_STYLE}</style></head>
-<body>
-  <h1>Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}</h1>
-  <p class="small">
+<head><meta charset="utf-8"></head>
+<body style="{_BODY_STYLE}">
+  <h1 style="{_H1_STYLE}">Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}</h1>
+  <p style="{_SMALL_STYLE}">
     {len(nieuw_actief_ids)} nieuwe kandidaten vandaag, {len(result.alle_actief)} in totaal nog open,
     {len(result.nieuw_afgevallen)} vandaag afgevallen op de geo-checks.
   </p>
 
-  <h2>Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
-  <table>
-    {_ACTIEF_TABEL_HEADER}
-    {nieuwe_kansen_rows or '<tr><td colspan="9">Geen nieuwe kansen vandaag.</td></tr>'}
+  <h2 style="{_H2_STYLE}">Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
+  <table style="{_TABLE_STYLE}">
+    {actief_header}
+    {nieuwe_kansen_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen nieuwe kansen vandaag.</td></tr>'}
   </table>
 
-  <h2>Openstaande kansen ({len(result.alle_actief)})</h2>
-  <p class="small">
+  <h2 style="{_H2_STYLE}">Openstaande kansen ({len(result.alle_actief)})</h2>
+  <p style="{_SMALL_STYLE}">
     Deze huizen zijn NIET afgevallen op nul-quotumgebied, de 50-meter kamerverhuurvergunning-check of
     (waar van toepassing) de automatische WOZ-check voor opkoopbescherming. Gesorteerd op vraagprijs
     per m² (laagste eerst), op basis van de officiële BAG-oppervlakte — die wijkt soms af van wat in de
@@ -153,33 +159,33 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     aan hoe lang een huis al op de lijst staat.
     Klik "Verwijderen" om een huis er zelf direct uit te halen (bijv. als het toch niet voldoet).
   </p>
-  <table>
-    {_ACTIEF_TABEL_HEADER}
-    {actieve_rows or '<tr><td colspan="9">Geen openstaande kansen.</td></tr>'}
+  <table style="{_TABLE_STYLE}">
+    {actief_header}
+    {actieve_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen openstaande kansen.</td></tr>'}
   </table>
 
-  <h2>Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
-  <table>
-    <tr><th>Adres</th><th>Reden</th></tr>
-    {handmatig_verwijderd_rows or '<tr><td colspan="2">Geen.</td></tr>'}
+  <h2 style="{_H2_STYLE}">Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
+  <table style="{_TABLE_STYLE}">
+    {_eenvoudige_header("Adres", "Reden")}
+    {handmatig_verwijderd_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
   </table>
 
-  <h2>Vandaag afgevallen op geo-checks ({len(result.nieuw_afgevallen)})</h2>
-  <table>
-    <tr><th>Adres</th><th>Reden</th></tr>
-    {nieuw_afgevallen_rows or '<tr><td colspan="2">Geen.</td></tr>'}
+  <h2 style="{_H2_STYLE}">Vandaag afgevallen op geo-checks ({len(result.nieuw_afgevallen)})</h2>
+  <table style="{_TABLE_STYLE}">
+    {_eenvoudige_header("Adres", "Reden")}
+    {nieuw_afgevallen_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
   </table>
 
-  <h2>Kon niet automatisch verwerkt worden ({len(result.nieuw_onbekend_adres)})</h2>
-  <p class="small">Bekijk deze zelf even handmatig op funda — het adres kon niet automatisch herleid worden.</p>
-  <table>
-    <tr><th>Link</th><th>Reden</th></tr>
-    {onbekend_rows or '<tr><td colspan="2">Geen.</td></tr>'}
+  <h2 style="{_H2_STYLE}">Kon niet automatisch verwerkt worden ({len(result.nieuw_onbekend_adres)})</h2>
+  <p style="{_SMALL_STYLE}">Bekijk deze zelf even handmatig op funda — het adres kon niet automatisch herleid worden.</p>
+  <table style="{_TABLE_STYLE}">
+    {_eenvoudige_header("Link", "Reden")}
+    {onbekend_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
   </table>
 
   {fouten_html}
 
-  <p class="small" style="margin-top:32px;">
+  <p style="{_SMALL_STYLE} margin-top: 32px;">
     Herinnering: de WOZ-waarde wordt normaal automatisch opgehaald (via de WOZ-API) en huizen
     boven de opkoopbeschermingsgrens vallen dan al niet meer af — de badge "check WOZ-waarde"
     verschijnt alleen als dat een keer niet is gelukt (zie eventuele opmerking bij het huis).
@@ -187,7 +193,7 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     rest — klopt een prijs een keer niet, meld dat dan even. "Verwijderen" opent een kant-en-klare
     e-mail; gewoon versturen (niet aanpassen) en het huis is er de volgende run uit.
   </p>
-  <p class="small">
+  <p style="{_SMALL_STYLE}">
     "Mogelijke huurprijsopslag" checkt automatisch op rijksmonument en rijksbeschermd
     stads-/dorpsgezicht (officiële Rijksdienst-data) en nieuwbouwopslag (BAG-bouwjaar) — deze zijn
     betrouwbaar maar altijd met "mogelijk" gemarkeerd omdat de exacte toepassing van de opslag
