@@ -237,6 +237,31 @@ def test_contract_mailen_onbekend_bestand_geeft_404(app_client):
     assert resp.status_code == 404
 
 
+def test_contract_verwijderen_haalt_hem_uit_het_overzicht(app_client):
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    overzicht = app_client.get("/pand/mahoniestraat/contracten")
+    assert bestandsnaam in overzicht.get_data(as_text=True)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/verwijderen", follow_redirects=True
+    )
+    assert resp.status_code == 200
+    assert "verwijderd" in resp.get_data(as_text=True).lower()
+
+    overzicht = app_client.get("/pand/mahoniestraat/contracten")
+    assert bestandsnaam not in overzicht.get_data(as_text=True)
+    # en is echt weg, niet alleen uit de lijst
+    bekijk_resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}")
+    assert bekijk_resp.status_code == 404
+
+
+def test_contract_verwijderen_van_onbekend_bestand_geeft_geen_fout(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/contracten/bestaat-niet.html/verwijderen", follow_redirects=True
+    )
+    assert resp.status_code == 200
+
+
 # --- Contractsjabloon aanpassen (alleen voor beheerders met alle_panden) ---
 
 

@@ -93,6 +93,24 @@ def test_genereer_pdf_onbekend_bestand_geeft_filenotfound(tmp_path):
         pass
 
 
+def test_verwijder_contract_verwijdert_html_en_metadata(tmp_path):
+    bestandsnaam = contracts.genereer_contract(
+        "mahoniestraat", _pand(), _form(email="bence@example.com"), state_dir=str(tmp_path)
+    )
+    output_dir = tmp_path / "gegenereerde_contracten" / "mahoniestraat"
+    assert (output_dir / bestandsnaam).is_file()
+    assert (output_dir / f"{bestandsnaam}.meta.json").is_file()
+
+    contracts.verwijder_contract("mahoniestraat", bestandsnaam, state_dir=str(tmp_path))
+
+    assert not (output_dir / bestandsnaam).is_file()
+    assert not (output_dir / f"{bestandsnaam}.meta.json").is_file()
+
+
+def test_verwijder_contract_van_onbekend_bestand_doet_niets(tmp_path):
+    contracts.verwijder_contract("mahoniestraat", "bestaat-niet.html", state_dir=str(tmp_path))  # geen crash
+
+
 def test_genereer_contract_bewaart_metadata_voor_mailen(tmp_path):
     bestandsnaam = contracts.genereer_contract(
         "mahoniestraat", _pand(), _form(email="bence@example.com"), state_dir=str(tmp_path)

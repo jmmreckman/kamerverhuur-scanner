@@ -21,6 +21,10 @@
         <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a>
         - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Download als PDF</a>
         - <a href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mailen naar huurder</a>
+        - <form method="post" action="{{ url_for('contract_verwijderen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}"
+                style="display:inline" onsubmit="return confirm('Contract \'{{ c }}\' definitief verwijderen?');">
+            <button type="submit" class="btn-link-danger">Verwijderen</button>
+          </form>
       </li>
     {% endfor %}
     </ul>

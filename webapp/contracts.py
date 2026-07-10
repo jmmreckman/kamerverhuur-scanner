@@ -267,6 +267,19 @@ def list_contracten_voor_kamer(pand_slug: str, kamer: str, state_dir: str = ".")
     return resultaat
 
 
+def verwijder_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> None:
+    """Verwijdert een gegenereerd contract (en de bijbehorende metadata voor
+    het mailscherm, als die er is) - bv. een proefcontract of een verkeerd
+    ingevuld exemplaar dat niet meer relevant is. Doet niets als het bestand
+    niet (meer) bestaat."""
+    veilige_naam = Path(bestandsnaam).name  # voorkomt path traversal (../)
+    if Path(veilige_naam).suffix != ".html":
+        return
+    output_dir = _output_dir(pand_slug, state_dir)
+    (output_dir / veilige_naam).unlink(missing_ok=True)
+    _metadata_pad(output_dir, veilige_naam).unlink(missing_ok=True)
+
+
 def lees_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> str:
     veilige_naam = Path(bestandsnaam).name  # voorkomt path traversal (../)
     pad = _output_dir(pand_slug, state_dir) / veilige_naam

@@ -881,6 +881,13 @@ def create_app(config: Config | None = None) -> Flask:
             bcc_adressen=bcc_adressen,
         )
 
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/verwijderen", methods=["POST"])
+    @login_required
+    def contract_verwijderen(pand_slug: str, bestandsnaam: str):
+        contracts.verwijder_contract(pand_slug, bestandsnaam, config.state_dir)
+        flash(f"Contract '{bestandsnaam}' verwijderd.")
+        return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
     # --- Documenten ---
 
     def _documenten_url(pand_slug: str, folder_id: str | None):

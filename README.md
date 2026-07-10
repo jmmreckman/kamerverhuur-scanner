@@ -254,6 +254,11 @@ daadwerkelijk laat ondertekenen.
   direct te uploaden naar DocHub voor de handtekeningaanvraag. Er is ook nog
   een "Print / opslaan als PDF"-knop die de browser-eigen afdrukfunctie
   gebruikt, als alternatief.
+- **Contract verwijderen**: elk contract op de Contracten-pagina heeft een
+  "Verwijderen"-knop (met een bevestigingsvraag) - handig om een
+  proefcontract of een verkeerd ingevuld exemplaar weer op te ruimen. Dit
+  verwijdert alleen het gegenereerde contractbestand zelf, niet de
+  huurdersgegevens in de sheet.
 - **Concept-contract mailen**: na het genereren kom je direct op een
   mailscherm terecht (ook later nog te vinden via "Mailen naar huurder" bij
   elk contract op de Contracten-pagina) - met het e-mailadres van de huurder
