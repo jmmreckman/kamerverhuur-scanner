@@ -32,28 +32,22 @@ def verstuur_email(
     `cc` is (in tegenstelling tot bcc) zichtbaar voor de ontvanger - gebruikt
     bv. bij het mailen van een concept-huurcontract, waar de beheerders bewust
     zichtbaar meegenomen worden. `bijlagen` is een lijst van
-    (bestandsnaam, mimetype, inhoud)-tuples. `afzender_email` laat een
-    ingelogde beheerder met een eigen mailadres (zie webapp/auth.py: User.email)
-    mail vanaf zijn/haar eigen adres versturen i.p.v. altijd het algemene
-    SMTP_FROM_EMAIL - mits er voor dat adres een wachtwoord in
-    config.smtp_wachtwoorden (SMTP_WACHTWOORDEN in .env) staat, want sommige
-    providers (Strato) staan een From-adres dat niet overeenkomt met het
-    ingelogde account niet toe. Staat er geen wachtwoord voor dat adres, dan
-    valt dit terug op de gewone SMTP_USERNAME/SMTP_FROM_EMAIL."""
+    (bestandsnaam, mimetype, inhoud)-tuples. `afzender_email` overschrijft
+    (indien gegeven) config.smtp_from_email - zo verstuurt een ingelogde
+    beheerder met een eigen mailadres (zie webapp/auth.py: User.email) mail
+    vanaf zijn/haar eigen adres i.p.v. altijd het algemene SMTP_FROM_EMAIL,
+    zonder dat er per beheerder een eigen SMTP-login nodig is (er wordt nog
+    steeds met dezelfde SMTP-credentials ingelogd, alleen de From-header
+    wijzigt)."""
     if not (config.smtp_host and config.smtp_username and config.smtp_password and config.smtp_from_email):
         raise MailError(
             "E-mail versturen is nog niet ingesteld - vul SMTP_HOST, SMTP_PORT, "
             "SMTP_USERNAME, SMTP_PASSWORD en SMTP_FROM_EMAIL in .env in (zie README)."
         )
 
-    eigen_wachtwoord = (config.smtp_wachtwoorden or {}).get(afzender_email) if afzender_email else None
-    if eigen_wachtwoord:
-        login_gebruiker, login_wachtwoord, afzender_adres = afzender_email, eigen_wachtwoord, afzender_email
-    else:
-        login_gebruiker, login_wachtwoord, afzender_adres = config.smtp_username, config.smtp_password, config.smtp_from_email
-
     msg = EmailMessage()
     msg["Subject"] = onderwerp
+    afzender_adres = afzender_email or config.smtp_from_email
     afzender = f"{config.smtp_from_naam} <{afzender_adres}>" if config.smtp_from_naam else afzender_adres
     msg["From"] = afzender
     msg["To"] = aan
@@ -74,12 +68,12 @@ def verstuur_email(
     try:
         if config.smtp_port == 465:
             with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, timeout=20) as smtp:
-                smtp.login(login_gebruiker, login_wachtwoord)
+                smtp.login(config.smtp_username, config.smtp_password)
                 smtp.send_message(msg)
         else:
             with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=20) as smtp:
                 smtp.starttls()
-                smtp.login(login_gebruiker, login_wachtwoord)
+                smtp.login(config.smtp_username, config.smtp_password)
                 smtp.send_message(msg)
     except (smtplib.SMTPException, OSError) as exc:
         raise MailError(f"Versturen via SMTP is mislukt: {exc}") from exc

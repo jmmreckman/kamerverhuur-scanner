@@ -143,40 +143,21 @@ def test_verstuur_email_met_bijlage(mock_smtp_cls):
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
-def test_verstuur_email_afzender_email_logt_in_met_eigen_wachtwoord(mock_smtp_cls):
+def test_verstuur_email_afzender_email_overschrijft_smtp_from_email(mock_smtp_cls):
     # Zodat een ingelogde beheerder met een eigen mailadres (zie
-    # webapp/auth.py: User.email) vanaf dat adres verstuurt. Strato (en
-    # vergelijkbare providers) staan een From-adres dat niet overeenkomt met
-    # het ingelogde account niet toe - dus er wordt ook echt met dát adres
-    # ingelogd, mits er een wachtwoord voor bekend is.
+    # webapp/auth.py: User.email) vanaf dat adres verstuurt, i.p.v. altijd
+    # het algemene SMTP_FROM_EMAIL - nog steeds met dezelfde SMTP-login.
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
-    config = _config(smtp_wachtwoorden={"jurian@steenhub.nl": "geheim-jurian"})
+    config = _config()
 
     verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", afzender_email="jurian@steenhub.nl")
 
     mock_smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=20)
-    smtp_instance.login.assert_called_once_with("jurian@steenhub.nl", "geheim-jurian")
+    smtp_instance.login.assert_called_once_with("info@steenhub.nl", "geheim")  # zelfde SMTP-login
     verzonden_bericht = smtp_instance.send_message.call_args[0][0]
     assert "jurian@steenhub.nl" in verzonden_bericht["From"]
     assert "info@steenhub.nl" not in verzonden_bericht["From"]
-
-
-@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
-def test_verstuur_email_afzender_email_zonder_wachtwoord_valt_terug_op_algemeen_adres(mock_smtp_cls):
-    # Geen wachtwoord bekend voor dit adres in SMTP_WACHTWOORDEN -> niet
-    # zomaar met een afwijkend From-adres versturen (dat weigert/verminkt
-    # Strato toch), gewoon terugvallen op de standaard-afzender.
-    smtp_instance = MagicMock()
-    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
-    config = _config()  # smtp_wachtwoorden is leeg
-
-    verstuur_email(config, "huurder@example.com", "Onderwerp", "Tekst", afzender_email="jurian@steenhub.nl")
-
-    smtp_instance.login.assert_called_once_with("info@steenhub.nl", "geheim")
-    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
-    assert "info@steenhub.nl" in verzonden_bericht["From"]
-    assert "jurian@steenhub.nl" not in verzonden_bericht["From"]
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")

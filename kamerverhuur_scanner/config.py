@@ -6,7 +6,6 @@ in properties.json - zie kamerverhuur_scanner/properties.py.
 """
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -60,13 +59,6 @@ class Config:
     smtp_from_email: str | None = None
     smtp_from_naam: str = "Steenhub"
     email_bcc: list[str] = field(default_factory=list)
-    # Eigen SMTP-inloggegevens per beheerdersmailbox (e-mailadres -> wachtwoord),
-    # zodat mail van die beheerder ook echt vanaf dat adres wordt ingelogd i.p.v.
-    # alleen een ander From-adres te tonen - sommige providers (Strato) staan
-    # een From-adres dat niet overeenkomt met het ingelogde account niet toe.
-    # Staat een adres hier niet in, dan valt verstuur_email() terug op de
-    # gewone SMTP_USERNAME/SMTP_FROM_EMAIL.
-    smtp_wachtwoorden: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
     def load() -> "Config":
@@ -88,21 +80,4 @@ class Config:
             smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", "").strip() or None,
             smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", "Steenhub").strip(),
             email_bcc=[e.strip() for e in os.environ.get("EMAIL_BCC", "").split(",") if e.strip()],
-            smtp_wachtwoorden=_laad_smtp_wachtwoorden(),
         )
-
-
-def _laad_smtp_wachtwoorden() -> dict[str, str]:
-    ruw = os.environ.get("SMTP_WACHTWOORDEN", "").strip()
-    if not ruw:
-        return {}
-    try:
-        gegevens = json.loads(ruw)
-    except json.JSONDecodeError as exc:
-        raise ConfigError(
-            f"SMTP_WACHTWOORDEN in .env is geen geldige JSON: {exc}. "
-            f'Voorbeeld: {{"jurian@steenhub.nl": "wachtwoord1", "justin@steenhub.nl": "wachtwoord2"}}'
-        ) from exc
-    if not isinstance(gegevens, dict):
-        raise ConfigError("SMTP_WACHTWOORDEN in .env moet een JSON-object zijn (e-mailadres -> wachtwoord).")
-    return gegevens
