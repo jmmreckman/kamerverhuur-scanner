@@ -508,9 +508,8 @@ def create_app(config: Config | None = None) -> Flask:
     def huurders(pand_slug: str):
         sheet = SheetClient(config, g.pand)
         kamers = sheet.get_kamers()
-        sheet_url = f"https://docs.google.com/spreadsheets/d/{g.pand.google_sheet_id}/edit"
         return render_template(
-            "huurders.html", kamers=kamers, sheet_url=sheet_url,
+            "huurders.html", kamers=kamers,
             vertrokken_huurders=sheet.get_recent_vertrokken_huurders(),
         )
 
