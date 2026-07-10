@@ -265,6 +265,7 @@ def create_app(config: Config | None = None) -> Flask:
             "google_sheet_worksheet": form.get("google_sheet_worksheet", "").strip() or "Huurders",
             "history_worksheet": form.get("history_worksheet", "").strip() or "Historie",
             "aanmeldingen_worksheet": form.get("aanmeldingen_worksheet", "").strip() or "Aanmeldingen",
+            "vertrokken_worksheet": form.get("vertrokken_worksheet", "").strip() or "Vertrokken",
             "google_drive_folder_id": form.get("google_drive_folder_id", "").strip() or None,
             "bunq_rekening_iban": form.get("bunq_rekening_iban", "").strip().replace(" ", "").upper(),
             "extra_bcc": [e.strip() for e in form.get("extra_bcc", "").split(",") if e.strip()],
@@ -467,7 +468,10 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         kamers = sheet.get_kamers()
         sheet_url = f"https://docs.google.com/spreadsheets/d/{g.pand.google_sheet_id}/edit"
-        return render_template("huurders.html", kamers=kamers, sheet_url=sheet_url)
+        return render_template(
+            "huurders.html", kamers=kamers, sheet_url=sheet_url,
+            vertrokken_huurders=sheet.get_recent_vertrokken_huurders(),
+        )
 
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()
@@ -511,7 +515,12 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
         if request.method == "POST":
-            sheet.update_kamer(row_index=kamer.row_index, **_kamer_form_naar_velden(request.form))
+            velden = _kamer_form_naar_velden(request.form)
+            if kamer.naam and kamer.naam != velden["naam"]:
+                # een andere (of geen) huurder komt voor deze kamer in de plaats -
+                # bewaar de vertrekkende huurder nog even (zie Huurders-pagina).
+                sheet.archiveer_vertrokken_huurder(kamer)
+            sheet.update_kamer(row_index=kamer.row_index, **velden)
             flash(f"Kamer {kamer_naam} bijgewerkt.")
             return redirect(url_for("huurders", pand_slug=pand_slug))
         return render_template("huurder_bewerken.html", kamer=kamer)
@@ -760,7 +769,12 @@ def create_app(config: Config | None = None) -> Flask:
             # niet gewenst is (zie het vinkje op het formulier).
             kamer_naam = request.form.get("kamer", "").strip()
             bestaande = next((k for k in kamers if k.kamer == kamer_naam), None)
+            nieuwe_naam = request.form.get("huurder_naam", "").strip()
             if bestaande is not None and request.form.get("schrijf_terug_naar_sheet") == "on":
+                if bestaande.naam and bestaande.naam != nieuwe_naam:
+                    # een andere huurder komt voor deze kamer in de plaats -
+                    # bewaar de vertrekkende huurder nog even (zie Huurders-pagina).
+                    sheet.archiveer_vertrokken_huurder(bestaande)
                 kale = request.form.get("kale_huurprijs", "").strip()
                 service = request.form.get("servicekosten", "").strip()
                 borg = request.form.get("borg", "").strip()

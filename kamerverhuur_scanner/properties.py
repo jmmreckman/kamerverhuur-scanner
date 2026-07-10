@@ -79,6 +79,7 @@ def load_properties(path: str) -> list[Pand]:
                     google_drive_folder_id=item.get("google_drive_folder_id") or None,
                     bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
                     aanmeldingen_worksheet=item.get("aanmeldingen_worksheet", "Aanmeldingen"),
+                    vertrokken_worksheet=item.get("vertrokken_worksheet", "Vertrokken"),
                     extra_bcc=_normaliseer_extra_bcc(item.get("extra_bcc")),
                     postcode=item.get("postcode", ""),
                     plaats=item.get("plaats", ""),

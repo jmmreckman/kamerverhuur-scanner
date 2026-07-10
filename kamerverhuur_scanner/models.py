@@ -88,6 +88,20 @@ class Verhuurder:
 
 
 @dataclass(frozen=True)
+class VertrokkenHuurder:
+    """Momentopname van een huurder die een kamer heeft verlaten (bv. omdat er
+    een nieuwe huurder voor die kamer is ingevoerd) - blijft nog een tijdje
+    zichtbaar (grijs/gearchiveerd) op de Huurders-pagina, zodat je nog bij
+    hun contactgegevens kunt als er nog iets afgehandeld moet worden."""
+    kamer: str
+    naam: str
+    email: str | None
+    telefoonnummer: str | None
+    contract_einddatum: str | None
+    vertrokken_op: date  # moment waarop deze huurder als 'vertrokken' is gearchiveerd
+
+
+@dataclass(frozen=True)
 class Pand:
     slug: str  # korte code in URL's, bv. "mahoniestraat"
     naam: str  # weergavenaam, bv. "Mahoniestraat 15"
@@ -97,6 +111,7 @@ class Pand:
     google_drive_folder_id: str | None
     bunq_rekening_iban: str
     aanmeldingen_worksheet: str = "Aanmeldingen"
+    vertrokken_worksheet: str = "Vertrokken"
     # Extra BCC-adressen die alleen voor dít pand meegaan bij herinnering/
     # ingebrekestelling-mails (bv. een mede-eigenaar van alleen dit pand) -
     # naast de adressen in EMAIL_BCC (.env), die voor alle panden gelden.

@@ -138,6 +138,16 @@ nodig.
   niet), met dezelfde BCC/Reply-To-instelling als de betaalherinneringen.
   Huurders zonder bekend e-mailadres worden overgeslagen, met een melding
   wie dat waren.
+- **Voormalige huurders blijven nog even zichtbaar** - zodra een kamer een
+  andere naam krijgt (via een nieuw huurcontract, of handmatig bij Huurders
+  bewerken) wordt de vertrekkende huurder automatisch gearchiveerd in een
+  apart "Vertrokken"-tabblad (naam, contactgegevens, contract-einddatum,
+  vertrekmoment). Op de Huurders-pagina verschijnt daaronder een grijze
+  sectie "Voormalige huurders (recent vertrokken)" met hun gegevens (mailen/
+  bellen blijft mogelijk), tot **1 maand na hun contract-einddatum** - daarna
+  verdwijnt die regel vanzelf uit dat overzicht (de sheetregel zelf blijft
+  gewoon staan, wordt alleen niet meer getoond). Werkt onafhankelijk van of
+  er intussen alweer een nieuwe huurder in diezelfde kamer zit.
 - **Contracten** - vult een sjabloon in met de pand- en huurdersgegevens tot een
   concept-huurcontract, inclusief echte **PDF-download** (handig om direct te
   uploaden naar DocHub voor de handtekeningaanvraag). **Let op:** dit is een

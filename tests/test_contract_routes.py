@@ -15,6 +15,9 @@ KAMER_1 = Tenant(row_index=2, naam="Bence Neumayer", kamer="1", verwacht_bedrag=
 
 
 class FakeSheetClient:
+    laatste_update = None
+    archiveer_aangeroepen_met = None
+
     def __init__(self, _config, _pand):
         pass
 
@@ -26,6 +29,12 @@ class FakeSheetClient:
 
     def update_kamer(self, **kwargs):
         FakeSheetClient.laatste_update = kwargs
+
+    def archiveer_vertrokken_huurder(self, kamer):
+        FakeSheetClient.archiveer_aangeroepen_met = kamer
+
+    def get_recent_vertrokken_huurders(self):
+        return []
 
 
 @pytest.fixture
@@ -73,6 +82,7 @@ def test_contract_nieuw_toont_kamerselectie(app_client):
 
 
 def test_contract_genereren_schrijft_gegevens_terug_naar_sheet(app_client):
+    FakeSheetClient.archiveer_aangeroepen_met = None
     resp = app_client.post(
         "/pand/mahoniestraat/contracten/nieuw",
         data={
@@ -93,6 +103,24 @@ def test_contract_genereren_schrijft_gegevens_terug_naar_sheet(app_client):
     assert update["studentnummer"] == "1124601"
     assert update["borgsteller_naam"] == "Tamás Neumayer"
     assert update["contract_startdatum"] == "2026-07-01"
+    # zelfde huurder, alleen bijgewerkte gegevens - geen "vertrokken huurder" archivering
+    assert FakeSheetClient.archiveer_aangeroepen_met is None
+
+
+def test_contract_genereren_voor_andere_huurder_archiveert_de_vertrekkende(app_client):
+    FakeSheetClient.archiveer_aangeroepen_met = None
+    resp = app_client.post(
+        "/pand/mahoniestraat/contracten/nieuw",
+        data={
+            "kamer": "1", "huurder_naam": "Nieuwe Huurder", "huurprijs": "919,00",
+            "ingangsdatum": "2026-07-01", "schrijf_terug_naar_sheet": "on",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    gearchiveerd = FakeSheetClient.archiveer_aangeroepen_met
+    assert gearchiveerd is not None
+    assert gearchiveerd.naam == "Bence Neumayer"  # de oude huurder van kamer 1, niet de nieuwe
 
 
 def test_contract_genereren_zonder_vinkje_laat_sheet_ongemoeid(app_client):

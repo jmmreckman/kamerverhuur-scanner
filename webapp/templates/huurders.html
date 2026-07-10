@@ -32,4 +32,27 @@
   </table>
   </div>
 </div>
+
+{% if vertrokken_huurders %}
+<div class="card">
+  <h2 class="muted">Voormalige huurders (recent vertrokken)</h2>
+  <p class="muted">Blijft hier nog tot 1 maand na de contract-einddatum staan, daarna verdwijnt dit
+     vanzelf. Contactgegevens blijven bruikbaar (bv. mailen/bellen) als er nog iets af te handelen is.</p>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Kamer</th><th>Naam</th><th>Mail</th><th>Telefoonnummer</th><th>Contract einddatum</th><th>Vertrokken op</th></tr>
+    {% for v in vertrokken_huurders %}
+    <tr style="color: var(--muted)">
+      <td>{{ v.kamer }}</td>
+      <td>{{ v.naam }} <span class="pil pil-neutral">voormalig</span></td>
+      <td>{% if v.email %}<a href="mailto:{{ v.email }}">{{ v.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if v.telefoonnummer %}<a href="tel:{{ v.telefoonnummer }}">{{ v.telefoonnummer }}</a>{% else %}-{% endif %}</td>
+      <td>{{ v.contract_einddatum or "-" }}</td>
+      <td>{{ v.vertrokken_op.strftime("%d-%m-%Y") }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

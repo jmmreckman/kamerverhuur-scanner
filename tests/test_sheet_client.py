@@ -1,6 +1,6 @@
 """Tests voor de kolomparsing/-opslag van SheetClient, zonder een echte Google
 Sheets-verbinding: we bouwen een SheetClient met een neppe worksheet."""
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from kamerverhuur_scanner.models import Pand, Payment, Status, Tenant, TenantResult
@@ -62,6 +62,17 @@ def _sheet_client_met_historie(historie_rows) -> tuple[SheetClient, FakeWorkshee
     historie_ws = FakeWorksheet(historie_rows)
     client._history_worksheet = lambda: historie_ws
     return client, historie_ws
+
+
+def _sheet_client_met_vertrokken(vertrokken_rows) -> tuple[SheetClient, FakeWorksheet]:
+    client = object.__new__(SheetClient)
+    client._pand = Pand(
+        slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
+        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+    )
+    vertrokken_ws = FakeWorksheet(vertrokken_rows)
+    client._vertrokken_worksheet = lambda: vertrokken_ws
+    return client, vertrokken_ws
 
 
 HISTORIE_HEADER = ["Maand", "Kamer", "Huurder", "Verwacht bedrag", "Ontvangen bedrag", "Status", "Betaaldatum"]
@@ -420,3 +431,106 @@ def test_verwijder_geschiedenis_voor_instapdatum_zonder_oude_regels_doet_niets()
 
     assert verwijderd == 0
     assert ws.get_all_values() == rows
+
+
+# --- Vertrokken huurders (archief, blijft nog even zichtbaar op Huurders-pagina) ---
+
+VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
+
+
+def test_archiveer_vertrokken_huurder_voegt_rij_toe():
+    client, ws = _sheet_client_met_vertrokken([VERTROKKEN_HEADER])
+    kamer = Tenant(
+        row_index=2, naam="Bence Neumayer", kamer="1", verwacht_bedrag=Decimal("919.00"),
+        email="bence@example.com", telefoonnummer="0612345678", contract_einddatum="01-07-2026",
+    )
+
+    client.archiveer_vertrokken_huurder(kamer)
+
+    assert len(ws.appended_rows) == 1
+    rij = ws.appended_rows[0]
+    assert rij[0] == "1"
+    assert rij[1] == "Bence Neumayer"
+    assert rij[2] == "bence@example.com"
+    assert rij[3] == "0612345678"
+    assert rij[4] == "01-07-2026"
+    assert rij[5] == date.today().strftime("%d-%m-%Y")
+
+
+def test_archiveer_vertrokken_huurder_zonder_naam_doet_niets():
+    client, ws = _sheet_client_met_vertrokken([VERTROKKEN_HEADER])
+    lege_kamer = Tenant(row_index=3, naam="", kamer="2", verwacht_bedrag=Decimal("650.00"))
+
+    client.archiveer_vertrokken_huurder(lege_kamer)
+
+    assert ws.appended_rows == []
+
+
+def test_get_recent_vertrokken_huurders_binnen_termijn_wordt_getoond():
+    einddatum = (date.today() - timedelta(days=10)).strftime("%d-%m-%Y")
+    vertrokken_op = date.today().strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Bence Neumayer", "bence@example.com", "0612345678", einddatum, vertrokken_op],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    resultaat = client.get_recent_vertrokken_huurders()
+
+    assert len(resultaat) == 1
+    assert resultaat[0].naam == "Bence Neumayer"
+    assert resultaat[0].kamer == "1"
+    assert resultaat[0].email == "bence@example.com"
+    assert resultaat[0].contract_einddatum == einddatum
+
+
+def test_get_recent_vertrokken_huurders_buiten_termijn_verdwijnt_vanzelf():
+    # meer dan 31 dagen ná de contract-einddatum - moet niet meer getoond worden
+    einddatum = (date.today() - timedelta(days=40)).strftime("%d-%m-%Y")
+    vertrokken_op = (date.today() - timedelta(days=40)).strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Bence Neumayer", "bence@example.com", "0612345678", einddatum, vertrokken_op],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    assert client.get_recent_vertrokken_huurders() == []
+
+
+def test_get_recent_vertrokken_huurders_zonder_einddatum_gebruikt_vertrokken_op():
+    vertrokken_op = (date.today() - timedelta(days=5)).strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Dzonatans", "", "", "", vertrokken_op],  # geen bekende contract-einddatum
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    resultaat = client.get_recent_vertrokken_huurders()
+
+    assert len(resultaat) == 1
+    assert resultaat[0].contract_einddatum is None
+
+
+def test_get_recent_vertrokken_huurders_onherkenbare_rij_wordt_overgeslagen():
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Bence Neumayer", "", "", "", "geen-datum"],  # onherkenbare 'vertrokken op'
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    assert client.get_recent_vertrokken_huurders() == []
+
+
+def test_get_recent_vertrokken_huurders_sorteert_meest_recent_eerst():
+    oud = (date.today() - timedelta(days=20)).strftime("%d-%m-%Y")
+    nieuw = (date.today() - timedelta(days=1)).strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Oudste", "", "", "", oud],
+        ["2", "Nieuwste", "", "", "", nieuw],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    resultaat = client.get_recent_vertrokken_huurders()
+
+    assert [v.naam for v in resultaat] == ["Nieuwste", "Oudste"]

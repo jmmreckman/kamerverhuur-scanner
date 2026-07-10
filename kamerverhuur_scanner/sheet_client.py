@@ -38,18 +38,30 @@ zichtbaar of iemand laat betaalde, ook al is de kamer inmiddels gewoon
 
 En een "Aanmeldingen" tabblad (ook automatisch aangemaakt) waar reacties op de
 publieke aanbodpagina in terechtkomen - zie webapp/aanbod.py.
+
+En een "Vertrokken" tabblad (ook automatisch aangemaakt) met een
+momentopname van elke huurder die een kamer verlaat doordat er een andere
+naam voor die kamer wordt ingevoerd (via een nieuw huurcontract of
+handmatig bij Huurders bewerken) - blijft nog een maand na hun
+contracteinddatum zichtbaar op de Huurders-pagina, zie
+archiveer_vertrokken_huurder()/get_recent_vertrokken_huurders() hieronder.
 """
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import gspread
 
 from .config import Config
-from .models import Aanmelding, HistorieRegel, Pand, Payment, Status, Tenant, TenantResult
+from .models import Aanmelding, HistorieRegel, Pand, Payment, Status, Tenant, TenantResult, VertrokkenHuurder
 from .utils import parse_bedrag
+
+# Hoelang een vertrokken huurder na hun contracteinddatum nog gearchiveerd
+# blijft getoond op de Huurders-pagina - een grove "1 maand" (geen precieze
+# kalendermaand-berekening nodig voor een archiveringstermijn).
+_VERTROKKEN_ZICHTBAAR_DAGEN = 31
 
 COL_KAMER = 1
 COL_NAAM = 2
@@ -137,6 +149,8 @@ _AANMELDINGEN_HEADER = [
     "Video-bel nummer", "Bewijs inschrijving",
 ]
 
+_VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
+
 
 def _optioneel(waarde: str) -> str | None:
     return waarde.strip() or None
@@ -148,6 +162,16 @@ def _naar_ja_nee(waarde: bool) -> str:
 
 def _naar_bool(waarde: str) -> bool:
     return waarde.strip().upper() in {"JA", "TRUE", "WAAR", "1"}
+
+
+def _parse_contract_einddatum(tekst: str) -> date | None:
+    """Contract einddatum (kolom F) is vrije tekst - kan een datum
+    dd-mm-jjjj zijn, of iets als 'onbepaalde tijd'. Geeft None terug als het
+    geen (herkenbare) datum is."""
+    try:
+        return datetime.strptime(tekst.strip(), "%d-%m-%Y").date()
+    except ValueError:
+        return None
 
 
 def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
@@ -509,6 +533,62 @@ class SheetClient:
                 title=self._pand.aanmeldingen_worksheet, rows=1000, cols=len(_AANMELDINGEN_HEADER)
             )
             ws.append_row(_AANMELDINGEN_HEADER, value_input_option="USER_ENTERED")
+            return ws
+
+    def archiveer_vertrokken_huurder(self, kamer: Tenant) -> None:
+        """Legt een momentopname vast van een huurder die een kamer verlaat
+        (aangeroepen vlak vóórdat hun gegevens door een nieuwe/andere naam
+        worden overschreven) - blijft nog een tijdje zichtbaar op de
+        Huurders-pagina, zie get_recent_vertrokken_huurders(). Doet niets als
+        de kamer al leeg stond (geen naam om te archiveren)."""
+        if not kamer.naam:
+            return
+        ws = self._vertrokken_worksheet()
+        row = [
+            kamer.kamer, kamer.naam, kamer.email or "", kamer.telefoonnummer or "",
+            kamer.contract_einddatum or "", date.today().strftime("%d-%m-%Y"),
+        ]
+        ws.append_row(row, value_input_option="RAW")
+
+    def get_recent_vertrokken_huurders(self) -> list[VertrokkenHuurder]:
+        """Vertrokken huurders die nog binnen de archiveringstermijn vallen
+        (_VERTROKKEN_ZICHTBAAR_DAGEN, gerekend vanaf hun contract-einddatum,
+        of - als die onbekend/onherkenbaar is - vanaf het moment van
+        archiveren). Oudere regels blijven gewoon in de sheet staan (voor de
+        volledigheid) maar worden hier niet meer teruggegeven - zo
+        'verdwijnt' een vertrokken huurder vanzelf zonder dat er iets
+        verwijderd hoeft te worden."""
+        ws = self._vertrokken_worksheet()
+        rows = ws.get_all_values()[1:]  # koprij overslaan
+        vandaag = date.today()
+        resultaat = []
+        for row in rows:
+            row = row + [""] * (6 - len(row))
+            kamer, naam, mail, telefoon, contract_einddatum, vertrokken_op_tekst = (c.strip() for c in row[:6])
+            if not naam:
+                continue
+            try:
+                vertrokken_op = datetime.strptime(vertrokken_op_tekst, "%d-%m-%Y").date()
+            except ValueError:
+                continue  # onherkenbare/handmatig aangepaste rij overslaan
+            referentiedatum = _parse_contract_einddatum(contract_einddatum) or vertrokken_op
+            if vandaag > referentiedatum + timedelta(days=_VERTROKKEN_ZICHTBAAR_DAGEN):
+                continue
+            resultaat.append(VertrokkenHuurder(
+                kamer=kamer, naam=naam, email=mail or None, telefoonnummer=telefoon or None,
+                contract_einddatum=contract_einddatum or None, vertrokken_op=vertrokken_op,
+            ))
+        resultaat.sort(key=lambda v: v.vertrokken_op, reverse=True)
+        return resultaat
+
+    def _vertrokken_worksheet(self):
+        try:
+            return self._spreadsheet.worksheet(self._pand.vertrokken_worksheet)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = self._spreadsheet.add_worksheet(
+                title=self._pand.vertrokken_worksheet, rows=1000, cols=len(_VERTROKKEN_HEADER)
+            )
+            ws.append_row(_VERTROKKEN_HEADER, value_input_option="RAW")
             return ws
 
     @staticmethod

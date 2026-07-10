@@ -27,6 +27,9 @@ class FakeSheetClient:
     def get_kamers(self):
         return [KAMER_1, KAMER_2, KAMER_ZONDER_MAIL]
 
+    def get_recent_vertrokken_huurders(self):
+        return []
+
 
 @pytest.fixture
 def verstuurde_mails(monkeypatch):
