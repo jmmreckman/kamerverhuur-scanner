@@ -43,10 +43,6 @@ def app_client(tmp_path, monkeypatch):
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
     monkeypatch.chdir(tmp_path)
 
-    contracten_dir = tmp_path / "gegenereerde_contracten"
-    import webapp.contracts as contracts
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", contracten_dir)
-
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
@@ -250,7 +246,7 @@ def test_contractsjabloon_bewerken_toont_standaardtekst(app_client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "Article 1" in body  # uit de standaardtekst
-    assert "Terugzetten naar standaardsjabloon" not in body  # nog geen aanpassing actief
+    assert "Terugzetten naar standaardtekst" not in body  # nog geen aanpassing actief
 
 
 def test_contractsjabloon_opslaan_en_gebruikt_bij_nieuw_contract(app_client):
@@ -269,7 +265,7 @@ def test_contractsjabloon_opslaan_en_gebruikt_bij_nieuw_contract(app_client):
 
     # en het bewerkscherm toont nu de "terugzetten"-optie
     bewerk_resp = app_client.get("/beheer/contractsjabloon")
-    assert "Terugzetten naar standaardsjabloon" in bewerk_resp.get_data(as_text=True)
+    assert "Terugzetten naar standaardtekst" in bewerk_resp.get_data(as_text=True)
 
 
 def test_contractsjabloon_ongeldige_syntax_wordt_niet_opgeslagen(app_client):
@@ -282,7 +278,7 @@ def test_contractsjabloon_ongeldige_syntax_wordt_niet_opgeslagen(app_client):
     assert "ongeldige" in resp.get_data(as_text=True).lower()
 
     bewerk_resp = app_client.get("/beheer/contractsjabloon")
-    assert "Terugzetten naar standaardsjabloon" not in bewerk_resp.get_data(as_text=True)
+    assert "Terugzetten naar standaardtekst" not in bewerk_resp.get_data(as_text=True)
 
 
 def test_contractsjabloon_terugzetten(app_client):
@@ -291,7 +287,7 @@ def test_contractsjabloon_terugzetten(app_client):
     assert resp.status_code == 200
     assert "teruggezet" in resp.get_data(as_text=True).lower()
     bewerk_resp = app_client.get("/beheer/contractsjabloon")
-    assert "Terugzetten naar standaardsjabloon" not in bewerk_resp.get_data(as_text=True)
+    assert "Terugzetten naar standaardtekst" not in bewerk_resp.get_data(as_text=True)
 
 
 def test_contractsjabloon_vereist_alle_panden_toegang(app_client, tmp_path):

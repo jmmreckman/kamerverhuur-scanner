@@ -486,6 +486,33 @@ form textarea { min-height: 6rem; }
   font-size: 0.9rem;
 }
 
+/* ---------- Contractsjabloon: tekstverwerker-editor ---------- */
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.editor-toolbar .btn { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+
+.editor-oppervlak {
+  min-height: 24rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text);
+  line-height: 1.5;
+}
+.editor-oppervlak:focus { outline: none; border-color: var(--primary); background: var(--surface); }
+.editor-oppervlak h2 { font-size: 1.05rem; margin: 1.1rem 0 0.3rem; }
+.editor-oppervlak h2:first-child { margin-top: 0; }
+.editor-oppervlak p { margin: 0.4rem 0; }
+.editor-oppervlak ul { margin: 0.4rem 0; padding-left: 1.3rem; }
+
 /* ---------- Breadcrumb ---------- */
 
 .breadcrumb {

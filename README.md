@@ -265,17 +265,30 @@ daadwerkelijk laat ondertekenen.
   Bold-sleutel (actief vanaf de ingangsdatum). Onderwerp en tekst zijn nog
   aan te passen voordat je 'm verstuurt. De PDF van het contract gaat
   automatisch als bijlage mee, verzonden vanaf info@steenhub.nl, met de
-  beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) zichtbaar in CC.
+  beheerders (EMAIL_BCC + het pand-specifieke `extra_bcc`) blind (BCC)
+  meegenomen - de huurder ziet deze adressen niet.
 - **Contractsjabloon aanpassen** (alleen voor beheerders met toegang tot alle
   panden): via **Contracten > Contractsjabloon aanpassen** pas je de
-  basistekst - alle artikelen - van het huurcontract zelf aan, in gewone HTML
-  met Jinja2-variabelen ertussen (bv. `{{ huurprijs }}`). Geldt voor **alle**
-  panden. De pagina valideert de Jinja2-syntax vóór het opslaan (een kapotte
-  `{% if %}` wordt geweigerd, de vorige versie blijft dan gewoon actief), en
-  er staat een "Terugzetten naar standaardsjabloon"-knop voor als je toch
-  iets wilt herstellen. De aanpassing wordt in `STATE_DIR` opgeslagen, overleeft
-  dus een herbuild/redeploy. Test een wijziging altijd eerst met een
+  artikelen van het huurcontract zelf aan, in een simpel tekstverwerker-
+  scherm (typen + koppen/vet/cursief/lijst via knoppen, geen HTML-code te
+  zien) - de vaste opmaak eromheen (CSS, kop met partijengegevens,
+  handtekeningenblok) staat hier niet bij en blijft ongewijzigd. Geldt voor
+  **alle** panden. Tussen de tekst staan nog wel stukjes zoals
+  `{{ huurprijs }}` en `{% if ... %}` - dat zijn de plekken waar automatisch
+  gegevens worden ingevuld of een stuk tekst automatisch aan/uit gaat (bv.
+  alleen tonen als er een borgsteller is); laat die intact. De pagina
+  valideert de Jinja2-syntax vóór het opslaan (een kapotte `{% if %}` wordt
+  geweigerd, de vorige versie blijft dan gewoon actief), en er staat een
+  "Terugzetten naar standaardtekst"-knop voor als je toch iets wilt
+  herstellen. De aanpassing wordt in `STATE_DIR` opgeslagen, overleeft dus
+  een herbuild/redeploy. Test een wijziging altijd eerst met een
   proefcontract voordat je 'm naar een echte huurder stuurt.
+- **Gegenereerde contracten overleven een redeploy**: net als de
+  contractsjabloon-aanpassing staan gegenereerde contracten (HTML + de
+  metadata voor het mailscherm) onder `STATE_DIR` (dus `/app/data` op de
+  VPS, gekoppeld aan een volume in docker-compose.yml), niet los in de
+  containercode - ze gaan dus niet verloren zodra `docker compose up -d
+  --build` een nieuwe container opbouwt.
 - De WWS-puntentelling (Annex 1, verplicht volgens de Wet goed
   verhuurderschap) wordt niet automatisch gegenereerd - reken deze zelf uit
   en voeg 'm apart toe als bijlage.

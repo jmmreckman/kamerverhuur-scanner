@@ -341,7 +341,7 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             inhoud = request.form.get("sjabloon", "")
             try:
-                contracts.schrijf_sjabloon(config.state_dir, inhoud)
+                contracts.schrijf_artikelen(config.state_dir, inhoud)
             except contracts.SjabloonFout as exc:
                 flash(str(exc))
                 return render_template(
@@ -352,7 +352,7 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Contractsjabloon opgeslagen - geldt voor alle nieuw te genereren contracten.")
             return redirect(url_for("contractsjabloon_bewerken"))
         return render_template(
-            "contractsjabloon.html", sjabloon=contracts.lees_sjabloon(config.state_dir),
+            "contractsjabloon.html", sjabloon=contracts.lees_artikelen(config.state_dir),
             variabelen=contracts.SJABLOON_VARIABELEN,
             aangepast=contracts.heeft_aangepast_sjabloon(config.state_dir),
         )
@@ -668,7 +668,7 @@ def create_app(config: Config | None = None) -> Flask:
             geschiedenis=list(reversed(geschiedenis)),
             betrouwbaarheid=bereken_betrouwbaarheid(geschiedenis),
             cache_status=cache_status,
-            contracten=contracts.list_contracten_voor_kamer(pand_slug, kamer_naam),
+            contracten=contracts.list_contracten_voor_kamer(pand_slug, kamer_naam, config.state_dir),
             aanzeg_status=bereken_aanzeg_status(kamer.contract_einddatum),
         )
 
@@ -754,7 +754,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/pand/<pand_slug>/contracten")
     @login_required
     def contracten_overzicht(pand_slug: str):
-        return render_template("contracten.html", contracten=contracts.list_contracten(pand_slug))
+        return render_template("contracten.html", contracten=contracts.list_contracten(pand_slug, config.state_dir))
 
     @app.route("/pand/<pand_slug>/contracten/nieuw", methods=["GET", "POST"])
     @login_required
@@ -810,7 +810,7 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def contract_bekijken(pand_slug: str, bestandsnaam: str):
         try:
-            html = contracts.lees_contract(pand_slug, bestandsnaam)
+            html = contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
         return Response(html, mimetype="text/html")
@@ -819,7 +819,7 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def contract_pdf(pand_slug: str, bestandsnaam: str):
         try:
-            pdf = contracts.genereer_pdf(pand_slug, bestandsnaam)
+            pdf = contracts.genereer_pdf(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
         except contracts.PdfGenerationError:
@@ -835,10 +835,10 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def contract_mailen(pand_slug: str, bestandsnaam: str):
         try:
-            contracts.lees_contract(pand_slug, bestandsnaam)
+            contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
-        metadata = contracts.lees_metadata(pand_slug, bestandsnaam)
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
         bcc_adressen = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
 
         if request.method == "POST":
@@ -852,7 +852,7 @@ def create_app(config: Config | None = None) -> Flask:
                     aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
             try:
-                pdf = contracts.genereer_pdf(pand_slug, bestandsnaam)
+                pdf = contracts.genereer_pdf(pand_slug, bestandsnaam, config.state_dir)
             except contracts.PdfGenerationError:
                 flash("PDF-generatie is mislukt - het contract is niet gemaild.")
                 return render_template(

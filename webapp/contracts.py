@@ -1,12 +1,19 @@
 """Genereert een concept-huurcontract (HTML, met een echte PDF-export via
 xhtml2pdf) op basis van het sjabloon in contract_templates/. Elk pand heeft
-zijn eigen submap onder gegenereerde_contracten/.
+zijn eigen submap onder gegenereerde_contracten/, die - net als de aangepaste
+sjabloontekst - onder STATE_DIR staat (dus /app/data in productie, gekoppeld
+aan een volume in docker-compose.yml) zodat gegenereerde contracten een
+herbuild/redeploy overleven in plaats van te verdwijnen zodra de container
+opnieuw wordt opgebouwd.
 
-Het sjabloon (basistekst + artikelen, geldt voor alle panden) is via de site
-zelf aan te passen ("Contractsjabloon aanpassen", zie lees_sjabloon()/
-schrijf_sjabloon() hieronder) - de aangepaste versie wordt in STATE_DIR
-opgeslagen (overleeft dus een herbuild/redeploy) en overschrijft dan de
-meegeleverde standaardtekst uit contract_templates/.
+De artikelen (het middenstuk van het contract, tussen de ARTIKELEN:START/
+ARTIKELEN:EINDE-markeringen in contract_templates/) zijn via de site zelf aan
+te passen ("Contractsjabloon aanpassen", zie lees_artikelen()/
+schrijf_artikelen() hieronder) in een simpel tekstverwerker-scherm (geen HTML/
+CSS-code te zien) - de aangepaste versie wordt in STATE_DIR opgeslagen
+(overleeft dus een herbuild/redeploy) en overschrijft dan de meegeleverde
+standaardartikelen. De vaste opmaak eromheen (CSS, kop met partijengegevens,
+handtekeningenblok) blijft ongewijzigd en is niet via de site te bewerken.
 
 BELANGRIJK: het meegeleverde sjabloon is gebaseerd op een echt gebruikt
 huurcontract, maar is geen juridisch gecontroleerde huurovereenkomst op zich.
@@ -31,7 +38,6 @@ from kamerverhuur_scanner.models import Pand
 from .reminders import AFZENDER_NAAM
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "contract_templates"
-BASIS_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "gegenereerde_contracten"
 STANDAARD_SJABLOON_NAAM = "huurovereenkomst_voorbeeld.html"
 
 _env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=select_autoescape())
@@ -48,6 +54,10 @@ SJABLOON_VARIABELEN = [
 ]
 
 
+_ARTIKELEN_START = "<!-- ARTIKELEN:START -->"
+_ARTIKELEN_EINDE = "<!-- ARTIKELEN:EINDE -->"
+
+
 class SjabloonFout(RuntimeError):
     """Het opgegeven sjabloon is geen geldige Jinja2-template (bv. een niet-
     gesloten {% if %} of een tikfout in een {{ variabele }})."""
@@ -58,47 +68,79 @@ def _sjabloon_override_pad(state_dir: str) -> Path:
 
 
 def lees_standaard_sjabloon() -> str:
-    """De meegeleverde standaardtekst (contract_templates/), ongeacht of er
-    een aangepaste versie bestaat - gebruikt voor "Terugzetten naar
-    standaard" en om op het bewerkscherm te vergelijken."""
+    """De volledige meegeleverde standaardtekst (contract_templates/),
+    inclusief de vaste opmaak (CSS, partijentabel, handtekeningenblok) - dit
+    is wat er daadwerkelijk gerenderd wordt, niet wat een beheerder op het
+    bewerkscherm te zien krijgt (zie lees_standaard_artikelen())."""
     return (TEMPLATE_DIR / STANDAARD_SJABLOON_NAAM).read_text()
 
 
-def lees_sjabloon(state_dir: str) -> str:
-    """De tekst die daadwerkelijk gebruikt wordt om een contract te
-    genereren: de aangepaste versie als die bestaat, anders de standaard."""
+def _split_sjabloon(html: str) -> tuple[str, str, str]:
+    """Splitst de volledige sjabloontekst in (vaste kop-/partijen-HTML, de
+    bewerkbare artikelen, vaste handtekeningen-HTML) aan de hand van de
+    ARTIKELEN:START/EINDE-markeringen in het standaardsjabloon."""
+    voor, _, rest = html.partition(_ARTIKELEN_START)
+    artikelen, _, na = rest.partition(_ARTIKELEN_EINDE)
+    return voor, artikelen.strip("\n"), na
+
+
+def lees_standaard_artikelen() -> str:
+    """Alleen de bewerkbare artikelen (Artikel 1 t/m de aanvullende
+    afspraken) uit de meegeleverde standaardtekst - dit is wat een beheerder
+    ziet en bewerkt op het "Contractsjabloon aanpassen"-scherm."""
+    _voor, artikelen, _na = _split_sjabloon(lees_standaard_sjabloon())
+    return artikelen
+
+
+def lees_artikelen(state_dir: str) -> str:
+    """De artikelen die daadwerkelijk gebruikt worden om een contract te
+    genereren: de aangepaste versie als die bestaat, anders de standaard.
+    Een override die (nog) een heel document is - van vóór dit scherm een
+    tekstverwerker-editor voor alleen de artikelen werd - wordt genegeerd,
+    zodat die niet dubbel in de opmaak terechtkomt."""
     override = _sjabloon_override_pad(state_dir)
     if override.is_file():
-        return override.read_text()
-    return lees_standaard_sjabloon()
+        inhoud = override.read_text()
+        if "<!doctype" not in inhoud.lower():
+            return inhoud
+    return lees_standaard_artikelen()
 
 
 def heeft_aangepast_sjabloon(state_dir: str) -> bool:
     return _sjabloon_override_pad(state_dir).is_file()
 
 
-def schrijf_sjabloon(state_dir: str, inhoud: str) -> None:
-    """Slaat een aangepast sjabloon op - valideert eerst of het geldige
-    Jinja2-syntax is (ontbrekende {% endif %}'s e.d.), zodat een tikfout niet
-    alle toekomstige contractgeneraties kapotmaakt."""
+def schrijf_artikelen(state_dir: str, artikelen_html: str) -> None:
+    """Slaat aangepaste artikelen op - valideert eerst (samen met de vaste
+    opmaak eromheen) of het geldige Jinja2-syntax is (ontbrekende
+    {% endif %}'s e.d.), zodat een tikfout niet alle toekomstige
+    contractgeneraties kapotmaakt."""
+    voor, _standaard_artikelen, na = _split_sjabloon(lees_standaard_sjabloon())
     try:
-        _env.from_string(inhoud)
+        _env.from_string(voor + artikelen_html + na)
     except TemplateSyntaxError as exc:
         raise SjabloonFout(f"Ongeldige sjabloon-syntax: {exc}") from exc
-    _sjabloon_override_pad(state_dir).write_text(inhoud)
+    _sjabloon_override_pad(state_dir).write_text(artikelen_html)
 
 
 def verwijder_sjabloon_override(state_dir: str) -> None:
-    """Zet het sjabloon terug naar de meegeleverde standaardtekst."""
+    """Zet de artikelen terug naar de meegeleverde standaardtekst."""
     _sjabloon_override_pad(state_dir).unlink(missing_ok=True)
+
+
+def lees_sjabloon(state_dir: str) -> str:
+    """De volledige sjabloontekst (vaste opmaak + de - eventueel aangepaste -
+    artikelen) waarmee een contract daadwerkelijk gerenderd wordt."""
+    voor, _standaard_artikelen, na = _split_sjabloon(lees_standaard_sjabloon())
+    return voor + lees_artikelen(state_dir) + na
 
 
 def _slugify(tekst: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", tekst.lower()).strip("-") or "onbekend"
 
 
-def _output_dir(pand_slug: str) -> Path:
-    return BASIS_OUTPUT_DIR / _slugify(pand_slug)
+def _output_dir(pand_slug: str, state_dir: str) -> Path:
+    return Path(state_dir) / "gegenereerde_contracten" / _slugify(pand_slug)
 
 
 def _datum_lang(iso_datum: str) -> str:
@@ -112,7 +154,7 @@ def _datum_lang(iso_datum: str) -> str:
 
 
 def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, state_dir: str = ".") -> str:
-    output_dir = _output_dir(pand_slug)
+    output_dir = _output_dir(pand_slug, state_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     context = _bouw_context(pand, form)
 
@@ -139,13 +181,13 @@ def _schrijf_metadata(output_dir: Path, bestandsnaam: str, metadata: dict) -> No
     _metadata_pad(output_dir, bestandsnaam).write_text(json.dumps(metadata))
 
 
-def lees_metadata(pand_slug: str, bestandsnaam: str) -> dict:
+def lees_metadata(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> dict:
     """Gegevens die niet in de contracttekst zelf staan maar wel nodig zijn om
     het concept te kunnen mailen (bv. het e-mailadres van de huurder) - lege
     dict als er (nog) geen metadata-bestand is, bv. voor contracten die vóór
     deze functie bestond zijn gegenereerd."""
     veilige_naam = Path(bestandsnaam).name
-    pad = _metadata_pad(_output_dir(pand_slug), veilige_naam)
+    pad = _metadata_pad(_output_dir(pand_slug, state_dir), veilige_naam)
     if not pad.is_file():
         return {}
     try:
@@ -208,35 +250,35 @@ def _bouw_context(pand: Pand, form: ImmutableMultiDict) -> dict:
     }
 
 
-def list_contracten(pand_slug: str) -> list[str]:
-    output_dir = _output_dir(pand_slug)
+def list_contracten(pand_slug: str, state_dir: str = ".") -> list[str]:
+    output_dir = _output_dir(pand_slug, state_dir)
     if not output_dir.exists():
         return []
     return sorted((p.name for p in output_dir.glob("*.html")), reverse=True)
 
 
-def list_contracten_voor_kamer(pand_slug: str, kamer: str) -> list[str]:
+def list_contracten_voor_kamer(pand_slug: str, kamer: str, state_dir: str = ".") -> list[str]:
     prefix = _slugify(kamer) + "-"
     resultaat = []
-    for naam in list_contracten(pand_slug):
+    for naam in list_contracten(pand_slug, state_dir):
         _datum, _, rest = naam.partition("_")
         if rest.startswith(prefix):
             resultaat.append(naam)
     return resultaat
 
 
-def lees_contract(pand_slug: str, bestandsnaam: str) -> str:
+def lees_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> str:
     veilige_naam = Path(bestandsnaam).name  # voorkomt path traversal (../)
-    pad = _output_dir(pand_slug) / veilige_naam
+    pad = _output_dir(pand_slug, state_dir) / veilige_naam
     if pad.suffix != ".html" or not pad.is_file():
         raise FileNotFoundError(bestandsnaam)
     return pad.read_text()
 
 
-def genereer_pdf(pand_slug: str, bestandsnaam: str) -> bytes:
+def genereer_pdf(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> bytes:
     """Zet een eerder gegenereerd contract om naar PDF - handig om direct te
     kunnen uploaden naar DocHub voor de handtekeningaanvraag."""
-    html = lees_contract(pand_slug, bestandsnaam)
+    html = lees_contract(pand_slug, bestandsnaam, state_dir)
     buffer = BytesIO()
     resultaat = pisa.CreatePDF(html, dest=buffer)
     if resultaat.err:

@@ -39,10 +39,9 @@ def _form(**overrides) -> ImmutableMultiDict:
     return ImmutableMultiDict(basis)
 
 
-def test_genereer_contract_schrijft_html_bestand(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
-    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form())
-    pad = tmp_path / "mahoniestraat" / bestandsnaam
+def test_genereer_contract_schrijft_html_bestand(tmp_path):
+    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form(), state_dir=str(tmp_path))
+    pad = tmp_path / "gegenereerde_contracten" / "mahoniestraat" / bestandsnaam
     assert pad.is_file()
     html = pad.read_text()
     assert "Bence Neumayer" in html
@@ -59,58 +58,54 @@ def test_genereer_contract_schrijft_html_bestand(tmp_path, monkeypatch):
     assert "01-07-2028" in html
 
 
-def test_genereer_contract_zonder_borgsteller_laat_artikel_12_niet_van_toepassing_zijn(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+def test_genereer_contract_zonder_borgsteller_laat_artikel_12_niet_van_toepassing_zijn(tmp_path):
     bestandsnaam = contracts.genereer_contract(
-        "mahoniestraat", _pand(), _form(borgsteller_naam="", borgsteller_relatie="")
+        "mahoniestraat", _pand(), _form(borgsteller_naam="", borgsteller_relatie=""), state_dir=str(tmp_path)
     )
-    html = (tmp_path / "mahoniestraat" / bestandsnaam).read_text()
+    html = (tmp_path / "gegenereerde_contracten" / "mahoniestraat" / bestandsnaam).read_text()
     assert "Guarantor:" not in html
     assert "Not applicable" in html
 
 
-def test_genereer_contract_zonder_pandgegevens_toont_invulplekken(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+def test_genereer_contract_zonder_pandgegevens_toont_invulplekken(tmp_path):
     leeg_pand = Pand(
         slug="baumannlaan", naam="Baumannlaan 70b", google_sheet_id="y", google_sheet_worksheet="Huurders",
         history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
     )
-    bestandsnaam = contracts.genereer_contract("baumannlaan", leeg_pand, _form(kamer="2"))
-    html = (tmp_path / "baumannlaan" / bestandsnaam).read_text()
+    bestandsnaam = contracts.genereer_contract(
+        "baumannlaan", leeg_pand, _form(kamer="2"), state_dir=str(tmp_path)
+    )
+    html = (tmp_path / "gegenereerde_contracten" / "baumannlaan" / bestandsnaam).read_text()
     assert "[fill in" in html.lower() or "[address]" in html
 
 
-def test_genereer_pdf_zet_html_om_naar_pdf_bytes(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
-    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form())
-    pdf_bytes = contracts.genereer_pdf("mahoniestraat", bestandsnaam)
+def test_genereer_pdf_zet_html_om_naar_pdf_bytes(tmp_path):
+    bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form(), state_dir=str(tmp_path))
+    pdf_bytes = contracts.genereer_pdf("mahoniestraat", bestandsnaam, state_dir=str(tmp_path))
     assert pdf_bytes.startswith(b"%PDF")
 
 
-def test_genereer_pdf_onbekend_bestand_geeft_filenotfound(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+def test_genereer_pdf_onbekend_bestand_geeft_filenotfound(tmp_path):
     try:
-        contracts.genereer_pdf("mahoniestraat", "bestaat-niet.html")
+        contracts.genereer_pdf("mahoniestraat", "bestaat-niet.html", state_dir=str(tmp_path))
         assert False, "had een FileNotFoundError moeten geven"
     except FileNotFoundError:
         pass
 
 
-def test_genereer_contract_bewaart_metadata_voor_mailen(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
+def test_genereer_contract_bewaart_metadata_voor_mailen(tmp_path):
     bestandsnaam = contracts.genereer_contract(
-        "mahoniestraat", _pand(), _form(email="bence@example.com")
+        "mahoniestraat", _pand(), _form(email="bence@example.com"), state_dir=str(tmp_path)
     )
-    metadata = contracts.lees_metadata("mahoniestraat", bestandsnaam)
+    metadata = contracts.lees_metadata("mahoniestraat", bestandsnaam, state_dir=str(tmp_path))
     assert metadata["email"] == "bence@example.com"
     assert metadata["huurder_naam"] == "Bence Neumayer"
     assert metadata["kamer"] == "1"
     assert metadata["borg"] == "1000,00"
 
 
-def test_lees_metadata_zonder_bestand_geeft_lege_dict(tmp_path, monkeypatch):
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", tmp_path)
-    assert contracts.lees_metadata("mahoniestraat", "bestaat-niet.html") == {}
+def test_lees_metadata_zonder_bestand_geeft_lege_dict(tmp_path):
+    assert contracts.lees_metadata("mahoniestraat", "bestaat-niet.html", state_dir=str(tmp_path)) == {}
 
 
 def test_bouw_concept_email_bevat_kamer_dochub_en_bold():
@@ -129,21 +124,37 @@ def test_bouw_concept_email_bevat_kamer_dochub_en_bold():
 
 
 def test_lees_sjabloon_zonder_aanpassing_geeft_standaardtekst(tmp_path):
-    assert contracts.lees_sjabloon(str(tmp_path)) == contracts.lees_standaard_sjabloon()
+    # gelijk aan de standaardtekst, op de interne ARTIKELEN:START/EINDE-
+    # markeringen na (die worden bij het samenvoegen verwijderd)
+    voor, artikelen, na = contracts._split_sjabloon(contracts.lees_standaard_sjabloon())
+    assert contracts.lees_sjabloon(str(tmp_path)) == voor + artikelen + na
     assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
 
 
-def test_schrijf_en_lees_aangepast_sjabloon(tmp_path):
-    contracts.schrijf_sjabloon(str(tmp_path), "<p>Custom artikel {{ huurder_naam }}</p>")
+def test_lees_standaard_artikelen_bevat_geen_html_document_boilerplate(tmp_path):
+    artikelen = contracts.lees_standaard_artikelen()
+    assert "Article 1" in artikelen
+    assert "<!doctype" not in artikelen.lower()
+    assert "<style>" not in artikelen.lower()
+    # het standaardsjabloon (volledig document) heeft dit stuk wél
+    assert "Article 1" in contracts.lees_standaard_sjabloon()
+
+
+def test_schrijf_en_lees_aangepaste_artikelen(tmp_path):
+    contracts.schrijf_artikelen(str(tmp_path), "<p>Custom artikel {{ huurder_naam }}</p>")
     assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is True
-    assert contracts.lees_sjabloon(str(tmp_path)) == "<p>Custom artikel {{ huurder_naam }}</p>"
+    assert contracts.lees_artikelen(str(tmp_path)) == "<p>Custom artikel {{ huurder_naam }}</p>"
     # de standaardtekst zelf blijft ongewijzigd beschikbaar
-    assert "Custom artikel" not in contracts.lees_standaard_sjabloon()
+    assert "Custom artikel" not in contracts.lees_standaard_artikelen()
+    # de vaste opmaak eromheen (partijentabel, handtekeningenblok) blijft in het volledige sjabloon staan
+    volledig = contracts.lees_sjabloon(str(tmp_path))
+    assert "Custom artikel" in volledig
+    assert "Signatures" in volledig
 
 
-def test_schrijf_sjabloon_met_ongeldige_syntax_geeft_sjabloonfout_en_slaat_niet_op(tmp_path):
+def test_schrijf_artikelen_met_ongeldige_syntax_geeft_sjabloonfout_en_slaat_niet_op(tmp_path):
     try:
-        contracts.schrijf_sjabloon(str(tmp_path), "<p>{% if kapot %}geen endif</p>")
+        contracts.schrijf_artikelen(str(tmp_path), "<p>{% if kapot %}geen endif</p>")
         assert False, "had een SjabloonFout moeten geven"
     except contracts.SjabloonFout:
         pass
@@ -151,10 +162,10 @@ def test_schrijf_sjabloon_met_ongeldige_syntax_geeft_sjabloonfout_en_slaat_niet_
 
 
 def test_verwijder_sjabloon_override_zet_terug_naar_standaard(tmp_path):
-    contracts.schrijf_sjabloon(str(tmp_path), "<p>Custom</p>")
+    contracts.schrijf_artikelen(str(tmp_path), "<p>Custom</p>")
     contracts.verwijder_sjabloon_override(str(tmp_path))
     assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
-    assert contracts.lees_sjabloon(str(tmp_path)) == contracts.lees_standaard_sjabloon()
+    assert contracts.lees_artikelen(str(tmp_path)) == contracts.lees_standaard_artikelen()
 
 
 def test_verwijder_sjabloon_override_zonder_aanpassing_doet_niets(tmp_path):
@@ -162,14 +173,24 @@ def test_verwijder_sjabloon_override_zonder_aanpassing_doet_niets(tmp_path):
     assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is False
 
 
-def test_genereer_contract_gebruikt_aangepast_sjabloon(tmp_path, monkeypatch):
-    output_dir = tmp_path / "output"
-    monkeypatch.setattr(contracts, "BASIS_OUTPUT_DIR", output_dir)
+def test_lees_artikelen_negeert_verouderde_volledig_document_override(tmp_path):
+    # override-bestanden van vóór de tekstverwerker-editor bevatten nog een heel
+    # HTML-document (incl. <!doctype>) - die moeten genegeerd worden, anders
+    # komt de vaste opmaak dubbel in het contract terecht.
+    (tmp_path / "contract_sjabloon.html").write_text(contracts.lees_standaard_sjabloon())
+    assert contracts.heeft_aangepast_sjabloon(str(tmp_path)) is True
+    assert contracts.lees_artikelen(str(tmp_path)) == contracts.lees_standaard_artikelen()
+
+
+def test_genereer_contract_gebruikt_aangepaste_artikelen(tmp_path):
     state_dir = tmp_path / "state"
     state_dir.mkdir()
-    contracts.schrijf_sjabloon(str(state_dir), "<p>Aangepast contract voor {{ huurder_naam }}, kamer {{ kamer }}</p>")
+    contracts.schrijf_artikelen(str(state_dir), "<p>Aangepast contract voor {{ huurder_naam }}, kamer {{ kamer }}</p>")
 
     bestandsnaam = contracts.genereer_contract("mahoniestraat", _pand(), _form(), state_dir=str(state_dir))
 
-    html = (output_dir / "mahoniestraat" / bestandsnaam).read_text()
+    html = (state_dir / "gegenereerde_contracten" / "mahoniestraat" / bestandsnaam).read_text()
     assert "Aangepast contract voor Bence Neumayer, kamer 1" in html
+    # de vaste opmaak (partijen, handtekeningen) staat er nog steeds omheen
+    assert "Jurian Reckman" in html
+    assert "Signatures" in html

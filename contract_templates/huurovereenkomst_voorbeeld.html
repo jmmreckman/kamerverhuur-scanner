@@ -62,6 +62,7 @@
 </p>
 {% endif %}
 
+<!-- ARTIKELEN:START -->
 <h2>Article 1 - Rented Property</h2>
 <p>The room{% if kamer_omschrijving %}, {{ kamer_omschrijving }},{% endif %} located at
    {{ pand.naam }}{% if pand.postcode or pand.plaats %}, {{ pand.postcode }} {{ pand.plaats }}{% endif %},
@@ -224,6 +225,7 @@
 <h2>Additional Agreements</h2>
 <p>{{ bijzonderheden }}</p>
 {% endif %}
+<!-- ARTIKELEN:EINDE -->
 
 <h2>Signatures</h2>
 <table class="handtekeningen">
