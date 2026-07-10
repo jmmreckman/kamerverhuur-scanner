@@ -16,6 +16,13 @@ nodig.
 
 - **Pandkiezer** - na inloggen zie je (of word je automatisch doorgestuurd naar,
   als je er maar één hebt) een overzicht van de panden waar je toegang toe hebt.
+- **Wissel van pand (dropdown in de navigatie)** - blijft zoveel mogelijk op
+  dezelfde (soort) pagina staan voor het andere pand (bv. van Kamers bij
+  pand A naar Kamers bij pand B, i.p.v. terug te vallen op het dashboard).
+  Sta je op een detailpagina die niet 1-op-1 bestaat bij het andere pand
+  (bv. een specifieke kamer of contract), dan land je op de overzichtspagina
+  van diezelfde sectie. Bij "Pand bewerken" wissel je naar het bewerkscherm
+  van het andere pand.
 - **Toegangscontrole per pand** - probeer je bij een pand te komen waar je geen
   toegang toe hebt, dan krijg je een duidelijke melding ("geen toegang, vraag de
   beheerder") in plaats van een foutmelding.

@@ -117,6 +117,39 @@ def create_app(config: Config | None = None) -> Flask:
             return render_template("geen_toegang.html", pand=pand), 403
         return None
 
+    # Endpoints met alléén pand_slug als dynamisch urldeel worden 1-op-1
+    # hergebruikt bij het wisselen van pand (zie _pand_wissel_url()). Voor
+    # detailpagina's (kamer/contract/document/etc., die een extra urldeel
+    # hebben dat niet vanzelfsprekend ook bestaat bij het andere pand) valt
+    # dit terug op de overzichtspagina van diezelfde sectie, aan de hand van
+    # het eerste urldeel na "/pand/<pand_slug>/".
+    _PAND_SECTIE_OVERZICHT = {
+        "": "dashboard", "dashboard": "dashboard", "huuropzegging": "huuropzegging",
+        "kamers": "kamers_overzicht", "huurders": "huurders", "betalingen": "betalingen",
+        "contracten": "contracten_overzicht", "documenten": "documenten",
+        "aanmeldingen": "aanmeldingen_overzicht",
+    }
+
+    def _pand_sectie_overzicht_endpoint() -> str:
+        pand = getattr(g, "pand", None)
+        if pand is None:
+            return "dashboard"
+        prefix = f"/pand/{pand.slug}/"
+        if not request.path.startswith(prefix):
+            return "dashboard"
+        sectie = request.path[len(prefix):].split("/", 1)[0]
+        return _PAND_SECTIE_OVERZICHT.get(sectie, "dashboard")
+
+    def _pand_wissel_url(doelpand_slug: str) -> str:
+        """URL voor het wisselen van pand via de dropdown in de navigatie -
+        blijft zoveel mogelijk op dezelfde (soort) pagina staan i.p.v. altijd
+        terug te vallen op het dashboard van het andere pand."""
+        if request.endpoint == "pand_bewerken":
+            return url_for("pand_bewerken", slug=doelpand_slug)
+        if request.endpoint and request.view_args and set(request.view_args) == {"pand_slug"}:
+            return url_for(request.endpoint, pand_slug=doelpand_slug)
+        return url_for(_pand_sectie_overzicht_endpoint(), pand_slug=doelpand_slug)
+
     @app.context_processor
     def _template_context():
         eigen_panden = []
@@ -124,7 +157,10 @@ def create_app(config: Config | None = None) -> Flask:
         if current_user.is_authenticated:
             alle_panden = _properties()
             eigen_panden = [p for p in alle_panden if current_user.heeft_toegang(p.slug)]
-        return {"eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None)}
+        return {
+            "eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None),
+            "pand_wissel_url": _pand_wissel_url,
+        }
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
         for kamer in sheet.get_kamers():
