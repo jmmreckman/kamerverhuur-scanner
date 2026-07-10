@@ -200,7 +200,7 @@ def test_contract_mailen_vult_emailadres_en_engelse_tekst_voor(app_client):
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
-def test_contract_mailen_verstuurt_met_pdf_bijlage_en_cc(mock_smtp_cls, app_client):
+def test_contract_mailen_verstuurt_met_pdf_bijlage_en_bcc(mock_smtp_cls, app_client):
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
     bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
@@ -216,8 +216,9 @@ def test_contract_mailen_verstuurt_met_pdf_bijlage_en_cc(mock_smtp_cls, app_clie
     verzonden_bericht = smtp_instance.send_message.call_args[0][0]
     assert verzonden_bericht["To"] == "bence@example.com"
     # zowel het pand-specifieke extra_bcc (Justin) als het algemene EMAIL_BCC
-    # (Jurian) horen zichtbaar in CC te staan - niet als BCC.
-    assert verzonden_bericht["Cc"] == "jurian@example.com, justin@example.com"
+    # (Jurian) horen blind (BCC) meegenomen te worden - niet zichtbaar voor de huurder.
+    assert verzonden_bericht["Bcc"] == "jurian@example.com, justin@example.com"
+    assert verzonden_bericht["Cc"] is None
     bijlagen = list(verzonden_bericht.iter_attachments())
     assert len(bijlagen) == 1
     assert bijlagen[0].get_content_type() == "application/pdf"

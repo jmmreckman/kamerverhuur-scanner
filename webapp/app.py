@@ -839,7 +839,7 @@ def create_app(config: Config | None = None) -> Flask:
         except FileNotFoundError:
             abort(404)
         metadata = contracts.lees_metadata(pand_slug, bestandsnaam)
-        cc_adressen = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        bcc_adressen = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
 
         if request.method == "POST":
             aan = request.form.get("aan", "").strip()
@@ -849,7 +849,7 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Vul een e-mailadres van de huurder in.")
                 return render_template(
                     "contract_mailen.html", bestandsnaam=bestandsnaam,
-                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
             try:
                 pdf = contracts.genereer_pdf(pand_slug, bestandsnaam)
@@ -857,19 +857,19 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("PDF-generatie is mislukt - het contract is niet gemaild.")
                 return render_template(
                     "contract_mailen.html", bestandsnaam=bestandsnaam,
-                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
             pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
             try:
                 verstuur_email(
-                    config, aan, onderwerp, tekst, cc=cc_adressen,
+                    config, aan, onderwerp, tekst, bcc=bcc_adressen,
                     bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
                 )
             except MailError as exc:
                 flash(str(exc))
                 return render_template(
                     "contract_mailen.html", bestandsnaam=bestandsnaam,
-                    aan=aan, onderwerp=onderwerp, tekst=tekst, cc_adressen=cc_adressen,
+                    aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
             flash(f"Concept-huurcontract gemaild naar {aan}.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
@@ -878,7 +878,7 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "contract_mailen.html", bestandsnaam=bestandsnaam,
             aan=metadata.get("email", ""), onderwerp=opgesteld["onderwerp"], tekst=opgesteld["tekst"],
-            cc_adressen=cc_adressen,
+            bcc_adressen=bcc_adressen,
         )
 
     # --- Documenten ---
