@@ -8,3 +8,9 @@ steenhub.nl {
 www.steenhub.nl {
     redir https://steenhub.nl{uri} permanent
 }
+
+# Los project (gewicht-tracker) op hetzelfde domein/dezelfde VPS - zie de
+# 'weight-tracker'-service in docker-compose.yml.
+gewicht.steenhub.nl {
+    reverse_proxy weight-tracker:8420
+}

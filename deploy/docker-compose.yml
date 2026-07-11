@@ -30,6 +30,28 @@ services:
       - ./data:/app/data
     command: ["python3", "scripts/dagelijkse_controle.py"]
 
+  # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
+  # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
+  # verder dan gedeelde hosting. Code + Dockerfile staan op een aparte
+  # branch in deze repo; Docker bouwt rechtstreeks vanaf die branch als
+  # git-context (geen lokale checkout nodig). WEIGHT_APP_USERNAME/
+  # WEIGHT_APP_PASSWORD in weight-tracker.env (kopieer van
+  # weight-tracker.env.example, zelfde patroon als app.env) - zonder die
+  # twee draait de app zonder login.
+  weight-tracker:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/weight-tracking-portal-x3phgn
+    container_name: weight-tracker
+    restart: unless-stopped
+    env_file:
+      - ./weight-tracker.env
+    environment:
+      - WEIGHT_DB_PATH=/data/weight.db
+    volumes:
+      - weight-tracker-data:/data
+    expose:
+      - "8420"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -42,7 +64,9 @@ services:
       - caddy_config:/config
     depends_on:
       - app
+      - weight-tracker
 
 volumes:
   caddy_data:
   caddy_config:
+  weight-tracker-data:
