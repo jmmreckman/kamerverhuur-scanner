@@ -80,6 +80,28 @@ def add_weight(entry: WeightEntry):
     return {"ok": True}
 
 
+class BulkWeightEntries(BaseModel):
+    entries: list[WeightEntry]
+
+
+@app.post("/api/weight/bulk")
+def add_weight_bulk(payload: BulkWeightEntries):
+    """Voor het in één keer overzetten van historische data (bijv. vanaf
+    een Excel-import elders) naar deze instantie, zonder voor elke losse
+    meting een aparte aanroep + herberekening te doen."""
+    parsed = []
+    for entry in payload.entries:
+        try:
+            entry_date = date.fromisoformat(entry.date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Ongeldige datum: {entry.date}")
+        if entry.weight <= 0 or entry.weight > 400:
+            raise HTTPException(status_code=400, detail=f"Ongeldig gewicht: {entry.weight}")
+        parsed.append((entry_date, entry.weight))
+    db.bulk_upsert_manual_weights(parsed)
+    return {"ok": True, "imported": len(parsed)}
+
+
 @app.get("/api/weight/today")
 def weight_today():
     result = db.get_weight_for_date(date.today())
