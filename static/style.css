@@ -102,6 +102,26 @@ canvas {
   max-width: 100%;
 }
 
+.range-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.range-buttons button {
+  flex: 1 1 auto;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  background: #262c36;
+  border-color: #333a45;
+}
+
+.range-buttons button.active {
+  background: #2f6fed;
+  border-color: #2f6fed;
+}
+
 .chart-tall {
   position: relative;
   height: 75vh;

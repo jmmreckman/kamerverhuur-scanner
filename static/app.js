@@ -62,8 +62,34 @@ const YEAR_COLORS = (year, allYears) => {
   return `hsl(${hue}, 70%, 55%)`;
 };
 
+let cachedAllData = null;
+let selectedRangeDays = "all";
+
+const rangeButtons = document.querySelectorAll("#range-buttons button");
+rangeButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    selectedRangeDays = btn.dataset.range;
+    rangeButtons.forEach((b) => b.classList.toggle("active", b === btn));
+    renderChartAll();
+  });
+});
+rangeButtons[rangeButtons.length - 1].classList.add("active");
+
 async function loadChartAll() {
-  const data = await (await fetch("/api/chart/all")).json();
+  cachedAllData = await (await fetch("/api/chart/all")).json();
+  renderChartAll();
+}
+
+function renderChartAll() {
+  if (!cachedAllData) return;
+  let data = cachedAllData;
+  if (selectedRangeDays !== "all") {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - Number(selectedRangeDays));
+    const cutoffIso = cutoff.toISOString().slice(0, 10);
+    data = cachedAllData.filter((d) => d.date >= cutoffIso);
+  }
+
   const ctx = document.getElementById("chart-all");
   if (chartAll) chartAll.destroy();
   chartAll = new Chart(ctx, {
@@ -76,14 +102,14 @@ async function loadChartAll() {
           data: data.map((d) => d.weight),
           borderColor: "#2f6fed",
           borderWidth: 1.5,
-          pointRadius: data.map((d) => (d.is_estimate ? 0 : 2.5)),
-          pointBackgroundColor: "#2f6fed",
+          pointRadius: 0,
           tension: 0,
         },
       ],
     },
     options: {
       animation: false,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { maxTicksLimit: 12 }, grid: { color: "#2a2f38" } },
         y: { grid: { color: "#2a2f38" } },

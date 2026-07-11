@@ -33,7 +33,16 @@
     </section>
 
     <section id="view-all" class="view hidden">
-      <canvas id="chart-all"></canvas>
+      <div class="range-buttons" id="range-buttons">
+        <button data-range="7">7 dagen</button>
+        <button data-range="14">2 weken</button>
+        <button data-range="30">1 maand</button>
+        <button data-range="90">3 maanden</button>
+        <button data-range="365">1 jaar</button>
+        <button data-range="1825">5 jaar</button>
+        <button data-range="all">All-time</button>
+      </div>
+      <div class="chart-tall"><canvas id="chart-all"></canvas></div>
     </section>
 
     <section id="view-yearly" class="view hidden">
