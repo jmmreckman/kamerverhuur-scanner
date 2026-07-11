@@ -4,10 +4,12 @@ Draait lokaal op je thuisnetwerk. Start met run.bat (Windows) of
 `uvicorn app:app --host 0.0.0.0 --port 8420`, en open dan vanaf je
 telefoon (zelfde wifi) http://<ip-van-deze-pc>:8420
 """
+import time
 from datetime import date, timedelta
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -18,6 +20,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 db.init_db()
 
+# Verandert bij elke herstart van de server, zodat de telefoon niet een
+# verouderde (gecachete) versie van app.js/style.css blijft gebruiken na
+# een update.
+ASSET_VERSION = str(int(time.time()))
+
 
 class WeightEntry(BaseModel):
     date: str  # YYYY-MM-DD
@@ -26,7 +33,10 @@ class WeightEntry(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse("static/index.html")
+    html = Path("static/index.html").read_text(encoding="utf-8")
+    html = html.replace("app.js", f"app.js?v={ASSET_VERSION}")
+    html = html.replace("style.css", f"style.css?v={ASSET_VERSION}")
+    return HTMLResponse(html)
 
 
 @app.post("/api/weight")
