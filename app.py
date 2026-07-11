@@ -4,12 +4,15 @@ Draait lokaal op je thuisnetwerk. Start met run.bat (Windows) of
 `uvicorn app:app --host 0.0.0.0 --port 8420`, en open dan vanaf je
 telefoon (zelfde wifi) http://<ip-van-deze-pc>:8420
 """
+import base64
+import os
+import secrets
 import time
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -24,6 +27,32 @@ db.init_db()
 # verouderde (gecachete) versie van app.js/style.css blijft gebruiken na
 # een update.
 ASSET_VERSION = str(int(time.time()))
+
+# Alleen actief als beide omgevingsvariabelen gezet zijn. Op je thuis-wifi
+# (alleen bereikbaar binnen je eigen netwerk) is dat niet nodig; zet ze wel
+# als deze app publiek op internet bereikbaar wordt (bijv. via een VPS).
+AUTH_USERNAME = os.environ.get("WEIGHT_APP_USERNAME")
+AUTH_PASSWORD = os.environ.get("WEIGHT_APP_PASSWORD")
+
+
+@app.middleware("http")
+async def basic_auth(request: Request, call_next):
+    if AUTH_USERNAME and AUTH_PASSWORD:
+        if not _has_valid_credentials(request.headers.get("Authorization")):
+            return Response(status_code=401, headers={"WWW-Authenticate": "Basic"})
+    return await call_next(request)
+
+
+def _has_valid_credentials(header: str | None) -> bool:
+    if not header or not header.startswith("Basic "):
+        return False
+    try:
+        username, _, password = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return secrets.compare_digest(username, AUTH_USERNAME) and secrets.compare_digest(
+        password, AUTH_PASSWORD
+    )
 
 
 class WeightEntry(BaseModel):

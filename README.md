@@ -43,9 +43,21 @@ wifi-netwerk zitten.
 - **Vergelijk vandaag**: je huidige gewicht tegenover dezelfde kalenderdag in
   alle voorgaande jaren, met per jaar of je toen zwaarder of lichter was.
 
-## Later ergens anders bij kunnen (buiten je wifi)
+## Deployen op een VPS (publiek bereikbaar)
 
-Nu werkt de app alleen binnen je thuisnetwerk. Als je later ook onderweg
-gewicht wil kunnen invullen, is [Tailscale](https://tailscale.com/) de
-makkelijkste volgende stap (gratis, installeren op pc + telefoon, geen
-open poorten nodig op je router) — laat het weten als je dat wil toevoegen.
+Draait deze app ergens waar hij vanaf het publieke internet bereikbaar is
+(bijv. op een VPS via een subdomein), zet dan **verplicht** een
+gebruikersnaam en wachtwoord, anders kan iedereen die de URL raadt je data
+zien en wijzigen:
+
+```
+export WEIGHT_APP_USERNAME="kies-een-gebruikersnaam"
+export WEIGHT_APP_PASSWORD="kies-een-sterk-wachtwoord"
+uvicorn app:app --host 0.0.0.0 --port <poort>
+```
+
+Zonder deze twee omgevingsvariabelen draait de app zonder login (zoals nu
+op de zolder-pc, prima want die is alleen op je eigen thuiswifi bereikbaar).
+
+Zorg bij een Docker-deploy voor een volume/mount voor `weight.db`, zodat de
+data een herdeploy overleeft en niet stilzwijgend gewist wordt.
