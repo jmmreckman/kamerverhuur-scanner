@@ -6,11 +6,15 @@ de eerste en de laatste meting, waarbij de dagen tussen twee metingen in
 lineair worden geïnterpoleerd. Die tabel wordt na elke wijziging opnieuw
 opgebouwd vanuit `manual_entries`, zodat hij nooit uit sync kan raken.
 """
+import os
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "weight.db"
+# Instelbaar via env var zodat een Docker-deploy de database op een
+# persistent volume kan zetten, los van de broncode (die bij elke deploy
+# opnieuw wordt uitgecheckt).
+DB_PATH = Path(os.environ.get("WEIGHT_DB_PATH", Path(__file__).parent / "weight.db"))
 
 
 def get_connection() -> sqlite3.Connection:
@@ -20,6 +24,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = get_connection()
     conn.executescript(
         """
