@@ -28,7 +28,7 @@ services:
       - ./app.env
     volumes:
       - ./data:/app/data
-    command: ["python3", "scripts/dagelijkse_controle.py"]
+    command: ["python3", "-m", "scripts.dagelijkse_controle"]
 
   # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
   # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
