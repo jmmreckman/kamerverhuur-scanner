@@ -1,0 +1,24 @@
+name: Deploy naar VPS
+
+on:
+  push:
+    branches:
+      - claude/rotterdam-property-scraper-impfg0
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" | tr -d ' \t\r\n' | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+            set -euo pipefail
+            cd /opt/kamerverhuur-scanner/deploy
+            docker compose build --no-cache fundazoeker
+            docker compose up -d fundazoeker
+          '
