@@ -8,15 +8,22 @@ Gebruik:
 """
 import base64
 import json
+import ssl
 import sys
 import urllib.error
 import urllib.request
 
+import certifi
 import openpyxl
 
 from import_excel import parse_date, parse_weight
 
 BATCH_SIZE = 500
+
+# Gebruik certifi's eigen, actuele lijst met vertrouwde certificaten in
+# plaats van die van het besturingssysteem - voorkomt "certificate has
+# expired"-fouten op Windows-machines met een verouderde certificatenlijst.
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 def send_batch(base_url: str, auth_header: str, batch: list[tuple]) -> None:
@@ -30,7 +37,7 @@ def send_batch(base_url: str, auth_header: str, batch: list[tuple]) -> None:
         method="POST",
     )
     try:
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req, context=SSL_CONTEXT)
     except urllib.error.HTTPError as e:
         raise SystemExit(f"Fout van de server ({e.code}): {e.read().decode('utf-8', 'replace')}")
 
