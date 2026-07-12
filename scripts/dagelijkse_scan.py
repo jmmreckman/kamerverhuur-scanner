@@ -5,6 +5,11 @@ Taakplanner-taak die dit voorheen lokaal triggerde.
 
 Geen losse cron-daemon nodig: dit proces blijft zelf draaien, wacht tot de
 volgende 09:00, voert de scan uit, en begint daarna weer opnieuw te wachten.
+In tegenstelling tot vergelijkbare scripts elders in dit project (bv. de
+uurlijkse betaalcontrole) draait dit BEWUST niet meteen bij het opstarten:
+elke scan hier stuurt een echte e-mail naar meerdere mensen, dus een
+container-herstart (bv. na een config-wijziging of nieuwe deploy) mag nooit
+zomaar een extra rapport versturen.
 """
 from __future__ import annotations
 
@@ -31,9 +36,6 @@ def _seconden_tot_volgende_run(nu: datetime | None = None) -> float:
 
 
 def main() -> None:
-    logger.info("Container gestart - meteen een scan uitvoeren, naast het dagelijkse schema om 09:00.")
-    scanner_main.main()
-
     while True:
         wachttijd = _seconden_tot_volgende_run()
         logger.info("Volgende automatische scan over %.1f uur (om 09:00).", wachttijd / 3600)
