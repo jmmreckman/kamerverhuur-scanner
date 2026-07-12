@@ -52,6 +52,27 @@ services:
     expose:
       - "8420"
 
+  # Los, derde project (fundazoeker) dat meelift op dezelfde VPS - geen
+  # relatie met de andere twee projecten verder dan gedeelde hosting. Geen
+  # webinterface: draait zelf elke dag om 09:00 (Europe/Amsterdam) een scan
+  # naar geschikte Rotterdamse kamerverhuur-panden en mailt een rapport -
+  # dus geen expose/Caddy-blok/subdomein nodig, in tegenstelling tot de
+  # andere twee projecten. Code + Dockerfile staan op een aparte branch in
+  # deze repo; Docker bouwt rechtstreeks vanaf die branch als git-context.
+  # SCANNER_GMAIL_ADDRESS/SCANNER_GMAIL_APP_PASSWORD (en evt.
+  # REPORT_TO_ADDRESS/SMTP_*) in fundazoeker.env (kopieer van
+  # fundazoeker.env.example) - zonder de Gmail-gegevens start de container
+  # niet.
+  fundazoeker:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: fundazoeker
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -70,3 +91,4 @@ volumes:
   caddy_data:
   caddy_config:
   weight-tracker-data:
+  fundazoeker-data:
