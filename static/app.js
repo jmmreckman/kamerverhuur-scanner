@@ -28,11 +28,12 @@ form.addEventListener("submit", async (e) => {
 });
 
 const seriesToggle = document.getElementById("toggle-series-form");
+const seriesPanel = document.getElementById("series-panel");
 const seriesForm = document.getElementById("series-form");
 const seriesStatus = document.getElementById("series-status");
 
 seriesToggle.addEventListener("click", () => {
-  seriesForm.classList.toggle("hidden");
+  seriesPanel.classList.toggle("hidden");
 });
 
 seriesForm.addEventListener("submit", async (e) => {

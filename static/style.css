@@ -52,11 +52,11 @@ h1 {
   margin: 0.25rem 0;
 }
 
-#series-form {
+#series-panel {
   margin-top: 0.5rem;
 }
 
-#series-form.hidden {
+#series-panel.hidden {
   display: none;
 }
 
