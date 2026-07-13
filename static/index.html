@@ -46,6 +46,21 @@
         <button type="submit">Reeks opslaan</button>
       </form>
       <p id="series-status" class="status"></p>
+
+      <button type="button" id="toggle-delete-form" class="secondary-button">Reeks verwijderen</button>
+
+      <form id="delete-form" class="hidden">
+        <label>
+          Startdatum
+          <input type="date" id="delete-start-date" required>
+        </label>
+        <label>
+          Einddatum
+          <input type="date" id="delete-end-date" required>
+        </label>
+        <button type="submit" class="danger-button">Verwijderen</button>
+      </form>
+      <p id="delete-status" class="status"></p>
     </section>
 
     <section class="buttons">

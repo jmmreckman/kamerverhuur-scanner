@@ -66,6 +66,44 @@ seriesForm.addEventListener("submit", async (e) => {
   }
 });
 
+const deleteToggle = document.getElementById("toggle-delete-form");
+const deleteForm = document.getElementById("delete-form");
+const deleteStatus = document.getElementById("delete-status");
+
+deleteToggle.addEventListener("click", () => {
+  deleteForm.classList.toggle("hidden");
+});
+
+deleteForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const startDate = document.getElementById("delete-start-date").value;
+  const endDate = document.getElementById("delete-end-date").value;
+  const [rangeStart, rangeEnd] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
+
+  if (!confirm(`Alle metingen tussen ${rangeStart} en ${rangeEnd} verwijderen? Dit kan niet ongedaan gemaakt worden.`)) {
+    return;
+  }
+
+  deleteStatus.textContent = "Bezig...";
+  deleteStatus.className = "status";
+
+  try {
+    const res = await fetch("/api/weight/series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_date: rangeStart, end_date: rangeEnd, entries: [] }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Verwijderen mislukt");
+    deleteStatus.textContent = `Metingen tussen ${rangeStart} en ${rangeEnd} verwijderd. Grafieken bijgewerkt.`;
+    deleteStatus.className = "status ok";
+    deleteForm.reset();
+    refreshActiveView();
+  } catch (err) {
+    deleteStatus.textContent = err.message;
+    deleteStatus.className = "status error";
+  }
+});
+
 // Bouwt een reeks metingen tussen twee data, in stapjes van 0.1 kg, evenredig
 // verdeeld over de tussenliggende dagen (bv. 95.1 op 25 maart -> 94.1 op 20
 // april wordt 10 stappen van -0.1, ongeveer eens in de 2-3 dagen).
