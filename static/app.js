@@ -66,41 +66,26 @@ seriesForm.addEventListener("submit", async (e) => {
   }
 });
 
-const deleteToggle = document.getElementById("toggle-delete-form");
-const deleteForm = document.getElementById("delete-form");
-const deleteStatus = document.getElementById("delete-status");
+const undoButton = document.getElementById("undo-button");
+const undoStatus = document.getElementById("undo-status");
 
-deleteToggle.addEventListener("click", () => {
-  deleteForm.classList.toggle("hidden");
-});
-
-deleteForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const startDate = document.getElementById("delete-start-date").value;
-  const endDate = document.getElementById("delete-end-date").value;
-  const [rangeStart, rangeEnd] = startDate <= endDate ? [startDate, endDate] : [endDate, startDate];
-
-  if (!confirm(`Alle metingen tussen ${rangeStart} en ${rangeEnd} verwijderen? Dit kan niet ongedaan gemaakt worden.`)) {
+undoButton.addEventListener("click", async () => {
+  if (!confirm("Laatste wijziging ongedaan maken? Dit herstelt de staat van vlak vóór die wijziging.")) {
     return;
   }
 
-  deleteStatus.textContent = "Bezig...";
-  deleteStatus.className = "status";
+  undoStatus.textContent = "Bezig...";
+  undoStatus.className = "status";
 
   try {
-    const res = await fetch("/api/weight/series", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start_date: rangeStart, end_date: rangeEnd, entries: [] }),
-    });
-    if (!res.ok) throw new Error((await res.json()).detail || "Verwijderen mislukt");
-    deleteStatus.textContent = `Metingen tussen ${rangeStart} en ${rangeEnd} verwijderd. Grafieken bijgewerkt.`;
-    deleteStatus.className = "status ok";
-    deleteForm.reset();
+    const res = await fetch("/api/undo", { method: "POST" });
+    if (!res.ok) throw new Error((await res.json()).detail || "Ongedaan maken mislukt");
+    undoStatus.textContent = "Laatste wijziging ongedaan gemaakt. Grafieken bijgewerkt.";
+    undoStatus.className = "status ok";
     refreshActiveView();
   } catch (err) {
-    deleteStatus.textContent = err.message;
-    deleteStatus.className = "status error";
+    undoStatus.textContent = err.message;
+    undoStatus.className = "status error";
   }
 });
 

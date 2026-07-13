@@ -132,6 +132,15 @@ def fill_series(payload: SeriesFill):
     return {"ok": True, "imported": len(parsed)}
 
 
+@app.post("/api/undo")
+def undo():
+    """Herstelt de staat van vlak vóór de laatst uitgevoerde wijziging
+    (losse meting, reeks invullen, of import) - één stap terug."""
+    if not db.undo_last_change():
+        raise HTTPException(status_code=409, detail="Niets om ongedaan te maken.")
+    return {"ok": True}
+
+
 @app.get("/api/weight/today")
 def weight_today():
     result = db.get_weight_for_date(date.today())

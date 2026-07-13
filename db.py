@@ -37,14 +37,52 @@ def init_db() -> None:
             weight REAL NOT NULL,
             is_interpolated INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS manual_entries_undo (
+            date TEXT PRIMARY KEY,
+            weight REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS undo_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            has_snapshot INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT OR IGNORE INTO undo_state (id, has_snapshot) VALUES (1, 0);
         """
     )
     conn.commit()
     conn.close()
 
 
+def _snapshot_before_change(conn: sqlite3.Connection) -> None:
+    """Bewaart de huidige manual_entries als één-staps ongedaan-maken-punt,
+    vóórdat een wijziging wordt doorgevoerd. Overschrijft een eventuele
+    eerdere snapshot - er is maar één stap terug, geen volledige historie."""
+    conn.execute("DELETE FROM manual_entries_undo")
+    conn.execute("INSERT INTO manual_entries_undo SELECT date, weight FROM manual_entries")
+    conn.execute("UPDATE undo_state SET has_snapshot = 1 WHERE id = 1")
+
+
+def undo_last_change() -> bool:
+    """Herstelt manual_entries naar de staat vlak vóór de laatste wijziging
+    (losse meting, reeks invullen, of Excel-import). Retourneert False als er
+    niets is om ongedaan te maken. Na het ongedaan maken is er geen nieuwe
+    undo-stap beschikbaar totdat er weer iets gewijzigd wordt."""
+    conn = get_connection()
+    row = conn.execute("SELECT has_snapshot FROM undo_state WHERE id = 1").fetchone()
+    if not row or not row["has_snapshot"]:
+        conn.close()
+        return False
+    conn.execute("DELETE FROM manual_entries")
+    conn.execute("INSERT INTO manual_entries SELECT date, weight FROM manual_entries_undo")
+    conn.execute("UPDATE undo_state SET has_snapshot = 0 WHERE id = 1")
+    conn.commit()
+    _recompute_interpolation(conn)
+    conn.close()
+    return True
+
+
 def upsert_manual_weight(entry_date: date, weight: float) -> None:
     conn = get_connection()
+    _snapshot_before_change(conn)
     conn.execute(
         "INSERT INTO manual_entries (date, weight) VALUES (?, ?) "
         "ON CONFLICT(date) DO UPDATE SET weight = excluded.weight",
@@ -60,6 +98,7 @@ def bulk_upsert_manual_weights(entries: list[tuple[date, float]]) -> None:
     schrijft alle metingen weg en herberekent de interpolatie daarna
     precies één keer, in plaats van na elke losse meting."""
     conn = get_connection()
+    _snapshot_before_change(conn)
     conn.executemany(
         "INSERT INTO manual_entries (date, weight) VALUES (?, ?) "
         "ON CONFLICT(date) DO UPDATE SET weight = excluded.weight",
@@ -76,6 +115,7 @@ def replace_manual_weights_in_range(start: date, end: date, entries: list[tuple[
     overlappende) poging in diezelfde periode geen resterende, conflicterende
     punten achterlaat die de grafiek een zigzag-patroon geven."""
     conn = get_connection()
+    _snapshot_before_change(conn)
     conn.execute(
         "DELETE FROM manual_entries WHERE date BETWEEN ? AND ?",
         (start.isoformat(), end.isoformat()),
