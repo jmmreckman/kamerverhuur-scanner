@@ -27,6 +27,86 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+const seriesToggle = document.getElementById("toggle-series-form");
+const seriesForm = document.getElementById("series-form");
+const seriesStatus = document.getElementById("series-status");
+
+seriesToggle.addEventListener("click", () => {
+  seriesForm.classList.toggle("hidden");
+});
+
+seriesForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const startDate = document.getElementById("series-start-date").value;
+  const startWeight = parseFloat(document.getElementById("series-start-weight").value);
+  const endDate = document.getElementById("series-end-date").value;
+  const endWeight = parseFloat(document.getElementById("series-end-weight").value);
+
+  seriesStatus.textContent = "Bezig...";
+  seriesStatus.className = "status";
+
+  try {
+    const entries = buildSeries(startDate, startWeight, endDate, endWeight);
+    const res = await fetch("/api/weight/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || "Opslaan mislukt");
+    const result = await res.json();
+    seriesStatus.textContent = `${result.imported} metingen ingevuld (van ${entries[0].date} t/m ${entries[entries.length - 1].date}). Grafieken bijgewerkt.`;
+    seriesStatus.className = "status ok";
+    seriesForm.reset();
+    refreshActiveView();
+  } catch (err) {
+    seriesStatus.textContent = err.message;
+    seriesStatus.className = "status error";
+  }
+});
+
+// Bouwt een reeks metingen tussen twee data, in stapjes van 0.1 kg, evenredig
+// verdeeld over de tussenliggende dagen (bv. 95.1 op 25 maart -> 94.1 op 20
+// april wordt 10 stappen van -0.1, ongeveer eens in de 2-3 dagen).
+function buildSeries(startDateStr, startWeight, endDateStr, endWeight) {
+  const start = new Date(startDateStr + "T00:00:00");
+  const end = new Date(endDateStr + "T00:00:00");
+  if (isNaN(start) || isNaN(end)) throw new Error("Ongeldige datum");
+  if (end < start) {
+    return buildSeries(endDateStr, endWeight, startDateStr, startWeight);
+  }
+
+  const totalDays = Math.round((end - start) / 86400000);
+  const diff = Math.round((endWeight - startWeight) * 10) / 10;
+  const steps = Math.round(Math.abs(diff) / 0.1);
+
+  if (steps === 0) {
+    return dedupeByDate([
+      { date: startDateStr, weight: startWeight },
+      { date: endDateStr, weight: endWeight },
+    ]);
+  }
+  if (steps > 3000) {
+    throw new Error("Te veel stappen van 0.1 kg tussen deze twee metingen - controleer de gewichten.");
+  }
+
+  const sign = diff < 0 ? -1 : 1;
+  const entries = [];
+  for (let i = 0; i <= steps; i++) {
+    const weight = i === steps ? endWeight : Math.round((startWeight + sign * 0.1 * i) * 10) / 10;
+    const dayOffset = Math.round((i * totalDays) / steps);
+    const d = new Date(start);
+    d.setDate(d.getDate() + dayOffset);
+    entries.push({ date: d.toISOString().slice(0, 10), weight });
+  }
+  return dedupeByDate(entries);
+}
+
+function dedupeByDate(entries) {
+  const map = new Map();
+  entries.forEach((e) => map.set(e.date, e.weight));
+  return Array.from(map, ([date, weight]) => ({ date, weight }));
+}
+
 const viewButtons = document.querySelectorAll(".buttons button");
 const views = {
   all: document.getElementById("view-all"),

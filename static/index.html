@@ -23,6 +23,29 @@
         <button type="submit">Opslaan</button>
       </form>
       <p id="save-status" class="status"></p>
+
+      <button type="button" id="toggle-series-form" class="secondary-button">Reeks invullen</button>
+
+      <form id="series-form" class="hidden">
+        <label>
+          Startdatum
+          <input type="date" id="series-start-date" required>
+        </label>
+        <label>
+          Startgewicht (kg)
+          <input type="number" id="series-start-weight" step="0.1" min="1" max="400" required>
+        </label>
+        <label>
+          Einddatum
+          <input type="date" id="series-end-date" required>
+        </label>
+        <label>
+          Eindgewicht (kg)
+          <input type="number" id="series-end-weight" step="0.1" min="1" max="400" required>
+        </label>
+        <button type="submit">Reeks opslaan</button>
+      </form>
+      <p id="series-status" class="status"></p>
     </section>
 
     <section class="buttons">
