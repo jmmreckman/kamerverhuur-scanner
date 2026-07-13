@@ -50,6 +50,10 @@ h1 {
   margin-top: 0.5rem;
 }
 
+#series-form.hidden {
+  display: none;
+}
+
 input, button {
   font-size: 1rem;
   padding: 0.6rem;
