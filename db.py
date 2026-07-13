@@ -70,6 +70,26 @@ def bulk_upsert_manual_weights(entries: list[tuple[date, float]]) -> None:
     conn.close()
 
 
+def replace_manual_weights_in_range(start: date, end: date, entries: list[tuple[date, float]]) -> None:
+    """Vervangt alle handmatige metingen in [start, end] door precies de
+    gegeven reeks - gebruikt door "Reeks invullen" zodat een eerdere (deels
+    overlappende) poging in diezelfde periode geen resterende, conflicterende
+    punten achterlaat die de grafiek een zigzag-patroon geven."""
+    conn = get_connection()
+    conn.execute(
+        "DELETE FROM manual_entries WHERE date BETWEEN ? AND ?",
+        (start.isoformat(), end.isoformat()),
+    )
+    conn.executemany(
+        "INSERT INTO manual_entries (date, weight) VALUES (?, ?) "
+        "ON CONFLICT(date) DO UPDATE SET weight = excluded.weight",
+        [(d.isoformat(), w) for d, w in entries],
+    )
+    conn.commit()
+    _recompute_interpolation(conn)
+    conn.close()
+
+
 def _recompute_interpolation(conn: sqlite3.Connection) -> None:
     rows = conn.execute(
         "SELECT date, weight FROM manual_entries ORDER BY date"

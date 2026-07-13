@@ -47,10 +47,12 @@ seriesForm.addEventListener("submit", async (e) => {
 
   try {
     const entries = buildSeries(startDate, startWeight, endDate, endWeight);
-    const res = await fetch("/api/weight/bulk", {
+    const rangeStart = entries[0].date;
+    const rangeEnd = entries[entries.length - 1].date;
+    const res = await fetch("/api/weight/series", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries }),
+      body: JSON.stringify({ start_date: rangeStart, end_date: rangeEnd, entries }),
     });
     if (!res.ok) throw new Error((await res.json()).detail || "Opslaan mislukt");
     const result = await res.json();

@@ -102,6 +102,36 @@ def add_weight_bulk(payload: BulkWeightEntries):
     return {"ok": True, "imported": len(parsed)}
 
 
+class SeriesFill(BaseModel):
+    start_date: str  # YYYY-MM-DD
+    end_date: str  # YYYY-MM-DD
+    entries: list[WeightEntry]
+
+
+@app.post("/api/weight/series")
+def fill_series(payload: SeriesFill):
+    """Voor "Reeks invullen": vervangt alle metingen in [start_date, end_date]
+    door de gegeven reeks, in plaats van er alleen bovenop te schrijven -
+    anders blijven metingen van een eerdere (deels overlappende) poging in
+    diezelfde periode staan en geeft dat een zigzag in de grafiek."""
+    try:
+        start = date.fromisoformat(payload.start_date)
+        end = date.fromisoformat(payload.end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Ongeldige datum")
+    parsed = []
+    for entry in payload.entries:
+        try:
+            entry_date = date.fromisoformat(entry.date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Ongeldige datum: {entry.date}")
+        if entry.weight <= 0 or entry.weight > 400:
+            raise HTTPException(status_code=400, detail=f"Ongeldig gewicht: {entry.weight}")
+        parsed.append((entry_date, entry.weight))
+    db.replace_manual_weights_in_range(start, end, parsed)
+    return {"ok": True, "imported": len(parsed)}
+
+
 @app.get("/api/weight/today")
 def weight_today():
     result = db.get_weight_for_date(date.today())
