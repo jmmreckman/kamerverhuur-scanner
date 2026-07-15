@@ -159,6 +159,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         prijs=listing.prijs,
         bag_oppervlakte=bag_oppervlakte,
         huurprijsopslag_signalen=[s.tekst for s in opslag_signalen],
+        opslag_percentage=opslag_percentage,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_pp=eigen_inleg_pp,
     )
@@ -170,6 +171,26 @@ def _sorteersleutel(item: ListingState) -> tuple[int, float]:
     if item.eigen_inleg_pp is None:
         return (1, 0.0)
     return (0, item.eigen_inleg_pp)
+
+
+def _backvul_investeringscijfers(state: StateStore) -> None:
+    """Woningen die al in state.json stonden vóórdat de investeringsberekening
+    bestond (of vóór een latere aanpassing eraan) missen winst_pm_pp/eigen_inleg_pp.
+    Ze worden alleen bijgewerkt via de normale (nieuw-adres-)pipeline, dus zonder dit
+    zouden ze die velden nooit met terugwerkende kracht krijgen. Kost geen nieuwe
+    geocode-/BAG-/monumenten-aanroepen: bag_oppervlakte, prijs en opslag_percentage
+    staan al in de state."""
+    for item in state.all():
+        if item.status != "actief" or item.winst_pm_pp is not None:
+            continue
+        if not item.bag_oppervlakte or not item.prijs:
+            continue
+        investering = bereken_investering(item.bag_oppervlakte, item.prijs, item.opslag_percentage)
+        if investering is None:
+            continue
+        item.winst_pm_pp = investering.winst_pm_pp
+        item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
+        state.upsert(item)
 
 
 _HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
@@ -226,6 +247,7 @@ def _verwerk_listings(
         else:
             result.nieuw_onbekend_adres.append(processed)
 
+    _backvul_investeringscijfers(state)
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 

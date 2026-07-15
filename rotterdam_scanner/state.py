@@ -24,6 +24,7 @@ class ListingState:
     prijs: int | None = None
     bag_oppervlakte: int | None = None
     huurprijsopslag_signalen: list[str] = field(default_factory=list)
+    opslag_percentage: float = 0.0
     winst_pm_pp: float | None = None
     eigen_inleg_pp: float | None = None
 

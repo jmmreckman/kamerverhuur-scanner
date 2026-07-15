@@ -372,6 +372,42 @@ def test_run_zet_woningen_zonder_prijs_achteraan_de_sortering(tmp_path):
     assert volgorde == ["met_prijs", "zonder_prijs"]
 
 
+def test_run_backvult_investeringscijfers_voor_bestaande_woningen_zonder_ze_opnieuw_te_verwerken(tmp_path):
+    # Simuleert een woning die al in state.json stond vóórdat de investeringsberekening
+    # bestond: winst_pm_pp/eigen_inleg_pp zijn nog None, terwijl bag_oppervlakte en
+    # prijs (nodig om ze alsnog te berekenen) al wel bekend waren. Verschijnt vandaag
+    # niet eens in de Funda-mail - moet toch bijgewerkt worden, zonder opnieuw te
+    # geocoderen/BAG/monumenten te bevragen (dat zou hier meteen falen/gemockt moeten
+    # zijn als het geprobeerd werd).
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="oude-woning",
+            url="https://example.com/oude-woning",
+            weergavenaam="Oudstraat 1, Rotterdam",
+            eerst_gezien="2026-06-25",
+            laatst_gezien="2026-06-30",
+            status="actief",
+            bag_oppervlakte=115,
+            prijs=403_000,
+            opslag_percentage=0.0,
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    bijgewerkt = next(item for item in result.alle_actief if item.object_id == "oude-woning")
+    assert round(bijgewerkt.winst_pm_pp, 2) == 972.63
+    assert round(bijgewerkt.eigen_inleg_pp, 2) == 27_721.05
+
+
 def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_path):
     config = _config(tmp_path)
     p1, p2, p3, p4, p5 = _patch_geo_checks()
