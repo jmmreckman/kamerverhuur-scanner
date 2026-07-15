@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import requests
 
 # Rijksdienst voor het Cultureel Erfgoed (RCE): officiële, gratis kaartendata voor
@@ -22,6 +24,22 @@ _GEMEENTELIJKE_MONUMENTEN_FEATURESERVER = (
     "https://services.arcgis.com/emS4w7iyWEQiulAb/arcgis/rest/services/monumentenRotterdam2021/FeatureServer/2"
 )
 ROTTERDAM_MONUMENTENREGISTER_URL = "https://monumentenregister.rotterdam.nl/"
+
+# WWS-huurprijsopslagpercentages, zie report.py voor de volledige toelichting per soort.
+_OPSLAG_RIJKSMONUMENT = 0.35
+_OPSLAG_BESCHERMD_STADSGEZICHT = 0.05
+_OPSLAG_NIEUWBOUW = 0.10
+_OPSLAG_GEMEENTELIJK_MONUMENT = 0.15
+
+# Beschermd-stadsgezicht-opslag geldt alleen voor panden van vóór 1965 (WWS-regel) --
+# dit werd voorheen alleen in de signaaltekst genoemd, niet echt gecontroleerd.
+_STADSGEZICHT_BOUWJAAR_GRENS = 1965
+
+
+@dataclass(frozen=True)
+class HuurprijsopslagSignaal:
+    percentage: float
+    tekst: str
 
 
 def _check_rijksmonument(rd_x: float, rd_y: float) -> tuple[bool, str | None]:
@@ -95,40 +113,67 @@ def _check_mogelijk_gemeentelijk_monument(rd_x: float, rd_y: float) -> tuple[boo
     return True, features[0]["attributes"].get("USER_Omschrijving")
 
 
-def bepaal_huurprijsopslag_signalen(rd_x: float, rd_y: float, bouwjaar: int | None) -> list[str]:
-    """Geeft leesbare signalen terug over mogelijke huurprijsopslagen (WWS) op basis van
-    monumentstatus/bouwjaar. Puur informatief -- filtert niets uit de lijst, en waar de
-    onderliggende data niet 100% zeker of actueel is staat dat expliciet in de tekst
-    zodat de gebruiker het zelf kan verifiëren voordat hij erop rekent."""
-    signalen: list[str] = []
+def bepaal_huurprijsopslag(rd_x: float, rd_y: float, bouwjaar: int | None) -> list[HuurprijsopslagSignaal]:
+    """Geeft signalen terug over mogelijke huurprijsopslagen (WWS) op basis van
+    monumentstatus/bouwjaar, elk met het bijbehorende percentage. Puur informatief qua
+    filtering (filtert niets uit de lijst), maar het percentage wordt wel gebruikt in de
+    investeringsberekening (zie investering.py) -- waar de onderliggende data niet 100%
+    zeker of actueel is staat dat expliciet in de tekst zodat de gebruiker het zelf kan
+    verifiëren voordat hij erop rekent."""
+    signalen: list[HuurprijsopslagSignaal] = []
 
     is_rijksmonument, rijksmonument_url = _check_rijksmonument(rd_x, rd_y)
     if is_rijksmonument:
         signalen.append(
-            f"Mogelijk rijksmonument (35% huurprijsopslag) — verifieer: "
-            f"{rijksmonument_url or RIJKSMONUMENTENREGISTER_URL}"
+            HuurprijsopslagSignaal(
+                percentage=_OPSLAG_RIJKSMONUMENT,
+                tekst=(
+                    f"Mogelijk rijksmonument (35% huurprijsopslag) — verifieer: "
+                    f"{rijksmonument_url or RIJKSMONUMENTENREGISTER_URL}"
+                ),
+            )
         )
 
     is_beschermd, gezicht_naam = _check_beschermd_stadsgezicht(rd_x, rd_y)
-    if is_beschermd:
-        bouwjaar_tekst = f"bouwjaar {bouwjaar}" if bouwjaar is not None else "bouwjaar onbekend"
+    if is_beschermd and bouwjaar is not None and bouwjaar < _STADSGEZICHT_BOUWJAAR_GRENS:
         signalen.append(
-            f"Ligt in rijksbeschermd stads-/dorpsgezicht '{gezicht_naam}' ({bouwjaar_tekst}) — 5% "
-            "huurprijsopslag mogelijk als het pand van vóór 1965 is én geen andere monumentenopslag krijgt."
+            HuurprijsopslagSignaal(
+                percentage=_OPSLAG_BESCHERMD_STADSGEZICHT,
+                tekst=(
+                    f"Ligt in rijksbeschermd stads-/dorpsgezicht '{gezicht_naam}' (bouwjaar {bouwjaar}) — 5% "
+                    "huurprijsopslag, mits geen andere monumentenopslag van toepassing is."
+                ),
+            )
         )
 
     if bouwjaar is not None and bouwjaar >= 2024:
         signalen.append(
-            f"Bouwjaar {bouwjaar} (na 1 juli 2024) — nieuwbouwopslag (10%) mogelijk van toepassing "
-            "op reguliere (niet-monumentale) middenhuurwoningen."
+            HuurprijsopslagSignaal(
+                percentage=_OPSLAG_NIEUWBOUW,
+                tekst=(
+                    f"Bouwjaar {bouwjaar} (na 1 juli 2024) — nieuwbouwopslag (10%) mogelijk van toepassing "
+                    "op reguliere (niet-monumentale) middenhuurwoningen."
+                ),
+            )
         )
 
     is_mogelijk_gemeentelijk, omschrijving = _check_mogelijk_gemeentelijk_monument(rd_x, rd_y)
     if is_mogelijk_gemeentelijk:
         signalen.append(
-            "Mogelijk gemeentelijk monument (15% huurprijsopslag)"
-            + (f": {omschrijving.strip()}" if omschrijving else "")
-            + f" — gebaseerd op een lijst uit 2021, verifieer op {ROTTERDAM_MONUMENTENREGISTER_URL}."
+            HuurprijsopslagSignaal(
+                percentage=_OPSLAG_GEMEENTELIJK_MONUMENT,
+                tekst=(
+                    "Mogelijk gemeentelijk monument (15% huurprijsopslag)"
+                    + (f": {omschrijving.strip()}" if omschrijving else "")
+                    + f" — gebaseerd op een lijst uit 2021, verifieer op {ROTTERDAM_MONUMENTENREGISTER_URL}."
+                ),
+            )
         )
 
     return signalen
+
+
+def hoogste_opslagpercentage(signalen: list[HuurprijsopslagSignaal]) -> float:
+    """De monumentenopslagen zijn volgens de WWS-regels niet stapelbaar (je krijgt de
+    hoogste toepasselijke, niet de som) -- vandaar het maximum i.p.v. optellen."""
+    return max((s.percentage for s in signalen), default=0.0)

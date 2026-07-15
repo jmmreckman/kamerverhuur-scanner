@@ -44,7 +44,8 @@ def _dagen_bekend(item: ListingState, today: date) -> int:
 def _euro(bedrag: int | float | None) -> str:
     if bedrag is None:
         return "-"
-    return f"€{bedrag:,.0f}".replace(",", ".")
+    teken = "-" if bedrag < 0 else ""
+    return f"{teken}€{abs(bedrag):,.0f}".replace(",", ".")
 
 
 def _verwijder_mailto(scanner_email: str, object_id: str) -> str:
@@ -96,6 +97,9 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
         else "-"
     )
 
+    winst_tekst = f"{_euro(item.winst_pm_pp)}/mnd" if item.winst_pm_pp is not None else "-"
+    eigen_inleg_tekst = _euro(item.eigen_inleg_pp) if item.eigen_inleg_pp is not None else "-"
+
     return f"""
     <tr>
       <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
@@ -103,6 +107,8 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
       <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>
+      <td style="{_TD_STYLE}">{winst_tekst}</td>
+      <td style="{_TD_STYLE}">{eigen_inleg_tekst}</td>
       <td style="{_TD_STYLE}">{dagen} dag{'en' if dagen != 1 else ''}</td>
       <td style="{_TD_STYLE}">{' '.join(badges)}{opmerking_html}</td>
       <td style="{_TD_OPSLAG_STYLE}">{opslag_html}</td>
@@ -113,7 +119,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
 def _actief_tabel_header() -> str:
     koppen = [
-        "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "€/m²",
+        "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "€/m²", "Winst p.p./mnd", "Eigen inleg p.p.",
         "Dagen bekend", "Nog te checken", "Mogelijke huurprijsopslag", "Acties",
     ]  # fmt: skip
     ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
@@ -163,15 +169,16 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
   <h2 style="{_H2_STYLE}">Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
   <table style="{_TABLE_STYLE}">
     {actief_header}
-    {nieuwe_kansen_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen nieuwe kansen vandaag.</td></tr>'}
+    {nieuwe_kansen_rows or f'<tr><td style="{_TD_STYLE}" colspan="11">Geen nieuwe kansen vandaag.</td></tr>'}
   </table>
 
   <h2 style="{_H2_STYLE}">Openstaande kansen ({len(result.alle_actief)})</h2>
   <p style="{_SMALL_STYLE}">
     Deze huizen zijn NIET afgevallen op nul-quotumgebied, de 50-meter kamerverhuurvergunning-check of
-    (waar van toepassing) de automatische WOZ-check voor opkoopbescherming. Gesorteerd op vraagprijs
-    per m² (laagste eerst), op basis van de officiële BAG-oppervlakte — die wijkt soms af van wat in de
-    advertentietekst staat. "Dagen bekend" = dagen sinds dit systeem het huis voor het eerst zag in je
+    (waar van toepassing) de automatische WOZ-check voor opkoopbescherming. Gesorteerd op de laagste
+    verwachte eigen inleg per persoon (na ophoging van de financiering, zie hieronder) — de beste kans
+    staat bovenaan. "Winst p.p./mnd" en "Eigen inleg p.p." staan op "-" zolang oppervlakte of vraagprijs
+    nog onbekend zijn. "Dagen bekend" = dagen sinds dit systeem het huis voor het eerst zag in je
     Funda-alertmail. Een huis verdwijnt vanzelf na {expiry_days} dagen als het niet eerder handmatig
     verwijderd is — er wordt niet automatisch op "verkocht" of "onder bod" gecheckt, dat zie je zelf
     aan hoe lang een huis al op de lijst staat.
@@ -179,7 +186,7 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
   </p>
   <table style="{_TABLE_STYLE}">
     {actief_header}
-    {actieve_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen openstaande kansen.</td></tr>'}
+    {actieve_rows or f'<tr><td style="{_TD_STYLE}" colspan="11">Geen openstaande kansen.</td></tr>'}
   </table>
 
   <h2 style="{_H2_STYLE}">Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
@@ -213,14 +220,26 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
   </p>
   <p style="{_SMALL_STYLE}">
     "Mogelijke huurprijsopslag" checkt automatisch op rijksmonument en rijksbeschermd
-    stads-/dorpsgezicht (officiële Rijksdienst-data) en nieuwbouwopslag (BAG-bouwjaar) — deze zijn
-    betrouwbaar maar altijd met "mogelijk" gemarkeerd omdat de exacte toepassing van de opslag
-    (bijv. niet ook al een andere monumentenopslag) je zelf moet checken. Gemeentelijk monument wordt
-    ook gecheckt, maar op basis van een door een derde gepubliceerde lijst uit 2021 — dus minder
-    zeker, altijd verifiëren op monumentenregister.rotterdam.nl. Provinciaal monument (ook 15%) wordt
-    niet automatisch gecheckt (geen bevraagbare open data beschikbaar, en komt in Rotterdam vrijwel
-    nooit voor) — check dit zelf als het voor jouw pand relevant lijkt. "geen gevonden" betekent dus
-    niet dat er zeker geen opslag mogelijk is, alleen dat de automatische checks niets vonden.
+    stads-/dorpsgezicht (officiële Rijksdienst-data, dat laatste alleen bij bouwjaar vóór 1965) en
+    nieuwbouwopslag (BAG-bouwjaar) — deze zijn betrouwbaar maar altijd met "mogelijk" gemarkeerd omdat
+    de exacte toepassing van de opslag (bijv. niet ook al een andere monumentenopslag) je zelf moet
+    checken. Gemeentelijk monument wordt ook gecheckt, maar op basis van een door een derde
+    gepubliceerde lijst uit 2021 — dus minder zeker, altijd verifiëren op
+    monumentenregister.rotterdam.nl. Provinciaal monument (ook 15%) wordt niet automatisch gecheckt
+    (geen bevraagbare open data beschikbaar, en komt in Rotterdam vrijwel nooit voor) — check dit zelf
+    als het voor jouw pand relevant lijkt. "geen gevonden" betekent dus niet dat er zeker geen opslag
+    mogelijk is, alleen dat de automatische checks niets vonden. De hoogste gevonden opslag (niet
+    gestapeld) telt mee in de "Winst p.p./mnd" en "Eigen inleg p.p."-berekening hieronder.
+  </p>
+  <p style="{_SMALL_STYLE}">
+    "Winst p.p./mnd" en "Eigen inleg p.p." gaan uit van een aanname-model met vaste aannames (BAR
+    7,6%, overdrachtsbelasting 8%, rente 5,8%, kosten koper €6.000, verbouwkosten €25.000, kale huur
+    €550/kamer) en een tweetraps-financiering: eerst een lening o.b.v. 80% van 87,5% van de koopsom,
+    daarna "opgehoogd" naar 80% van de taxatie ná vergunning (o.b.v. de verwachte huurinkomsten) zodra
+    die vergunning er is. "Eigen inleg p.p." is dus wat er ná die ophoging definitief zelf ingelegd
+    blijft, gedeeld door twee (bij twee investeerders) — een negatief bedrag betekent dat de lening na
+    ophoging alle kosten dekt. Puur een rekenmodel op basis van aannames, geen advies — check zelf de
+    actuele rente/voorwaarden voordat je hierop een bod uitbrengt.
   </p>
 </body>
 </html>
@@ -240,6 +259,10 @@ def _item_regels(item: ListingState, today: date, scanner_email: str) -> list[st
         f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}",
         f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}",
     ]
+    if item.winst_pm_pp is not None and item.eigen_inleg_pp is not None:
+        regels.append(
+            f"    winst p.p./mnd: {_euro(item.winst_pm_pp)}, eigen inleg p.p.: {_euro(item.eigen_inleg_pp)}"
+        )
     if extra:
         regels.append(f"    nog te checken: {', '.join(extra)}")
     if item.huurprijsopslag_signalen:
@@ -263,7 +286,7 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
         lines.append("  (geen)")
 
     lines.append("")
-    lines.append(f"Openstaande kansen ({len(result.alle_actief)}), gesorteerd op €/m²:")
+    lines.append(f"Openstaande kansen ({len(result.alle_actief)}), gesorteerd op laagste eigen inleg p.p.:")
     for item in result.alle_actief:
         lines.extend(_item_regels(item, today, scanner_email))
     if not result.alle_actief:

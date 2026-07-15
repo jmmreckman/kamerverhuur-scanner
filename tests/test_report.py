@@ -5,7 +5,16 @@ from rotterdam_scanner.report import build_html_report, build_text_report
 from rotterdam_scanner.state import ListingState
 
 
-def _listing(object_id, weergavenaam, eerst_gezien, wijknaam="Centrum", prijs=250_000, bag_oppervlakte=60):
+def _listing(
+    object_id,
+    weergavenaam,
+    eerst_gezien,
+    wijknaam="Centrum",
+    prijs=250_000,
+    bag_oppervlakte=60,
+    winst_pm_pp=None,
+    eigen_inleg_pp=None,
+):
     return ListingState(
         object_id=object_id,
         url=f"https://example.com/{object_id}",
@@ -16,6 +25,8 @@ def _listing(object_id, weergavenaam, eerst_gezien, wijknaam="Centrum", prijs=25
         wijknaam=wijknaam,
         prijs=prijs,
         bag_oppervlakte=bag_oppervlakte,
+        winst_pm_pp=winst_pm_pp,
+        eigen_inleg_pp=eigen_inleg_pp,
     )
 
 
@@ -92,6 +103,41 @@ def test_html_report_nieuwe_kansen_blok_toont_geen_woningen_bij_leeg():
     assert "Nieuwe kansen vandaag (0)" in html
     nieuwe_sectie = html.split("Nieuwe kansen vandaag")[1].split("Openstaande kansen")[0]
     assert "Geen nieuwe kansen vandaag." in nieuwe_sectie
+
+
+def test_html_report_toont_winst_en_eigen_inleg_kolommen():
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", winst_pm_pp=972.63, eigen_inleg_pp=27_721.05)
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "€973/mnd" in html
+    assert "€27.721" in html
+    assert "Winst p.p./mnd" in html
+    assert "Eigen inleg p.p." in html
+
+
+def test_html_report_toont_negatieve_eigen_inleg_met_minteken():
+    # Negatief betekent: de lening na ophoging dekt alle kosten - een sterk signaal,
+    # dus moet duidelijk als negatief bedrag herkenbaar zijn (niet als een positief
+    # bedrag door een wegvallend minteken).
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09", winst_pm_pp=500.0, eigen_inleg_pp=-12_345.0)
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "-€12.345" in html
+
+
+def test_html_report_zonder_investeringscijfers_toont_streepje():
+    item = _listing("NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09")
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "<td" in html  # sanity check dat de tabel gerenderd is
+    # geen crash en geen "None" in de output
+    assert "None" not in html
 
 
 def test_html_report_bevat_geen_zelfbewoningsplicht_melding_meer():

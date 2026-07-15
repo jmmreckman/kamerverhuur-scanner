@@ -4,7 +4,8 @@ from rotterdam_scanner.monumenten import (
     _check_beschermd_stadsgezicht,
     _check_mogelijk_gemeentelijk_monument,
     _check_rijksmonument,
-    bepaal_huurprijsopslag_signalen,
+    bepaal_huurprijsopslag,
+    hoogste_opslagpercentage,
 )
 
 
@@ -64,79 +65,121 @@ def test_check_mogelijk_gemeentelijk_monument_false_zonder_features():
     assert omschrijving is None
 
 
-def test_bepaal_huurprijsopslag_signalen_niets_gevonden_geeft_lege_lijst():
+def test_bepaal_huurprijsopslag_niets_gevonden_geeft_lege_lijst():
     with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=1980)
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1980)
     assert signalen == []
 
 
-def test_bepaal_huurprijsopslag_signalen_rijksmonument():
+def test_bepaal_huurprijsopslag_rijksmonument():
     responses = [
         _mock_response({"features": [{"properties": {"rijksmonumenturl": "https://example.com/1"}}]}),
         _lege_response(),
         _lege_response(),
     ]
     with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=1900)
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1900)
     assert len(signalen) == 1
-    assert "35%" in signalen[0]
-    assert "https://example.com/1" in signalen[0]
+    assert signalen[0].percentage == 0.35
+    assert "35%" in signalen[0].tekst
+    assert "https://example.com/1" in signalen[0].tekst
 
 
-def test_bepaal_huurprijsopslag_signalen_beschermd_stadsgezicht_toont_bouwjaar():
+def test_bepaal_huurprijsopslag_beschermd_stadsgezicht_voor_1965_telt_mee():
     responses = [
         _lege_response(),
         _mock_response({"features": [{"properties": {"NAAM": "Rotterdam - Delfshaven"}}]}),
         _lege_response(),
     ]
     with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=1918)
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1918)
     assert len(signalen) == 1
-    assert "5%" in signalen[0]
-    assert "Delfshaven" in signalen[0]
-    assert "1918" in signalen[0]
+    assert signalen[0].percentage == 0.05
+    assert "Delfshaven" in signalen[0].tekst
+    assert "1918" in signalen[0].tekst
 
 
-def test_bepaal_huurprijsopslag_signalen_nieuwbouw_boven_2024():
-    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=2025)
-    assert len(signalen) == 1
-    assert "10%" in signalen[0]
-    assert "2025" in signalen[0]
-
-
-def test_bepaal_huurprijsopslag_signalen_geen_nieuwbouw_onder_2024():
-    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=2010)
+def test_bepaal_huurprijsopslag_beschermd_stadsgezicht_na_1965_telt_niet_mee():
+    # WWS-regel: de 5%-opslag voor beschermd stadsgezicht geldt alleen voor panden
+    # van vóór 1965 - een latente bug die nooit echt gecontroleerd werd (stond alleen
+    # in de tekst), nu wél afgedwongen omdat dit financieel meetelt.
+    responses = [
+        _lege_response(),
+        _mock_response({"features": [{"properties": {"NAAM": "Rotterdam - Delfshaven"}}]}),
+        _lege_response(),
+    ]
+    with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1970)
     assert signalen == []
 
 
-def test_bepaal_huurprijsopslag_signalen_zonder_bouwjaar_geen_nieuwbouwsignaal():
-    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=None)
+def test_bepaal_huurprijsopslag_beschermd_stadsgezicht_zonder_bouwjaar_telt_niet_mee():
+    responses = [
+        _lege_response(),
+        _mock_response({"features": [{"properties": {"NAAM": "Rotterdam - Delfshaven"}}]}),
+        _lege_response(),
+    ]
+    with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=None)
     assert signalen == []
 
 
-def test_bepaal_huurprijsopslag_signalen_mogelijk_gemeentelijk_monument():
+def test_bepaal_huurprijsopslag_nieuwbouw_boven_2024():
+    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=2025)
+    assert len(signalen) == 1
+    assert signalen[0].percentage == 0.10
+    assert "2025" in signalen[0].tekst
+
+
+def test_bepaal_huurprijsopslag_geen_nieuwbouw_onder_2024():
+    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=2010)
+    assert signalen == []
+
+
+def test_bepaal_huurprijsopslag_zonder_bouwjaar_geen_nieuwbouwsignaal():
+    with patch("rotterdam_scanner.monumenten.requests.get", return_value=_lege_response()):
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=None)
+    assert signalen == []
+
+
+def test_bepaal_huurprijsopslag_mogelijk_gemeentelijk_monument():
     responses = [
         _lege_response(),
         _lege_response(),
         _mock_response({"features": [{"attributes": {"USER_Omschrijving": "Voormalig pakhuis"}}]}),
     ]
     with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=1900)
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1900)
     assert len(signalen) == 1
-    assert "15%" in signalen[0]
-    assert "Voormalig pakhuis" in signalen[0]
-    assert "monumentenregister.rotterdam.nl" in signalen[0]
+    assert signalen[0].percentage == 0.15
+    assert "Voormalig pakhuis" in signalen[0].tekst
+    assert "monumentenregister.rotterdam.nl" in signalen[0].tekst
 
 
-def test_bepaal_huurprijsopslag_signalen_combineert_alle_signalen():
+def test_bepaal_huurprijsopslag_combineert_alle_signalen():
     responses = [
         _mock_response({"features": [{"properties": {"rijksmonumenturl": None}}]}),
         _mock_response({"features": [{"properties": {"NAAM": "Test-gezicht"}}]}),
         _mock_response({"features": [{"attributes": {"USER_Omschrijving": None}}]}),
     ]
     with patch("rotterdam_scanner.monumenten.requests.get", side_effect=responses):
-        signalen = bepaal_huurprijsopslag_signalen(1.0, 2.0, bouwjaar=2025)
-    assert len(signalen) == 4
+        signalen = bepaal_huurprijsopslag(1.0, 2.0, bouwjaar=1920)
+    # rijksmonument (35%) + stadsgezicht (5%, bouwjaar 1920 < 1965) + gemeentelijk monument (15%)
+    # -- nieuwbouwsignaal komt er niet bij aangezien bouwjaar 1920 geen nieuwbouw is.
+    assert len(signalen) == 3
+
+
+def test_hoogste_opslagpercentage_neemt_maximum_niet_de_som():
+    from rotterdam_scanner.monumenten import HuurprijsopslagSignaal
+
+    signalen = [
+        HuurprijsopslagSignaal(percentage=0.05, tekst="stadsgezicht"),
+        HuurprijsopslagSignaal(percentage=0.35, tekst="rijksmonument"),
+    ]
+    assert hoogste_opslagpercentage(signalen) == 0.35
+
+
+def test_hoogste_opslagpercentage_leeg_geeft_nul():
+    assert hoogste_opslagpercentage([]) == 0.0

@@ -8,6 +8,7 @@ from rotterdam_scanner.bag import BagGegevens
 from rotterdam_scanner.config import Config
 from rotterdam_scanner.funda_mail import FundaListing, FundaMailScan
 from rotterdam_scanner.geocode import GeocodeError, GeocodeResult
+from rotterdam_scanner.monumenten import HuurprijsopslagSignaal
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +81,7 @@ def _patch_geo_checks(wijk="Rotterdam Centrum", nulquotum=False, binnen_50m=Fals
             "rotterdam_scanner.pipeline.fetch_bag_gegevens",
             return_value=BagGegevens(oppervlakte=oppervlakte, bouwjaar=bouwjaar),
         ),
-        patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]),
+        patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[]),
     )
 
 
@@ -141,8 +142,9 @@ def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):
 
 def test_huurprijsopslag_signalen_worden_meegenomen_op_actieve_woning(tmp_path):
     p1, p2, p3, p4, _ = _patch_geo_checks(wijk="Rotterdam Centrum", bouwjaar=1918)
+    signaal = HuurprijsopslagSignaal(percentage=0.35, tekst="Mogelijk rijksmonument (35%)")
     with p1, p2, p3, p4, patch(
-        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=["Mogelijk rijksmonument (35%)"]
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[signaal]
     ) as signalen_mock:
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
@@ -153,7 +155,7 @@ def test_huurprijsopslag_signalen_worden_meegenomen_op_actieve_woning(tmp_path):
 def test_monumentencheck_fout_geeft_opmerking_maar_geen_crash(tmp_path):
     p1, p2, p3, p4, _ = _patch_geo_checks(wijk="Rotterdam Centrum")
     with p1, p2, p3, p4, patch(
-        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", side_effect=RuntimeError("RCE plat")
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag", side_effect=RuntimeError("RCE plat")
     ):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
@@ -166,7 +168,7 @@ def test_bag_fout_geeft_opmerking_maar_geen_crash(tmp_path):
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.fetch_bag_gegevens", side_effect=RuntimeError("BAG plat")
-    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[]):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.bag_oppervlakte is None
@@ -209,7 +211,7 @@ def test_woz_api_fout_valt_terug_op_handmatige_vlag_met_opmerking(tmp_path):
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.meest_recente_woz_waarde", side_effect=RuntimeError("API plat")
     ), patch("rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=None), patch(
-        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]
+        "rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[]
     ):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
 
@@ -315,7 +317,11 @@ def test_run_meldt_fout_bij_kapotte_verwijder_commando_scan_zonder_te_crashen(tm
     assert "IMAP kapot" in result.fouten[0]
 
 
-def test_run_sorteert_openstaande_kansen_op_prijs_per_m2(tmp_path):
+def test_run_sorteert_openstaande_kansen_op_eigen_inleg_pp(tmp_path):
+    # Zelfde BAG-oppervlakte (dus zelfde aantal kamers/kale huur/taxatie na
+    # vergunning) voor alle drie - alleen de vraagprijs verschilt, dus een lagere
+    # vraagprijs geeft hier ook een lagere eigen inleg p.p. (zelfde volgorde als de
+    # oude prijs-per-m2-sortering, maar nu getest tegen de echte sorteersleutel).
     config = _config(tmp_path)
 
     def geocode_side_effect(postcode, huisnummer, toevoeging=""):
@@ -337,7 +343,7 @@ def test_run_sorteert_openstaande_kansen_op_prijs_per_m2(tmp_path):
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.fetch_bag_gegevens", side_effect=bag_side_effect
-    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[]):
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     volgorde = [item.object_id for item in result.alle_actief]
@@ -359,7 +365,7 @@ def test_run_zet_woningen_zonder_prijs_achteraan_de_sortering(tmp_path):
         "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
     ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=False), patch(
         "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=100, bouwjaar=None)
-    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag_signalen", return_value=[]):
+    ), patch("rotterdam_scanner.pipeline.bepaal_huurprijsopslag", return_value=[]):
         result = pipeline.run(config, today=date(2026, 7, 1))
 
     volgorde = [item.object_id for item in result.alle_actief]

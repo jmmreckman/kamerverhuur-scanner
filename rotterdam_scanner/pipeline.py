@@ -8,7 +8,8 @@ from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
-from .monumenten import bepaal_huurprijsopslag_signalen
+from .investering import bereken as bereken_investering
+from .monumenten import bepaal_huurprijsopslag, hoogste_opslagpercentage
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
 from .woz import meest_recente_woz_waarde
@@ -124,13 +125,23 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
     bag_oppervlakte = bag.oppervlakte if bag else None
     bouwjaar = bag.bouwjaar if bag else None
 
+    opslag_percentage = 0.0
     try:
-        huurprijsopslag_signalen = bepaal_huurprijsopslag_signalen(geo.rd_x, geo.rd_y, bouwjaar)
+        opslag_signalen = bepaal_huurprijsopslag(geo.rd_x, geo.rd_y, bouwjaar)
+        opslag_percentage = hoogste_opslagpercentage(opslag_signalen)
     except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
-        huurprijsopslag_signalen = []
+        opslag_signalen = []
         opmerking = (
             opmerking + " " if opmerking else ""
         ) + f"Monumenten-/opslagcheck kon niet uitgevoerd worden ({exc})."
+
+    winst_pm_pp = None
+    eigen_inleg_pp = None
+    if bag_oppervlakte and listing.prijs:
+        investering = bereken_investering(bag_oppervlakte, listing.prijs, opslag_percentage)
+        if investering is not None:
+            winst_pm_pp = investering.winst_pm_pp
+            eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
 
     return ListingState(
         object_id=listing.object_id,
@@ -147,15 +158,18 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         opmerking=opmerking,
         prijs=listing.prijs,
         bag_oppervlakte=bag_oppervlakte,
-        huurprijsopslag_signalen=huurprijsopslag_signalen,
+        huurprijsopslag_signalen=[s.tekst for s in opslag_signalen],
+        winst_pm_pp=winst_pm_pp,
+        eigen_inleg_pp=eigen_inleg_pp,
     )
 
 
 def _sorteersleutel(item: ListingState) -> tuple[int, float]:
-    prijs_per_m2 = item.prijs_per_m2
-    if prijs_per_m2 is None:
+    # Laagste eigen inleg per persoon eerst (beste kansen bovenaan) - ontbrekende
+    # waarden (bv. geen BAG-oppervlakte of vraagprijs bekend) onderaan.
+    if item.eigen_inleg_pp is None:
         return (1, 0.0)
-    return (0, prijs_per_m2)
+    return (0, item.eigen_inleg_pp)
 
 
 _HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
