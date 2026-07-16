@@ -167,6 +167,30 @@ Start-ScheduledTask -TaskName "KamerverhuurScannerRotterdam"
 
 Verwijderen/opnieuw instellen kan met `scripts\verwijder_taakplanner.ps1`.
 
+## Draait nu op de VPS (zolder-pc/Taakplanner niet meer nodig)
+
+Sinds juli 2026 draait dit als losse Docker-container (`fundazoeker`) op dezelfde VPS
+als steenhub.nl, met een eigen dagelijkse planning (09:00 Europe/Amsterdam) ingebouwd
+in `scripts/dagelijkse_scan.py` — zie `deploy/docker-compose.yml` en
+`deploy/fundazoeker.env.example` in de hoofdbranch. Een push naar deze branch deployt
+automatisch (GitHub Actions, `.github/workflows/deploy.yml`).
+
+Handig op de VPS (`cd /opt/kamerverhuur-scanner/deploy` eerst):
+
+```bash
+# Logs bekijken (bv. na een deploy, of om te checken of de laatste scan goed ging)
+docker compose logs fundazoeker --tail 100
+
+# Handmatig een scan + rapport forceren (buiten het 09:00-schema om) - stuurt naar
+# alle adressen in REPORT_TO_ADDRESS
+docker compose exec fundazoeker python3 main.py
+
+# Zelfde, maar dit ene keer alleen naar jezelf (bv. om een wijziging te testen zonder
+# een medegebruiker mee te mailen) - REPORT_TO_ADDRESS in fundazoeker.env blijft
+# ongewijzigd, dit geldt alleen voor deze ene aanroep
+docker compose exec -e REPORT_TO_ADDRESS=jmmreckman@gmail.com fundazoeker python3 main.py
+```
+
 ## Het dagrapport lezen
 
 Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
