@@ -2,6 +2,7 @@
 huurcontract: verzoek tot tekenen versturen, de publieke ondertekenpagina,
 en het automatisch afronden (definitieve PDF + mail) zodra iedereen heeft
 getekend."""
+import html
 import json
 import re
 from decimal import Decimal
@@ -75,7 +76,8 @@ def app_client(tmp_path, monkeypatch):
         bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
         smtp_host="smtp.example.com", smtp_port=587, smtp_username="info@steenhub.nl",
         smtp_password="geheim", smtp_from_email="info@steenhub.nl", smtp_from_naam="Steenhub",
-        email_bcc=["jurian@example.com"],
+        email_bcc=["jurian@example.com", "justin@example.com"],
+        email_bcc_beheerder=["jurian@example.com"],
     )
     app = create_app(config)
     app.testing = True
@@ -411,8 +413,12 @@ def test_tekenverzoek_op_al_getekend_contract_geeft_foutmelding(mock_smtp_cls, a
     assert "al een ondertekend contract" in resp.get_data(as_text=True).lower()
 
 
+def _opnieuw_mailen_url(bestandsnaam, ondertekenaar_id):
+    return f"/pand/mahoniestraat/contracten/{bestandsnaam}/ondertekenstatus/{ondertekenaar_id}/opnieuw-mailen"
+
+
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
-def test_opnieuw_mailen_stuurt_alleen_naar_1_ondertekenaar(mock_smtp_cls, app_client):
+def test_opnieuw_mailen_get_toont_voorbeeld_met_beide_boxjes_aangevinkt(mock_smtp_cls, app_client):
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
     bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
@@ -420,11 +426,84 @@ def test_opnieuw_mailen_stuurt_alleen_naar_1_ondertekenaar(mock_smtp_cls, app_cl
     tokens = _tokens(bestandsnaam)
     smtp_instance.send_message.reset_mock()
 
+    resp = app_client.get(_opnieuw_mailen_url(bestandsnaam, tokens["huurder"]["id"]))
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "We have not yet received your payment" in body
+    assert "We have not yet received your signature" in body
+    # nog niets gemaild - alleen een voorbeeld
+    smtp_instance.send_message.assert_not_called()
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_opnieuw_mailen_get_met_alleen_onderteken_bevestigt_betaling(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+
+    resp = app_client.get(
+        _opnieuw_mailen_url(bestandsnaam, tokens["huurder"]["id"]) + "?onderteken=1&betaal=0"
+    )
+    body = resp.get_data(as_text=True)
+    assert "We have received your payment" in body
+    assert "We have not yet received your signature" in body
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_opnieuw_mailen_post_stuurt_alleen_naar_1_ondertekenaar_met_beheerder_bcc(mock_smtp_cls, app_client):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+    smtp_instance.send_message.reset_mock()
+
+    voorbeeld = app_client.get(_opnieuw_mailen_url(bestandsnaam, tokens["huurder"]["id"]))
+    body = voorbeeld.get_data(as_text=True)
+    onderwerp = html.unescape(re.search(r'name="onderwerp" value="([^"]+)"', body).group(1))
+    tekst = html.unescape(re.search(r'name="tekst"[^>]*>([\s\S]*?)</textarea>', body).group(1))
+
     resp = app_client.post(
-        f"/pand/mahoniestraat/contracten/{bestandsnaam}/ondertekenstatus/{tokens['huurder']['id']}/opnieuw-mailen",
+        _opnieuw_mailen_url(bestandsnaam, tokens["huurder"]["id"]),
+        data={"onderwerp": onderwerp, "tekst": tekst},
         follow_redirects=True,
     )
     assert resp.status_code == 200
     assert "opnieuw gemaild" in resp.get_data(as_text=True).lower()
     assert smtp_instance.send_message.call_count == 1
-    assert smtp_instance.send_message.call_args.args[0]["To"] == "bence@example.com"
+    verzonden_bericht = smtp_instance.send_message.call_args.args[0]
+    assert verzonden_bericht["To"] == "bence@example.com"
+    # smallere BCC dan de rest van de app (email_bcc_beheerder, niet Justin)
+    assert verzonden_bericht["Bcc"] == "jurian@example.com"
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_opnieuw_mailen_verhuurder_krijgt_alleen_tekenherinnering(mock_smtp_cls, app_client):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+
+    resp = app_client.get(_opnieuw_mailen_url(bestandsnaam, tokens["verhuurder"]["id"]))
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "we have not yet received your signature" in body.lower()
+    assert "onderteken herinnering" not in body.lower()  # geen boxjes voor niet-huurders
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_opnieuw_mailen_op_al_getekende_ondertekenaar_geeft_foutmelding(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+    app_client.post(
+        f"/tekenen/{tokens['huurder']['token']}",
+        data={"getekende_naam": "Bence Neumayer", "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
+    )
+
+    resp = app_client.get(_opnieuw_mailen_url(bestandsnaam, tokens["huurder"]["id"]), follow_redirects=True)
+    assert resp.status_code == 200
+    assert "had al getekend" in resp.get_data(as_text=True).lower()

@@ -324,6 +324,92 @@ def bouw_tekenmail_overig(rol: str, naam: str, pand: Pand, metadata: dict, teken
     return {"onderwerp": onderwerp, "tekst": tekst}
 
 
+def bouw_huurder_herinnering(
+    pand: Pand, metadata: dict, teken_url: str, betaalverzoek: dict,
+    onderteken_herinnering: bool, betaal_herinnering: bool,
+) -> dict[str, str]:
+    """Mail naar de huurder bij het opnieuw versturen van het ondertekenverzoek
+    (zie webapp/app.py: contract_tekenverzoek_opnieuw) - per aangevinkte
+    checkbox wordt dat onderdeel als herinnering ('nog niet ontvangen')
+    geformuleerd, en anders als bevestiging ('al ontvangen'). Minstens een
+    van beide moet een herinnering zijn - anders is er niets te versturen
+    (de knop verschijnt sowieso alleen voor nog niet getekende partijen)."""
+    naam = metadata.get("huurder_naam") or "there"
+    kamer = metadata.get("kamer", "")
+    if onderteken_herinnering and betaal_herinnering:
+        onderwerp = f"Reminder: signature & payment - room {kamer}, {pand.naam}".strip()
+    elif onderteken_herinnering:
+        onderwerp = f"Reminder: signature required - room {kamer}, {pand.naam}".strip()
+    else:
+        onderwerp = f"Reminder: payment required - room {kamer}, {pand.naam}".strip()
+
+    ingangsdatum = betaalverzoek["ingangsdatum"].strftime("%d-%m-%Y")
+    laatste_dag = betaalverzoek["laatste_dag_maand"].strftime("%d-%m-%Y")
+    if betaal_herinnering:
+        betaal_tekst = (
+            f"We have not yet received your payment of EUR {format_bedrag_nl(betaalverzoek['totaal'])} in total, "
+            f"made up of:\n"
+            f"   - Security deposit: EUR {format_bedrag_nl(betaalverzoek['borg'])}\n"
+            f"   - Pro-rated rent from {ingangsdatum} to {laatste_dag} "
+            f"({betaalverzoek['dagen_resterend']} days): EUR {format_bedrag_nl(betaalverzoek['pro_rata_huur'])}\n\n"
+            f"   Please transfer this to:\n"
+            f"   IBAN: {pand.bunq_rekening_iban}\n"
+            f"   Account holder: {pand.rekeninghouder_naam or pand.naam}"
+        )
+    else:
+        betaal_tekst = (
+            f"We have received your payment of EUR {format_bedrag_nl(betaalverzoek['totaal'])} in total - thank you."
+        )
+
+    if onderteken_herinnering:
+        teken_tekst = (
+            "We have not yet received your signature on the rental agreement. Please sign it "
+            f"electronically via this link:\n   {teken_url}"
+        )
+    else:
+        teken_tekst = "You have already signed the rental agreement - thank you."
+
+    wie_nog = "the landlord(s)" + (" and guarantor" if metadata.get("borgsteller_naam") else "")
+    if pand.heeft_bold_slot:
+        afronding = (
+            "we will send you the fully signed agreement, and your digital key (Bold) will be "
+            "activated - it becomes valid from the start date of your rental agreement"
+        )
+    else:
+        afronding = "we will send you the fully signed agreement"
+
+    tekst = (
+        f"Dear {naam},\n\n"
+        f"This is a follow-up regarding room {kamer} at {pand.naam}.\n\n"
+        f"1) Payment:\n   {betaal_tekst}\n\n"
+        f"2) Signature:\n   {teken_tekst}\n\n"
+        f"Once the payment has been received and everyone has signed ({wie_nog} still need to sign as "
+        f"well), {afronding}.\n\n"
+        f"Kind regards,\n{AFZENDER_NAAM}"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
+def bouw_tekenmail_overig_herinnering(rol: str, naam: str, pand: Pand, metadata: dict, teken_url: str) -> dict[str, str]:
+    """Herinneringsmail naar de verhuurder(s) of borgsteller bij het opnieuw
+    versturen: alleen het tekenverzoek is voor hen relevant (zij betalen
+    niets), dus geen bevestiging/herinnering-onderscheid zoals bij de
+    huurder - altijd een herinnering om te tekenen."""
+    kamer = metadata.get("kamer", "")
+    huurder_naam = metadata.get("huurder_naam", "")
+    onderwerp = f"Reminder: signature request - room {kamer}, {pand.naam}".strip()
+    rol_tekst = _ROLNAMEN_EN.get(rol, rol)
+    tekst = (
+        f"Dear {naam},\n\n"
+        f"This is a reminder that we have not yet received your signature on the rental agreement for "
+        f"room {kamer} at {pand.naam} (tenant: {huurder_naam}), in your role as {rol_tekst}. Please sign "
+        f"it via this link:\n\n"
+        f"{teken_url}\n\n"
+        f"Kind regards,\n{AFZENDER_NAAM}"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
 def bouw_getekend_contract_mail(pand: Pand, metadata: dict) -> dict[str, str]:
     """Mail met het volledig ondertekende contract als bijlage, verstuurd
     naar alle partijen zodra iedereen getekend heeft."""

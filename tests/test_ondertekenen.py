@@ -87,6 +87,66 @@ def test_bouw_betaal_en_tekenmail_zonder_bold_slot_noemt_bold_niet():
     assert "we will send you the fully signed agreement." in mail["tekst"]
 
 
+# --- bouw_huurder_herinnering ---
+
+
+def test_bouw_huurder_herinnering_beide_aangevinkt_is_dubbele_herinnering():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=True, betaal_herinnering=True,
+    )
+    assert "signature & payment" in mail["onderwerp"]
+    assert "We have not yet received your payment" in mail["tekst"]
+    assert "We have not yet received your signature" in mail["tekst"]
+    assert "https://steenhub.nl/tekenen/abc" in mail["tekst"]
+
+
+def test_bouw_huurder_herinnering_alleen_onderteken_bevestigt_betaling():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=True, betaal_herinnering=False,
+    )
+    assert "signature required" in mail["onderwerp"]
+    assert "We have received your payment" in mail["tekst"]
+    assert "thank you." in mail["tekst"]
+    assert "We have not yet received your signature" in mail["tekst"]
+
+
+def test_bouw_huurder_herinnering_alleen_betaal_bevestigt_ondertekening():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=False, betaal_herinnering=True,
+    )
+    assert "payment required" in mail["onderwerp"]
+    assert "You have already signed the rental agreement" in mail["tekst"]
+    assert "We have not yet received your payment" in mail["tekst"]
+
+
+# --- bouw_tekenmail_overig_herinnering ---
+
+
+def test_bouw_tekenmail_overig_herinnering_is_altijd_een_herinnering():
+    pand = _pand()
+    mail = ondertekenen.bouw_tekenmail_overig_herinnering(
+        "verhuurder", "Jurian Reckman", pand, _metadata(), "https://steenhub.nl/tekenen/def"
+    )
+    assert "Reminder" in mail["onderwerp"]
+    assert "we have not yet received your signature" in mail["tekst"]
+    assert "https://steenhub.nl/tekenen/def" in mail["tekst"]
+
+
 # --- start_ondertekenronde ---
 
 

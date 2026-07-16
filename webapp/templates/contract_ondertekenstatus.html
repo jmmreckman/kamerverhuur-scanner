@@ -30,9 +30,7 @@
       </td>
       <td>
         {% if not o.ondertekend_op and o.email %}
-        <form method="post" action="{{ url_for('contract_tekenverzoek_opnieuw', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam, ondertekenaar_id=o.id) }}" style="display:inline">
-          <button class="btn btn-secondary" type="submit">Opnieuw mailen</button>
-        </form>
+        <a class="btn btn-secondary" href="{{ url_for('contract_tekenverzoek_opnieuw', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam, ondertekenaar_id=o.id) }}">Opnieuw mailen</a>
         {% endif %}
       </td>
     </tr>

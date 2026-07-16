@@ -958,14 +958,17 @@ def create_app(config: Config | None = None) -> Flask:
     def _teken_url(token: str) -> str:
         return url_for("tekenen", token=token, _external=True)
 
-    def _bouw_huurder_tekenmail(metadata: dict, teken_url: str) -> dict[str, str]:
+    def _betaalverzoek_uit_metadata(metadata: dict) -> dict:
         huurprijs = parse_bedrag(metadata.get("huurprijs"))
         borg = parse_bedrag(metadata.get("borg"))
         try:
             ingangsdatum = date.fromisoformat(metadata.get("ingangsdatum_iso") or "")
         except ValueError:
             ingangsdatum = date.today()
-        betaalverzoek = ondertekenen.bereken_betaalverzoek(huurprijs, borg, ingangsdatum)
+        return ondertekenen.bereken_betaalverzoek(huurprijs, borg, ingangsdatum)
+
+    def _bouw_huurder_tekenmail(metadata: dict, teken_url: str) -> dict[str, str]:
+        betaalverzoek = _betaalverzoek_uit_metadata(metadata)
         return ondertekenen.bouw_betaal_en_tekenmail(g.pand, metadata, teken_url, betaalverzoek)
 
     def _verstuur_tekenverzoek_mails(ronde: dict, metadata: dict, huurder_override: dict | None = None) -> list[str]:
@@ -1077,7 +1080,7 @@ def create_app(config: Config | None = None) -> Flask:
 
     @app.route(
         "/pand/<pand_slug>/contracten/<bestandsnaam>/ondertekenstatus/<ondertekenaar_id>/opnieuw-mailen",
-        methods=["POST"],
+        methods=["GET", "POST"],
     )
     @login_required
     def contract_tekenverzoek_opnieuw(pand_slug: str, bestandsnaam: str, ondertekenaar_id: str):
@@ -1089,11 +1092,56 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
         if doelwit["ondertekend_op"]:
             flash(f"{doelwit['naam']} had al getekend.")
+            return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+        if not doelwit["email"]:
+            flash(f"Geen e-mailadres bekend voor {doelwit['naam']}.")
+            return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        teken_url = _teken_url(doelwit["token"])
+        is_huurder = doelwit["rol"] == "huurder"
+
+        if request.method == "POST":
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            if not onderwerp or not tekst:
+                flash("Onderwerp en tekst zijn verplicht.")
+                return redirect(url_for(
+                    "contract_tekenverzoek_opnieuw", pand_slug=pand_slug,
+                    bestandsnaam=bestandsnaam, ondertekenaar_id=ondertekenaar_id,
+                ))
+            # Bewust een smallere BCC dan de rest van de app (config.email_bcc,
+            # alle mede-eigenaren) - deze herinneringen gaan alleen naar de
+            # beheerder, zie EMAIL_BCC_BEHEERDER in config.py.
+            bcc = config.email_bcc_beheerder or config.email_bcc
+            try:
+                verstuur_email(config, doelwit["email"], onderwerp, tekst, bcc=bcc)
+            except MailError:
+                app.logger.exception("Herinneringsmail naar %s is mislukt.", doelwit["email"])
+                flash(f"Mail naar {doelwit['naam']} is mislukt.")
+            else:
+                flash(f"Opnieuw gemaild naar {doelwit['naam']}.")
+            return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+
+        onderteken_herinnering = request.args.get("onderteken", "1") == "1"
+        betaal_herinnering = request.args.get("betaal", "1") == "1"
+        if is_huurder:
+            if not onderteken_herinnering and not betaal_herinnering:
+                onderteken_herinnering = True
+            betaalverzoek = _betaalverzoek_uit_metadata(metadata)
+            mail = ondertekenen.bouw_huurder_herinnering(
+                g.pand, metadata, teken_url, betaalverzoek, onderteken_herinnering, betaal_herinnering
+            )
         else:
-            metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
-            mislukt = _verstuur_tekenverzoek_mails({"ondertekenaars": [doelwit]}, metadata)
-            flash(f"Mail naar {doelwit['naam']} is mislukt." if mislukt else f"Opnieuw gemaild naar {doelwit['naam']}.")
-        return redirect(url_for("contract_ondertekenstatus", pand_slug=pand_slug, bestandsnaam=bestandsnaam))
+            mail = ondertekenen.bouw_tekenmail_overig_herinnering(
+                doelwit["rol"], doelwit["naam"], g.pand, metadata, teken_url
+            )
+
+        return render_template(
+            "contract_tekenverzoek_opnieuw.html", bestandsnaam=bestandsnaam, doelwit=doelwit,
+            is_huurder=is_huurder, onderteken_herinnering=onderteken_herinnering,
+            betaal_herinnering=betaal_herinnering, onderwerp=mail["onderwerp"], tekst=mail["tekst"],
+        )
 
     @app.route("/tekenen/<token>", methods=["GET", "POST"])
     def tekenen(token: str):

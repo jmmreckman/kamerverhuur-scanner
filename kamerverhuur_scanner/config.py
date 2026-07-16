@@ -59,6 +59,11 @@ class Config:
     smtp_from_email: str | None = None
     smtp_from_naam: str = "Steenhub"
     email_bcc: list[str] = field(default_factory=list)
+    # Aparte, smallere BCC-lijst voor de "opnieuw mailen"-herinneringen bij
+    # het ondertekenen (zie webapp/ondertekenen.py) - die gaan bewust niet
+    # naar alle mede-eigenaren in EMAIL_BCC, alleen naar de beheerder. Valt
+    # terug op email_bcc als deze niet gezet is.
+    email_bcc_beheerder: list[str] = field(default_factory=list)
 
     @staticmethod
     def load() -> "Config":
@@ -80,4 +85,7 @@ class Config:
             smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", "").strip() or None,
             smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", "Steenhub").strip(),
             email_bcc=[e.strip() for e in os.environ.get("EMAIL_BCC", "").split(",") if e.strip()],
+            email_bcc_beheerder=[
+                e.strip() for e in os.environ.get("EMAIL_BCC_BEHEERDER", "").split(",") if e.strip()
+            ],
         )
