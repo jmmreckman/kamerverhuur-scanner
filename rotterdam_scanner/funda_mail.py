@@ -23,6 +23,9 @@ _LISTING_LINK_RE = re.compile(
 _ADRES_SPLITS_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)\s*(?P<toevoeging>[A-Za-z]?(?:-\d+)?)\s*$")
 _POSTCODE_PLAATS_RE = re.compile(r"(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)")
 _PRIJS_RE = re.compile(r"€\s?([\d]{2,3}(?:[.,]\d{3})*)")
+# Zie _KAART_TEMPLATE in tests/test_funda_mail.py: geverifieerd tegen een echte
+# funda-alertmail, formaat "97 m² • 4 kamers" in één <span>.
+_OPPERVLAKTE_RE = re.compile(r"(\d{1,4})\s*m²")
 _BEKIJK_ALLE_RE = re.compile(r"Bekijk alle (\d+) woning", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -45,6 +48,9 @@ class FundaListing:
     postcode: str | None
     woonplaats: str | None
     prijs: int | None = None
+    # Zoals in de advertentietekst zelf staat - kan afwijken van de officiële
+    # BAG-oppervlakte die de pipeline er later apart bij haalt (zie bag.py).
+    oppervlakte_advertentie: int | None = None
     # Alleen gezet door de handmatige tekstdump-parser, die soms een "Sinds X
     # weken/maanden" of exacte datum bij een woning kan lezen. Zo niet: None, en dan
     # gebruikt de pipeline gewoon vandaag als eerst_gezien (net als bij nieuwe
@@ -108,6 +114,9 @@ def scan_email_body(body: str) -> FundaMailScan:
         prijs_match = _PRIJS_RE.search(venster)
         prijs = int(re.sub(r"[.,]", "", prijs_match.group(1))) if prijs_match else None
 
+        oppervlakte_match = _OPPERVLAKTE_RE.search(venster)
+        oppervlakte_advertentie = int(oppervlakte_match.group(1)) if oppervlakte_match else None
+
         object_id = _maak_object_id(postcode, huisnummer, toevoeging)
         if object_id is None:
             onherkend_urls.append(url)
@@ -125,6 +134,7 @@ def scan_email_body(body: str) -> FundaMailScan:
             postcode=postcode,
             woonplaats=woonplaats,
             prijs=prijs,
+            oppervlakte_advertentie=oppervlakte_advertentie,
         )
 
     waarschuwingen = []

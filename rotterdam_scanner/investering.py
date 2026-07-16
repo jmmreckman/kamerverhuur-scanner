@@ -42,6 +42,13 @@ class InvesteringsResultaat:
     eigen_inleg_na_ophoging_pp: float
 
 
+def aantal_kamers_mogelijk(bag_m2: float) -> int:
+    """Losstaand herbruikbaar (o.a. voor de rapporttabel) zodat het aantal kamers ook
+    getoond kan worden wanneer de volledige investeringsberekening niet kan draaien
+    (bv. vraagprijs nog onbekend)."""
+    return math.floor(bag_m2 / M2_PER_STUDENTENKAMER)
+
+
 def bereken(bag_m2: float, koopsom: float, opslag_percentage: float = 0.0) -> InvesteringsResultaat | None:
     """`opslag_percentage` is de hoogste toepasselijke WWS-huurprijsopslag (bv. 0.05 voor
     5% beschermd stadsgezicht, zie monumenten.hoogste_opslagpercentage) en werkt door in
@@ -49,7 +56,7 @@ def bereken(bag_m2: float, koopsom: float, opslag_percentage: float = 0.0) -> In
 
     Geeft None terug als er geen enkele studentenkamer mogelijk is (te kleine
     oppervlakte) - dan is dit sowieso geen bruikbare kans."""
-    aantal_kamers = math.floor(bag_m2 / M2_PER_STUDENTENKAMER)
+    aantal_kamers = aantal_kamers_mogelijk(bag_m2)
     if aantal_kamers < 1:
         return None
 

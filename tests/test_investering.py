@@ -1,4 +1,16 @@
-from rotterdam_scanner.investering import bereken
+from rotterdam_scanner.investering import aantal_kamers_mogelijk, bereken
+
+
+def test_aantal_kamers_mogelijk_matcht_bereken():
+    assert aantal_kamers_mogelijk(115) == 6
+    assert aantal_kamers_mogelijk(17) == 0
+    assert aantal_kamers_mogelijk(18) == 1
+
+
+def test_aantal_kamers_mogelijk_werkt_zonder_koopsom_te_kennen():
+    # Los bruikbaar zodat de rapporttabel het aantal kamers al kan tonen voordat de
+    # vraagprijs bekend is (en dus vóórdat bereken() een resultaat kan geven).
+    assert aantal_kamers_mogelijk(115) == bereken(bag_m2=115, koopsom=403_000).aantal_kamers
 
 
 def test_referentievoorbeeld_matcht_handmatig_doorgerekende_spreadsheet():

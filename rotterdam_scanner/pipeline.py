@@ -8,6 +8,7 @@ from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
+from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from .investering import bereken as bereken_investering
 from .monumenten import bepaal_huurprijsopslag, hoogste_opslagpercentage
 from .opkoop import check_opkoopbescherming
@@ -135,6 +136,11 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             opmerking + " " if opmerking else ""
         ) + f"Monumenten-/opslagcheck kon niet uitgevoerd worden ({exc})."
 
+    # Aantal kamers is al bekend zodra de BAG-oppervlakte er is, ook als de
+    # vraagprijs (nog) ontbreekt - los tonen in de rapporttabel heeft dus meer bereik
+    # dan de volledige investeringsberekening (die ook de vraagprijs nodig heeft).
+    aantal_kamers = bereken_aantal_kamers_mogelijk(bag_oppervlakte) if bag_oppervlakte else None
+
     winst_pm_pp = None
     eigen_inleg_pp = None
     if bag_oppervlakte and listing.prijs:
@@ -158,8 +164,10 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         opmerking=opmerking,
         prijs=listing.prijs,
         bag_oppervlakte=bag_oppervlakte,
+        oppervlakte_advertentie=listing.oppervlakte_advertentie,
         huurprijsopslag_signalen=[s.tekst for s in opslag_signalen],
         opslag_percentage=opslag_percentage,
+        aantal_kamers_mogelijk=aantal_kamers,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_pp=eigen_inleg_pp,
     )
@@ -175,15 +183,22 @@ def _sorteersleutel(item: ListingState) -> tuple[int, float]:
 
 def _backvul_investeringscijfers(state: StateStore) -> None:
     """Woningen die al in state.json stonden vóórdat de investeringsberekening
-    bestond (of vóór een latere aanpassing eraan) missen winst_pm_pp/eigen_inleg_pp.
-    Ze worden alleen bijgewerkt via de normale (nieuw-adres-)pipeline, dus zonder dit
-    zouden ze die velden nooit met terugwerkende kracht krijgen. Kost geen nieuwe
-    geocode-/BAG-/monumenten-aanroepen: bag_oppervlakte, prijs en opslag_percentage
-    staan al in de state."""
+    bestond (of vóór een latere aanpassing eraan) missen winst_pm_pp/eigen_inleg_pp/
+    aantal_kamers_mogelijk. Ze worden alleen bijgewerkt via de normale
+    (nieuw-adres-)pipeline, dus zonder dit zouden ze die velden nooit met
+    terugwerkende kracht krijgen. Kost geen nieuwe geocode-/BAG-/monumenten-
+    aanroepen: bag_oppervlakte, prijs en opslag_percentage staan al in de state.
+    (oppervlakte_advertentie kan niet met terugwerkende kracht ingevuld worden -
+    die staat alleen in de oorspronkelijke Funda-mail, niet in de state.)"""
     for item in state.all():
-        if item.status != "actief" or item.winst_pm_pp is not None:
+        if item.status != "actief" or not item.bag_oppervlakte:
             continue
-        if not item.bag_oppervlakte or not item.prijs:
+
+        if item.aantal_kamers_mogelijk is None:
+            item.aantal_kamers_mogelijk = bereken_aantal_kamers_mogelijk(item.bag_oppervlakte)
+            state.upsert(item)
+
+        if item.winst_pm_pp is not None or not item.prijs:
             continue
         investering = bereken_investering(item.bag_oppervlakte, item.prijs, item.opslag_percentage)
         if investering is None:
@@ -226,6 +241,8 @@ def _verwerk_listings(
             existing.url = listing.url
             if listing.prijs is not None:
                 existing.prijs = listing.prijs
+            if listing.oppervlakte_advertentie is not None:
+                existing.oppervlakte_advertentie = listing.oppervlakte_advertentie
             state.upsert(existing)
             continue
 

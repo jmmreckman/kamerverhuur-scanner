@@ -12,6 +12,8 @@ def _listing(
     wijknaam="Centrum",
     prijs=250_000,
     bag_oppervlakte=60,
+    oppervlakte_advertentie=None,
+    aantal_kamers_mogelijk=None,
     winst_pm_pp=None,
     eigen_inleg_pp=None,
 ):
@@ -25,6 +27,8 @@ def _listing(
         wijknaam=wijknaam,
         prijs=prijs,
         bag_oppervlakte=bag_oppervlakte,
+        oppervlakte_advertentie=oppervlakte_advertentie,
+        aantal_kamers_mogelijk=aantal_kamers_mogelijk,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_pp=eigen_inleg_pp,
     )
@@ -115,6 +119,23 @@ def test_html_report_toont_winst_en_eigen_inleg_kolommen():
     assert "€27.721" in html
     assert "Winst p.p./mnd" in html
     assert "Eigen inleg p.p." in html
+
+
+def test_html_report_toont_advertentie_oppervlakte_en_aantal_kamers():
+    item = _listing(
+        "NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09",
+        bag_oppervlakte=115, oppervlakte_advertentie=120, aantal_kamers_mogelijk=6,
+    )
+    result = RunResult(alle_actief=[item], nieuw_actief=[item])
+
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+
+    assert "115 m²" in html
+    assert "120 m²" in html
+    assert "m² (advertentie)" in html
+    assert "Kamers mogelijk" in html
+    # 6 als losse celwaarde, niet toevallig ergens anders in de pagina
+    assert '<td style="' in html and ">6</td>" in html
 
 
 def test_html_report_toont_negatieve_eigen_inleg_met_minteken():

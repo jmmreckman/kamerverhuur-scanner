@@ -23,8 +23,10 @@ class ListingState:
     opmerking: str | None = None
     prijs: int | None = None
     bag_oppervlakte: int | None = None
+    oppervlakte_advertentie: int | None = None
     huurprijsopslag_signalen: list[str] = field(default_factory=list)
     opslag_percentage: float = 0.0
+    aantal_kamers_mogelijk: int | None = None
     winst_pm_pp: float | None = None
     eigen_inleg_pp: float | None = None
 

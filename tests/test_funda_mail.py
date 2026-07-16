@@ -35,7 +35,25 @@ def test_scan_email_body_herkent_adres_postcode_en_prijs():
     assert listing.prijs == 260000
     assert listing.object_id == "3073KJ-47A"
     assert listing.adres_bekend
+    assert listing.oppervlakte_advertentie == 97
     assert not scan.waarschuwingen
+
+
+def test_scan_email_body_herkent_afwijkende_advertentie_oppervlakte():
+    scan = scan_email_body(_kaart(oppervlakte="142", kamers="6"))
+    assert scan.listings[0].oppervlakte_advertentie == 142
+
+
+def test_scan_email_body_zonder_oppervlakte_geeft_none():
+    body = """
+    <a target="_blank" href="https://links.funda.nl/s/c/token1/hash1/22" rel="noopener">
+      <span style="color:#0071b3;">Hillevliet 47 A</span>
+    </a>
+    <span>3073 KJ Rotterdam</span>
+    <span>€ 260.000 k.k.</span>
+    """
+    scan = scan_email_body(body)
+    assert scan.listings[0].oppervlakte_advertentie is None
 
 
 def test_scan_email_body_zonder_toevoeging():

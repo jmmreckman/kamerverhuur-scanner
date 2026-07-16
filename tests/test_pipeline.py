@@ -31,7 +31,15 @@ def _config(tmp_path, **overrides):
     return Config(**defaults)
 
 
-def _listing(object_id="3000AA-1", straat="Teststraat", huisnummer="1", postcode="3000AA", toevoeging="", prijs=None):
+def _listing(
+    object_id="3000AA-1",
+    straat="Teststraat",
+    huisnummer="1",
+    postcode="3000AA",
+    toevoeging="",
+    prijs=None,
+    oppervlakte_advertentie=None,
+):
     return FundaListing(
         object_id=object_id,
         url=f"https://links.funda.nl/s/c/token-{object_id}/hash/22",
@@ -41,6 +49,7 @@ def _listing(object_id="3000AA-1", straat="Teststraat", huisnummer="1", postcode
         postcode=postcode,
         woonplaats="Rotterdam",
         prijs=prijs,
+        oppervlakte_advertentie=oppervlakte_advertentie,
     )
 
 
@@ -138,6 +147,30 @@ def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):
     assert result.bag_oppervlakte == 80
     assert result.prijs == 320_000
     assert result.prijs_per_m2 == 4000.0
+
+
+def test_oppervlakte_advertentie_en_aantal_kamers_worden_meegenomen(tmp_path):
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum", oppervlakte=115)
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(
+            _listing(prijs=403_000, oppervlakte_advertentie=120), _config(tmp_path), date(2026, 7, 5)
+        )
+    assert result.status == "actief"
+    assert result.oppervlakte_advertentie == 120
+    # aantal_kamers_mogelijk gaat uit van de officiële BAG-oppervlakte (115), niet de
+    # advertentietekst (120) - zelfde 6 kamers als het geverifieerde referentievoorbeeld.
+    assert result.aantal_kamers_mogelijk == 6
+
+
+def test_aantal_kamers_mogelijk_ook_bekend_zonder_vraagprijs(tmp_path):
+    # Kamers volgen alleen uit de BAG-oppervlakte, dus dat kan al getoond worden ook
+    # als de vraagprijs (nog) niet uit de mail te herleiden was.
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum", oppervlakte=115)
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(_listing(prijs=None), _config(tmp_path), date(2026, 7, 5))
+    assert result.aantal_kamers_mogelijk == 6
+    assert result.winst_pm_pp is None
+    assert result.eigen_inleg_pp is None
 
 
 def test_huurprijsopslag_signalen_worden_meegenomen_op_actieve_woning(tmp_path):
@@ -406,6 +439,39 @@ def test_run_backvult_investeringscijfers_voor_bestaande_woningen_zonder_ze_opni
     bijgewerkt = next(item for item in result.alle_actief if item.object_id == "oude-woning")
     assert round(bijgewerkt.winst_pm_pp, 2) == 972.63
     assert round(bijgewerkt.eigen_inleg_pp, 2) == 27_721.05
+    assert bijgewerkt.aantal_kamers_mogelijk == 6
+
+
+def test_run_backvult_aantal_kamers_ook_zonder_bekende_prijs(tmp_path):
+    # aantal_kamers_mogelijk heeft geen prijs nodig (alleen bag_oppervlakte), dus moet
+    # ook bijgevuld worden voor oude woningen waarvan de vraagprijs nooit bekend werd.
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="oude-woning-zonder-prijs",
+            url="https://example.com/oude-woning-zonder-prijs",
+            weergavenaam="Oudstraat 2, Rotterdam",
+            eerst_gezien="2026-06-25",
+            laatst_gezien="2026-06-30",
+            status="actief",
+            bag_oppervlakte=115,
+            prijs=None,
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    bijgewerkt = next(item for item in result.alle_actief if item.object_id == "oude-woning-zonder-prijs")
+    assert bijgewerkt.aantal_kamers_mogelijk == 6
+    assert bijgewerkt.winst_pm_pp is None
+    assert bijgewerkt.eigen_inleg_pp is None
 
 
 def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_path):
