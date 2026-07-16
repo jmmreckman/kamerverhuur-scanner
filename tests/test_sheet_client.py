@@ -244,6 +244,41 @@ def test_upsert_history_herkent_bestaande_rij_ondanks_google_sheets_datumconvers
     assert bijgewerkte_rij[5] == "Betaald"
 
 
+def test_upsert_history_verandert_naam_van_bestaande_regel_niet():
+    # Regressietest voor een echt gemelde situatie: een nieuwe huurder
+    # (Thomas) alvast invullen voor een kamer waarvan de huidige huurder
+    # (Matias) pas volgende maand vertrekt, overschreef bij de eerstvolgende
+    # automatische controle de lopende-maand-regel van Matias met Thomas'
+    # naam - terwijl de betaling zelf (bedrag/status) prima bleef matchen.
+    # De naam van een al bestaande regel moet dus bevroren blijven.
+    bestaand = [
+        HISTORIE_HEADER,
+        ["2026-07", "1", "Matias", "870,00", "0,00", "Nog niet ontvangen", ""],
+    ]
+    client, ws = _sheet_client_met_historie(bestaand)
+
+    resultaat = _result(naam="Thomas", bedrag="870.00", ontvangen="870.00", betaaldatum=date(2026, 7, 16))
+    client.upsert_history([resultaat], maand="2026-07")
+
+    assert ws.appended_rows == []
+    bijgewerkte_rij = ws.batch_updates[0][0]["values"][0]
+    assert bijgewerkte_rij[2] == "Matias"  # naam blijft ongewijzigd
+    assert bijgewerkte_rij[5] == "Betaald"  # status/bedrag worden wel bijgewerkt
+    assert bijgewerkte_rij[6] == "16-07-2026"
+
+
+def test_upsert_history_gebruikt_actuele_naam_voor_gloednieuwe_regel():
+    # Bij een compleet nieuwe (kamer, maand)-regel is er geen eerdere naam om
+    # te bevriezen - dan moet gewoon de huidige huurder gebruikt worden (bv.
+    # augustus, zodra Thomas' contract daadwerkelijk ingaat).
+    client, ws = _sheet_client_met_historie([HISTORIE_HEADER])
+    resultaat = _result(naam="Thomas", bedrag="870.00", ontvangen="870.00", betaaldatum=date(2026, 8, 1))
+    client.upsert_history([resultaat], maand="2026-08")
+
+    assert len(ws.appended_rows) == 1
+    assert ws.appended_rows[0][2] == "Thomas"
+
+
 def test_upsert_history_schrijft_met_raw_input_option():
     # value_input_option=RAW voorkomt dat Google Sheets "2026-07" zelf als
     # datum gaat interpreteren en omzetten naar "01-07-2026".

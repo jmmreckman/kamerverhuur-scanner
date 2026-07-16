@@ -308,6 +308,15 @@ class SheetClient:
         voor dezelfde (kamer, maand)-combinatie, ook niet bij vaker
         controleren binnen dezelfde maand.
 
+        De huurdersnaam van een BESTAANDE regel wordt na de eerste keer
+        wegschrijven bevroren (alleen bedrag/status/betaaldatum worden nog
+        bijgewerkt) - anders overschrijft het invullen van een nieuwe huurder
+        voor volgende maand (vooruitlopend op een instapdatum in de
+        toekomst) per ongeluk de geschiedenis van de nog lopende maand van de
+        vertrekkende huurder, terwijl de matching zelf (op bedrag/IBAN) prima
+        blijft werken. Alleen bij een gloednieuwe regel wordt de dan-actuele
+        naam gebruikt.
+
         Schrijft met value_input_option=RAW (i.p.v. USER_ENTERED), anders
         herkent Google Sheets een waarde als "2026-06" soms zelf als datum en
         slaat 'm op (en toont 'm) als "01-06-2026" - dan vindt deze functie
@@ -331,16 +340,18 @@ class SheetClient:
         nieuwe_rijen = []
         for r in results:
             betaaldatum = _laatste_betaaldatum(r.gematchte_betalingen)
+            rij_index = rij_voor_kamer_maand.get((r.tenant.kamer, maand))
+            bestaande_rij = bestaande[rij_index - 1] if rij_index else None
+            huurder = bestaande_rij[2] if bestaande_rij and len(bestaande_rij) > 2 and bestaande_rij[2] else r.tenant.naam
             rij = [
                 maand,
                 r.tenant.kamer,
-                r.tenant.naam,
+                huurder,
                 f"{r.tenant.verwacht_bedrag:.2f}".replace(".", ","),
                 f"{r.ontvangen_bedrag:.2f}".replace(".", ","),
                 r.status.value,
                 betaaldatum.strftime("%d-%m-%Y") if betaaldatum else "",
             ]
-            rij_index = rij_voor_kamer_maand.get((r.tenant.kamer, maand))
             if rij_index:
                 updates.append({"range": f"A{rij_index}:G{rij_index}", "values": [rij]})
             else:
