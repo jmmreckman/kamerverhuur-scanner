@@ -547,6 +547,54 @@ def test_get_recent_vertrokken_huurders_sorteert_meest_recent_eerst():
     assert [v.naam for v in resultaat] == ["Nieuwste", "Oudste"]
 
 
+def test_get_alle_vertrokken_huurders_toont_ook_regels_buiten_de_termijn():
+    # in tegenstelling tot get_recent_vertrokken_huurders() blijft dit de
+    # volledige, permanente lijst - zie de "Oude huurders"-pagina.
+    lang_geleden = (date.today() - timedelta(days=400)).strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Allang Vertrokken", "oud@example.com", "", "", lang_geleden],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    assert client.get_recent_vertrokken_huurders() == []
+    resultaat = client.get_alle_vertrokken_huurders()
+    assert len(resultaat) == 1
+    assert resultaat[0].naam == "Allang Vertrokken"
+
+
+def test_get_alle_vertrokken_huurders_kent_een_row_index_toe():
+    vertrokken_op = date.today().strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Eerste", "", "", "", vertrokken_op],
+        ["2", "Tweede", "", "", "", vertrokken_op],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    resultaat = {v.naam: v.row_index for v in client.get_alle_vertrokken_huurders()}
+    assert resultaat == {"Eerste": 2, "Tweede": 3}
+
+
+def test_get_vertrokken_huurder_vindt_op_row_index():
+    vertrokken_op = date.today().strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Eerste", "", "", "", vertrokken_op],
+        ["2", "Tweede", "", "", "", vertrokken_op],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    gevonden = client.get_vertrokken_huurder(3)
+    assert gevonden is not None
+    assert gevonden.naam == "Tweede"
+
+
+def test_get_vertrokken_huurder_onbekende_row_index_geeft_none():
+    client, _ = _sheet_client_met_vertrokken([VERTROKKEN_HEADER])
+    assert client.get_vertrokken_huurder(99) is None
+
+
 # --- Aanmeldingen (incl. borgsteller-velden) ---
 
 class FakeSpreadsheet:

@@ -9,7 +9,7 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from kamerverhuur_scanner.config import Config
-from kamerverhuur_scanner.models import Tenant, VertrokkenHuurder
+from kamerverhuur_scanner.models import HistorieRegel, Status, Tenant, VertrokkenHuurder
 from webapp.app import create_app
 
 KAMER_1 = Tenant(
@@ -22,6 +22,8 @@ class FakeSheetClient:
     laatste_update = None
     archiveer_aangeroepen_met = None
     vertrokken_huurders = []
+    alle_vertrokken_huurders = []
+    geschiedenis_per_kamer = {}
 
     def __init__(self, _config, _pand):
         pass
@@ -41,6 +43,15 @@ class FakeSheetClient:
     def get_recent_vertrokken_huurders(self):
         return FakeSheetClient.vertrokken_huurders
 
+    def get_alle_vertrokken_huurders(self):
+        return FakeSheetClient.alle_vertrokken_huurders
+
+    def get_vertrokken_huurder(self, row_index):
+        return next((v for v in FakeSheetClient.alle_vertrokken_huurders if v.row_index == row_index), None)
+
+    def get_geschiedenis(self, kamer):
+        return FakeSheetClient.geschiedenis_per_kamer.get(kamer, [])
+
 
 @pytest.fixture
 def app_client(tmp_path, monkeypatch):
@@ -49,6 +60,8 @@ def app_client(tmp_path, monkeypatch):
     FakeSheetClient.laatste_update = None
     FakeSheetClient.archiveer_aangeroepen_met = None
     FakeSheetClient.vertrokken_huurders = []
+    FakeSheetClient.alle_vertrokken_huurders = []
+    FakeSheetClient.geschiedenis_per_kamer = {}
 
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
@@ -125,3 +138,68 @@ def test_huurders_pagina_zonder_vertrokken_huurders_toont_geen_sectie(app_client
     resp = app_client.get("/pand/mahoniestraat/huurders")
     assert resp.status_code == 200
     assert "Voormalige huurders" not in resp.get_data(as_text=True)
+
+
+def test_huurders_pagina_heeft_knop_naar_oude_huurders(app_client):
+    resp = app_client.get("/pand/mahoniestraat/huurders")
+    assert resp.status_code == 200
+    assert 'href="/pand/mahoniestraat/huurders/oud"' in resp.get_data(as_text=True)
+
+
+# --- Oude huurders (permanent archief) ---
+
+
+def test_oude_huurders_pagina_toont_ook_langer_vertrokken_huurders(app_client):
+    # deze zou NIET meer in get_recent_vertrokken_huurders() zitten (buiten de
+    # 31-dagen-termijn), maar moet wel permanent op deze pagina blijven staan.
+    FakeSheetClient.alle_vertrokken_huurders = [
+        VertrokkenHuurder(
+            kamer="1", naam="Allang Vertrokken", email="oud@example.com", telefoonnummer=None,
+            contract_einddatum="01-01-2025", vertrokken_op=date(2025, 1, 1), row_index=2,
+        )
+    ]
+    resp = app_client.get("/pand/mahoniestraat/huurders/oud")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Allang Vertrokken" in body
+    assert "oud@example.com" in body
+
+
+def test_oude_huurders_pagina_zonder_huurders_toont_nette_melding(app_client):
+    resp = app_client.get("/pand/mahoniestraat/huurders/oud")
+    assert resp.status_code == 200
+    assert "Nog geen oude huurders" in resp.get_data(as_text=True)
+
+
+def test_oude_huurder_detail_toont_gegevens_en_alleen_eigen_betaalgeschiedenis(app_client):
+    FakeSheetClient.alle_vertrokken_huurders = [
+        VertrokkenHuurder(
+            kamer="1", naam="Matias", email="matias@example.com", telefoonnummer="0611111111",
+            contract_einddatum="31-07-2026", vertrokken_op=date(2026, 7, 15), row_index=2,
+        )
+    ]
+    FakeSheetClient.geschiedenis_per_kamer = {
+        "1": [
+            HistorieRegel(
+                maand="2026-06", kamer="1", huurder="Matias", verwacht_bedrag=Decimal("870.00"),
+                ontvangen_bedrag=Decimal("870.00"), status=Status.BETAALD,
+            ),
+            # augustus is al de nieuwe huurder - hoort dus niet bij Matias' geschiedenis
+            HistorieRegel(
+                maand="2026-08", kamer="1", huurder="Thomas", verwacht_bedrag=Decimal("870.00"),
+                ontvangen_bedrag=Decimal("0.00"), status=Status.NIET_ONTVANGEN,
+            ),
+        ]
+    }
+    resp = app_client.get("/pand/mahoniestraat/huurders/oud/2")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Matias" in body
+    assert "matias@example.com" in body
+    assert "juni" in body.lower()
+    assert "Thomas" not in body
+
+
+def test_oude_huurder_detail_onbekende_row_index_geeft_404(app_client):
+    resp = app_client.get("/pand/mahoniestraat/huurders/oud/999")
+    assert resp.status_code == 404

@@ -513,6 +513,29 @@ def create_app(config: Config | None = None) -> Flask:
             vertrokken_huurders=sheet.get_recent_vertrokken_huurders(),
         )
 
+    @app.route("/pand/<pand_slug>/huurders/oud")
+    @login_required
+    def oude_huurders(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        return render_template("oude_huurders.html", oude_huurders=sheet.get_alle_vertrokken_huurders())
+
+    @app.route("/pand/<pand_slug>/huurders/oud/<int:row_index>")
+    @login_required
+    def oude_huurder_detail(pand_slug: str, row_index: int):
+        sheet = SheetClient(config, g.pand)
+        oud = sheet.get_vertrokken_huurder(row_index)
+        if oud is None:
+            abort(404)
+        # Historie-regels blijven permanent per kamer staan (ook nadat een
+        # andere huurder is ingevoerd) en de huurdernaam van een bestaande
+        # regel wordt nooit meer overschreven (zie SheetClient.upsert_history)
+        # - dus filteren op naam geeft precies de maanden terug die déze
+        # (voormalige) huurder zelf betaalde.
+        geschiedenis = [r for r in sheet.get_geschiedenis(oud.kamer) if r.huurder == oud.naam]
+        return render_template(
+            "oude_huurder_detail.html", oud=oud, geschiedenis=list(reversed(geschiedenis)),
+        )
+
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()
         servicekosten = form.get("servicekosten", "").strip()

@@ -11,7 +11,9 @@ import pytest
 
 from kamerverhuur_scanner.config import Config
 from kamerverhuur_scanner.models import Pand, Payment, Status, Tenant
+from kamerverhuur_scanner.models import HistorieRegel
 from kamerverhuur_scanner.runner import (
+    _instapbetaling_al_ontvangen,
     _parse_datum_dmy,
     _pro_rata_huur,
     _verwacht_bedrag_voor_maand,
@@ -67,6 +69,60 @@ def test_verwacht_bedrag_voor_maand_zonder_startdatum_blijft_normale_huur():
 def test_verwacht_bedrag_voor_maand_zonder_borg_is_alleen_pro_rata():
     tenant = _tenant(contract_startdatum="11-04-2026", borg_bedrag=None)
     assert _verwacht_bedrag_voor_maand(tenant, (2026, 4)) == Decimal("400.00")
+
+
+def test_verwacht_bedrag_voor_maand_vlak_voor_instapmaand_is_ook_pro_rata_plus_borg():
+    # het betaalverzoek wordt al bij het tekenen verstuurd, vaak (ruim) vóór
+    # de daadwerkelijke ingangsdatum - de maand ervoor moet dus hetzelfde
+    # instapbedrag verwachten, niet de volle "oude" maandhuur van de kamer.
+    tenant = _tenant(contract_startdatum="01-08-2026", borg_bedrag=Decimal("1000.00"))
+    assert _verwacht_bedrag_voor_maand(tenant, (2026, 7)) == Decimal("1600.00")
+
+
+def test_verwacht_bedrag_voor_maand_instapmaand_zelf_verwacht_niets_extra_als_al_ontvangen():
+    tenant = _tenant(contract_startdatum="01-08-2026", borg_bedrag=Decimal("1000.00"))
+    assert _verwacht_bedrag_voor_maand(
+        tenant, (2026, 8), instapbetaling_al_ontvangen=True
+    ) == Decimal("0")
+
+
+def test_verwacht_bedrag_voor_maand_instapmaand_verwacht_gewoon_instapbedrag_als_nog_niet_ontvangen():
+    tenant = _tenant(contract_startdatum="01-08-2026", borg_bedrag=Decimal("1000.00"))
+    assert _verwacht_bedrag_voor_maand(
+        tenant, (2026, 8), instapbetaling_al_ontvangen=False
+    ) == Decimal("1600.00")
+
+
+def test_verwacht_bedrag_voor_maand_twee_maanden_voor_instap_blijft_normale_huur():
+    tenant = _tenant(contract_startdatum="01-08-2026", borg_bedrag=Decimal("1000.00"))
+    assert _verwacht_bedrag_voor_maand(tenant, (2026, 6)) == Decimal("600.00")
+
+
+# --- _instapbetaling_al_ontvangen ---
+
+
+def test_instapbetaling_al_ontvangen_vindt_eerdere_volledige_maand():
+    geschiedenis = [
+        HistorieRegel(
+            maand="2026-07", kamer="1", huurder="Henri", verwacht_bedrag=Decimal("1600.00"),
+            ontvangen_bedrag=Decimal("1600.00"), status=Status.TE_VEEL,
+        ),
+    ]
+    assert _instapbetaling_al_ontvangen(geschiedenis, "2026-08", Decimal("1600.00"), Decimal("0.01")) is True
+
+
+def test_instapbetaling_al_ontvangen_negeert_maanden_erna():
+    geschiedenis = [
+        HistorieRegel(
+            maand="2026-09", kamer="1", huurder="Henri", verwacht_bedrag=Decimal("600.00"),
+            ontvangen_bedrag=Decimal("1600.00"), status=Status.TE_VEEL,
+        ),
+    ]
+    assert _instapbetaling_al_ontvangen(geschiedenis, "2026-08", Decimal("1600.00"), Decimal("0.01")) is False
+
+
+def test_instapbetaling_al_ontvangen_false_zonder_geschiedenis():
+    assert _instapbetaling_al_ontvangen([], "2026-08", Decimal("1600.00"), Decimal("0.01")) is False
 
 
 # --- run_check(): instapmaand-aanpassing tijdens de actuele controle ---
@@ -202,6 +258,45 @@ def test_run_check_instapmaand_twee_betalingen_binnen_10_procent_is_betaald(monk
     _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True)
 
     assert results[0].ontvangen_bedrag == Decimal("1447.00")
+    assert results[0].status == Status.BETAALD
+
+
+class FakeSheetClientVooruitbetaald(FakeSheetClientInstapperExact):
+    def get_tenants(self):
+        # tekent en betaalt nu (deze maand), maar het huurcontract gaat pas
+        # de 1e van vólgende maand in - typisch: net getekend, borg + eerste
+        # (volle) maand huur al in één keer overgemaakt.
+        volgende_maand = date.today().month % 12 + 1
+        jaar = date.today().year + (1 if date.today().month == 12 else 0)
+        return [_tenant(
+            verwacht_bedrag=Decimal("870.00"),
+            contract_startdatum=f"01-{volgende_maand:02d}-{jaar}", borg_bedrag=Decimal("1000.00"),
+        )]
+
+
+class FakeBunqClientVooruitbetaald:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("1870.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date.today()),
+        ]
+
+
+def test_run_check_vooruitbetaling_maand_voor_instap_is_niet_te_veel(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie: huurder tekent en betaalt
+    # de borg + volle eerste maandhuur al in de maand vóór de daadwerkelijke
+    # ingangsdatum. Zonder de "maand vóór de instapmaand telt ook al mee"-
+    # aanpassing werd dit vergeleken met de gewone maandhuur en verscheen het
+    # als "Te veel ontvangen", terwijl het gewoon de correcte vooruitbetaling is.
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientVooruitbetaald)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientVooruitbetaald)
+
+    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True)
+
+    assert results[0].ontvangen_bedrag == Decimal("1870.00")
     assert results[0].status == Status.BETAALD
 
 

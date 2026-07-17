@@ -118,8 +118,15 @@ nodig.
   in centen - de pro-rata berekening wijkt vaker een paar euro af door
   afrondingsverschillen (bv. een dag verschil in de ingangsdatum), en borg +
   eerste huur worden ook vaak in 2 losse overschrijvingen betaald in plaats
-  van 1. Zie ook "Welke maand telt een betaling mee" hieronder voor de
-  1e/17e/18e-regel die ná de instapmaand blijft gelden.
+  van 1. **Vooruitbetaling:** het betaalverzoek (borg + pro-rata huur) wordt
+  al bij het ondertekenen van het contract verstuurd, vaak (ruim) vóór de
+  daadwerkelijke ingangsdatum - dus geldt hetzelfde instapbedrag (en dezelfde
+  10%-marge) ook al voor de kalendermaand vlak vóór de instapmaand. Komt het
+  daar al volledig binnen, dan verwacht de instapmaand zelf niets extra's
+  meer (voorkomt dat hetzelfde bedrag twee keer als "verwacht" telt en de
+  instapmaand dus ten onrechte "Nog niet ontvangen" toont). Zie ook "Welke
+  maand telt een betaling mee" hieronder voor de 1e/17e/18e-regel die ná de
+  instapmaand blijft gelden.
   Ruimt bij elke druk op de knop ook automatisch eventuele dubbele
   Historie-regels voor dezelfde (kamer, maand)-combinatie op, én (voor kamers
   met een bekende "Contract startdatum") regels van vóór die instapdatum die
@@ -161,7 +168,12 @@ nodig.
   bellen blijft mogelijk), tot **1 maand na hun contract-einddatum** - daarna
   verdwijnt die regel vanzelf uit dat overzicht (de sheetregel zelf blijft
   gewoon staan, wordt alleen niet meer getoond). Werkt onafhankelijk van of
-  er intussen alweer een nieuwe huurder in diezelfde kamer zit.
+  er intussen alweer een nieuwe huurder in diezelfde kamer zit. Via de knop
+  **"Oude huurders"** op de Huurders-pagina blijft de volledige, permanente
+  lijst (geen 1-maand-limiet) altijd doorzoekbaar - klik op een naam voor hun
+  contactgegevens én de betaalgeschiedenis van tóen (alleen de maanden die zij
+  zelf betaalden, ook al zijn Kamer + Historie-tabblad daarna alweer door een
+  nieuwe huurder in gebruik genomen).
 - **Contracten** - vult een sjabloon in met de pand- en huurdersgegevens tot een
   concept-huurcontract, inclusief echte **PDF-download** (handig om direct te
   uploaden naar DocHub voor de handtekeningaanvraag). **Let op:** dit is een

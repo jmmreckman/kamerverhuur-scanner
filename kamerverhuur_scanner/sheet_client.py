@@ -518,19 +518,16 @@ class SheetClient:
         ]
         ws.append_row(row, value_input_option="RAW")
 
-    def get_recent_vertrokken_huurders(self) -> list[VertrokkenHuurder]:
-        """Vertrokken huurders die nog binnen de archiveringstermijn vallen
-        (_VERTROKKEN_ZICHTBAAR_DAGEN, gerekend vanaf hun contract-einddatum,
-        of - als die onbekend/onherkenbaar is - vanaf het moment van
-        archiveren). Oudere regels blijven gewoon in de sheet staan (voor de
-        volledigheid) maar worden hier niet meer teruggegeven - zo
-        'verdwijnt' een vertrokken huurder vanzelf zonder dat er iets
-        verwijderd hoeft te worden."""
+    def _alle_vertrokken_huurders_ruw(self) -> list[VertrokkenHuurder]:
+        """Alle ooit gearchiveerde vertrokken huurders, nieuwste eerst - de
+        volledige, permanente lijst (zie get_alle_vertrokken_huurders()) die
+        ook get_recent_vertrokken_huurders() als basis gebruikt voor zijn
+        tijdelijke filter."""
         ws = self._vertrokken_worksheet()
         rows = ws.get_all_values()[1:]  # koprij overslaan
-        vandaag = date.today()
         resultaat = []
-        for row in rows:
+        for i, row in enumerate(rows):
+            row_index = i + 2  # +1 voor de koprij, +1 voor 1-gebaseerde rijnummers
             row = row + [""] * (6 - len(row))
             kamer, naam, mail, telefoon, contract_einddatum, vertrokken_op_tekst = (c.strip() for c in row[:6])
             if not naam:
@@ -539,15 +536,39 @@ class SheetClient:
                 vertrokken_op = datetime.strptime(vertrokken_op_tekst, "%d-%m-%Y").date()
             except ValueError:
                 continue  # onherkenbare/handmatig aangepaste rij overslaan
-            referentiedatum = _parse_contract_einddatum(contract_einddatum) or vertrokken_op
-            if vandaag > referentiedatum + timedelta(days=_VERTROKKEN_ZICHTBAAR_DAGEN):
-                continue
             resultaat.append(VertrokkenHuurder(
                 kamer=kamer, naam=naam, email=mail or None, telefoonnummer=telefoon or None,
-                contract_einddatum=contract_einddatum or None, vertrokken_op=vertrokken_op,
+                contract_einddatum=contract_einddatum or None, vertrokken_op=vertrokken_op, row_index=row_index,
             ))
         resultaat.sort(key=lambda v: v.vertrokken_op, reverse=True)
         return resultaat
+
+    def get_recent_vertrokken_huurders(self) -> list[VertrokkenHuurder]:
+        """Vertrokken huurders die nog binnen de archiveringstermijn vallen
+        (_VERTROKKEN_ZICHTBAAR_DAGEN, gerekend vanaf hun contract-einddatum,
+        of - als die onbekend/onherkenbaar is - vanaf het moment van
+        archiveren) - voor het grijze blokje bovenaan de Huurders-pagina.
+        Oudere regels blijven gewoon (permanent) in de sheet staan, zie
+        get_alle_vertrokken_huurders()."""
+        vandaag = date.today()
+        return [
+            v for v in self._alle_vertrokken_huurders_ruw()
+            if vandaag <= (_parse_contract_einddatum(v.contract_einddatum or "") or v.vertrokken_op)
+            + timedelta(days=_VERTROKKEN_ZICHTBAAR_DAGEN)
+        ]
+
+    def get_alle_vertrokken_huurders(self) -> list[VertrokkenHuurder]:
+        """De volledige, permanente lijst van ooit vertrokken huurders (zie
+        "Oude huurders"-pagina) - in tegenstelling tot
+        get_recent_vertrokken_huurders() geen tijdsfilter, dus blijft een
+        huurder hier voor altijd terug te vinden."""
+        return self._alle_vertrokken_huurders_ruw()
+
+    def get_vertrokken_huurder(self, row_index: int) -> VertrokkenHuurder | None:
+        """Eén specifieke vertrokken huurder op basis van hun rijnummer in de
+        "Vertrokken"-sheet (zie VertrokkenHuurder.row_index) - voor de
+        "Oude huurders"-detailpagina."""
+        return next((v for v in self._alle_vertrokken_huurders_ruw() if v.row_index == row_index), None)
 
     def _vertrokken_worksheet(self):
         try:

@@ -113,17 +113,53 @@ def _pro_rata_huur(verwacht_bedrag: Decimal, start: date) -> Decimal:
     return (verwacht_bedrag * resterende_dagen / dagen_in_maand).quantize(Decimal("0.01"))
 
 
-def _verwacht_bedrag_voor_maand(tenant: Tenant, maand_sleutel: tuple[int, int]) -> Decimal:
+def _instapbedrag(tenant: Tenant, start: date) -> Decimal:
+    return _pro_rata_huur(tenant.verwacht_bedrag, start) + (tenant.borg_bedrag or Decimal("0"))
+
+
+def _instapbetaling_al_ontvangen(
+    geschiedenis: list, voor_maand: str, instapbedrag: Decimal, tolerantie: Decimal
+) -> bool:
+    """True als er al een eerdere Historie-maand is (vóór `voor_maand`)
+    waarin het volledige instapbedrag (pro-rata huur + borg) al ontvangen is
+    - dit gebeurt zodra een huurder vooruitbetaalt bij het ondertekenen van
+    het contract, vaak (een deel van) een kalendermaand vóór de daadwerkelijke
+    ingangsdatum (het betaalverzoek wordt al bij het tekenen verstuurd, zie
+    webapp/ondertekenen.py: bouw_betaal_en_tekenmail). Zonder deze check zou
+    de instapmaand zelf het instapbedrag nog een keer verwachten, terwijl dat
+    - in de maand ervóór - al binnen is."""
+    return any(
+        regel.maand < voor_maand and regel.ontvangen_bedrag >= instapbedrag - tolerantie
+        for regel in geschiedenis
+    )
+
+
+def _verwacht_bedrag_voor_maand(
+    tenant: Tenant, maand_sleutel: tuple[int, int], instapbetaling_al_ontvangen: bool = False,
+) -> Decimal:
     """Voor de kalendermaand waarin de huurder is ingestapt (kolom 'Contract
     startdatum') is het redelijkerwijs te verwachten bedrag de pro-rata huur
     over de resterende dagen van die maand, plus de waarborgsom (kolom
     'Borg') - huurders betalen die vaak in één keer samen met (een deel van)
-    de eerste huur, en dat mag niet als "te veel ontvangen" verschijnen. Voor
-    elke andere maand blijft het gewoon de volle maandhuur."""
+    de eerste huur, en dat mag niet als "te veel ontvangen" verschijnen.
+
+    Datzelfde instapbedrag geldt óók al voor de kalendermaand vlak vóór de
+    ingangsdatum: het betaalverzoek wordt namelijk al bij het ondertekenen
+    verstuurd, vaak (ruim) voordat de huurder er daadwerkelijk intrekt. Is
+    dat bedrag in die maand ervoor al (volledig) ontvangen
+    (`instapbetaling_al_ontvangen`), dan verwacht de instapmaand zelf niets
+    extra's meer - anders zou hetzelfde bedrag twee keer verwacht worden.
+
+    Voor elke andere maand blijft het gewoon de volle maandhuur."""
     start = _tenant_startdatum(tenant)
-    if not start or (start.year, start.month) != maand_sleutel:
+    if not start:
         return tenant.verwacht_bedrag
-    return _pro_rata_huur(tenant.verwacht_bedrag, start) + (tenant.borg_bedrag or Decimal("0"))
+    start_sleutel = (start.year, start.month)
+    if maand_sleutel == start_sleutel:
+        return Decimal("0") if instapbetaling_al_ontvangen else _instapbedrag(tenant, start)
+    if maand_sleutel == _vorige_maand(*start_sleutel):
+        return _instapbedrag(tenant, start)
+    return tenant.verwacht_bedrag
 
 
 def run_check(
@@ -138,26 +174,40 @@ def run_check(
     tenants = sheet.get_tenants()
     logger.info("[%s] %d kamers met huurder gevonden", pand.slug, len(tenants))
 
-    # Voor een huurder die deze maand is ingestapt geldt tijdelijk een
+    # Eén keer per kamer opgehaald, hergebruikt voor zowel het openstaand-
+    # tekort hieronder als de instapbetaling-check verderop.
+    geschiedenis_per_kamer = {t.kamer: sheet.get_geschiedenis(t.kamer) for t in tenants}
+    huidige_maand_string = _maand_sleutel_naar_string(huidige_maand_sleutel)
+
+    # Voor een huurder die deze maand instapt (of net daarvóór, als het
+    # instapbedrag al vooruitbetaald is bij het tekenen) geldt tijdelijk een
     # aangepast verwacht bedrag (pro-rata huur + borg) i.p.v. de volle
     # maandhuur - zie _verwacht_bedrag_voor_maand(). Dit raakt alleen de
     # matching/status van déze controle, niet de "Totale huur"-kolom in de
     # sheet zelf (die wordt door write_results() niet aangepast).
-    tenants_voor_match = [
-        dataclasses.replace(t, verwacht_bedrag=_verwacht_bedrag_voor_maand(t, huidige_maand_sleutel))
-        for t in tenants
-    ]
+    tenants_voor_match = []
+    for t in tenants:
+        start = _tenant_startdatum(t)
+        instapbetaling_al_ontvangen = False
+        if start and (start.year, start.month) == huidige_maand_sleutel:
+            instapbetaling_al_ontvangen = _instapbetaling_al_ontvangen(
+                geschiedenis_per_kamer[t.kamer], huidige_maand_string,
+                _instapbedrag(t, start), config.bedrag_tolerantie,
+            )
+        tenants_voor_match.append(dataclasses.replace(
+            t, verwacht_bedrag=_verwacht_bedrag_voor_maand(t, huidige_maand_sleutel, instapbetaling_al_ontvangen)
+        ))
     instapmaand_kamers = {
         t.kamer for t in tenants
-        if (start := _tenant_startdatum(t)) and (start.year, start.month) == huidige_maand_sleutel
+        if (start := _tenant_startdatum(t))
+        and huidige_maand_sleutel in ((start.year, start.month), _vorige_maand(start.year, start.month))
     }
 
     # Een eventuele nog openstaande achterstand van eerdere maand(en) - zodat
     # een inhaalbetaling deze maand die eerst aflost i.p.v. als 'te veel
     # ontvangen' te tellen (zie openstaand_tekort_uit_geschiedenis()).
-    huidige_maand_string = _maand_sleutel_naar_string(huidige_maand_sleutel)
     openstaand_tekort = {
-        t.kamer: openstaand_tekort_uit_geschiedenis(sheet.get_geschiedenis(t.kamer), huidige_maand_string)
+        t.kamer: openstaand_tekort_uit_geschiedenis(geschiedenis_per_kamer[t.kamer], huidige_maand_string)
         for t in tenants
     }
 

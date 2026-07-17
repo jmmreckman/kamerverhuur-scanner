@@ -91,14 +91,18 @@ class Verhuurder:
 class VertrokkenHuurder:
     """Momentopname van een huurder die een kamer heeft verlaten (bv. omdat er
     een nieuwe huurder voor die kamer is ingevoerd) - blijft nog een tijdje
-    zichtbaar (grijs/gearchiveerd) op de Huurders-pagina, zodat je nog bij
-    hun contactgegevens kunt als er nog iets afgehandeld moet worden."""
+    prominent (grijs/gearchiveerd) zichtbaar op de Huurders-pagina, en
+    daarna nog altijd permanent terug te vinden via de "Oude huurders"-
+    pagina, zodat je nog bij hun contactgegevens en betaalgeschiedenis kunt
+    als er nog iets afgehandeld moet worden."""
     kamer: str
     naam: str
     email: str | None
     telefoonnummer: str | None
     contract_einddatum: str | None
     vertrokken_op: date  # moment waarop deze huurder als 'vertrokken' is gearchiveerd
+    # rijnummer in de "Vertrokken"-sheet (voor de "Oude huurders"-detailpagina)
+    row_index: int = 0
 
 
 @dataclass(frozen=True)
