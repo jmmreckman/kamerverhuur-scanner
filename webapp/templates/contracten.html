@@ -33,6 +33,9 @@
         {% else %}
         - <a href="{{ url_for('contract_tekenverzoek', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Verzoek tot tekenen</a>
         {% endif %}
+        {% if item.kan_bevestiging_mailen %}
+        - <a href="{{ url_for('contract_bevestiging', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mail bevestiging</a>
+        {% endif %}
         {% endif %}
         - <form method="post" action="{{ url_for('contract_verwijderen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}"
                 style="display:inline" onsubmit="return confirm('Contract \'{{ c }}\' definitief verwijderen?');">

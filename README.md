@@ -178,7 +178,15 @@ nodig.
   concept-huurcontract, inclusief echte **PDF-download** (handig om direct te
   uploaden naar DocHub voor de handtekeningaanvraag). **Let op:** dit is een
   voorbeeldsjabloon, geen juridisch gecontroleerd contract - zie "Huurcontracten
-  genereren" hieronder.
+  genereren" hieronder. Zodra een contract volledig elektronisch ondertekend is
+  ("Ondertekenstatus (afgerond)") **én** de betaling (incl. borg) van die kamer
+  ontvangen is, verschijnt op de Contracten-pagina de knop **"Mail bevestiging"**
+  - toont eerst een aanpasbaar voorbeeldscherm (net als de andere mails) voordat
+  je 'm verstuurt. Voor panden met een Bold digitaal slot vraagt het scherm
+  eerst verplicht om de persoonlijke Bold-uitnodigingslink (komt automatisch in
+  de mail te staan); voor Burgemeester Baumannlaan (geen Bold slot, wel een
+  sleutelbox aan de voordeur) staat de sleutelbox-code er al standaard in;
+  overige panden zonder Bold slot krijgen alleen de algemene bevestiging.
 - **Documenten** - echte mappenstructuur van de Google Drive-map van het
   gekozen pand: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
   aanmaken en downloaden, rechtstreeks vanaf de site.

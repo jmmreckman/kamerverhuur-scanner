@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Mail bevestiging{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Mail bevestiging</h1>
+</div>
+
+<div class="card">
+  <p class="muted">Dit pand heeft een Bold digitaal slot - plak eerst de persoonlijke Bold-uitnodigingslink
+     voor deze huurder. Die komt automatisch in de mail te staan, op het volgende scherm kun je de mail
+     nog verder aanpassen voor je 'm verstuurt.</p>
+  <form method="get" action="{{ url_for('contract_bevestiging', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}">
+    <label>Bold-uitnodigingslink
+      <input type="url" name="bold_link" required placeholder="https://...">
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Volgende</button>
+      <a class="btn btn-secondary" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -257,6 +257,41 @@ def bouw_concept_email(pand: Pand, metadata: dict) -> dict[str, str]:
     return {"onderwerp": onderwerp, "tekst": tekst}
 
 
+def bouw_bevestigingsmail(pand: Pand, metadata: dict, bold_link: str = "") -> dict[str, str]:
+    """Stelt de (Engelstalige) welkomst-/bevestigingsmail op voor zodra een
+    contract volledig ondertekend is ÉN de betaling (incl. borg) binnen is
+    (zie webapp/app.py: contract_bevestiging) - de toegangsinstructies
+    verschillen per pand: bij een Bold digitaal slot de meegegeven
+    persoonlijke uitnodigingslink, bij Burgemeester Baumannlaan (geen Bold
+    slot, wel een sleutelbox aan de voordeur) de vaste sleutelbox-code, en
+    voor overige panden zonder Bold slot alleen de algemene bevestiging."""
+    naam = metadata.get("huurder_naam") or "there"
+    kamer = metadata.get("kamer", "")
+    onderwerp = f"Welcome to {pand.naam}, room {kamer}!".strip()
+    if pand.heeft_bold_slot:
+        toegang = (
+            f"Here is your personal invitation to activate the Bold digital key for the front door - "
+            f"it becomes valid from the start date of your rental agreement:\n{bold_link}\n\n"
+        )
+    elif pand.slug == "baumannlaan":
+        toegang = (
+            "The front door key can be collected from the keybox at the front door - the code is "
+            "1590.\n\n"
+        )
+    else:
+        toegang = ""
+    tekst = (
+        f"Dear {naam},\n\n"
+        f"Good news - your rental agreement for room {kamer} at {pand.naam} has now been signed by "
+        f"all parties, and we have received your payment. Everything is in order!\n\n"
+        f"{toegang}"
+        f"We wish you a pleasant stay. If you have any questions, please don't hesitate to reach out - "
+        f"we're happy to help.\n\n"
+        f"Kind regards,\n{AFZENDER_NAAM}"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
 def _bouw_context(pand: Pand, form: ImmutableMultiDict) -> dict:
     kale = form.get("kale_huurprijs", "").strip()
     service = form.get("servicekosten", "").strip()

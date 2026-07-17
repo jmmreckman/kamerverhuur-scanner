@@ -177,6 +177,41 @@ def test_bouw_concept_email_zonder_bold_slot_noemt_bold_niet():
     assert "rental agreement takes effect from its start date" in opgesteld["tekst"]
 
 
+# --- bouw_bevestigingsmail ---
+
+
+def test_bouw_bevestigingsmail_bold_slot_bevat_de_meegegeven_link():
+    pand = _pand(heeft_bold_slot=True)
+    metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1"}
+    opgesteld = contracts.bouw_bevestigingsmail(pand, metadata, bold_link="https://bold.example/invite/abc123")
+    assert "Bence Neumayer" in opgesteld["tekst"]
+    assert "signed by all parties" in opgesteld["tekst"]
+    assert "https://bold.example/invite/abc123" in opgesteld["tekst"]
+    assert "keybox" not in opgesteld["tekst"].lower()
+    assert "1" in opgesteld["onderwerp"]
+    assert pand.naam in opgesteld["onderwerp"]
+
+
+def test_bouw_bevestigingsmail_baumannlaan_noemt_sleutelbox_code():
+    pand = _pand(slug="baumannlaan", naam="Burgemeester Baumannlaan 70b", heeft_bold_slot=False)
+    metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1"}
+    opgesteld = contracts.bouw_bevestigingsmail(pand, metadata)
+    assert "keybox" in opgesteld["tekst"].lower()
+    assert "1590" in opgesteld["tekst"]
+    assert "Bold" not in opgesteld["tekst"]
+
+
+def test_bouw_bevestigingsmail_overig_pand_zonder_bold_slot_heeft_geen_toegangsinstructies():
+    pand = _pand(slug="anderpand", heeft_bold_slot=False)
+    metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1"}
+    opgesteld = contracts.bouw_bevestigingsmail(pand, metadata)
+    assert "Bold" not in opgesteld["tekst"]
+    assert "keybox" not in opgesteld["tekst"].lower()
+    assert "1590" not in opgesteld["tekst"]
+    assert "signed by all parties" in opgesteld["tekst"]
+    assert "wish you a pleasant stay" in opgesteld["tekst"]
+
+
 # --- Aanpasbaar contractsjabloon ---
 
 

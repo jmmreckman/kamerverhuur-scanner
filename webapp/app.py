@@ -24,7 +24,7 @@ from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
-from kamerverhuur_scanner.models import Tenant
+from kamerverhuur_scanner.models import Status, Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
 from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
@@ -852,17 +852,75 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/pand/<pand_slug>/contracten")
     @login_required
     def contracten_overzicht(pand_slug: str):
+        cache = state.load(pand_slug, config.state_dir)
         contracten = []
         for bestandsnaam in contracts.list_contracten(pand_slug, config.state_dir):
             ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+            afgerond = bool(ronde and ronde.get("afgerond_op"))
+            betaald = False
+            if afgerond:
+                metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+                status = state.status_voor_kamer(cache, metadata.get("kamer", ""))
+                betaald = bool(status and status["status"] == Status.BETAALD.value)
             contracten.append({
                 "bestandsnaam": bestandsnaam,
                 "getekend": contracts.is_getekend_contract(bestandsnaam),
                 # alleen tonen als het ondertekenverzoek ook echt verstuurd is
                 # (niet bij een geopend maar niet bevestigd voorbeeldscherm)
                 "ronde": ronde if ronde and ronde.get("verzonden_op") else None,
+                # "Mail bevestiging"-knop pas als zowel volledig ondertekend
+                # is als de betaling (incl. borg) van de kamer binnen is - zie
+                # contract_bevestiging() hieronder.
+                "kan_bevestiging_mailen": afgerond and betaald,
             })
         return render_template("contracten.html", contracten=contracten)
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/bevestiging", methods=["GET", "POST"])
+    @login_required
+    def contract_bevestiging(pand_slug: str, bestandsnaam: str):
+        ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
+        if ronde is None or not ronde.get("afgerond_op"):
+            flash("Dit contract is nog niet volledig ondertekend door alle partijen.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        if not metadata.get("email"):
+            flash("Geen e-mailadres van de huurder bekend voor dit contract.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        status = state.status_voor_kamer(state.load(pand_slug, config.state_dir), metadata.get("kamer", ""))
+        if not status or status["status"] != Status.BETAALD.value:
+            flash("De betaling (inclusief borg) voor deze kamer is nog niet volledig ontvangen.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
+        if request.method == "POST":
+            onderwerp = request.form.get("onderwerp", "").strip()
+            tekst = request.form.get("tekst", "").strip()
+            if not onderwerp or not tekst:
+                flash("Onderwerp en tekst zijn verplicht.")
+                return redirect(url_for(
+                    "contract_bevestiging", pand_slug=pand_slug, bestandsnaam=bestandsnaam,
+                ))
+            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+            try:
+                verstuur_email(config, metadata["email"], onderwerp, tekst, bcc=bcc)
+            except MailError:
+                app.logger.exception("Bevestigingsmail naar %s is mislukt.", metadata["email"])
+                flash("Versturen van de bevestigingsmail is mislukt.")
+            else:
+                flash(f"Bevestigingsmail verstuurd naar {metadata.get('huurder_naam') or metadata['email']}.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+
+        if g.pand.heeft_bold_slot:
+            bold_link = request.args.get("bold_link", "").strip()
+            if not bold_link:
+                return render_template("contract_bevestiging_bold_link.html", bestandsnaam=bestandsnaam)
+            mail = contracts.bouw_bevestigingsmail(g.pand, metadata, bold_link)
+        else:
+            mail = contracts.bouw_bevestigingsmail(g.pand, metadata)
+
+        return render_template(
+            "contract_bevestiging.html", bestandsnaam=bestandsnaam,
+            onderwerp=mail["onderwerp"], tekst=mail["tekst"],
+        )
 
     @app.route("/pand/<pand_slug>/contracten/nieuw", methods=["GET", "POST"])
     @login_required
