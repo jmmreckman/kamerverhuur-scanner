@@ -158,6 +158,37 @@ def test_genereer_getekend_contract_vervangt_handtekeningenblok(tmp_path):
     assert (tmp_path / "gegenereerde_contracten" / "mahoniestraat" / bestandsnaam).is_file()
 
 
+def test_genereer_getekend_contract_kopieert_metadata_naar_getekende_versie(tmp_path):
+    # zodat gegevens die na volledige ondertekening nog nodig zijn (bv. voor
+    # de bevestigingsmail) beschikbaar blijven, ook als het concept later
+    # wordt verwijderd - zie test_contract_bevestiging.py voor de route-test
+    # van dat scenario.
+    bestandsnaam = contracts.genereer_contract(
+        "mahoniestraat", _pand(), _form(email="bence@example.com"), state_dir=str(tmp_path)
+    )
+    getekend_bestandsnaam = contracts.genereer_getekend_contract(
+        "mahoniestraat", bestandsnaam, "<p>handtekeningen</p>", state_dir=str(tmp_path)
+    )
+    metadata = contracts.lees_metadata("mahoniestraat", getekend_bestandsnaam, state_dir=str(tmp_path))
+    assert metadata["email"] == "bence@example.com"
+    assert metadata["kamer"] == "1"
+
+
+def test_origineel_bestandsnaam_is_de_inverse_van_getekend_bestandsnaam():
+    origineel = "2026-07-10_1-bence-neumayer.html"
+    getekend = "2026-07-10_1-bence-neumayer-getekend.html"
+    assert contracts.origineel_bestandsnaam(getekend) == origineel
+
+
+def test_origineel_bestandsnaam_op_al_niet_getekende_naam_geeft_ongewijzigd():
+    assert contracts.origineel_bestandsnaam("2026-07-10_1-bence-neumayer.html") == "2026-07-10_1-bence-neumayer.html"
+
+
+def test_kopieer_metadata_zonder_bronmetadata_doet_niets(tmp_path):
+    contracts.kopieer_metadata("mahoniestraat", "bestaat-niet.html", "ook-niet.html", state_dir=str(tmp_path))
+    assert contracts.lees_metadata("mahoniestraat", "ook-niet.html", state_dir=str(tmp_path)) == {}
+
+
 def test_bouw_concept_email_bevat_kamer_en_bold():
     pand = _pand()
     metadata = {"huurder_naam": "Bence Neumayer", "kamer": "1", "borg": "1000,00"}

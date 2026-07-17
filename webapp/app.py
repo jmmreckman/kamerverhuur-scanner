@@ -849,40 +849,81 @@ def create_app(config: Config | None = None) -> Flask:
             borg_bedrag=parse_bedrag(borg) if borg else bestaande.borg_bedrag,
         )
 
+    def _bevestiging_metadata(pand_slug: str, getekend_bestandsnaam: str, sheet_kamers) -> dict:
+        """Metadata (huurder_naam, kamer, email) voor de bevestigingsmail bij
+        een volledig ondertekend contract - normaal gewoon de metadata die bij
+        het afronden automatisch is meegekopieerd naar de getekende versie
+        zelf (zie contracts.genereer_getekend_contract()). Voor oudere, al
+        vóór die aanpassing getekende contracten (waarvan het concept en dus
+        de eigen metadata inmiddels verwijderd kan zijn, zie
+        contracts.verwijder_contract()) valt dit terug op de ondertekenronde
+        (naam/mail van de huurder) en - voor de kamer - een zoekopdracht in de
+        sheet op die naam. `sheet_kamers` is een lazy callable (géén directe
+        SheetClient-aanroep) zodat de sheet alleen bevraagd wordt als deze
+        terugvalroute daadwerkelijk nodig is."""
+        metadata = contracts.lees_metadata(pand_slug, getekend_bestandsnaam, config.state_dir)
+        if metadata.get("email") and metadata.get("kamer"):
+            return metadata
+        origineel = contracts.origineel_bestandsnaam(getekend_bestandsnaam)
+        metadata = {**contracts.lees_metadata(pand_slug, origineel, config.state_dir), **metadata}
+        ronde = ondertekenen.lees_ondertekenronde(pand_slug, origineel, config.state_dir)
+        if ronde:
+            huurder = next((o for o in ronde["ondertekenaars"] if o["rol"] == "huurder"), None)
+            if huurder:
+                metadata.setdefault("huurder_naam", huurder["naam"])
+                metadata.setdefault("email", huurder["email"])
+        if not metadata.get("kamer") and metadata.get("huurder_naam"):
+            kamer = next((k for k in sheet_kamers() if k.naam == metadata["huurder_naam"]), None)
+            if kamer:
+                metadata["kamer"] = kamer.kamer
+        return metadata
+
     @app.route("/pand/<pand_slug>/contracten")
     @login_required
     def contracten_overzicht(pand_slug: str):
         cache = state.load(pand_slug, config.state_dir)
+        kamers_cache: list | None = None
+
+        def _sheet_kamers():
+            nonlocal kamers_cache
+            if kamers_cache is None:
+                kamers_cache = SheetClient(config, g.pand).get_kamers()
+            return kamers_cache
+
         contracten = []
         for bestandsnaam in contracts.list_contracten(pand_slug, config.state_dir):
+            getekend = contracts.is_getekend_contract(bestandsnaam)
+            kan_bevestiging_mailen = False
+            if getekend:
+                # het bestaan van de getekende versie bewijst op zich al dat
+                # volledig ondertekend is - alleen de betaling nog checken.
+                metadata = _bevestiging_metadata(pand_slug, bestandsnaam, _sheet_kamers)
+                if metadata.get("email"):
+                    status = state.status_voor_kamer(cache, metadata.get("kamer", ""))
+                    kan_bevestiging_mailen = bool(status and status["status"] == Status.BETAALD.value)
             ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
-            afgerond = bool(ronde and ronde.get("afgerond_op"))
-            betaald = False
-            if afgerond:
-                metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
-                status = state.status_voor_kamer(cache, metadata.get("kamer", ""))
-                betaald = bool(status and status["status"] == Status.BETAALD.value)
             contracten.append({
                 "bestandsnaam": bestandsnaam,
-                "getekend": contracts.is_getekend_contract(bestandsnaam),
+                "getekend": getekend,
                 # alleen tonen als het ondertekenverzoek ook echt verstuurd is
                 # (niet bij een geopend maar niet bevestigd voorbeeldscherm)
                 "ronde": ronde if ronde and ronde.get("verzonden_op") else None,
                 # "Mail bevestiging"-knop pas als zowel volledig ondertekend
                 # is als de betaling (incl. borg) van de kamer binnen is - zie
                 # contract_bevestiging() hieronder.
-                "kan_bevestiging_mailen": afgerond and betaald,
+                "kan_bevestiging_mailen": kan_bevestiging_mailen,
             })
         return render_template("contracten.html", contracten=contracten)
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/bevestiging", methods=["GET", "POST"])
     @login_required
     def contract_bevestiging(pand_slug: str, bestandsnaam: str):
-        ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, config.state_dir)
-        if ronde is None or not ronde.get("afgerond_op"):
+        if not contracts.is_getekend_contract(bestandsnaam):
             flash("Dit contract is nog niet volledig ondertekend door alle partijen.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
-        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        metadata = _bevestiging_metadata(
+            pand_slug, bestandsnaam, lambda: SheetClient(config, g.pand).get_kamers()
+        )
         if not metadata.get("email"):
             flash("Geen e-mailadres van de huurder bekend voor dit contract.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))

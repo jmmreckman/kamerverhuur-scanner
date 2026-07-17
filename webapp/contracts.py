@@ -358,6 +358,30 @@ def is_getekend_contract(bestandsnaam: str) -> bool:
     return Path(bestandsnaam).stem.endswith(GETEKEND_ACHTERVOEGSEL)
 
 
+def origineel_bestandsnaam(getekend_bestandsnaam: str) -> str:
+    """Het bestandsnaam van het concept waaruit deze definitieve, getekende
+    versie is gegenereerd (zie genereer_getekend_contract()) - de exacte
+    inverse van de "-getekend"-naamgeving. Geeft de invoer ongewijzigd terug
+    als dit al geen getekende bestandsnaam is."""
+    stem = Path(getekend_bestandsnaam).stem
+    if stem.endswith(GETEKEND_ACHTERVOEGSEL):
+        stem = stem[: -len(GETEKEND_ACHTERVOEGSEL)]
+    return f"{stem}.html"
+
+
+def kopieer_metadata(pand_slug: str, van_bestandsnaam: str, naar_bestandsnaam: str, state_dir: str = ".") -> None:
+    """Kopieert de contractmetadata (huurder_naam, kamer, email, etc.) van het
+    concept naar de definitieve ondertekende versie - zodat gegevens die na
+    volledige ondertekening nog nodig zijn (bv. voor de bevestigingsmail,
+    zie webapp/app.py: contract_bevestiging) beschikbaar blijven, ook als het
+    concept daarna wordt verwijderd (zie verwijder_contract()). Doet niets als
+    er geen metadata voor het concept is."""
+    metadata = lees_metadata(pand_slug, van_bestandsnaam, state_dir)
+    if not metadata:
+        return
+    _schrijf_metadata(_output_dir(pand_slug, state_dir), Path(naar_bestandsnaam).name, metadata)
+
+
 def genereer_getekend_contract(pand_slug: str, bestandsnaam: str, handtekeningen_html: str, state_dir: str = ".") -> str:
     """Maakt van een (al volledig ondertekend) concept-contract de
     definitieve versie: neemt de eerder gegenereerde contracttekst en
@@ -373,6 +397,7 @@ def genereer_getekend_contract(pand_slug: str, bestandsnaam: str, handtekeningen
     getekend_bestandsnaam = f"{Path(bestandsnaam).stem}{GETEKEND_ACHTERVOEGSEL}.html"
     output_dir = _output_dir(pand_slug, state_dir)
     (output_dir / getekend_bestandsnaam).write_text(nieuwe_html)
+    kopieer_metadata(pand_slug, bestandsnaam, getekend_bestandsnaam, state_dir)
     return getekend_bestandsnaam
 
 

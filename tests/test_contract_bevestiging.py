@@ -1,8 +1,12 @@
 """Tests voor de "Mail bevestiging"-knop op de Contracten-pagina: verschijnt
-pas zodra een contract volledig ondertekend is ÉN de betaling (incl. borg)
-van de kamer binnen is, en toont eerst een aanpasbaar voorbeeldscherm - voor
-panden met een Bold-slot moet daar eerst verplicht de persoonlijke
-uitnodigingslink ingevuld worden."""
+pas zodra een contract volledig ondertekend is (herkenbaar aan de definitieve,
+"-getekend" bestandsnaam) ÉN de betaling (incl. borg) van de kamer binnen is,
+en toont eerst een aanpasbaar voorbeeldscherm - voor panden met een Bold-slot
+moet daar eerst verplicht de persoonlijke uitnodigingslink ingevuld worden.
+
+Belangrijke regressie: de knop moet ook nog werken als het concept-contract
+(en daarmee zijn eigen metadata) na het tekenen is verwijderd via
+"Verwijderen" - alleen de definitieve "-getekend" versie is dan nog over."""
 import json
 import re
 from decimal import Decimal
@@ -14,7 +18,7 @@ from werkzeug.security import generate_password_hash
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config
 from kamerverhuur_scanner.models import Status, Tenant, TenantResult
-from webapp import ondertekenen
+from webapp import contracts, ondertekenen
 from webapp.app import create_app
 
 TEST_HANDTEKENING_DATA_URL = (
@@ -86,10 +90,9 @@ def app_client(tmp_path, monkeypatch):
     return client
 
 
-def _genereer_en_teken_af(client, pand_slug="mahoniestraat") -> str:
-    """Genereert een contract, stuurt het tekenverzoek en laat alle partijen
-    (huurder + verhuurder) tekenen - geeft de bestandsnaam van het originele
-    (niet-getekende) contract terug."""
+def _genereer_contract(client, pand_slug="mahoniestraat") -> str:
+    """Genereert een contract, geeft de bestandsnaam van het (nog niet
+    getekende) concept terug."""
     data = {
         "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "870,00",
         "ingangsdatum": "2026-08-01", "borg": "1000,00", "email": "bence@example.com",
@@ -97,8 +100,13 @@ def _genereer_en_teken_af(client, pand_slug="mahoniestraat") -> str:
     client.post(f"/pand/{pand_slug}/contracten/nieuw", data=data)
     resp = client.get(f"/pand/{pand_slug}/contracten")
     match = re.search(r'contracten/([^/"]+\.html)/pdf', resp.get_data(as_text=True))
-    bestandsnaam = match.group(1)
+    return match.group(1)
 
+
+def _teken_af(client, pand_slug: str, bestandsnaam: str) -> str:
+    """Stuurt het tekenverzoek en laat alle partijen (huurder + verhuurder)
+    tekenen - geeft de bestandsnaam van de definitieve, GETEKENDE versie
+    terug."""
     with patch("kamerverhuur_scanner.mailer.smtplib.SMTP") as mock_smtp_cls:
         mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
         client.post(f"/pand/{pand_slug}/contracten/{bestandsnaam}/tekenverzoek")
@@ -111,7 +119,15 @@ def _genereer_en_teken_af(client, pand_slug="mahoniestraat") -> str:
                     "handtekening_data_url": TEST_HANDTEKENING_DATA_URL,
                 },
             )
-    return bestandsnaam
+    ronde = ondertekenen.lees_ondertekenronde(pand_slug, bestandsnaam, ".")
+    return ronde["getekend_bestandsnaam"]
+
+
+def _genereer_en_teken_af(client, pand_slug="mahoniestraat") -> str:
+    """Genereert een contract en tekent het meteen volledig af - geeft de
+    bestandsnaam van de definitieve, GETEKENDE versie terug."""
+    bestandsnaam = _genereer_contract(client, pand_slug)
+    return _teken_af(client, pand_slug, bestandsnaam)
 
 
 def _markeer_betaald(pand_slug: str) -> None:
@@ -136,11 +152,7 @@ def _bevestiging_url(pand_slug: str, bestandsnaam: str) -> str:
 
 
 def test_bevestiging_knop_verschijnt_niet_zonder_afgeronde_ondertekening(app_client):
-    data = {
-        "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "870,00",
-        "ingangsdatum": "2026-08-01", "borg": "1000,00", "email": "bence@example.com",
-    }
-    app_client.post("/pand/mahoniestraat/contracten/nieuw", data=data)
+    _genereer_contract(app_client)
     _markeer_betaald("mahoniestraat")
 
     overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
@@ -148,7 +160,7 @@ def test_bevestiging_knop_verschijnt_niet_zonder_afgeronde_ondertekening(app_cli
 
 
 def test_bevestiging_knop_verschijnt_niet_zonder_betaling(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    _genereer_en_teken_af(app_client)
     _markeer_niet_betaald("mahoniestraat")
 
     overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
@@ -156,25 +168,19 @@ def test_bevestiging_knop_verschijnt_niet_zonder_betaling(app_client):
 
 
 def test_bevestiging_knop_verschijnt_pas_na_ondertekenen_en_betaling(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_betaald("mahoniestraat")
 
     overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
     assert "Mail bevestiging" in overzicht
-    assert _bevestiging_url("mahoniestraat", bestandsnaam) in overzicht
+    assert _bevestiging_url("mahoniestraat", getekend_bestandsnaam) in overzicht
 
 
 # --- Route-bescherming ---
 
 
-def test_contract_bevestiging_zonder_afgeronde_ondertekening_geeft_foutmelding(app_client):
-    data = {
-        "kamer": "1", "huurder_naam": "Bence Neumayer", "huurprijs": "870,00",
-        "ingangsdatum": "2026-08-01", "borg": "1000,00", "email": "bence@example.com",
-    }
-    app_client.post("/pand/mahoniestraat/contracten/nieuw", data=data)
-    resp = app_client.get("/pand/mahoniestraat/contracten")
-    bestandsnaam = re.search(r'contracten/([^/"]+\.html)/pdf', resp.get_data(as_text=True)).group(1)
+def test_contract_bevestiging_op_concept_geeft_foutmelding(app_client):
+    bestandsnaam = _genereer_contract(app_client)
     _markeer_betaald("mahoniestraat")
 
     resp = app_client.get(_bevestiging_url("mahoniestraat", bestandsnaam), follow_redirects=True)
@@ -183,22 +189,45 @@ def test_contract_bevestiging_zonder_afgeronde_ondertekening_geeft_foutmelding(a
 
 
 def test_contract_bevestiging_zonder_betaling_geeft_foutmelding(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_niet_betaald("mahoniestraat")
 
-    resp = app_client.get(_bevestiging_url("mahoniestraat", bestandsnaam), follow_redirects=True)
+    resp = app_client.get(_bevestiging_url("mahoniestraat", getekend_bestandsnaam), follow_redirects=True)
     assert resp.status_code == 200
     assert "betaling" in resp.get_data(as_text=True).lower()
+
+
+# --- Regressie: concept (en dus zijn eigen metadata) al verwijderd na tekenen ---
+
+
+def test_contract_bevestiging_werkt_nog_als_concept_verwijderd_is(app_client):
+    bestandsnaam = _genereer_contract(app_client)
+    getekend_bestandsnaam = _teken_af(app_client, "mahoniestraat", bestandsnaam)
+    _markeer_betaald("mahoniestraat")
+
+    # simuleert een oudere situatie (van vóór automatisch meekopiëren van
+    # metadata naar de getekende versie) waarin het concept via "Verwijderen"
+    # is opgeruimd - de getekende versie en de ondertekenronde blijven staan.
+    contracts.verwijder_contract("mahoniestraat", bestandsnaam, ".")
+    (contracts.output_dir("mahoniestraat", ".") / f"{getekend_bestandsnaam}.meta.json").unlink(missing_ok=True)
+
+    overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
+    assert "Mail bevestiging" in overzicht
+
+    resp = app_client.get(_bevestiging_url("mahoniestraat", getekend_bestandsnaam))
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Bold-uitnodigingslink" in body  # kwam gewoon tot een geldig voorbeeldscherm
 
 
 # --- Bold-slot panden: verplichte uitnodigingslink ---
 
 
 def test_contract_bevestiging_bold_slot_vraagt_eerst_om_link(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_betaald("mahoniestraat")
 
-    resp = app_client.get(_bevestiging_url("mahoniestraat", bestandsnaam))
+    resp = app_client.get(_bevestiging_url("mahoniestraat", getekend_bestandsnaam))
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "Bold-uitnodigingslink" in body
@@ -206,11 +235,12 @@ def test_contract_bevestiging_bold_slot_vraagt_eerst_om_link(app_client):
 
 
 def test_contract_bevestiging_bold_slot_toont_link_in_voorbeeld(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_betaald("mahoniestraat")
 
     resp = app_client.get(
-        _bevestiging_url("mahoniestraat", bestandsnaam), query_string={"bold_link": "https://bold.example/invite/xyz"}
+        _bevestiging_url("mahoniestraat", getekend_bestandsnaam),
+        query_string={"bold_link": "https://bold.example/invite/xyz"},
     )
     body = resp.get_data(as_text=True)
     assert "https://bold.example/invite/xyz" in body
@@ -221,18 +251,19 @@ def test_contract_bevestiging_bold_slot_toont_link_in_voorbeeld(app_client):
 def test_contract_bevestiging_bold_slot_verstuurt_mail_met_link_en_bcc(mock_smtp_cls, app_client):
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_betaald("mahoniestraat")
 
     voorbeeld = app_client.get(
-        _bevestiging_url("mahoniestraat", bestandsnaam), query_string={"bold_link": "https://bold.example/invite/xyz"}
+        _bevestiging_url("mahoniestraat", getekend_bestandsnaam),
+        query_string={"bold_link": "https://bold.example/invite/xyz"},
     )
     body = voorbeeld.get_data(as_text=True)
     onderwerp = re.search(r'name="onderwerp" value="([^"]+)"', body).group(1)
     tekst = re.search(r'name="tekst"[^>]*>([\s\S]*?)</textarea>', body).group(1)
 
     resp = app_client.post(
-        _bevestiging_url("mahoniestraat", bestandsnaam),
+        _bevestiging_url("mahoniestraat", getekend_bestandsnaam),
         data={"onderwerp": onderwerp, "tekst": tekst}, follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -252,10 +283,10 @@ def test_contract_bevestiging_baumannlaan_toont_sleutelbox_direct(tmp_path, monk
         tmp_path, monkeypatch,
         pand_overrides={"slug": "baumannlaan", "naam": "Burgemeester Baumannlaan 70b", "heeft_bold_slot": False},
     )
-    bestandsnaam = _genereer_en_teken_af(client, pand_slug=slug)
+    getekend_bestandsnaam = _genereer_en_teken_af(client, pand_slug=slug)
     _markeer_betaald(slug)
 
-    resp = client.get(_bevestiging_url(slug, bestandsnaam))
+    resp = client.get(_bevestiging_url(slug, getekend_bestandsnaam))
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "keybox" in body.lower()
@@ -267,12 +298,15 @@ def test_contract_bevestiging_baumannlaan_toont_sleutelbox_direct(tmp_path, monk
 
 
 def test_contract_bevestiging_post_lege_tekst_geeft_foutmelding(app_client):
-    bestandsnaam = _genereer_en_teken_af(app_client)
+    getekend_bestandsnaam = _genereer_en_teken_af(app_client)
     _markeer_betaald("mahoniestraat")
-    app_client.get(_bevestiging_url("mahoniestraat", bestandsnaam), query_string={"bold_link": "https://bold.example/x"})
+    app_client.get(
+        _bevestiging_url("mahoniestraat", getekend_bestandsnaam), query_string={"bold_link": "https://bold.example/x"}
+    )
 
     resp = app_client.post(
-        _bevestiging_url("mahoniestraat", bestandsnaam), data={"onderwerp": "", "tekst": ""}, follow_redirects=True,
+        _bevestiging_url("mahoniestraat", getekend_bestandsnaam),
+        data={"onderwerp": "", "tekst": ""}, follow_redirects=True,
     )
     assert resp.status_code == 200
     assert "verplicht" in resp.get_data(as_text=True).lower()
