@@ -279,9 +279,13 @@ class FakeBunqClientVooruitbetaald:
         pass
 
     def get_incoming_payments(self, pand, since):
+        # dag 3 i.p.v. date.today(): moet altijd vóór de 17e-effectieve-maand-
+        # grens vallen (zie runner._EFFECTIEVE_MAAND_GRENSDAG), anders telt de
+        # betaling per ongeluk al mee voor de vólgende maand als de test
+        # toevallig laat in de maand draait.
         return [
             Payment(bedrag=Decimal("1870.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
-                    omschrijving="borg + eerste huur", datum=date.today()),
+                    omschrijving="borg + eerste huur", datum=date.today().replace(day=3)),
         ]
 
 

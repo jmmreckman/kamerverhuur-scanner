@@ -4,9 +4,9 @@
 {% block content %}
 <div class="page-header">
   <h1>Mail het hele huishouden</h1>
-  <p class="muted">Stuurt dezelfde mail apart naar elke huidige huurder van {{ huidig_pand.naam }} - bijvoorbeeld voor
-     een aankondiging (taxateur langs, lekkage, onderhoud). Elke huurder krijgt zijn eigen mail, ze zien elkaars
-     adres niet.</p>
+  <p class="muted">Stuurt één mail naar alle huidige huurders van {{ huidig_pand.naam }} samen (allemaal in de
+     "Aan"-regel, ze zien elkaars adres dus wel) - bijvoorbeeld voor een aankondiging (taxateur langs, lekkage,
+     onderhoud). Als beheerder(s) staan jullie in de BCC, en krijgen dus ook maar één keer een kopie.</p>
 </div>
 
 <div class="card">

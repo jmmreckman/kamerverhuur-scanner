@@ -155,10 +155,11 @@ nodig.
 - **Mail het hele huishouden** - knop op de Huurders-pagina om alle huidige
   huurders van dat pand in één keer aan te schrijven (bv. "de taxateur komt
   langs", "we zijn bekend met de lekkage"). Je typt onderwerp/tekst op de
-  site; elke huurder krijgt een eigen, losse mail (ze zien elkaars adres
-  niet), met dezelfde BCC/Reply-To-instelling als de betaalherinneringen.
-  Huurders zonder bekend e-mailadres worden overgeslagen, met een melding
-  wie dat waren.
+  site; er gaat één groepsmail uit met alle huurders samen in de "Aan"-regel
+  (ze zien elkaars adres dus wel), met dezelfde BCC/Reply-To-instelling als
+  de betaalherinneringen - de beheerder(s) krijgen daardoor ook maar één
+  kopie, niet één per huurder. Huurders zonder bekend e-mailadres worden
+  overgeslagen, met een melding wie dat waren.
 - **Voormalige huurders blijven nog even zichtbaar** - zodra een kamer een
   andere naam krijgt (via een nieuw huurcontract, of handmatig bij Huurders
   bewerken) wordt de vertrekkende huurder automatisch gearchiveerd in een

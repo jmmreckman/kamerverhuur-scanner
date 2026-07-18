@@ -596,17 +596,16 @@ def create_app(config: Config | None = None) -> Flask:
                     tenants_zonder_mail=tenants_zonder_mail, onderwerp=onderwerp, tekst=tekst,
                 )
             bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
-            verzonden, mislukt = 0, []
-            for tenant in tenants_met_mail:
+            if tenants_met_mail:
+                aan = ", ".join(t.email for t in tenants_met_mail)
                 try:
-                    verstuur_email(config, tenant.email, onderwerp, tekst, bcc=bcc)
-                    verzonden += 1
+                    verstuur_email(config, aan, onderwerp, tekst, bcc=bcc)
+                    flash(
+                        f"Mail verstuurd naar het hele huishouden ({len(tenants_met_mail)} huurder(s), "
+                        "als groep in één mail)."
+                    )
                 except MailError:
-                    mislukt.append(tenant.naam)
-            if verzonden:
-                flash(f"Mail verstuurd naar {verzonden} huurder(s).")
-            if mislukt:
-                flash(f"Versturen is mislukt voor: {', '.join(mislukt)}.")
+                    flash("Versturen van de mail is mislukt.")
             if tenants_zonder_mail:
                 flash(
                     "Geen e-mailadres bekend voor: "

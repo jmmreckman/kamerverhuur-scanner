@@ -1,5 +1,6 @@
-"""Tests voor 'Mail het hele huishouden': stuurt dezelfde mail apart naar
-elke huidige huurder van een pand (bv. aankondiging taxateur/lekkage)."""
+"""Tests voor 'Mail het hele huishouden': stuurt één groepsmail naar alle
+huidige huurders van een pand samen (bv. aankondiging taxateur/lekkage) -
+allemaal in de 'Aan'-regel, de beheerder(s) staan in de BCC."""
 import json
 from decimal import Decimal
 
@@ -82,19 +83,18 @@ def test_formulier_toont_ontvangers_en_mist_lijst(app_client):
     assert "Piet" in body  # staat in de "geen e-mailadres bekend"-lijst
 
 
-def test_versturen_gaat_apart_naar_elke_huurder_met_mail(app_client, verstuurde_mails):
+def test_versturen_stuurt_1_groepsmail_met_alle_huurders_in_aan(app_client, verstuurde_mails):
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
         data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
         follow_redirects=True,
     )
     assert resp.status_code == 200
-    assert len(verstuurde_mails) == 2  # Luisa en Vladislav, niet Piet (geen mailadres)
-    ontvangers = {m["aan"] for m in verstuurde_mails}
-    assert ontvangers == {"luisa@example.com", "vlad@example.com"}
-    for mail in verstuurde_mails:
-        assert mail["onderwerp"] == "Taxateur langs"
-        assert mail["bcc"] == ["eigenaar@example.com", "justin@example.com"]
+    assert len(verstuurde_mails) == 1  # 1 groepsmail, niet apart per huurder
+    mail = verstuurde_mails[0]
+    assert mail["aan"] == "luisa@example.com, vlad@example.com"  # samen in de "Aan"-regel, niet Piet (geen mailadres)
+    assert mail["onderwerp"] == "Taxateur langs"
+    assert mail["bcc"] == ["eigenaar@example.com", "justin@example.com"]  # beheerders krijgen maar 1 kopie
 
 
 def test_versturen_meldt_ontbrekende_mailadressen(app_client, verstuurde_mails):
@@ -104,7 +104,7 @@ def test_versturen_meldt_ontbrekende_mailadressen(app_client, verstuurde_mails):
         follow_redirects=True,
     )
     body = resp.get_data(as_text=True)
-    assert "verstuurd naar 2 huurder" in body.lower()
+    assert "verstuurd naar het hele huishouden (2 huurder" in body.lower()
     assert "piet" in body.lower()
 
 
@@ -118,21 +118,46 @@ def test_leeg_onderwerp_of_tekst_wordt_geweigerd(app_client, verstuurde_mails):
     assert "verplicht" in resp.get_data(as_text=True).lower()
 
 
-def test_mailerror_bij_1_huurder_stopt_de_rest_niet(app_client, monkeypatch):
+def test_mailerror_geeft_foutmelding_zonder_te_crashen(app_client, monkeypatch):
     import webapp.app as appmodule
 
-    def _wisselvallige_mailer(config, aan, onderwerp, tekst, bcc=None):
-        if aan == "luisa@example.com":
-            raise MailError("SMTP tijdelijk niet bereikbaar")
+    def _falende_mailer(config, aan, onderwerp, tekst, bcc=None):
+        raise MailError("SMTP tijdelijk niet bereikbaar")
 
-    monkeypatch.setattr(appmodule, "verstuur_email", _wisselvallige_mailer)
+    monkeypatch.setattr(appmodule, "verstuur_email", _falende_mailer)
 
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
         data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
         follow_redirects=True,
     )
-    body = resp.get_data(as_text=True)
-    assert "verstuurd naar 1 huurder" in body.lower()
-    assert "mislukt" in body.lower()
-    assert "luisa" in body.lower()
+    assert resp.status_code == 200
+    assert "mislukt" in resp.get_data(as_text=True).lower()
+
+
+def test_zonder_huurders_met_mailadres_verstuurt_niets(app_client, verstuurde_mails, monkeypatch):
+    import webapp.app as appmodule
+
+    class FakeSheetClientZonderMail:
+        def __init__(self, _config, _pand):
+            pass
+
+        def get_tenants(self):
+            return [KAMER_ZONDER_MAIL]
+
+        def get_kamers(self):
+            return [KAMER_ZONDER_MAIL]
+
+        def get_recent_vertrokken_huurders(self):
+            return []
+
+    monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClientZonderMail)
+
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert verstuurde_mails == []
+    assert "piet" in resp.get_data(as_text=True).lower()
