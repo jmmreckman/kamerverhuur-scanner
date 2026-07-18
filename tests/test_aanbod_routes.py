@@ -358,6 +358,20 @@ def test_kamer_aanbod_beheren_post_onleesbaar_bedrag_geeft_foutmelding_niet_500(
     assert _fake_sheet_singleton["mahoniestraat"].laatste_update_aanbod is None
 
 
+def test_kamer_aanbod_beheren_get_mislukte_medialijst_crasht_niet(app_client, monkeypatch):
+    # Regressietest: als het ophalen van de foto-/videolijst faalt (bv. een
+    # beschadigd .meta-bestand na veel uploads), mag de hele "Aanbod beheren"-
+    # pagina niet crashen - alleen een lege lijst tonen met een melding.
+    def _falende_list_bestanden(self, kamer):
+        raise RuntimeError("simuleert een kapot .meta-bestand")
+
+    monkeypatch.setattr(LokaleMediaClient, "list_bestanden", _falende_list_bestanden)
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/aanbod")
+    assert resp.status_code == 200
+    assert "niet volledig geladen" in resp.get_data(as_text=True).lower()
+
+
 def test_kamer_aanbod_beheren_mislukte_sheet_schrijfactie_geeft_foutmelding_niet_500(app_client):
     # Regressietest voor de gemelde "Internal Server Error": een fout bij het
     # schrijven naar de sheet (bv. een tijdelijke Google-API-hapering) mag

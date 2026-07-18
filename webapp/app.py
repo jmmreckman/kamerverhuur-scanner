@@ -172,6 +172,19 @@ def create_app(config: Config | None = None) -> Flask:
     def _aanmeldingen_media(pand=None) -> LokaleMediaClient:
         return LokaleMediaClient(config, pand or g.pand, "aanmeldingen")
 
+    def _lees_aanbod_media_veilig(kamer_naam: str) -> list:
+        """Haalt de geüploade foto's/video's op voor "Aanbod beheren" - vangt
+        een fout af (bv. een beschadigd .meta-bestand, of een schijf-/
+        bestandssysteemhapering) zodat één probleembestand niet de hele
+        "Aanbod beheren"-pagina laat crashen (kale 500-fout), alleen een
+        lege/onvolledige lijst laat zien met een duidelijke melding."""
+        try:
+            return _aanbod_media().list_bestanden(kamer_naam)
+        except Exception:
+            app.logger.exception("Ophalen van aanbod-media voor kamer %s is mislukt.", kamer_naam)
+            flash("De lijst met foto's/video's kon niet volledig geladen worden - de rest van de pagina werkt gewoon.")
+            return []
+
     def admin_required(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
@@ -757,7 +770,7 @@ def create_app(config: Config | None = None) -> Flask:
                 borg_bedrag = parse_bedrag(borg) if borg else None
             except ValueError:
                 flash("Kon de prijs of waarborgsom niet lezen - vul een bedrag in zoals 725,00 of 725.")
-                media = _aanbod_media().list_bestanden(kamer_naam)
+                media = _lees_aanbod_media_veilig(kamer_naam)
                 standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
                 return render_template(
                     "kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving,
@@ -777,14 +790,14 @@ def create_app(config: Config | None = None) -> Flask:
                     "Opslaan is helaas mislukt door een fout bij het schrijven naar de sheet - "
                     "probeer het nog eens, en laat het weten als dit blijft gebeuren."
                 )
-                media = _aanbod_media().list_bestanden(kamer_naam)
+                media = _lees_aanbod_media_veilig(kamer_naam)
                 standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
                 return render_template(
                     "kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving,
                 )
             flash("Aanbod bijgewerkt.")
             return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
-        media = _aanbod_media().list_bestanden(kamer_naam)
+        media = _lees_aanbod_media_veilig(kamer_naam)
         standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
         return render_template("kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving)
 
