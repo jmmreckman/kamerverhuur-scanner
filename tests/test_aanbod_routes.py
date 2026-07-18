@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash
 
 from kamerverhuur_scanner.config import Config
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
+from kamerverhuur_scanner.mailer import MailError
 from kamerverhuur_scanner.models import Pand, Tenant
 from webapp.app import create_app
 
@@ -86,8 +87,7 @@ def _fake_sheet_factory(config, pand):
 _file_id = {}
 
 
-@pytest.fixture
-def app_client(tmp_path, monkeypatch):
+def _bouw_app_client(tmp_path, monkeypatch, config_overrides=None):
     import webapp.app as appmodule
     _fake_sheet_singleton.clear()
     monkeypatch.setattr(appmodule, "SheetClient", _fake_sheet_factory)
@@ -95,7 +95,7 @@ def app_client(tmp_path, monkeypatch):
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "bunq_rekening_iban": "NL81BUNQ2163127125"},
+         "bunq_rekening_iban": "NL81BUNQ2163127125", "extra_bcc": ["justin@example.com"]},
     ]))
     users_file = tmp_path / "users.json"
     users_file.write_text(json.dumps({
@@ -103,12 +103,18 @@ def app_client(tmp_path, monkeypatch):
     }))
     state_dir = tmp_path / "state"
     state_dir.mkdir()
-    config = Config(
+    config_velden = dict(
         google_service_account_file="fake.json", properties_file=str(properties_file),
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
         bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=str(state_dir),
+        smtp_host="smtp.example.com", smtp_port=587, smtp_username="info@steenhub.nl",
+        smtp_password="geheim", smtp_from_email="info@steenhub.nl", smtp_from_naam="Steenhub",
+        email_bcc=["jurian@example.com", "justin@example.com"],
+        email_bcc_beheerder=["jmmreckman@gmail.com"],
     )
+    config_velden.update(config_overrides or {})
+    config = Config(**config_velden)
     pand = Pand(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="fake",
         google_sheet_worksheet="Huurders", history_worksheet="Historie",
@@ -121,6 +127,23 @@ def app_client(tmp_path, monkeypatch):
     app = create_app(config)
     app.testing = True
     return app.test_client()
+
+
+@pytest.fixture
+def app_client(tmp_path, monkeypatch):
+    return _bouw_app_client(tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def verstuurde_mails(monkeypatch):
+    verstuurd = []
+
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, **kwargs):
+        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
+
+    import webapp.app as appmodule
+    monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
+    return verstuurd
 
 
 VOLLEDIG_FORMULIER = {
@@ -193,6 +216,53 @@ def test_apply_form_volledig_ingevuld_slaagt(app_client):
 def test_apply_form_op_verhuurde_kamer_geeft_404(app_client):
     resp = app_client.get("/aanbod/mahoniestraat/2/apply")
     assert resp.status_code == 404
+
+
+# --- Meldingsmail bij nieuwe aanmelding (alleen naar de beheerder, niet naar alle mede-eigenaren) ---
+
+
+def test_nieuwe_aanmelding_mailt_alleen_de_beheerder(app_client, verstuurde_mails):
+    data = dict(VOLLEDIG_FORMULIER)
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    app_client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
+
+    assert len(verstuurde_mails) == 1
+    mail = verstuurde_mails[0]
+    assert mail["aan"] == "jmmreckman@gmail.com"
+    assert mail["bcc"] == []  # expliciet leeg - geen mede-eigenaren erbij via de standaard-BCC
+    assert "justin@example.com" not in mail["aan"]
+    assert "Jane Doe" in mail["tekst"]
+    assert "kamer 1" in mail["onderwerp"].lower()
+    assert "Mahoniestraat 15" in mail["onderwerp"]
+
+
+def test_nieuwe_aanmelding_zonder_beheerder_bcc_valt_terug_op_email_bcc(tmp_path, monkeypatch, verstuurde_mails):
+    client = _bouw_app_client(tmp_path, monkeypatch, config_overrides={"email_bcc_beheerder": []})
+
+    data = dict(VOLLEDIG_FORMULIER)
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
+
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "jurian@example.com, justin@example.com"
+
+
+def test_nieuwe_aanmelding_mislukte_mail_breekt_de_aanmelding_niet(app_client, monkeypatch):
+    import webapp.app as appmodule
+
+    def _falende_mailer(config, aan, onderwerp, tekst, bcc=None):
+        raise MailError("SMTP tijdelijk niet bereikbaar")
+
+    monkeypatch.setattr(appmodule, "verstuur_email", _falende_mailer)
+
+    data = dict(VOLLEDIG_FORMULIER)
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    resp = app_client.post(
+        "/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data", follow_redirects=True
+    )
+    assert resp.status_code == 200
+    assert b"Thank you for your application" in resp.data
+    assert len(_fake_sheet_singleton["mahoniestraat"].aanmeldingen) == 1
 
 
 def test_kamer_aanbod_beheren_vereist_login(app_client):

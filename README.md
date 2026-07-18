@@ -205,7 +205,12 @@ nodig.
 - **Aanmeldingen** - reacties op de aanbodpagina komen (met een upload van hun
   bewijs van inschrijving) in een overzicht terecht dat alleen beheerders van
   dat specifieke pand kunnen zien - met één druk op de knop weer leeg te maken
-  zodra je een huurder hebt gekozen.
+  zodra je een huurder hebt gekozen. Bij elke nieuwe aanmelding gaat er ook
+  een meldingsmail uit - bewust alleen naar `EMAIL_BCC_BEHEERDER` (standaard
+  alleen de beheerder zelf, niet naar alle mede-eigenaren uit `EMAIL_BCC`),
+  met de belangrijkste gegevens en een link naar het volledige overzicht.
+  Lukt het versturen niet (bv. een SMTP-hapering), dan blijft de aanmelding
+  zelf gewoon goed opgeslagen - alleen de melding zelf mislukt dan stil.
 
 ## Aanbod & aanmeldingen (publieke kamerlisting)
 

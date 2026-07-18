@@ -31,7 +31,7 @@ from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import ads, contracts, ondertekenen
-from .aanmeldingen import AanmeldingFout, valideer_en_bouw
+from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
 from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
@@ -1506,6 +1506,22 @@ def create_app(config: Config | None = None) -> Flask:
                 ),
             )
             sheet.add_aanmelding(kamer_naam, aanmelding)
+            # Meldingsmail (best-effort, mag een geslaagde aanmelding nooit
+            # laten mislukken) - bewust alleen naar de beheerder(s) uit
+            # EMAIL_BCC_BEHEERDER (standaard alleen jmmreckman@gmail.com),
+            # niet naar alle mede-eigenaren uit EMAIL_BCC.
+            ontvangers = config.email_bcc_beheerder or config.email_bcc
+            if ontvangers:
+                mail = bouw_nieuwe_aanmelding_mail(
+                    g.pand, kamer_naam, aanmelding,
+                    url_for("aanmeldingen_overzicht", pand_slug=pand_slug, _external=True),
+                )
+                try:
+                    verstuur_email(config, ", ".join(ontvangers), mail["onderwerp"], mail["tekst"], bcc=[])
+                except MailError:
+                    app.logger.exception(
+                        "Melding van nieuwe aanmelding (kamer %s, pand %s) is mislukt.", kamer_naam, pand_slug
+                    )
             return redirect(url_for("aanbod_apply_bedankt", pand_slug=pand_slug, kamer_naam=kamer_naam))
         return render_template("aanbod_apply.html", kamer=kamer, fout=None)
 

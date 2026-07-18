@@ -3,7 +3,7 @@ aanbodpagina). De site is voor de aanmelders in het Engels, vandaar Engelse
 foutmeldingen hier."""
 from __future__ import annotations
 
-from kamerverhuur_scanner.models import Aanmelding
+from kamerverhuur_scanner.models import Aanmelding, Pand
 
 VEREISTE_VELDEN = {
     "full_name": "Full name",
@@ -69,3 +69,22 @@ def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
         borgsteller_relatie=form.get("guarantor_relation", "").strip() if heeft_borgsteller else "",
         borgsteller_email=form.get("guarantor_email", "").strip() if heeft_borgsteller else "",
     )
+
+
+def bouw_nieuwe_aanmelding_mail(pand: Pand, kamer_naam: str, aanmelding: Aanmelding, aanmeldingen_url: str) -> dict[str, str]:
+    """Interne meldingsmail zodra er een nieuwe aanmelding via de publieke
+    aanbodpagina binnenkomt - Nederlands, want dit is (in tegenstelling tot
+    de rest van de aanbodpagina) puur intern, voor de beheerder(s)."""
+    onderwerp = f"Nieuwe aanmelding - kamer {kamer_naam}, {pand.naam}"
+    tekst = (
+        f"Er is een nieuwe aanmelding binnengekomen via de aanbodpagina.\n\n"
+        f"Pand: {pand.naam}\n"
+        f"Kamer: {kamer_naam}\n"
+        f"Naam: {aanmelding.naam}\n"
+        f"E-mail: {aanmelding.email}\n"
+        f"Telefoon: {aanmelding.telefoon}\n"
+        f"Gewenste ingangsdatum: {aanmelding.gewenste_ingangsdatum}\n\n"
+        f"Bekijk alle details (incl. bewijs van inschrijving): {aanmeldingen_url}\n\n"
+        "- Steenhub (automatisch bericht)"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
