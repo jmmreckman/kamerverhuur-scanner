@@ -9,14 +9,21 @@ from kamerverhuur_scanner.sheet_client import _AANMELDINGEN_HEADER, SheetClient
 
 
 class FakeWorksheet:
-    def __init__(self, rows):
+    def __init__(self, rows, col_count=26):
         self._rows = rows
         self.batch_updates = []
         self.appended_rows = []
         self.laatste_value_input_option = None
+        self.col_count = col_count
+        self.resize_aanroepen = []
 
     def get_all_values(self):
         return self._rows
+
+    def resize(self, rows=None, cols=None):
+        self.resize_aanroepen.append({"rows": rows, "cols": cols})
+        if cols is not None:
+            self.col_count = cols
 
     def batch_update(self, updates, value_input_option="USER_ENTERED"):
         self.laatste_value_input_option = value_input_option
@@ -185,6 +192,36 @@ def test_update_aanbod_schrijft_advertentievelden():
     assert ranges["AB2"] == "01-09-2026"
     assert ranges["AC2"] == "01-07-2027"
     assert ranges["AD2"] == "1000,00"
+
+
+def test_update_aanbod_breidt_sheet_uit_als_grid_te_klein_is():
+    # Regressietest voor een echt gemelde crash: een sheet die nog nooit tot
+    # kolom AD is uitgebreid (het gebruikelijke standaard-grid van 26
+    # kolommen, A t/m Z) gaf een "exceeds grid limits"-APIError van Google
+    # zodra er naar kolom AA e.v. geschreven werd - de Sheets API breidt het
+    # aantal kolommen namelijk niet vanzelf uit (in tegenstelling tot rijen).
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    assert ws.col_count == 26  # het standaard-grid, zoals op de live sheet
+    client.update_aanbod(row_index=2, beschikbaar=True, omschrijving="Great room", map_id="map456")
+    assert ws.resize_aanroepen == [{"rows": None, "cols": 30}]
+    assert ws.col_count == 30
+
+
+def test_update_aanbod_breidt_niet_onnodig_uit_als_grid_al_groot_genoeg_is():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    ws.col_count = 40
+    client.update_aanbod(row_index=2, beschikbaar=True, omschrijving="Great room", map_id="map456")
+    assert ws.resize_aanroepen == []
+
+
+def test_update_kamer_breidt_sheet_uit_als_grid_te_klein_is():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    ws.col_count = 20  # kleiner dan kolom Y (25, "Borg")
+    client.update_kamer(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"), iban=None, zoekwoord=None)
+    assert ws.resize_aanroepen == [{"rows": None, "cols": 25}]
 
 
 def test_get_kamers_leest_advertentievelden():

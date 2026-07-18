@@ -277,6 +277,7 @@ class SheetClient:
         contract_startdatum: str | None = None,
         borg_bedrag: Decimal | None = None,
     ) -> None:
+        self._zorg_voor_voldoende_kolommen(COL_BORG)
         updates = [
             {"range": self._a1(row_index, COL_KAMER), "values": [[kamer]]},
             {"range": self._a1(row_index, COL_NAAM), "values": [[naam]]},
@@ -315,6 +316,11 @@ class SheetClient:
         beschikbaar_tot: str | None = None,
         borg: Decimal | None = None,
     ) -> None:
+        # Anders dan bij nieuwe RIJEN (die de Sheets API vanzelf aanmaakt),
+        # breidt de API het aantal KOLOMMEN niet automatisch uit - schrijven
+        # voorbij het huidige grid (bv. een sheet die nog nooit tot kolom AD
+        # is uitgebreid) faalt anders met "exceeds grid limits".
+        self._zorg_voor_voldoende_kolommen(COL_ADVERTENTIE_BORG)
         updates = [
             {"range": self._a1(row_index, COL_BESCHIKBAAR), "values": [[_naar_ja_nee(beschikbaar)]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_OMSCHRIJVING), "values": [[omschrijving or ""]]},
@@ -326,6 +332,16 @@ class SheetClient:
             {"range": self._a1(row_index, COL_ADVERTENTIE_BORG), "values": [[self._bedrag_of_leeg(borg)]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+
+    def _zorg_voor_voldoende_kolommen(self, min_cols: int) -> None:
+        """Breidt het grid van het hoofdtabblad uit als dat nog niet genoeg
+        kolommen heeft. Anders dan bij nieuwe rijen (die gewoon ontstaan door
+        ze te schrijven) breidt de Sheets API het aantal kolommen NIET vanzelf
+        uit bij een schrijfactie voorbij de huidige grid-afmetingen - dat
+        geeft dan een "exceeds grid limits"-fout in plaats van gewoon te
+        werken (bv. een sheet die (nog) nooit tot kolom AD is uitgebreid)."""
+        if self._worksheet.col_count < min_cols:
+            self._worksheet.resize(cols=min_cols)
 
     def write_results(self, results: list[TenantResult]) -> None:
         now = datetime.now().strftime("%d-%m-%Y %H:%M")
