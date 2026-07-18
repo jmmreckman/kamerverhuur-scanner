@@ -752,12 +752,36 @@ def create_app(config: Config | None = None) -> Flask:
             beschikbaar_per = request.form.get("advertentie_beschikbaar_per", "").strip() or None
             beschikbaar_tot = request.form.get("advertentie_beschikbaar_tot", "").strip() or None
             borg = request.form.get("advertentie_borg", "").strip()
-            sheet.update_aanbod(
-                kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id,
-                prijs=parse_bedrag(prijs) if prijs else None, oppervlakte=oppervlakte,
-                beschikbaar_per=beschikbaar_per, beschikbaar_tot=beschikbaar_tot,
-                borg=parse_bedrag(borg) if borg else None,
-            )
+            try:
+                prijs_bedrag = parse_bedrag(prijs) if prijs else None
+                borg_bedrag = parse_bedrag(borg) if borg else None
+            except ValueError:
+                flash("Kon de prijs of waarborgsom niet lezen - vul een bedrag in zoals 725,00 of 725.")
+                media = _aanbod_media().list_bestanden(kamer_naam)
+                standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
+                return render_template(
+                    "kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving,
+                )
+            try:
+                sheet.update_aanbod(
+                    kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id,
+                    prijs=prijs_bedrag, oppervlakte=oppervlakte,
+                    beschikbaar_per=beschikbaar_per, beschikbaar_tot=beschikbaar_tot,
+                    borg=borg_bedrag,
+                )
+            except Exception:
+                app.logger.exception(
+                    "Bijwerken van aanbod voor kamer %s (pand %s) is mislukt.", kamer_naam, pand_slug
+                )
+                flash(
+                    "Opslaan is helaas mislukt door een fout bij het schrijven naar de sheet - "
+                    "probeer het nog eens, en laat het weten als dit blijft gebeuren."
+                )
+                media = _aanbod_media().list_bestanden(kamer_naam)
+                standaard_omschrijving = kamer.advertentie_omschrijving or ads.genereer_advertentie(g.pand, kamer)["beschrijving"]
+                return render_template(
+                    "kamer_aanbod.html", kamer=kamer, media=media, standaard_omschrijving=standaard_omschrijving,
+                )
             flash("Aanbod bijgewerkt.")
             return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
         media = _aanbod_media().list_bestanden(kamer_naam)

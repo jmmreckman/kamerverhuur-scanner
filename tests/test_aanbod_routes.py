@@ -41,10 +41,14 @@ class FakeSheetClient:
     def get_geschiedenis(self, kamer):
         return []
 
+    laat_update_aanbod_falen = False
+
     def update_aanbod(
         self, row_index, beschikbaar, omschrijving, map_id,
         prijs=None, oppervlakte=None, beschikbaar_per=None, beschikbaar_tot=None, borg=None,
     ):
+        if self.laat_update_aanbod_falen:
+            raise RuntimeError("simuleert een mislukte Google Sheets-schrijfactie")
         self.laatste_update_aanbod = {
             "row_index": row_index, "beschikbaar": beschikbaar, "omschrijving": omschrijving, "map_id": map_id,
             "prijs": prijs, "oppervlakte": oppervlakte, "beschikbaar_per": beschikbaar_per,
@@ -324,3 +328,51 @@ def test_kamer_aanbod_beheren_post_zonder_advertentievelden_slaat_none_op(app_cl
     assert opgeslagen["prijs"] is None
     assert opgeslagen["oppervlakte"] is None
     assert opgeslagen["borg"] is None
+
+
+def test_kamer_aanbod_beheren_post_accepteert_rond_bedrag_zonder_centen(app_client):
+    # Regressietest: "725,-" (gangbare NL-notatie voor een rond bedrag) gaf
+    # eerder een onafgevangen crash (kale 500-fout) i.p.v. gewoon op te slaan.
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod",
+        data={
+            "beschikbaar": "on", "omschrijving": "A nice room",
+            "advertentie_prijs": "725,-", "advertentie_borg": "1.000,-",
+        },
+    )
+    assert resp.status_code == 302
+    opgeslagen = _fake_sheet_singleton["mahoniestraat"].laatste_update_aanbod
+    assert opgeslagen["prijs"] == Decimal("725.00")
+    assert opgeslagen["borg"] == Decimal("1000.00")
+
+
+def test_kamer_aanbod_beheren_post_onleesbaar_bedrag_geeft_foutmelding_niet_500(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod",
+        data={"beschikbaar": "on", "omschrijving": "A nice room", "advertentie_prijs": "geen bedrag"},
+    )
+    assert resp.status_code == 200
+    assert "niet lezen" in resp.get_data(as_text=True).lower()
+    assert _fake_sheet_singleton["mahoniestraat"].laatste_update_aanbod is None
+
+
+def test_kamer_aanbod_beheren_mislukte_sheet_schrijfactie_geeft_foutmelding_niet_500(app_client):
+    # Regressietest voor de gemelde "Internal Server Error": een fout bij het
+    # schrijven naar de sheet (bv. een tijdelijke Google-API-hapering) mag
+    # nooit als kale 500-crash eindigen, altijd als nette foutmelding.
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    app_client.get("/pand/mahoniestraat/kamers/1/aanbod")  # instantieert de FakeSheetClient-singleton
+    _fake_sheet_singleton["mahoniestraat"].laat_update_aanbod_falen = True
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod",
+        data={
+            "beschikbaar": "on", "omschrijving": "A nice room",
+            "advertentie_prijs": "919", "advertentie_oppervlakte": "19",
+            "advertentie_beschikbaar_per": "01-08-2026", "advertentie_beschikbaar_tot": "31-07-2028",
+            "advertentie_borg": "1402",
+        },
+    )
+    assert resp.status_code == 200
+    assert "mislukt" in resp.get_data(as_text=True).lower()
