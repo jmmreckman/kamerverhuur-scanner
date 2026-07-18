@@ -83,10 +83,17 @@ def test_formulier_toont_ontvangers_en_mist_lijst(app_client):
     assert "Piet" in body  # staat in de "geen e-mailadres bekend"-lijst
 
 
-def test_versturen_stuurt_1_groepsmail_met_alle_huurders_in_aan(app_client, verstuurde_mails):
+def test_formulier_heeft_alle_huurders_standaard_aangevinkt(app_client):
+    resp = app_client.get("/pand/mahoniestraat/huurders/mailen")
+    body = resp.get_data(as_text=True)
+    assert body.count('name="kamers" value="1" checked') == 1
+    assert body.count('name="kamers" value="2" checked') == 1
+
+
+def test_versturen_stuurt_1_groepsmail_met_alle_aangevinkte_huurders_in_aan(app_client, verstuurde_mails):
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -97,10 +104,33 @@ def test_versturen_stuurt_1_groepsmail_met_alle_huurders_in_aan(app_client, vers
     assert mail["bcc"] == ["eigenaar@example.com", "justin@example.com"]  # beheerders krijgen maar 1 kopie
 
 
+def test_versturen_naar_1_uitgevinkte_huurder_mailt_alleen_die(app_client, verstuurde_mails):
+    # het uitvinken van iedereen behalve 1 kamer werkt zo ook als individuele mail.
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Persoonlijk berichtje", "tekst": "Beste Luisa, ...", "kamers": ["1"]},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "luisa@example.com"
+
+
+def test_versturen_zonder_aangevinkte_huurder_geeft_foutmelding(app_client, verstuurde_mails):
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},  # geen "kamers" meegestuurd
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert verstuurde_mails == []
+    assert "selecteer" in resp.get_data(as_text=True).lower()
+
+
 def test_versturen_meldt_ontbrekende_mailadressen(app_client, verstuurde_mails):
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
         follow_redirects=True,
     )
     body = resp.get_data(as_text=True)
@@ -111,7 +141,7 @@ def test_versturen_meldt_ontbrekende_mailadressen(app_client, verstuurde_mails):
 def test_leeg_onderwerp_of_tekst_wordt_geweigerd(app_client, verstuurde_mails):
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "", "tekst": "Beste bewoners, ..."},
+        data={"onderwerp": "", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
     )
     assert resp.status_code == 200
     assert verstuurde_mails == []
@@ -128,7 +158,7 @@ def test_mailerror_geeft_foutmelding_zonder_te_crashen(app_client, monkeypatch):
 
     resp = app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ..."},
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
         follow_redirects=True,
     )
     assert resp.status_code == 200

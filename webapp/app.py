@@ -589,23 +589,28 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             onderwerp = request.form.get("onderwerp", "").strip()
             tekst = request.form.get("tekst", "").strip()
-            if not onderwerp or not tekst:
-                flash("Onderwerp en tekst zijn verplicht.")
+            geselecteerde_kamers = request.form.getlist("kamers")
+            ontvangers = [t for t in tenants_met_mail if t.kamer in geselecteerde_kamers]
+            if not onderwerp or not tekst or not ontvangers:
+                if not onderwerp or not tekst:
+                    flash("Onderwerp en tekst zijn verplicht.")
+                else:
+                    flash("Selecteer minstens 1 huurder om naar te mailen.")
                 return render_template(
                     "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
                     tenants_zonder_mail=tenants_zonder_mail, onderwerp=onderwerp, tekst=tekst,
+                    geselecteerde_kamers=geselecteerde_kamers,
                 )
             bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
-            if tenants_met_mail:
-                aan = ", ".join(t.email for t in tenants_met_mail)
-                try:
-                    verstuur_email(config, aan, onderwerp, tekst, bcc=bcc)
-                    flash(
-                        f"Mail verstuurd naar het hele huishouden ({len(tenants_met_mail)} huurder(s), "
-                        "als groep in één mail)."
-                    )
-                except MailError:
-                    flash("Versturen van de mail is mislukt.")
+            aan = ", ".join(t.email for t in ontvangers)
+            try:
+                verstuur_email(config, aan, onderwerp, tekst, bcc=bcc)
+                flash(
+                    f"Mail verstuurd naar het hele huishouden ({len(ontvangers)} huurder(s), "
+                    "als groep in één mail)."
+                )
+            except MailError:
+                flash("Versturen van de mail is mislukt.")
             if tenants_zonder_mail:
                 flash(
                     "Geen e-mailadres bekend voor: "
@@ -616,6 +621,7 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
             tenants_zonder_mail=tenants_zonder_mail, onderwerp="", tekst="",
+            geselecteerde_kamers=[t.kamer for t in tenants_met_mail],
         )
 
     # --- Betalingen ---

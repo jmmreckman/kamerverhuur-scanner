@@ -4,27 +4,29 @@
 {% block content %}
 <div class="page-header">
   <h1>Mail het hele huishouden</h1>
-  <p class="muted">Stuurt één mail naar alle huidige huurders van {{ huidig_pand.naam }} samen (allemaal in de
+  <p class="muted">Stuurt één mail naar de aangevinkte huurders van {{ huidig_pand.naam }} samen (allemaal in de
      "Aan"-regel, ze zien elkaars adres dus wel) - bijvoorbeeld voor een aankondiging (taxateur langs, lekkage,
-     onderhoud). Als beheerder(s) staan jullie in de BCC, en krijgen dus ook maar één keer een kopie.</p>
-</div>
-
-<div class="card">
-  <h2>Ontvangers</h2>
-  {% if tenants_met_mail %}
-  <p>Gaat naar {{ tenants_met_mail|length }} huurder(s): {{ tenants_met_mail|map(attribute="naam")|join(", ") }}.</p>
-  {% else %}
-  <p class="muted">Geen enkele huidige huurder heeft een e-mailadres bekend - vul dit eerst in bij Huurders.</p>
-  {% endif %}
-  {% if tenants_zonder_mail %}
-  <p class="muted">Geen e-mailadres bekend voor: {{ tenants_zonder_mail|map(attribute="naam")|join(", ") }} - deze
-     ontvangen dus niets.</p>
-  {% endif %}
+     onderhoud). Vink alleen 1 huurder aan om iemand individueel te mailen. Als beheerder(s) staan jullie in de
+     BCC, en krijgen dus ook maar één keer een kopie.</p>
 </div>
 
 {% if tenants_met_mail %}
 <div class="card">
-  <form method="post" onsubmit="return confirm('Weet je zeker dat je deze mail nu wilt versturen naar alle {{ tenants_met_mail|length }} huurder(s) van {{ huidig_pand.naam }}?');">
+  <form method="post" onsubmit="return confirm('Weet je zeker dat je deze mail nu wilt versturen naar de aangevinkte huurder(s)?');">
+    <h2>Ontvangers</h2>
+    <div class="warning-box">
+      {% for t in tenants_met_mail %}
+      <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem">
+        <input type="checkbox" name="kamers" value="{{ t.kamer }}" {% if t.kamer in geselecteerde_kamers %}checked{% endif %} style="width:auto">
+        {{ t.naam }} <span class="muted">({{ t.email }})</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% if tenants_zonder_mail %}
+    <p class="muted">Geen e-mailadres bekend voor: {{ tenants_zonder_mail|map(attribute="naam")|join(", ") }} - deze
+       kunnen dus niet aangevinkt worden.</p>
+    {% endif %}
+
     <label>Onderwerp
       <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
     </label>
@@ -36,6 +38,13 @@
       <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Annuleren</a>
     </div>
   </form>
+</div>
+{% else %}
+<div class="card">
+  <p class="muted">Geen enkele huidige huurder heeft een e-mailadres bekend - vul dit eerst in bij Huurders.</p>
+  {% if tenants_zonder_mail %}
+  <p class="muted">Geen e-mailadres bekend voor: {{ tenants_zonder_mail|map(attribute="naam")|join(", ") }}.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
