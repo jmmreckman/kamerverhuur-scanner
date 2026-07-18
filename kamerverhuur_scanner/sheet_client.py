@@ -20,7 +20,18 @@ op de bestaande huuradministratie-sheet:
       i.p.v. een vast aantal maanden terug) |
     Y Borg (nieuw, optioneel) - waarborgsom die in de instapmaand naast de
       (eventueel pro-rata) huur binnenkomt, zodat die maand niet als "te veel
-      ontvangen" wordt gezien
+      ontvangen" wordt gezien |
+    Z Advertentie prijs (nieuw, optioneel) | AA Advertentie oppervlakte
+      (nieuw, optioneel, vrije tekst) | AB Advertentie beschikbaar per
+      (nieuw, optioneel, vrije tekst) | AC Advertentie beschikbaar tot
+      (nieuw, optioneel, vrije tekst) | AD Advertentie borg (nieuw, optioneel)
+
+Kolommen Z t/m AD zijn puur voor de publieke aanbodpagina/advertentie (zie
+webapp/ads.py) - bewust losgekoppeld van "Totale huur" (E) en "Borg" (Y),
+want een geadverteerde kamer heeft vaak nog geen huurder (en dus geen
+ingevulde Y) en de geadverteerde prijs mag afwijken van de huur van de
+HUIDIGE/vorige huurder. Leeg = de aanbodpagina valt terug op "Totale huur"
+voor de prijs, en laat de overige regels gewoon weg.
 
 "Totale huur" (kolom E) is het bedrag dat via bunq moet binnenkomen. Een rij met
 een lege Huurder maar een ingevulde Kamer betekent: kamer staat leeg. Een rij
@@ -88,6 +99,11 @@ COL_BORGSTELLER_NAAM = 22
 COL_BORGSTELLER_RELATIE = 23
 COL_CONTRACT_STARTDATUM = 24
 COL_BORG = 25
+COL_ADVERTENTIE_PRIJS = 26
+COL_ADVERTENTIE_OPPERVLAKTE = 27
+COL_ADVERTENTIE_BESCHIKBAAR_PER = 28
+COL_ADVERTENTIE_BESCHIKBAAR_TOT = 29
+COL_ADVERTENTIE_BORG = 30
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
@@ -192,7 +208,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_BORG - len(row))
+            row = row + [""] * (COL_ADVERTENTIE_BORG - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -221,6 +237,15 @@ class SheetClient:
                     borgsteller_relatie=_optioneel(row[COL_BORGSTELLER_RELATIE - 1]),
                     contract_startdatum=_optioneel(row[COL_CONTRACT_STARTDATUM - 1]),
                     borg_bedrag=parse_bedrag(row[COL_BORG - 1]) if row[COL_BORG - 1].strip() else None,
+                    advertentie_prijs=(
+                        parse_bedrag(row[COL_ADVERTENTIE_PRIJS - 1]) if row[COL_ADVERTENTIE_PRIJS - 1].strip() else None
+                    ),
+                    advertentie_oppervlakte=_optioneel(row[COL_ADVERTENTIE_OPPERVLAKTE - 1]),
+                    advertentie_beschikbaar_per=_optioneel(row[COL_ADVERTENTIE_BESCHIKBAAR_PER - 1]),
+                    advertentie_beschikbaar_tot=_optioneel(row[COL_ADVERTENTIE_BESCHIKBAAR_TOT - 1]),
+                    advertentie_borg=(
+                        parse_bedrag(row[COL_ADVERTENTIE_BORG - 1]) if row[COL_ADVERTENTIE_BORG - 1].strip() else None
+                    ),
                 )
             )
         return kamers
@@ -278,11 +303,27 @@ class SheetClient:
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 
-    def update_aanbod(self, row_index: int, beschikbaar: bool, omschrijving: str | None, map_id: str | None) -> None:
+    def update_aanbod(
+        self,
+        row_index: int,
+        beschikbaar: bool,
+        omschrijving: str | None,
+        map_id: str | None,
+        prijs: Decimal | None = None,
+        oppervlakte: str | None = None,
+        beschikbaar_per: str | None = None,
+        beschikbaar_tot: str | None = None,
+        borg: Decimal | None = None,
+    ) -> None:
         updates = [
             {"range": self._a1(row_index, COL_BESCHIKBAAR), "values": [[_naar_ja_nee(beschikbaar)]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_OMSCHRIJVING), "values": [[omschrijving or ""]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_MAP_ID), "values": [[map_id or ""]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_PRIJS), "values": [[self._bedrag_of_leeg(prijs)]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_OPPERVLAKTE), "values": [[oppervlakte or ""]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_BESCHIKBAAR_PER), "values": [[beschikbaar_per or ""]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_BESCHIKBAAR_TOT), "values": [[beschikbaar_tot or ""]]},
+            {"range": self._a1(row_index, COL_ADVERTENTIE_BORG), "values": [[self._bedrag_of_leeg(borg)]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
 

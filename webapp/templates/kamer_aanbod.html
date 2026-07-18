@@ -15,6 +15,27 @@
     <label>Omschrijving (in het Engels - dit ziet de bezoeker)
       <textarea name="omschrijving" rows="10">{{ kamer.advertentie_omschrijving or standaard_omschrijving }}</textarea>
     </label>
+
+    <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap: 1rem">
+      <label>Prijs per maand
+        <input type="text" name="advertentie_prijs" value="{{ kamer.advertentie_prijs|eur if kamer.advertentie_prijs is not none else '' }}" placeholder="{{ kamer.verwacht_bedrag|eur }}">
+      </label>
+      <label>Oppervlakte
+        <input type="text" name="advertentie_oppervlakte" value="{{ kamer.advertentie_oppervlakte or '' }}" placeholder="bv. 18 m²">
+      </label>
+      <label>Beschikbaar per
+        <input type="text" name="advertentie_beschikbaar_per" value="{{ kamer.advertentie_beschikbaar_per or '' }}" placeholder="bv. 01-09-2026">
+      </label>
+      <label>Beschikbaar tot
+        <input type="text" name="advertentie_beschikbaar_tot" value="{{ kamer.advertentie_beschikbaar_tot or '' }}" placeholder="leeg = onbepaalde tijd">
+      </label>
+      <label>Waarborgsom
+        <input type="text" name="advertentie_borg" value="{{ kamer.advertentie_borg|eur if kamer.advertentie_borg is not none else '' }}" placeholder="bv. €1.000,00">
+      </label>
+    </div>
+    <p class="muted">Prijs/waarborgsom leeg laten = de aanbodpagina valt terug op de gewone huur/borg van deze
+       kamer (kolommen "Totale huur"/"Borg" in de sheet) - handig zolang er nog geen (nieuwe) huurder bekend is.</p>
+
     <button class="btn" type="submit">Opslaan</button>
   </form>
 </div>

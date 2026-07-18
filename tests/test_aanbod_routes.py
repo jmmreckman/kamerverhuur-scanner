@@ -20,21 +20,36 @@ KAMER_BESCHIKBAAR = Tenant(
 KAMER_VERHUURD = Tenant(
     row_index=3, naam="Jan Jansen", kamer="2", verwacht_bedrag=Decimal("700.00"), beschikbaar=False,
 )
+KAMER_MET_ADVERTENTIEVELDEN = Tenant(
+    row_index=4, naam="", kamer="3", verwacht_bedrag=Decimal("650.00"),
+    beschikbaar=True, advertentie_omschrijving="Nice room with extras",
+    advertentie_prijs=Decimal("725.00"), advertentie_oppervlakte="18 m²",
+    advertentie_beschikbaar_per="01-09-2026", advertentie_beschikbaar_tot="01-07-2027",
+    advertentie_borg=Decimal("1000.00"),
+)
 
 
 class FakeSheetClient:
     def __init__(self, _config, pand):
         self.pand = pand
         self.aanmeldingen = []
+        self.laatste_update_aanbod = None
 
     def get_kamers(self):
-        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD]
+        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN]
 
     def get_geschiedenis(self, kamer):
         return []
 
-    def update_aanbod(self, row_index, beschikbaar, omschrijving, map_id):
-        pass
+    def update_aanbod(
+        self, row_index, beschikbaar, omschrijving, map_id,
+        prijs=None, oppervlakte=None, beschikbaar_per=None, beschikbaar_tot=None, borg=None,
+    ):
+        self.laatste_update_aanbod = {
+            "row_index": row_index, "beschikbaar": beschikbaar, "omschrijving": omschrijving, "map_id": map_id,
+            "prijs": prijs, "oppervlakte": oppervlakte, "beschikbaar_per": beschikbaar_per,
+            "beschikbaar_tot": beschikbaar_tot, "borg": borg,
+        }
 
     def add_aanmelding(self, kamer, aanmelding):
         self.aanmeldingen.append((kamer, aanmelding))
@@ -238,3 +253,74 @@ def test_aanmeldingen_overzicht_en_wissen(app_client):
     resp = app_client.get("/pand/mahoniestraat/aanmeldingen")
     assert b"Jane Doe" not in resp.data
     assert b"Nog geen aanmeldingen" in resp.data
+
+
+# --- Aanpasbare advertentievelden (prijs, oppervlakte, beschikbaarheid, borg) ---
+
+
+def test_aanbod_detail_toont_advertentievelden_ipv_gewone_huur(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/3")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "€725,00" in body  # advertentieprijs, niet de gewone €650,00 huur
+    assert "€650,00" not in body
+    assert "18 m²" in body
+    assert "available from 01-09-2026 to 01-07-2027" in body
+    assert "Security deposit: €1.000,00" in body
+
+
+def test_aanbod_detail_zonder_advertentievelden_valt_terug_op_gewone_huur(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/1")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "€650,00" in body  # gewone "Totale huur", geen advertentieprijs ingevuld
+    assert "Security deposit" not in body  # ook geen (advertentie)borg bekend
+
+
+def test_aanbod_overzicht_toont_advertentieprijs_en_oppervlakte(app_client):
+    resp = app_client.get("/aanbod")
+    body = resp.get_data(as_text=True)
+    assert "€725,00" in body
+    assert "18 m²" in body
+
+
+def test_kamer_aanbod_beheren_toont_advertentievelden(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    resp = app_client.get("/pand/mahoniestraat/kamers/3/aanbod")
+    body = resp.get_data(as_text=True)
+    assert 'value="€725,00"' in body
+    assert 'value="18 m²"' in body
+    assert 'value="01-09-2026"' in body
+    assert 'value="01-07-2027"' in body
+    assert 'value="€1.000,00"' in body
+
+
+def test_kamer_aanbod_beheren_post_slaat_advertentievelden_op(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod",
+        data={
+            "beschikbaar": "on", "omschrijving": "A nice room",
+            "advertentie_prijs": "725,00", "advertentie_oppervlakte": "18 m²",
+            "advertentie_beschikbaar_per": "01-09-2026", "advertentie_beschikbaar_tot": "01-07-2027",
+            "advertentie_borg": "1.000,00",
+        },
+    )
+    opgeslagen = _fake_sheet_singleton["mahoniestraat"].laatste_update_aanbod
+    assert opgeslagen["prijs"] == Decimal("725.00")
+    assert opgeslagen["oppervlakte"] == "18 m²"
+    assert opgeslagen["beschikbaar_per"] == "01-09-2026"
+    assert opgeslagen["beschikbaar_tot"] == "01-07-2027"
+    assert opgeslagen["borg"] == Decimal("1000.00")
+
+
+def test_kamer_aanbod_beheren_post_zonder_advertentievelden_slaat_none_op(app_client):
+    app_client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    app_client.post(
+        "/pand/mahoniestraat/kamers/1/aanbod",
+        data={"beschikbaar": "on", "omschrijving": "A nice room"},
+    )
+    opgeslagen = _fake_sheet_singleton["mahoniestraat"].laatste_update_aanbod
+    assert opgeslagen["prijs"] is None
+    assert opgeslagen["oppervlakte"] is None
+    assert opgeslagen["borg"] is None

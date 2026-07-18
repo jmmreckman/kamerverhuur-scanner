@@ -216,8 +216,17 @@ zijn.
 - **Een kamer te huur zetten**: ga naar de kamerpagina (Kamers > kies een
   kamer) en klik op **"Aanbod beheren"**. Daar vink je "Deze kamer is te huur"
   aan, schrijf je een Engelse omschrijving (of gebruik de voorgestelde tekst),
-  en upload je foto's/video's. Zodra je opslaat, verschijnt de kamer op
-  `steenhub.nl/aanbod` en op zijn eigen deelbare pagina
+  en upload je foto's/video's. Daarnaast kun je vijf advertentievelden apart
+  invullen: **prijs per maand**, **oppervlakte**, **beschikbaar per/tot** en
+  **waarborgsom** - allemaal optioneel en losgekoppeld van de "echte"
+  operationele gegevens van de kamer (de "Totale huur"/"Borg" die voor de
+  betalingscontrole gebruikt worden), want een geadverteerde kamer heeft vaak
+  nog geen huurder (en dus nog geen ingevulde huur/borg) en de geadverteerde
+  prijs mag afwijken van de huur van de huidige/vorige huurder. Leeg gelaten
+  velden vallen terug op de gewone huur (prijs) of worden gewoon weggelaten
+  (oppervlakte/beschikbaarheid/borg) op zowel de aanbodpagina als de
+  Kamernet-advertentietekst ("Advertentie plaatsen"). Zodra je opslaat,
+  verschijnt de kamer op `steenhub.nl/aanbod` en op zijn eigen deelbare pagina
   `steenhub.nl/aanbod/<pand-slug>/<kamernaam>` - geen login nodig om die te
   bekijken.
 - **Reageren**: bezoekers klikken op "Apply for this room" en vullen een

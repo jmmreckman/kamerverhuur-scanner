@@ -45,6 +45,17 @@ class Tenant:
     # huur/pro-rata huur) - gebruikt door backfill_geschiedenis()/run_check()
     # om te voorkomen dat de instapmaand als "te veel ontvangen" verschijnt.
     borg_bedrag: Decimal | None = None
+    # Onderstaande velden zijn puur voor de publieke aanbodpagina/advertentie
+    # (zie webapp/ads.py en de "Aanbod beheren"-pagina) - bewust losgekoppeld
+    # van de "echte" operationele velden hierboven (verwacht_bedrag/
+    # borg_bedrag), want een geadverteerde kamer heeft vaak nog geen huurder
+    # (en dus geen ingevulde borg) en de geadverteerde prijs mag afwijken van
+    # de huur van de HUIDIGE/vorige huurder.
+    advertentie_prijs: Decimal | None = None
+    advertentie_oppervlakte: str | None = None  # vrije tekst, bv. "18 m²"
+    advertentie_beschikbaar_per: str | None = None  # vrije tekst/datum
+    advertentie_beschikbaar_tot: str | None = None  # vrije tekst/datum, leeg = onbepaalde tijd
+    advertentie_borg: Decimal | None = None
 
 
 @dataclass(frozen=True)

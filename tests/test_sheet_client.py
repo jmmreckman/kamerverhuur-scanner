@@ -1,5 +1,6 @@
 """Tests voor de kolomparsing/-opslag van SheetClient, zonder een echte Google
 Sheets-verbinding: we bouwen een SheetClient met een neppe worksheet."""
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -22,8 +23,10 @@ class FakeWorksheet:
         self.batch_updates.append(updates)
         for u in updates:
             # simuleer het effect op _rows, zodat opeenvolgende aanroepen
-            # (bv. get_all_values erna) de update ook echt terugzien
-            kolom_start, rij = u["range"][0], int(u["range"].split(":")[0][1:])
+            # (bv. get_all_values erna) de update ook echt terugzien - de
+            # kolomletter(s) doen er hier niet toe (kan ook "AA2" zijn), alleen
+            # het rijnummer (de cijfers aan het einde van de A1-notatie).
+            rij = int(re.search(r"\d+", u["range"].split(":")[0]).group())
             while len(self._rows) <= rij - 1:
                 self._rows.append([])
             self._rows[rij - 1] = u["values"][0]
@@ -163,6 +166,51 @@ def test_update_aanbod_schrijft_alleen_aanbod_kolommen():
     assert ranges["M2"] == "JA"
     assert ranges["N2"] == "Great room"
     assert ranges["O2"] == "map456"
+    # zonder opgegeven advertentievelden blijven die leeg, niet "None"
+    assert ranges["Z2"] == ""
+    assert ranges["AA2"] == ""
+
+
+def test_update_aanbod_schrijft_advertentievelden():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    client.update_aanbod(
+        row_index=2, beschikbaar=True, omschrijving="Great room", map_id="map456",
+        prijs=Decimal("725.00"), oppervlakte="18 m²", beschikbaar_per="01-09-2026",
+        beschikbaar_tot="01-07-2027", borg=Decimal("1000.00"),
+    )
+    ranges = {u["range"]: u["values"][0][0] for u in ws.batch_updates[0]}
+    assert ranges["Z2"] == "725,00"
+    assert ranges["AA2"] == "18 m²"
+    assert ranges["AB2"] == "01-09-2026"
+    assert ranges["AC2"] == "01-07-2027"
+    assert ranges["AD2"] == "1000,00"
+
+
+def test_get_kamers_leest_advertentievelden():
+    rows = [
+        HEADER,
+        ["1", "Jan", "", "", "650,00", "", "", "", "", "", "", "", "", "", "", "", "",
+         "", "", "", "", "", "", "", "", "725,00", "18 m²", "01-09-2026", "01-07-2027", "1000,00"],
+    ]
+    client, _ = _sheet_client(rows)
+    kamer = client.get_kamers()[0]
+    assert kamer.advertentie_prijs == Decimal("725.00")
+    assert kamer.advertentie_oppervlakte == "18 m²"
+    assert kamer.advertentie_beschikbaar_per == "01-09-2026"
+    assert kamer.advertentie_beschikbaar_tot == "01-07-2027"
+    assert kamer.advertentie_borg == Decimal("1000.00")
+
+
+def test_get_kamers_zonder_advertentievelden_geeft_none():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, _ = _sheet_client(rows)
+    kamer = client.get_kamers()[0]
+    assert kamer.advertentie_prijs is None
+    assert kamer.advertentie_oppervlakte is None
+    assert kamer.advertentie_beschikbaar_per is None
+    assert kamer.advertentie_beschikbaar_tot is None
+    assert kamer.advertentie_borg is None
 
 
 def test_update_kamer_schrijft_contactgegevens():

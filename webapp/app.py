@@ -747,7 +747,17 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             beschikbaar = request.form.get("beschikbaar") == "on"
             omschrijving = request.form.get("omschrijving", "").strip() or None
-            sheet.update_aanbod(kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id)
+            prijs = request.form.get("advertentie_prijs", "").strip()
+            oppervlakte = request.form.get("advertentie_oppervlakte", "").strip() or None
+            beschikbaar_per = request.form.get("advertentie_beschikbaar_per", "").strip() or None
+            beschikbaar_tot = request.form.get("advertentie_beschikbaar_tot", "").strip() or None
+            borg = request.form.get("advertentie_borg", "").strip()
+            sheet.update_aanbod(
+                kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id,
+                prijs=parse_bedrag(prijs) if prijs else None, oppervlakte=oppervlakte,
+                beschikbaar_per=beschikbaar_per, beschikbaar_tot=beschikbaar_tot,
+                borg=parse_bedrag(borg) if borg else None,
+            )
             flash("Aanbod bijgewerkt.")
             return redirect(url_for("kamer_aanbod", pand_slug=pand_slug, kamer_naam=kamer_naam))
         media = _aanbod_media().list_bestanden(kamer_naam)

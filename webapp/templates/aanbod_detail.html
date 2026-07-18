@@ -3,7 +3,15 @@
 {% block content %}
 <div class="page-header">
   <h1>{{ huidig_pand.naam }} - room {{ kamer.kamer }}</h1>
-  <p class="muted">{{ kamer.verwacht_bedrag|eur }} / month</p>
+  <p class="muted">
+    {{ (kamer.advertentie_prijs if kamer.advertentie_prijs is not none else kamer.verwacht_bedrag)|eur }} / month
+    {%- if kamer.advertentie_oppervlakte %} · {{ kamer.advertentie_oppervlakte }}{% endif %}
+    {%- if kamer.advertentie_beschikbaar_per %} · available from {{ kamer.advertentie_beschikbaar_per }}{% if kamer.advertentie_beschikbaar_tot %} to {{ kamer.advertentie_beschikbaar_tot }}{% endif %}{% endif %}
+  </p>
+  {% set borg = kamer.advertentie_borg if kamer.advertentie_borg is not none else kamer.borg_bedrag %}
+  {% if borg is not none %}
+  <p class="muted">Security deposit: {{ borg|eur }}</p>
+  {% endif %}
 </div>
 
 {% if media %}

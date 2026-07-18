@@ -15,7 +15,10 @@
            style="width:100%; aspect-ratio:4/3; object-fit:cover; border-radius: var(--radius-sm); margin-bottom:0.75rem">
     {% endif %}
     <h2>{{ k.pand.naam }} - room {{ k.kamer.kamer }}</h2>
-    <p class="muted">{{ k.kamer.verwacht_bedrag|eur }} / month</p>
+    <p class="muted">
+      {{ (k.kamer.advertentie_prijs if k.kamer.advertentie_prijs is not none else k.kamer.verwacht_bedrag)|eur }} / month
+      {%- if k.kamer.advertentie_oppervlakte %} · {{ k.kamer.advertentie_oppervlakte }}{% endif %}
+    </p>
   </a>
   {% endfor %}
 </div>
