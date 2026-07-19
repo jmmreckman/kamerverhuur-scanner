@@ -212,11 +212,6 @@ nodig.
 - **Documenten** - echte mappenstructuur van de Google Drive-map van het
   gekozen pand: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
   aanmaken en downloaden, rechtstreeks vanaf de site.
-- **Advertentie plaatsen** - genereert een kant-en-klare titel/beschrijving per
-  kamer (met het adres van het juiste pand) om te plakken op Kamernet. Er is
-  geen publieke Kamernet-API voor individuele verhuurders (alleen een zakelijke
-  XML-feed voor makelaars/vastgoedbeheerders via een sales-contact) - vandaar
-  geen automatische plaatsing.
 - **Publieke aanbodpagina** (`/aanbod`, Engelstalig, geen login nodig) - toont
   alle kamers die je als "te huur" hebt aangevinkt, met foto's/video's en een
   "Apply"-knop die naar een aanmeldformulier leidt. Zie "Aanbod & aanmeldingen"
@@ -238,18 +233,17 @@ aanbodpagina - handig omdat de meeste kamerzoekers internationale studenten
 zijn.
 
 - **Een kamer te huur zetten**: ga naar de kamerpagina (Kamers > kies een
-  kamer) en klik op **"Aanbod beheren"**. Daar vink je "Deze kamer is te huur"
-  aan, schrijf je een Engelse omschrijving (of gebruik de voorgestelde tekst),
-  en upload je foto's/video's. Daarnaast kun je vijf advertentievelden apart
-  invullen: **prijs per maand**, **oppervlakte**, **beschikbaar per/tot** en
-  **waarborgsom** - allemaal optioneel en losgekoppeld van de "echte"
+  kamer) en klik op **"Kamer adverteren"**. Daar vink je "Deze kamer is te
+  huur" aan, schrijf je een Engelse omschrijving (of gebruik de voorgestelde
+  tekst), en upload je foto's/video's. Daarnaast kun je vijf advertentievelden
+  apart invullen: **prijs per maand**, **oppervlakte**, **beschikbaar per/tot**
+  en **waarborgsom** - allemaal optioneel en losgekoppeld van de "echte"
   operationele gegevens van de kamer (de "Totale huur"/"Borg" die voor de
   betalingscontrole gebruikt worden), want een geadverteerde kamer heeft vaak
   nog geen huurder (en dus nog geen ingevulde huur/borg) en de geadverteerde
   prijs mag afwijken van de huur van de huidige/vorige huurder. Leeg gelaten
   velden vallen terug op de gewone huur (prijs) of worden gewoon weggelaten
-  (oppervlakte/beschikbaarheid/borg) op zowel de aanbodpagina als de
-  Kamernet-advertentietekst ("Advertentie plaatsen"). Zodra je opslaat,
+  (oppervlakte/beschikbaarheid/borg) op de aanbodpagina. Zodra je opslaat,
   verschijnt de kamer op `steenhub.nl/aanbod` en op zijn eigen deelbare pagina
   `steenhub.nl/aanbod/<pand-slug>/<kamernaam>` - geen login nodig om die te
   bekijken.
@@ -323,7 +317,7 @@ zijn.
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 
-De foto's/video's van "Aanbod beheren" en de bewijsstukken van inschrijving bij
+De foto's/video's van "Kamer adverteren" en de bewijsstukken van inschrijving bij
 aanmeldingen staan **niet** op Google Drive, maar lokaal op de server, onder
 `<STATE_DIR>/media/<pand>/<aanbod of aanmeldingen>/<kamer>/`. Reden: een Google
 *service account* (het soort inlog dat deze site gebruikt) heeft zelf 0 GB
@@ -476,7 +470,7 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   nieuw - voeg de koppen toe, de site vult de inhoud zelf.
 - Kolom **M, N, O** (Beschikbaar, Advertentie omschrijving, Advertentie
   map-ID) horen bij de publieke aanbodpagina - voeg de koppen toe, maar vul de
-  inhoud niet zelf in: dat doet de site via de "Aanbod beheren"-knop op de
+  inhoud niet zelf in: dat doet de site via de "Kamer adverteren"-knop op de
   kamerpagina.
 - Kolom **P en Q** (Mail, Telefoonnummer) zijn nieuw en optioneel -
   contactgegevens van de huurder, te bewerken via de Huurders-pagina op de

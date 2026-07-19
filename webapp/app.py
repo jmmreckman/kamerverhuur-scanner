@@ -751,13 +751,6 @@ def create_app(config: Config | None = None) -> Flask:
             aanzeg_status=bereken_aanzeg_status(kamer.contract_einddatum),
         )
 
-    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/advertentie")
-    @login_required
-    def kamer_advertentie(pand_slug: str, kamer_naam: str):
-        sheet = SheetClient(config, g.pand)
-        kamer = _kamer_of_404(sheet, kamer_naam)
-        return render_template("advertentie.html", kamer=kamer, advertentie=ads.genereer_advertentie(g.pand, kamer))
-
     # --- Communicatie (tijdlijn per huurder + AI-sparpaneel) ---
 
     @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie")
