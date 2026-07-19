@@ -87,6 +87,12 @@ class FakeSheetClient:
             for datum_iso, a in self.bezichtigingen
         ]
 
+    def get_bezichtigingen_met_rijnummer(self):
+        return list(enumerate(self.get_bezichtigingen(), start=2))
+
+    def verwijder_bezichtiging(self, rijnummer):
+        del self.bezichtigingen[rijnummer - 2]
+
 
 _fake_sheet_singleton = {}
 

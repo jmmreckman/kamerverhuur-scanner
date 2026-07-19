@@ -31,7 +31,7 @@ from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, bezichtiging, communicatie, contracts, ondertekenen
+from . import ads, afwijzing, bezichtiging, communicatie, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
@@ -623,6 +623,13 @@ def create_app(config: Config | None = None) -> Flask:
                     f"Mail verstuurd naar het hele huishouden ({len(ontvangers)} huurder(s), "
                     "als groep in één mail)."
                 )
+                for ontvanger in ontvangers:
+                    try:
+                        sheet.add_communicatie(ontvanger.kamer, ontvanger.naam, "Uitgaand", onderwerp, tekst)
+                    except Exception:
+                        app.logger.exception(
+                            "Communicatie wegschrijven naar de sheet mislukt voor kamer %s.", ontvanger.kamer
+                        )
             except MailError:
                 flash("Versturen van de mail is mislukt.")
             if tenants_zonder_mail:
@@ -965,7 +972,11 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def aanmeldingen_overzicht(pand_slug: str):
         sheet = SheetClient(config, g.pand)
-        return render_template("aanmeldingen.html", rijen=sheet.get_aanmeldingen())
+        # (kamer, naam, email) van elke al ingeplande bezichtiging - zodat de
+        # pagina kan tonen wie al is uitgenodigd, handig bij het kiezen van
+        # een vervanger voor een afgezegd tijdslot.
+        ingepland = {(b[3], b[4], b[5]) for b in sheet.get_bezichtigingen()}
+        return render_template("aanmeldingen.html", rijen=sheet.get_aanmeldingen(), ingepland=ingepland)
 
     @app.route("/pand/<pand_slug>/aanmeldingen/wissen", methods=["POST"])
     @login_required
@@ -974,6 +985,38 @@ def create_app(config: Config | None = None) -> Flask:
         sheet.wis_aanmeldingen()
         flash("Lijst met aanmeldingen gewist.")
         return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtigingen")
+    @login_required
+    def bezichtigingen_overzicht(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        rijen = sheet.get_bezichtigingen_met_rijnummer()
+        rijen.sort(key=lambda item: (item[1][0], item[1][1]))  # datum, tijd_start
+        return render_template("bezichtigingen_overzicht.html", rijen=rijen)
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtigingen/verwijderen", methods=["POST"])
+    @login_required
+    def bezichtigingen_verwijderen(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        try:
+            rijnummers = [int(r) for r in request.form.getlist("rijnummers")]
+        except ValueError:
+            flash("Ongeldige aanvraag - probeer opnieuw.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        if not rijnummers:
+            flash("Selecteer minstens 1 bezichtiging om te verwijderen.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        # van hoog naar laag rijnummer verwijderen - anders schuiven latere
+        # rijnummers op en verwijder je per ongeluk de verkeerde regel
+        for rijnummer in sorted(rijnummers, reverse=True):
+            try:
+                sheet.verwijder_bezichtiging(rijnummer)
+            except Exception:
+                app.logger.exception("Verwijderen van bezichtiging (rij %s) mislukt.", rijnummer)
+                flash("Verwijderen van één of meer bezichtigingen is mislukt - probeer het nog eens.")
+                return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        flash(f"{len(rijnummers)} bezichtiging(en) verwijderd - dat tijdslot is nu weer vrij.")
+        return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
 
     # --- Bezichtiging inplannen (voor geselecteerde aanmelders) ---
 
@@ -1160,6 +1203,52 @@ def create_app(config: Config | None = None) -> Flask:
 
         gelukt = len(afspraken) - len(mislukt)
         flash(f"Bezichtiging ingepland en bevestigingsmail verstuurd naar {gelukt} van {len(afspraken)} aanmelder(s).")
+        if mislukt:
+            flash("Mislukt voor: " + ", ".join(mislukt) + " - controleer het e-mailadres en probeer het opnieuw.")
+        return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
+    # --- Afwijzing sturen (voor aanmelders die niet uitgenodigd worden) ---
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/afwijzen", methods=["POST"])
+    @login_required
+    def afwijzing_formulier(pand_slug: str):
+        ruwe_aanmelders = request.form.getlist("aanmelders")
+        aanmelders, foutrespons = _aanmelders_of_terug(pand_slug, ruwe_aanmelders)
+        if foutrespons is not None:
+            return foutrespons
+        standaard = afwijzing.standaard_afwijzingsmail(g.pand)
+        return render_template(
+            "afwijzing_versturen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
+            onderwerp=standaard["onderwerp"], tekst=standaard["tekst"],
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/afwijzen/versturen", methods=["POST"])
+    @login_required
+    def afwijzing_versturen(pand_slug: str):
+        ruwe_aanmelders = request.form.getlist("aanmelders")
+        onderwerp = request.form.get("onderwerp", "").strip()
+        tekst = request.form.get("tekst", "").strip()
+        aanmelders, foutrespons = _aanmelders_of_terug(pand_slug, ruwe_aanmelders)
+        if foutrespons is not None:
+            return foutrespons
+        if not onderwerp or not tekst:
+            flash("Vul een onderwerp en tekst in.")
+            return render_template(
+                "afwijzing_versturen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
+                onderwerp=onderwerp, tekst=tekst,
+            )
+
+        beheerder_bcc = config.email_bcc_beheerder or config.email_bcc
+        mislukt = []
+        for aanmelder in aanmelders:
+            try:
+                verstuur_email(config, aanmelder["email"], onderwerp, tekst, bcc=beheerder_bcc)
+            except MailError:
+                app.logger.exception("Afwijzingsmail mislukt voor %s.", aanmelder["email"])
+                mislukt.append(aanmelder["naam"])
+
+        gelukt = len(aanmelders) - len(mislukt)
+        flash(f"Afwijzingsmail verstuurd naar {gelukt} van {len(aanmelders)} aanmelder(s).")
         if mislukt:
             flash("Mislukt voor: " + ", ".join(mislukt) + " - controleer het e-mailadres en probeer het opnieuw.")
         return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))

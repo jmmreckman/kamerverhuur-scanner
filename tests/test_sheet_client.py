@@ -53,6 +53,9 @@ class FakeWorksheet:
         self.appended_rows.append(row)
         self._rows.append(row)
 
+    def delete_rows(self, start_index, end_index=None):
+        del self._rows[start_index - 1:(end_index or start_index)]
+
     def clear(self):
         self._rows = []
 
@@ -858,3 +861,29 @@ def test_get_communicatie_filtert_op_kamer():
 
     assert len(rijen) == 2
     assert [r[4] for r in rijen] == ["Verwarming", "Re: Verwarming"]
+
+
+# --- Bezichtigingen: rijnummer + verwijderen ---
+
+def test_get_bezichtigingen_met_rijnummer():
+    client, _ = _sheet_client_met_bezichtigingen([_BEZICHTIGINGEN_HEADER])
+    client.add_bezichtiging("2026-08-01", _afspraak())
+    client.add_bezichtiging("2026-08-01", _afspraak(naam="John Smith"))
+
+    resultaat = client.get_bezichtigingen_met_rijnummer()
+
+    assert [rijnummer for rijnummer, _ in resultaat] == [2, 3]
+    assert resultaat[0][1][4] == "Jane Doe"
+    assert resultaat[1][1][4] == "John Smith"
+
+
+def test_verwijder_bezichtiging():
+    client, ws = _sheet_client_met_bezichtigingen([_BEZICHTIGINGEN_HEADER])
+    client.add_bezichtiging("2026-08-01", _afspraak())
+    client.add_bezichtiging("2026-08-01", _afspraak(naam="John Smith"))
+
+    client.verwijder_bezichtiging(2)  # verwijdert Jane Doe (rij 2)
+
+    resultaat = client.get_bezichtigingen_met_rijnummer()
+    assert len(resultaat) == 1
+    assert resultaat[0][1][4] == "John Smith"

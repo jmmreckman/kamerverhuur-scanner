@@ -601,6 +601,27 @@ class SheetClient:
             for row in rows if any(cel.strip() for cel in row)
         ]
 
+    def get_bezichtigingen_met_rijnummer(self) -> list[tuple[int, list[str]]]:
+        """Als get_bezichtigingen(), maar met het echte sheet-rijnummer erbij -
+        nodig om een specifieke bezichtiging te kunnen verwijderen (zie
+        verwijder_bezichtiging())."""
+        ws = self._bezichtigingen_worksheet()
+        rows = ws.get_all_values()
+        aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
+        resultaat = []
+        for offset, row in enumerate(rows[1:]):  # koprij overslaan
+            if not any(cel.strip() for cel in row):
+                continue
+            rijnummer = offset + 2  # rij 1 = koprij
+            resultaat.append((rijnummer, row + [""] * (aantal_kolommen - len(row))))
+        return resultaat
+
+    def verwijder_bezichtiging(self, rijnummer: int) -> None:
+        """Verwijdert één regel uit het Bezichtigingen-tabblad, zodat dat
+        tijdslot weer vrij komt voor een andere aanmelder."""
+        ws = self._bezichtigingen_worksheet()
+        ws.delete_rows(rijnummer)
+
     def _bezichtigingen_worksheet(self):
         try:
             return self._spreadsheet.worksheet(self._pand.bezichtigingen_worksheet)

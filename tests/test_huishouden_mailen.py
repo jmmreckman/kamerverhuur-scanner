@@ -20,7 +20,7 @@ KAMER_LEEG = Tenant(row_index=5, naam="", kamer="4", verwacht_bedrag=Decimal("65
 
 class FakeSheetClient:
     def __init__(self, _config, _pand):
-        pass
+        self.communicatie = []
 
     def get_tenants(self):
         return [KAMER_1, KAMER_2, KAMER_ZONDER_MAIL]
@@ -30,6 +30,20 @@ class FakeSheetClient:
 
     def get_recent_vertrokken_huurders(self):
         return []
+
+    def add_communicatie(self, kamer, huurder_naam, richting, onderwerp, tekst):
+        self.communicatie.append(
+            {"kamer": kamer, "huurder": huurder_naam, "richting": richting, "onderwerp": onderwerp, "tekst": tekst}
+        )
+
+
+_fake_sheet_singleton = {}
+
+
+def _fake_sheet_factory(config, pand):
+    if pand.slug not in _fake_sheet_singleton:
+        _fake_sheet_singleton[pand.slug] = FakeSheetClient(config, pand)
+    return _fake_sheet_singleton[pand.slug]
 
 
 @pytest.fixture
@@ -47,7 +61,8 @@ def verstuurde_mails(monkeypatch):
 @pytest.fixture
 def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
-    monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
+    _fake_sheet_singleton.clear()
+    monkeypatch.setattr(appmodule, "SheetClient", _fake_sheet_factory)
     monkeypatch.chdir(tmp_path)
 
     properties_file = tmp_path / "properties.json"
@@ -146,6 +161,21 @@ def test_leeg_onderwerp_of_tekst_wordt_geweigerd(app_client, verstuurde_mails):
     assert resp.status_code == 200
     assert verstuurde_mails == []
     assert "verplicht" in resp.get_data(as_text=True).lower()
+
+
+def test_versturen_logt_de_mail_bij_elke_ontvanger_in_de_communicatielijst(app_client, verstuurde_mails):
+    app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
+    )
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    assert len(sheet.communicatie) == 2
+    kamers = {c["kamer"] for c in sheet.communicatie}
+    assert kamers == {"1", "2"}
+    for c in sheet.communicatie:
+        assert c["richting"] == "Uitgaand"
+        assert c["onderwerp"] == "Taxateur langs"
+        assert c["tekst"] == "Beste bewoners, ..."
 
 
 def test_mailerror_geeft_foutmelding_zonder_te_crashen(app_client, monkeypatch):

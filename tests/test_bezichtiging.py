@@ -295,3 +295,141 @@ def test_toevoegen_flow_persisteert_en_overzichtsmail_bevat_oude_en_nieuwe(app_c
     overzicht_mail = next(m for m in verstuurde_mails if m["aan"] not in ("newguy@example.com",))
     assert "Jane Doe" in overzicht_mail["tekst"]  # de eerder al bevestigde afspraak staat er nog steeds in
     assert "New Guy" in overzicht_mail["tekst"]
+
+
+# --- "Ingepland"-indicator op de aanmeldingenpagina ---
+
+
+def test_aanmeldingen_overzicht_toont_ingepland_indicator(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _dien_aanmelding_in(app_client, naam="John Smith", email="john@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen")
+    body = resp.get_data(as_text=True)
+    assert body.count("✓ Ingepland") == 1  # alleen bij Jane Doe, niet bij John Smith
+
+
+# --- Bezichtigingen-overzicht + verwijderen ---
+
+
+def test_bezichtigingen_overzicht_toont_ingeplande_afspraken(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert "14:00" in body and "14:15" in body
+
+
+def test_bezichtigingen_overzicht_leeg(app_client):
+    _login(app_client)
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")
+    assert resp.status_code == 200
+    assert "nog geen bezichtigingen" in resp.get_data(as_text=True).lower()
+
+
+def test_bezichtigingen_verwijderen_maakt_tijdslot_weer_vrij(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    _bevestig(app_client, "2026-08-01", ["1|John Smith|john@example.com|+31611111111|In person||14:15|14:30"])
+
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    rijnummer_jane = sheet.get_bezichtigingen_met_rijnummer()[0][0]
+
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/verwijderen",
+        data={"rijnummers": [str(rijnummer_jane)]}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "1 bezichtiging(en) verwijderd" in resp.get_data(as_text=True)
+
+    overgebleven = sheet.get_bezichtigingen()
+    assert len(overgebleven) == 1
+    assert overgebleven[0][4] == "John Smith"
+
+
+def test_bezichtigingen_verwijderen_zonder_selectie_geeft_melding(app_client):
+    _login(app_client)
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/verwijderen", data={}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "selecteer minstens 1" in resp.get_data(as_text=True).lower()
+
+
+# --- Afwijzing sturen ---
+
+
+def test_afwijzing_formulier_toont_standaardtekst_en_ontvangers(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    aanmelder = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/afwijzen", data={"aanmelders": [aanmelder]},
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert "reserve list" in body.lower()
+    assert "Mahoniestraat 15" in body
+
+
+def test_afwijzing_versturen_mailt_iedereen_apart_met_beheerder_only_bcc(app_client, verstuurde_mails):
+    _login(app_client)
+    aanmelder_1 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    aanmelder_2 = serialiseer_aanmelder("1", "John Smith", "john@example.com", "+31611111111", "In person", "")
+
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/afwijzen/versturen",
+        data={
+            "aanmelders": [aanmelder_1, aanmelder_2],
+            "onderwerp": "Update on your application - Mahoniestraat 15",
+            "tekst": "Dear applicant, thanks but no thanks - reserve list.",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "2 van 2" in resp.get_data(as_text=True)
+
+    assert len(verstuurde_mails) == 2
+    aan_adressen = {m["aan"] for m in verstuurde_mails}
+    assert aan_adressen == {"jane@example.com", "john@example.com"}
+    for mail in verstuurde_mails:
+        assert mail["bcc"] == ["jmmreckman@gmail.com"]  # niet naar alle beheerders
+
+
+def test_afwijzing_versturen_zonder_selectie_redirect(app_client):
+    _login(app_client)
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/afwijzen/versturen",
+        data={"onderwerp": "Update", "tekst": "Tekst"}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "selecteer minstens 1" in resp.get_data(as_text=True).lower()
+
+
+def test_afwijzing_versturen_mislukte_mail_telt_mee(app_client, monkeypatch):
+    import webapp.app as appmodule
+    from kamerverhuur_scanner.mailer import MailError
+
+    def _falende_mailer(config, aan, onderwerp, tekst, bcc=None, **kwargs):
+        raise MailError("SMTP tijdelijk niet bereikbaar")
+
+    monkeypatch.setattr(appmodule, "verstuur_email", _falende_mailer)
+    _login(app_client)
+    aanmelder = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/afwijzen/versturen",
+        data={"aanmelders": [aanmelder], "onderwerp": "Update", "tekst": "Tekst"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "0 van 1" in body
+    assert "mislukt voor" in body.lower()

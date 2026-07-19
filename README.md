@@ -161,7 +161,9 @@ nodig.
   "Aan"-regel (ze zien elkaars adres dus wel), met dezelfde BCC/Reply-To-
   instelling als de betaalherinneringen - de beheerder(s) krijgen daardoor
   ook maar één kopie, niet één per huurder. Huurders zonder bekend
-  e-mailadres kunnen niet aangevinkt worden.
+  e-mailadres kunnen niet aangevinkt worden. Bij elke verstuurde groepsmail
+  wordt de tekst automatisch ook toegevoegd aan de communicatielijst van elke
+  aangevinkte huurder afzonderlijk (zie hieronder).
 - **Communicatie + AI-sparpaneel per huurder** - via de knop "Communicatie" op
   de kamerpagina van een bewoonde kamer. Een tijdlijn houdt alle in-/uitgaande
   communicatie met die huurder bij (in een eigen "Communicatie"-tabblad per
@@ -300,6 +302,24 @@ zijn.
   welke lijst je wilt aanvullen. De overzichtsmail naar de beheerders bevat
   daarna altijd de complete, actuele planning voor die datum - dus ook de
   eerder al bevestigde bezichtigingen, niet alleen de net toegevoegde.
+- **Ingeplande bezichtigingen bekijken/wijzigen**: knop **"Bekijk ingeplande
+  bezichtigingen"** naast "Lijst wissen" op de Aanmeldingen-pagina toont alle
+  bevestigde bezichtigingen op een rij. Zegt iemand af, vink diegene dan aan
+  en klik op **"Verwijderen"** - dat tijdslot komt meteen weer vrij. Ga
+  daarna terug naar Aanmeldingen (waar elke al ingeplande aanmelder een
+  "✓ Ingepland"-label heeft, zodat in één oogopslag duidelijk is wie er al
+  is uitgenodigd), vink een andere aanmelder aan, en gebruik "Bezichtigers
+  toevoegen aan bestaande lijst" - pas de vooraf ingevulde begintijd aan naar
+  het vrijgekomen tijdslot om iemand anders daarvoor in te plannen.
+- **Afwijzing sturen**: knop **"Stuur afwijzing"** naast "Plan bezichtiging
+  in", voor aanmelders die niet worden uitgenodigd. Vink ze aan (de
+  "✓ Ingepland"-labels maken duidelijk wie er al wél is uitgenodigd) en klik
+  op de knop - je krijgt een bewerkbaar voorstel te zien (Engelstalige
+  standaardtekst: bedankt voor het reageren, meer reacties dan verwacht,
+  helaas niet geselecteerd, wel op de reservelijst) voordat er iets
+  verstuurd wordt. Elke aanmelder krijgt een eigen mail (niet als groep), met
+  bewust alleen `EMAIL_BCC_BEHEERDER` in de BCC (dus niet alle
+  mede-eigenaren).
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 
