@@ -34,6 +34,7 @@ class FakeSheetClient:
     def __init__(self, _config, pand):
         self.pand = pand
         self.aanmeldingen = []
+        self.bezichtigingen = []
         self.laatste_update_aanbod = None
 
     def get_kamers(self):
@@ -73,6 +74,18 @@ class FakeSheetClient:
 
     def wis_aanmeldingen(self):
         self.aanmeldingen = []
+
+    def add_bezichtiging(self, datum_iso, afspraak):
+        self.bezichtigingen.append((datum_iso, dict(afspraak)))
+
+    def get_bezichtigingen(self):
+        return [
+            [
+                datum_iso, a["tijd_start"], a["tijd_eind"], a["kamer"], a["naam"], a["email"],
+                a["telefoon"], a["bezichtiging"], a["bel_nummer"], "10-07-2026 12:00",
+            ]
+            for datum_iso, a in self.bezichtigingen
+        ]
 
 
 _fake_sheet_singleton = {}

@@ -208,3 +208,90 @@ def test_bezichtiging_mislukte_mail_telt_mee_in_de_melding(app_client, monkeypat
     assert "0 van 1" in body
     assert "mislukt voor" in body.lower()
     assert "jane doe" in body.lower()
+
+
+# --- Bezichtigers toevoegen aan een bestaande lijst ---
+
+
+def _bevestig(client, datum, afspraken):
+    return client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/bevestigen",
+        data={"datum": datum, "afspraken": afspraken},
+    )
+
+
+def test_toevoegen_zonder_bestaande_lijst_geeft_melding(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client)
+    aanmelder_1 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/toevoegen",
+        data={"aanmelders": [aanmelder_1]}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "nog geen eerdere bezichtigingslijst" in resp.get_data(as_text=True).lower()
+
+
+def test_toevoegen_met_1_bestaande_lijst_gaat_direct_door_en_sluit_aan(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+
+    aanmelder_2 = serialiseer_aanmelder("1", "New Guy", "newguy@example.com", "+31611111111", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/toevoegen",
+        data={"aanmelders": [aanmelder_2]},
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "wordt toegevoegd aan de bestaande lijst van 2026-08-01" in body.lower()
+    assert 'name="tijd_vanaf" value="14:15"' in body  # sluit aan op het bestaande laatste tijdslot
+    assert 'name="duur_minuten" value="15"' in body  # duur afgeleid van de laatste bestaande afspraak
+    assert 'value="2026-08-01"' in body
+
+
+def test_toevoegen_met_meerdere_lijsten_toont_kiezer(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    _bevestig(app_client, "2026-08-05", ["1|Jane Doe|jane@example.com|+31612345678|In person||10:00|10:15"])
+
+    aanmelder_2 = serialiseer_aanmelder("1", "New Guy", "newguy@example.com", "+31611111111", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/toevoegen",
+        data={"aanmelders": [aanmelder_2]},
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "2026-08-01" in body and "2026-08-05" in body
+    assert "kies een bestaande lijst" in body.lower()
+
+    kies = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/toevoegen/kies",
+        data={"aanmelders": [aanmelder_2], "datum": "2026-08-05"},
+    )
+    assert kies.status_code == 200
+    kies_body = kies.get_data(as_text=True)
+    assert 'name="tijd_vanaf" value="10:15"' in kies_body
+    assert 'value="2026-08-05"' in kies_body
+
+
+def test_toevoegen_flow_persisteert_en_overzichtsmail_bevat_oude_en_nieuwe(app_client, verstuurde_mails):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    verstuurde_mails.clear()
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    verstuurde_mails.clear()
+
+    _bevestig(
+        app_client, "2026-08-01",
+        ["1|New Guy|newguy@example.com|+31611111111|In person||14:15|14:30"],
+    )
+
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    assert len(sheet.bezichtigingen) == 2
+    assert {a["naam"] for _d, a in sheet.bezichtigingen} == {"Jane Doe", "New Guy"}
+
+    overzicht_mail = next(m for m in verstuurde_mails if m["aan"] not in ("newguy@example.com",))
+    assert "Jane Doe" in overzicht_mail["tekst"]  # de eerder al bevestigde afspraak staat er nog steeds in
+    assert "New Guy" in overzicht_mail["tekst"]

@@ -48,8 +48,11 @@
     {% endfor %}
   </table>
   </div>
-  <div style="margin-top:1rem">
+  <div style="margin-top:1rem; display:flex; gap:0.6rem">
     <button class="btn" type="submit">Plan bezichtiging in</button>
+    <button class="btn btn-secondary" type="submit"
+      formaction="{{ url_for('bezichtiging_toevoegen_formulier', pand_slug=huidig_pand.slug) }}">Bezichtigers
+      toevoegen aan bestaande lijst</button>
   </div>
   </form>
   {% else %}

@@ -126,6 +126,7 @@ class Pand:
     google_drive_folder_id: str | None
     bunq_rekening_iban: str
     aanmeldingen_worksheet: str = "Aanmeldingen"
+    bezichtigingen_worksheet: str = "Bezichtigingen"
     vertrokken_worksheet: str = "Vertrokken"
     # Extra BCC-adressen die alleen voor dít pand meegaan bij herinnering/
     # ingebrekestelling-mails (bv. een mede-eigenaar van alleen dit pand) -

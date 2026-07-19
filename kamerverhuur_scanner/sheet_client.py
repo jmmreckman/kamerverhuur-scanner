@@ -50,6 +50,11 @@ zichtbaar of iemand laat betaalde, ook al is de kamer inmiddels gewoon
 En een "Aanmeldingen" tabblad (ook automatisch aangemaakt) waar reacties op de
 publieke aanbodpagina in terechtkomen - zie webapp/aanbod.py.
 
+En een "Bezichtigingen" tabblad (ook automatisch aangemaakt) met elke
+bevestigde bezichtiging (datum, tijdslot, wie, hoe) - zie webapp/bezichtiging.py.
+Puur een log; hierdoor kan "Bezichtigers toevoegen aan bestaande lijst" een
+eerder geplande dag terugvinden en er verder op aansluiten.
+
 En een "Vertrokken" tabblad (ook automatisch aangemaakt) met een
 momentopname van elke huurder die een kamer verlaat doordat er een andere
 naam voor die kamer wordt ingevoerd (via een nieuw huurcontract of
@@ -164,6 +169,11 @@ _AANMELDINGEN_HEADER = [
     "Inkomstenbron", "Inkomsten (bedrag)", "Borgsteller", "Bezichtiging",
     "Video-bel nummer", "Bewijs inschrijving",
     "Borgsteller naam", "Borgsteller relatie", "Borgsteller email",
+]
+
+_BEZICHTIGINGEN_HEADER = [
+    "Datum", "Tijd start", "Tijd eind", "Kamer", "Naam", "Email", "Telefoon",
+    "Manier", "Bel nummer", "Bevestigd op",
 ]
 
 _VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
@@ -558,6 +568,36 @@ class SheetClient:
                 title=self._pand.aanmeldingen_worksheet, rows=1000, cols=len(_AANMELDINGEN_HEADER)
             )
             ws.append_row(_AANMELDINGEN_HEADER, value_input_option="USER_ENTERED")
+            return ws
+
+    def add_bezichtiging(self, datum_iso: str, afspraak: dict) -> None:
+        ws = self._bezichtigingen_worksheet()
+        ws.append_row(
+            [
+                datum_iso, afspraak["tijd_start"], afspraak["tijd_eind"], afspraak["kamer"],
+                afspraak["naam"], afspraak["email"], afspraak["telefoon"], afspraak["bezichtiging"],
+                afspraak["bel_nummer"], datetime.now().strftime("%d-%m-%Y %H:%M"),
+            ],
+            value_input_option="USER_ENTERED",
+        )
+
+    def get_bezichtigingen(self) -> list[list[str]]:
+        ws = self._bezichtigingen_worksheet()
+        rows = ws.get_all_values()[1:]  # koprij overslaan
+        aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
+        return [
+            row + [""] * (aantal_kolommen - len(row))
+            for row in rows if any(cel.strip() for cel in row)
+        ]
+
+    def _bezichtigingen_worksheet(self):
+        try:
+            return self._spreadsheet.worksheet(self._pand.bezichtigingen_worksheet)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = self._spreadsheet.add_worksheet(
+                title=self._pand.bezichtigingen_worksheet, rows=1000, cols=len(_BEZICHTIGINGEN_HEADER)
+            )
+            ws.append_row(_BEZICHTIGINGEN_HEADER, value_input_option="USER_ENTERED")
             return ws
 
     def archiveer_vertrokken_huurder(self, kamer: Tenant) -> None:

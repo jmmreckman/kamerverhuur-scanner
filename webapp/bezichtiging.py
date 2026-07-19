@@ -1,8 +1,10 @@
 """Bezichtigingen inplannen voor geselecteerde aanmelders (reacties op de
 aanbodpagina): tijdsloten berekenen, en de bevestigingsmail (aanmelder, Engels)
-en overzichtsmail (beheerders, Nederlands) opstellen. Blijft bewust stateless -
-net als de rest van de aanmeldingenflow wordt niets hiervan in de sheet
-opgeslagen, alleen gemaild."""
+en overzichtsmail (beheerders, Nederlands) opstellen. Bevestigde bezichtigingen
+worden door SheetClient.add_bezichtiging() in het "Bezichtigingen"-tabblad
+gelogd - hierdoor kan een latere ronde ("Bezichtigers toevoegen aan bestaande
+lijst") een eerder geplande dag terugvinden en er verder op aansluiten
+(zie groepeer_per_datum())."""
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
@@ -92,16 +94,44 @@ def bouw_bevestigingsmail(pand: Pand, afspraak: dict, datum: date) -> dict[str, 
     return {"onderwerp": onderwerp, "tekst": tekst}
 
 
+def groepeer_per_datum(rijen: list[list[str]]) -> dict[str, list[dict]]:
+    """Groepeert de rauwe rijen uit SheetClient.get_bezichtigingen() per datum
+    (ISO-notatie, "jjjj-mm-dd"), oplopend gesorteerd - zowel de datums
+    onderling als de afspraken binnen elke datum (op tijd_start). Gebruikt om
+    te bepalen welke bestaande lijsten er al zijn voor "Bezichtigers
+    toevoegen aan bestaande lijst"."""
+    per_datum: dict[str, list[dict]] = {}
+    for row in rijen:
+        datum, tijd_start, tijd_eind, kamer, naam, email, telefoon, manier, bel_nr, _bevestigd_op = row
+        per_datum.setdefault(datum, []).append({
+            "tijd_start": tijd_start, "tijd_eind": tijd_eind, "kamer": kamer, "naam": naam,
+            "email": email, "telefoon": telefoon, "bezichtiging": manier, "bel_nummer": bel_nr,
+        })
+    for afspraken in per_datum.values():
+        afspraken.sort(key=lambda a: a["tijd_start"])
+    return dict(sorted(per_datum.items()))
+
+
+def duur_minuten_van(afspraak: dict) -> int:
+    start = datetime.strptime(afspraak["tijd_start"], "%H:%M")
+    eind = datetime.strptime(afspraak["tijd_eind"], "%H:%M")
+    return int((eind - start).total_seconds() // 60)
+
+
 def bouw_overzichtsmail_beheerders(pand: Pand, afspraken: list[dict], datum: date) -> dict[str, str]:
-    """Interne overzichtsmail naar alle beheerders met de volledige lijst
-    ingeplande bezichtigingen - Nederlands, puur intern."""
+    """Interne overzichtsmail naar alle beheerders met de volledige,
+    actuele lijst ingeplande bezichtigingen voor deze datum (dus inclusief
+    eerder al bevestigde bezichtigingen als dit een aanvulling is via
+    "Bezichtigers toevoegen aan bestaande lijst") - Nederlands, puur intern.
+    Verwacht dat `afspraak["bel_nummer"]` al gezet is (zowel verse afspraken
+    als de rijen uit groepeer_per_datum() hebben dit al)."""
     onderwerp = f"Bezichtigingen ingepland - {pand.naam}, {datum.strftime('%d-%m-%Y')}"
     regels = []
     for a in afspraken:
         manier = "videobellen" if a["bezichtiging"] == "Video call" else "in persoon"
         regels.append(
             f"- {a['tijd_start']}-{a['tijd_eind']}: {a['naam']} (kamer {a['kamer']}), {manier}, "
-            f"te bellen op {bel_nummer(a)}, {a['email']}"
+            f"te bellen op {a['bel_nummer']}, {a['email']}"
         )
     tekst = (
         f"Er zijn bezichtigingen ingepland voor {pand.naam} op {datum.strftime('%d-%m-%Y')}:\n\n"

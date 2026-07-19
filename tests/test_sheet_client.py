@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from kamerverhuur_scanner.models import Aanmelding, Pand, Payment, Status, Tenant, TenantResult
-from kamerverhuur_scanner.sheet_client import _AANMELDINGEN_HEADER, SheetClient
+from kamerverhuur_scanner.sheet_client import _AANMELDINGEN_HEADER, _BEZICHTIGINGEN_HEADER, SheetClient
 
 
 class FakeWorksheet:
@@ -742,3 +742,47 @@ def test_get_aanmeldingen_padt_oudere_rijen_zonder_borgstellerkolommen():
     assert len(rijen) == 1
     assert len(rijen[0]) == len(_AANMELDINGEN_HEADER)
     assert rijen[0][16:19] == ["", "", ""]
+
+
+# --- Bezichtigingen ---
+
+def _sheet_client_met_bezichtigingen(rows) -> tuple[SheetClient, FakeWorksheet]:
+    client = object.__new__(SheetClient)
+    client._pand = Pand(
+        slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
+        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+    )
+    ws = FakeWorksheet(rows)
+    client._spreadsheet = FakeSpreadsheet(ws)
+    return client, ws
+
+
+def _afspraak(**overrides) -> dict:
+    basis = dict(
+        tijd_start="14:00", tijd_eind="14:15", kamer="1", naam="Jane Doe",
+        email="jane@example.com", telefoon="+31612345678", bezichtiging="In person", bel_nummer="+31612345678",
+    )
+    basis.update(overrides)
+    return basis
+
+
+def test_add_bezichtiging_schrijft_alle_velden_weg():
+    client, ws = _sheet_client_met_bezichtigingen([_BEZICHTIGINGEN_HEADER])
+    client.add_bezichtiging("2026-08-01", _afspraak())
+
+    rij = ws.appended_rows[0]
+    assert rij[:9] == [
+        "2026-08-01", "14:00", "14:15", "1", "Jane Doe", "jane@example.com",
+        "+31612345678", "In person", "+31612345678",
+    ]
+
+
+def test_get_bezichtigingen_geeft_toegevoegde_afspraken_terug():
+    client, _ = _sheet_client_met_bezichtigingen([_BEZICHTIGINGEN_HEADER])
+    client.add_bezichtiging("2026-08-01", _afspraak())
+    client.add_bezichtiging("2026-08-01", _afspraak(naam="John Smith", tijd_start="14:15", tijd_eind="14:30"))
+
+    rijen = client.get_bezichtigingen()
+
+    assert len(rijen) == 2
+    assert [r[4] for r in rijen] == ["Jane Doe", "John Smith"]

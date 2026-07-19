@@ -272,9 +272,17 @@ zijn.
   van bezichtigen - bewust alleen met `EMAIL_BCC_BEHEERDER` in de BCC (dus
   niet alle mede-eigenaren). Daarnaast gaat er één Nederlandstalige
   overzichtsmail met de volledige planning naar alle beheerders van dat pand
-  (`EMAIL_BCC` + eventuele `extra_bcc`). Niets hiervan wordt in de sheet
-  opgeslagen - het is puur een mailactie, dezelfde aanmeldingenlijst blijft
-  gewoon staan tot je hem zelf wist.
+  (`EMAIL_BCC` + eventuele `extra_bcc`). Elke bevestigde bezichtiging wordt
+  ook gelogd in een apart "Bezichtigingen"-tabblad (automatisch aangemaakt,
+  net als "Aanmeldingen") - dit is precies wat **"Bezichtigers toevoegen aan
+  bestaande lijst"** gebruikt: vink nieuwe aanmelders aan, klik op die knop
+  in plaats van "Plan bezichtiging in", en het inplanformulier sluit
+  automatisch aan op het laatste tijdslot van de bestaande lijst voor die
+  datum (zelfde tijdsduur per bezichtiging als de vorige ronde, aanpasbaar).
+  Zijn er meerdere eerder geplande datums voor dit pand, dan kies je eerst
+  welke lijst je wilt aanvullen. De overzichtsmail naar de beheerders bevat
+  daarna altijd de complete, actuele planning voor die datum - dus ook de
+  eerder al bevestigde bezichtigingen, niet alleen de net toegevoegde.
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 
@@ -483,9 +491,10 @@ teruggezet naar het normale "jjjj-mm"-formaat.
 > | Huurder | Verwacht bedrag | Ontvangen bedrag | Status | Betaaldatum** (voeg
 > kolom G toe) - nieuwe tabbladen krijgen deze koprij automatisch.
 
-Ook wordt automatisch een derde tabblad (**Aanmeldingen**, naam ook instelbaar
-per pand) aangemaakt waar reacties op de publieke aanbodpagina in
-terechtkomen - zie "Aanbod & aanmeldingen" hierboven.
+Ook worden automatisch een derde en vierde tabblad (**Aanmeldingen** en
+**Bezichtigingen**, namen ook instelbaar per pand) aangemaakt: het eerste voor
+reacties op de publieke aanbodpagina, het tweede als log van elke bevestigde
+bezichtiging - zie "Aanbod & aanmeldingen" hierboven.
 
 ## Vereisten
 

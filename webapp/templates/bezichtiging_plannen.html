@@ -15,11 +15,19 @@
   </ul>
 </div>
 
+{% if toevoegen_aan_datum %}
+<div class="card">
+  <p class="muted">Wordt toegevoegd aan de bestaande lijst van {{ toevoegen_aan_datum }} - de begintijd sluit aan op
+     het laatste al geplande tijdslot van die dag.</p>
+</div>
+{% endif %}
+
 <div class="card">
   <form method="post" action="{{ url_for('bezichtiging_voorstel', pand_slug=huidig_pand.slug) }}">
     {% for r in ruwe_aanmelders %}
     <input type="hidden" name="aanmelders" value="{{ r }}">
     {% endfor %}
+    <input type="hidden" name="toevoegen_aan_datum" value="{{ toevoegen_aan_datum or '' }}">
 
     <label>Datum
       <input type="date" name="datum" value="{{ datum }}" required>

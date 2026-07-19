@@ -856,21 +856,78 @@ def create_app(config: Config | None = None) -> Flask:
 
     # --- Bezichtiging inplannen (voor geselecteerde aanmelders) ---
 
+    def _aanmelders_of_terug(pand_slug: str, ruwe_aanmelders: list[str]):
+        """Parseert de aangevinkte aanmelders, of stuurt terug naar het
+        aanmeldingenoverzicht met een foutmelding - gedeeld door alle
+        bezichtiging-routes die met dezelfde checkbox-selectie beginnen."""
+        if not ruwe_aanmelders:
+            flash("Selecteer minstens 1 aanmelder om een bezichtiging voor in te plannen.")
+            return None, redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        try:
+            return [bezichtiging.parse_aanmelder(r) for r in ruwe_aanmelders], None
+        except bezichtiging.BezichtigingFout as exc:
+            flash(str(exc))
+            return None, redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
     @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging", methods=["POST"])
     @login_required
     def bezichtiging_formulier(pand_slug: str):
+        aanmelders, foutrespons = _aanmelders_of_terug(pand_slug, request.form.getlist("aanmelders"))
+        if foutrespons is not None:
+            return foutrespons
+        return render_template(
+            "bezichtiging_plannen.html", aanmelders=aanmelders, ruwe_aanmelders=request.form.getlist("aanmelders"),
+            datum="", tijd_vanaf="", tijd_tot="", duur_minuten="15", toevoegen_aan_datum=None,
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/toevoegen", methods=["POST"])
+    @login_required
+    def bezichtiging_toevoegen_formulier(pand_slug: str):
         ruwe_aanmelders = request.form.getlist("aanmelders")
-        if not ruwe_aanmelders:
-            flash("Selecteer minstens 1 aanmelder om een bezichtiging voor in te plannen.")
+        aanmelders, foutrespons = _aanmelders_of_terug(pand_slug, ruwe_aanmelders)
+        if foutrespons is not None:
+            return foutrespons
+
+        sheet = SheetClient(config, g.pand)
+        lijsten = bezichtiging.groepeer_per_datum(sheet.get_bezichtigingen())
+        if not lijsten:
+            flash(
+                "Nog geen eerdere bezichtigingslijst gevonden voor dit pand - gebruik "
+                "'Plan bezichtiging in' om een nieuwe lijst te starten."
+            )
             return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
-        try:
-            aanmelders = [bezichtiging.parse_aanmelder(r) for r in ruwe_aanmelders]
-        except bezichtiging.BezichtigingFout as exc:
-            flash(str(exc))
+        if len(lijsten) == 1:
+            datum_iso, afspraken_op_datum = next(iter(lijsten.items()))
+            return _bezichtiging_plannen_response(aanmelders, ruwe_aanmelders, datum_iso, afspraken_op_datum)
+        return render_template(
+            "bezichtiging_kies_lijst.html", lijsten=lijsten, ruwe_aanmelders=ruwe_aanmelders,
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/toevoegen/kies", methods=["POST"])
+    @login_required
+    def bezichtiging_toevoegen_kies(pand_slug: str):
+        ruwe_aanmelders = request.form.getlist("aanmelders")
+        aanmelders, foutrespons = _aanmelders_of_terug(pand_slug, ruwe_aanmelders)
+        if foutrespons is not None:
+            return foutrespons
+
+        sheet = SheetClient(config, g.pand)
+        lijsten = bezichtiging.groepeer_per_datum(sheet.get_bezichtigingen())
+        datum_iso = request.form.get("datum", "").strip()
+        afspraken_op_datum = lijsten.get(datum_iso)
+        if afspraken_op_datum is None:
+            flash("Deze lijst bestaat niet (meer) - kies opnieuw.")
             return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        return _bezichtiging_plannen_response(aanmelders, ruwe_aanmelders, datum_iso, afspraken_op_datum)
+
+    def _bezichtiging_plannen_response(aanmelders, ruwe_aanmelders, datum_iso: str, afspraken_op_datum: list[dict]):
+        """Rendert het inplanformulier, voorgevuld om aan te sluiten op het
+        laatste tijdslot van een al bestaande lijst voor deze datum."""
+        laatste = afspraken_op_datum[-1]
         return render_template(
             "bezichtiging_plannen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
-            datum="", tijd_vanaf="", tijd_tot="", duur_minuten="15",
+            datum=datum_iso, tijd_vanaf=laatste["tijd_eind"], tijd_tot="",
+            duur_minuten=str(bezichtiging.duur_minuten_van(laatste)), toevoegen_aan_datum=datum_iso,
         )
 
     @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/voorstel", methods=["POST"])
@@ -881,6 +938,7 @@ def create_app(config: Config | None = None) -> Flask:
         tijd_vanaf_ruw = request.form.get("tijd_vanaf", "").strip()
         tijd_tot_ruw = request.form.get("tijd_tot", "").strip()
         duur_ruw = request.form.get("duur_minuten", "").strip()
+        toevoegen_aan_datum = request.form.get("toevoegen_aan_datum", "").strip() or None
 
         def _terug_naar_formulier(foutmelding: str):
             flash(foutmelding)
@@ -891,6 +949,7 @@ def create_app(config: Config | None = None) -> Flask:
             return render_template(
                 "bezichtiging_plannen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
                 datum=datum_ruw, tijd_vanaf=tijd_vanaf_ruw, tijd_tot=tijd_tot_ruw, duur_minuten=duur_ruw,
+                toevoegen_aan_datum=toevoegen_aan_datum,
             )
 
         if not ruwe_aanmelders:
@@ -945,6 +1004,15 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Geen bezichtigingen om te bevestigen.")
             return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
 
+        sheet = SheetClient(config, g.pand)
+        datum_iso = datum.isoformat()
+        for afspraak in afspraken:
+            afspraak["bel_nummer"] = bezichtiging.bel_nummer(afspraak)
+            try:
+                sheet.add_bezichtiging(datum_iso, afspraak)
+            except Exception:
+                app.logger.exception("Bezichtiging wegschrijven naar de sheet mislukt voor %s.", afspraak["naam"])
+
         beheerder_bcc = config.email_bcc_beheerder or config.email_bcc
         mislukt = []
         for afspraak in afspraken:
@@ -957,7 +1025,11 @@ def create_app(config: Config | None = None) -> Flask:
 
         alle_beheerders = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
         if alle_beheerders:
-            overzicht = bezichtiging.bouw_overzichtsmail_beheerders(g.pand, afspraken, datum)
+            # De volledige, actuele lijst voor deze datum (dus incl. eerder al
+            # bevestigde bezichtigingen als dit een aanvulling was) - niet
+            # alleen de net toegevoegde afspraken.
+            volledige_lijst = bezichtiging.groepeer_per_datum(sheet.get_bezichtigingen()).get(datum_iso, afspraken)
+            overzicht = bezichtiging.bouw_overzichtsmail_beheerders(g.pand, volledige_lijst, datum)
             try:
                 verstuur_email(
                     config, ", ".join(alle_beheerders), overzicht["onderwerp"], overzicht["tekst"], bcc=[],
