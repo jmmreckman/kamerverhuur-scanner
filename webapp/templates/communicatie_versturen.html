@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Mail versturen - {{ kamer.naam }} - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Mail versturen - {{ kamer.naam }}</h1>
+  <p class="muted">Controleer en pas zo nodig aan voordat je verstuurt. Alle beheerders van dit pand staan in de
+     BCC. Na versturen komt deze mail automatisch in de communicatielijst van deze huurder te staan.</p>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('communicatie_versturen', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <label>Aan
+      <input type="email" name="aan" value="{{ aan }}" required>
+    </label>
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('communicatie_overzicht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -8,3 +8,4 @@ Flask-Login>=0.6.3
 gunicorn>=22.0.0
 tzdata>=2024.1
 xhtml2pdf>=0.2.16
+anthropic>=0.117.0

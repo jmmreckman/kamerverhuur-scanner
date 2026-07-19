@@ -20,6 +20,7 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from kamerverhuur_scanner import state
+from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
@@ -30,7 +31,7 @@ from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, bezichtiging, contracts, ondertekenen
+from . import ads, bezichtiging, communicatie, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
@@ -749,6 +750,126 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         kamer = _kamer_of_404(sheet, kamer_naam)
         return render_template("advertentie.html", kamer=kamer, advertentie=ads.genereer_advertentie(g.pand, kamer))
+
+    # --- Communicatie (tijdlijn per huurder + AI-sparpaneel) ---
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie")
+    @login_required
+    def communicatie_overzicht(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        return render_template(
+            "communicatie.html", kamer=kamer, rijen=sheet.get_communicatie(kamer_naam),
+        )
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie/profiel", methods=["POST"])
+    @login_required
+    def communicatie_profiel_opslaan(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        profiel = request.form.get("profiel", "").strip()
+        try:
+            sheet.update_communicatie_profiel(kamer.row_index, profiel)
+            flash("Huurderprofiel opgeslagen.")
+        except Exception:
+            app.logger.exception("Opslaan van huurderprofiel mislukt voor kamer %s.", kamer_naam)
+            flash("Opslaan van het huurderprofiel is helaas mislukt - probeer het nog eens.")
+        return redirect(url_for("communicatie_overzicht", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie/toevoegen", methods=["POST"])
+    @login_required
+    def communicatie_toevoegen(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        richting = request.form.get("richting", "").strip()
+        onderwerp = request.form.get("onderwerp", "").strip()
+        tekst = request.form.get("tekst", "").strip()
+        if richting not in ("Inkomend", "Uitgaand") or not tekst:
+            flash("Vul de richting en tekst in om iets aan de communicatielijst toe te voegen.")
+            return redirect(url_for("communicatie_overzicht", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        try:
+            sheet.add_communicatie(kamer_naam, kamer.naam, richting, onderwerp, tekst)
+            flash("Toegevoegd aan de communicatielijst.")
+        except Exception:
+            app.logger.exception("Communicatie handmatig toevoegen mislukt voor kamer %s.", kamer_naam)
+            flash("Toevoegen aan de communicatielijst is helaas mislukt - probeer het nog eens.")
+        return redirect(url_for("communicatie_overzicht", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie/sparren", methods=["POST"])
+    @login_required
+    def communicatie_sparren(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        nieuw_bericht = request.form.get("nieuw_bericht", "").strip()
+        try:
+            chatgeschiedenis = communicatie.parse_chatgeschiedenis(request.form.get("chatgeschiedenis_json", ""))
+        except communicatie.CommunicatieFout as exc:
+            flash(str(exc))
+            return redirect(url_for("communicatie_overzicht", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        if not nieuw_bericht:
+            flash("Typ eerst een bericht (of plak de mail van de huurder) om mee te sparren.")
+            return render_template(
+                "communicatie_sparren.html", kamer=kamer, chatgeschiedenis=chatgeschiedenis,
+                chatgeschiedenis_json=communicatie.serialiseer_chatgeschiedenis(chatgeschiedenis),
+            )
+        chatgeschiedenis = chatgeschiedenis + [{"role": "user", "content": nieuw_bericht}]
+
+        geschiedenis_tekst = communicatie.formatteer_geschiedenis_voor_ai(sheet.get_communicatie(kamer_naam))
+        try:
+            antwoord = genereer_reactie(config, kamer.communicatie_profiel or "", geschiedenis_tekst, chatgeschiedenis)
+        except AIError as exc:
+            flash(str(exc))
+            chatgeschiedenis = chatgeschiedenis[:-1]  # het mislukte bericht niet laten hangen in de geschiedenis
+            return render_template(
+                "communicatie_sparren.html", kamer=kamer, chatgeschiedenis=chatgeschiedenis,
+                chatgeschiedenis_json=communicatie.serialiseer_chatgeschiedenis(chatgeschiedenis),
+                nieuw_bericht=nieuw_bericht,
+            )
+        chatgeschiedenis = chatgeschiedenis + [{"role": "assistant", "content": antwoord}]
+        return render_template(
+            "communicatie_sparren.html", kamer=kamer, chatgeschiedenis=chatgeschiedenis,
+            chatgeschiedenis_json=communicatie.serialiseer_chatgeschiedenis(chatgeschiedenis),
+        )
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie/opstellen", methods=["POST"])
+    @login_required
+    def communicatie_opstellen(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        return render_template(
+            "communicatie_versturen.html", kamer=kamer, aan=kamer.email or "",
+            onderwerp="", tekst=request.form.get("tekst", "").strip(),
+        )
+
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/communicatie/versturen", methods=["POST"])
+    @login_required
+    def communicatie_versturen(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        aan = request.form.get("aan", "").strip()
+        onderwerp = request.form.get("onderwerp", "").strip()
+        tekst = request.form.get("tekst", "").strip()
+        if not aan or not onderwerp or not tekst:
+            flash("Vul een ontvanger, onderwerp en tekst in.")
+            return render_template("communicatie_versturen.html", kamer=kamer, aan=aan, onderwerp=onderwerp, tekst=tekst)
+
+        alle_beheerders = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        try:
+            verstuur_email(config, aan, onderwerp, tekst, bcc=alle_beheerders)
+        except MailError as exc:
+            flash(str(exc))
+            return render_template("communicatie_versturen.html", kamer=kamer, aan=aan, onderwerp=onderwerp, tekst=tekst)
+
+        try:
+            sheet.add_communicatie(kamer_naam, kamer.naam, "Uitgaand", onderwerp, tekst)
+            flash(f"Mail verstuurd naar {aan} en toegevoegd aan de communicatielijst.")
+        except Exception:
+            app.logger.exception("Communicatie wegschrijven naar de sheet mislukt voor kamer %s.", kamer_naam)
+            flash(
+                f"Mail is verstuurd naar {aan}, maar kon niet automatisch aan de communicatielijst toegevoegd "
+                "worden - voeg 'm hierboven handmatig toe."
+            )
+        return redirect(url_for("communicatie_overzicht", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     # --- Aanbod beheren (foto's/video's + beschikbaarheid voor de publieke aanbodpagina) ---
 

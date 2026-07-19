@@ -5,7 +5,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from kamerverhuur_scanner.models import Aanmelding, Pand, Payment, Status, Tenant, TenantResult
-from kamerverhuur_scanner.sheet_client import _AANMELDINGEN_HEADER, _BEZICHTIGINGEN_HEADER, SheetClient
+from kamerverhuur_scanner.sheet_client import (
+    _AANMELDINGEN_HEADER,
+    _BEZICHTIGINGEN_HEADER,
+    _COMMUNICATIE_HEADER,
+    SheetClient,
+)
 
 
 class FakeWorksheet:
@@ -248,6 +253,40 @@ def test_get_kamers_zonder_advertentievelden_geeft_none():
     assert kamer.advertentie_beschikbaar_per is None
     assert kamer.advertentie_beschikbaar_tot is None
     assert kamer.advertentie_borg is None
+
+
+def test_get_kamers_leest_communicatie_profiel():
+    rows = [
+        HEADER,
+        ["1", "Jan", "", "", "650,00"] + [""] * 25 + ["Emotionele huurder, kort en zakelijk blijven."],
+    ]
+    client, _ = _sheet_client(rows)
+    kamer = client.get_kamers()[0]
+    assert kamer.communicatie_profiel == "Emotionele huurder, kort en zakelijk blijven."
+
+
+def test_get_kamers_zonder_communicatie_profiel_geeft_none():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, _ = _sheet_client(rows)
+    kamer = client.get_kamers()[0]
+    assert kamer.communicatie_profiel is None
+
+
+def test_update_communicatie_profiel_schrijft_weg():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    client.update_communicatie_profiel(row_index=2, profiel="Nieuw profiel.")
+    assert ws.batch_updates[-1] == [
+        {"range": "AE2", "values": [["Nieuw profiel."]]},
+    ]
+
+
+def test_update_communicatie_profiel_breidt_sheet_uit_als_grid_te_klein_is():
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    ws.col_count = 20  # kleiner dan kolom AE (31, "Communicatie profiel")
+    client.update_communicatie_profiel(row_index=2, profiel="Nieuw profiel.")
+    assert ws.resize_aanroepen == [{"rows": None, "cols": 31}]
 
 
 def test_update_kamer_schrijft_contactgegevens():
@@ -786,3 +825,36 @@ def test_get_bezichtigingen_geeft_toegevoegde_afspraken_terug():
 
     assert len(rijen) == 2
     assert [r[4] for r in rijen] == ["Jane Doe", "John Smith"]
+
+
+# --- Communicatie ---
+
+def _sheet_client_met_communicatie(rows) -> tuple[SheetClient, FakeWorksheet]:
+    client = object.__new__(SheetClient)
+    client._pand = Pand(
+        slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
+        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+    )
+    ws = FakeWorksheet(rows)
+    client._spreadsheet = FakeSpreadsheet(ws)
+    return client, ws
+
+
+def test_add_communicatie_schrijft_alle_velden_weg():
+    client, ws = _sheet_client_met_communicatie([_COMMUNICATIE_HEADER])
+    client.add_communicatie("1", "Jane Doe", "Uitgaand", "Verwarming", "We sturen een monteur langs.")
+
+    rij = ws.appended_rows[0]
+    assert rij[1:] == ["1", "Jane Doe", "Uitgaand", "Verwarming", "We sturen een monteur langs."]
+
+
+def test_get_communicatie_filtert_op_kamer():
+    client, _ = _sheet_client_met_communicatie([_COMMUNICATIE_HEADER])
+    client.add_communicatie("1", "Jane Doe", "Inkomend", "Verwarming", "De verwarming doet het niet.")
+    client.add_communicatie("2", "John Smith", "Inkomend", "Lek", "Er lekt water.")
+    client.add_communicatie("1", "Jane Doe", "Uitgaand", "Re: Verwarming", "We sturen een monteur langs.")
+
+    rijen = client.get_communicatie("1")
+
+    assert len(rijen) == 2
+    assert [r[4] for r in rijen] == ["Verwarming", "Re: Verwarming"]

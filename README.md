@@ -162,6 +162,23 @@ nodig.
   instelling als de betaalherinneringen - de beheerder(s) krijgen daardoor
   ook maar één kopie, niet één per huurder. Huurders zonder bekend
   e-mailadres kunnen niet aangevinkt worden.
+- **Communicatie + AI-sparpaneel per huurder** - via de knop "Communicatie" op
+  de kamerpagina van een bewoonde kamer. Een tijdlijn houdt alle in-/uitgaande
+  communicatie met die huurder bij (in een eigen "Communicatie"-tabblad per
+  pand); alleen mails die je écht via de site verstuurt komen daar automatisch
+  in te staan, maar je kunt er ook zelf tekst in plakken/bewerken (bv. om
+  bestaande geschiedenis terug te vullen). Een kort **huurderprofiel** (vrije
+  tekst, bv. "reageert emotioneel, kort en zakelijk blijven") wordt bij elk
+  AI-gesprek automatisch als context meegegeven, samen met de recentste
+  communicatie - handig bij huurders waar je vaak lastig/emotioneel mailcontact
+  mee hebt en telkens opnieuw context moest typen. Plak de binnengekomen mail
+  in het sparpaneel, sparren met Claude tot je tevreden bent met de reactie, en
+  klik dan op "Laatste AI-antwoord gebruiken voor mail" - je krijgt een
+  bewerkbaar voorstel (aan/onderwerp/tekst) te zien vóór er iets verstuurd
+  wordt. Alle beheerders van dat pand staan in de BCC. Het gespar zelf wordt
+  nergens bewaard, alleen de uiteindelijk verstuurde mail komt in de
+  communicatielijst. Vereist een `ANTHROPIC_API_KEY` (zie Stap 2b) - zonder die
+  instelling werkt alleen het sparknopje niet, de rest van deze pagina gewoon.
 - **Voormalige huurders blijven nog even zichtbaar** - zodra een kamer een
   andere naam krijgt (via een nieuw huurcontract, of handmatig bij Huurders
   bewerken) wordt de vertrekkende huurder automatisch gearchiveerd in een
@@ -464,6 +481,11 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
 - **Contract einddatum** (kolom F, formaat `dd-mm-jjjj`) wordt ook gebruikt
   voor de aanzeg-waarschuwing op het dashboard. Leeg laten (of "onbepaalde
   tijd" erin zetten) als het contract geen einddatum heeft.
+- Kolom **Z t/m AD** (Advertentie prijs/oppervlakte/beschikbaar per/tot/borg)
+  en **AE** (Communicatie profiel) zijn nieuw en optioneel - horen bij de
+  aanbodpagina-advertentievelden respectievelijk het AI-sparpaneel bij
+  "Communicatie" (zie hierboven bij Features). Beide breiden het sheet-grid
+  vanzelf uit als dat nog niet tot kolom AE reikt.
 
 Er wordt automatisch een tweede tabblad (**Historie**, naam instelbaar per
 pand) aangemaakt met kolommen **Maand | Kamer | Huurder | Verwacht bedrag |
@@ -491,10 +513,12 @@ teruggezet naar het normale "jjjj-mm"-formaat.
 > | Huurder | Verwacht bedrag | Ontvangen bedrag | Status | Betaaldatum** (voeg
 > kolom G toe) - nieuwe tabbladen krijgen deze koprij automatisch.
 
-Ook worden automatisch een derde en vierde tabblad (**Aanmeldingen** en
-**Bezichtigingen**, namen ook instelbaar per pand) aangemaakt: het eerste voor
-reacties op de publieke aanbodpagina, het tweede als log van elke bevestigde
-bezichtiging - zie "Aanbod & aanmeldingen" hierboven.
+Ook worden automatisch een derde, vierde en vijfde tabblad (**Aanmeldingen**,
+**Bezichtigingen** en **Communicatie**, namen ook instelbaar per pand)
+aangemaakt: het eerste voor reacties op de publieke aanbodpagina, het tweede
+als log van elke bevestigde bezichtiging (zie "Aanbod & aanmeldingen"
+hierboven), het derde als tijdlijn van de communicatie per huurder (zie
+"Communicatie + AI-sparpaneel" bij Features).
 
 ## Vereisten
 
@@ -577,6 +601,25 @@ alléén mee bij mails van dat ene pand, naast de adressen uit `EMAIL_BCC`.
 > tekst altijd aanpassen op het voorbeeldscherm voordat je 'm verstuurt, en
 > laat 'm bij een echt geschil het beste even meelezen door een jurist/
 > rechtsbijstandsverzekeraar.
+
+## Stap 2c: AI-sparpaneel instellen (optioneel, voor "Communicatie" op de huurderspagina)
+
+Alleen nodig als je het sparknopje bij "Communicatie" wilt gebruiken (zie
+Features hierboven). Maak een API-key aan op
+[console.anthropic.com](https://console.anthropic.com/settings/keys) en zet in
+`.env` (op de VPS in `deploy/app.env`):
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+`ANTHROPIC_MODEL` is optioneel (staat standaard al op `claude-sonnet-5`). Elk
+gesprek in het sparpaneel kost API-verbruik (los van een eventueel Claude-
+abonnement) - reken op een paar cent per gesprek bij normaal gebruik. Zonder
+`ANTHROPIC_API_KEY` blijft de rest van "Communicatie" (tijdlijn, huurderprofiel,
+handmatig toevoegen, mail versturen) gewoon werken, alleen "Start sparren"
+geeft dan een nette foutmelding.
 
 ## Stap 3: bunq API key aanmaken (eenmalig, voor alle rekeningen samen)
 

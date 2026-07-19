@@ -65,6 +65,11 @@ class Config:
     # terug op email_bcc als deze niet gezet is.
     email_bcc_beheerder: list[str] = field(default_factory=list)
 
+    # Voor het AI-sparpaneel bij "Communicatie" op de huurderspagina (zie
+    # webapp/ai_sparren.py) - optioneel, alleen nodig als je die knop gebruikt.
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -88,4 +93,6 @@ class Config:
             email_bcc_beheerder=[
                 e.strip() for e in os.environ.get("EMAIL_BCC_BEHEERDER", "").split(",") if e.strip()
             ],
+            anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip() or None,
+            anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5",
         )
