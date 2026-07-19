@@ -306,7 +306,6 @@ class SheetClient:
             {"range": self._a1(row_index, COL_IBAN), "values": [[iban or ""]]},
             {"range": self._a1(row_index, COL_ZOEKWOORD), "values": [[zoekwoord or ""]]},
             {"range": self._a1(row_index, COL_EMAIL), "values": [[email or ""]]},
-            {"range": self._a1(row_index, COL_TELEFOONNUMMER), "values": [[telefoonnummer or ""]]},
             {"range": self._a1(row_index, COL_GEBOORTEDATUM), "values": [[geboortedatum or ""]]},
             {"range": self._a1(row_index, COL_GEBOORTEPLAATS), "values": [[geboorteplaats or ""]]},
             {"range": self._a1(row_index, COL_STUDENTNUMMER), "values": [[studentnummer or ""]]},
@@ -317,6 +316,14 @@ class SheetClient:
             {"range": self._a1(row_index, COL_BORG), "values": [[self._bedrag_of_leeg(borg_bedrag)]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
+        # Los, met RAW: bij USER_ENTERED interpreteert Google Sheets een
+        # telefoonnummer als "0612345678" als getal (de voorloop-nul valt
+        # weg) of - bij een nummer met een "+" ervoor - soms als het begin
+        # van een formule. RAW slaat de tekst altijd letterlijk op.
+        self._worksheet.batch_update(
+            [{"range": self._a1(row_index, COL_TELEFOONNUMMER), "values": [[telefoonnummer or ""]]}],
+            value_input_option="RAW",
+        )
 
     def update_aanbod(
         self,
@@ -555,7 +562,10 @@ class SheetClient:
             aanmelding.borgsteller_relatie,
             aanmelding.borgsteller_email,
         ]
-        ws.append_row(row, value_input_option="USER_ENTERED")
+        # RAW, niet USER_ENTERED: anders interpreteert Google Sheets een
+        # telefoonnummer als "0612345678" als getal (voorloop-nul valt weg)
+        # of - met een "+" ervoor - soms als het begin van een formule.
+        ws.append_row(row, value_input_option="RAW")
 
     def get_aanmeldingen(self) -> list[list[str]]:
         ws = self._aanmeldingen_worksheet()
@@ -583,13 +593,15 @@ class SheetClient:
 
     def add_bezichtiging(self, datum_iso: str, afspraak: dict) -> None:
         ws = self._bezichtigingen_worksheet()
+        # RAW, niet USER_ENTERED: zie add_aanmelding() - anders vallen
+        # voorloop-nullen in het telefoon-/belnummer weg.
         ws.append_row(
             [
                 datum_iso, afspraak["tijd_start"], afspraak["tijd_eind"], afspraak["kamer"],
                 afspraak["naam"], afspraak["email"], afspraak["telefoon"], afspraak["bezichtiging"],
                 afspraak["bel_nummer"], datetime.now().strftime("%d-%m-%Y %H:%M"),
             ],
-            value_input_option="USER_ENTERED",
+            value_input_option="RAW",
         )
 
     def get_bezichtigingen(self) -> list[list[str]]:

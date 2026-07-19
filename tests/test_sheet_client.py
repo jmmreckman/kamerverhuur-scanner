@@ -299,9 +299,24 @@ def test_update_kamer_schrijft_contactgegevens():
         row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"), iban=None, zoekwoord=None,
         email="jan@example.com", telefoonnummer="0612345678",
     )
-    ranges = {u["range"]: u["values"][0][0] for u in ws.batch_updates[0]}
+    ranges = {u["range"]: u["values"][0][0] for updates in ws.batch_updates for u in updates}
     assert ranges["P2"] == "jan@example.com"
     assert ranges["Q2"] == "0612345678"
+
+
+def test_update_kamer_schrijft_telefoonnummer_met_raw_zodat_voorloopnul_blijft_staan():
+    # Regressietest: bij USER_ENTERED interpreteert Google Sheets "0612345678"
+    # als getal (voorloop-nul valt weg) of "+31612345678" soms als het begin
+    # van een formule - RAW slaat het altijd letterlijk op.
+    rows = [HEADER, ["1", "Jan", "", "", "650,00"]]
+    client, ws = _sheet_client(rows)
+    client.update_kamer(
+        row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"), iban=None, zoekwoord=None,
+        telefoonnummer="0612345678",
+    )
+    telefoon_update = next(u for updates in ws.batch_updates for u in updates if u["range"] == "Q2")
+    assert telefoon_update["values"][0][0] == "0612345678"
+    assert ws.laatste_value_input_option == "RAW"  # laatste aanroep was de losse telefoonnummer-update
 
 
 def test_upsert_history_voegt_nieuwe_maand_toe():
@@ -764,6 +779,18 @@ def test_add_aanmelding_schrijft_borgstellervelden_weg():
     assert rij[-3:] == ["John Doe", "Father", "john@example.com"]
 
 
+def test_add_aanmelding_schrijft_met_raw_zodat_telefoonnummer_niet_gemangeld_wordt():
+    # Regressietest: bij USER_ENTERED interpreteert Google Sheets
+    # "+31612345678" soms als het begin van een formule (leidt tot een
+    # foutmelding in de cel) en "0612345678" als getal (voorloop-nul valt
+    # weg). RAW slaat het telefoonnummer altijd letterlijk op.
+    client, ws = _sheet_client_met_aanmeldingen([_AANMELDINGEN_HEADER])
+    client.add_aanmelding("1", _aanmelding(telefoon="+31612345678"))
+
+    assert ws.appended_rows[0][4] == "+31612345678"
+    assert ws.laatste_value_input_option == "RAW"
+
+
 def test_get_aanmeldingen_geeft_borgstellervelden_terug():
     client, _ = _sheet_client_met_aanmeldingen([_AANMELDINGEN_HEADER])
     client.add_aanmelding("1", _aanmelding())
@@ -817,6 +844,7 @@ def test_add_bezichtiging_schrijft_alle_velden_weg():
         "2026-08-01", "14:00", "14:15", "1", "Jane Doe", "jane@example.com",
         "+31612345678", "In person", "+31612345678",
     ]
+    assert ws.laatste_value_input_option == "RAW"  # anders vallen voorloop-nullen weg
 
 
 def test_get_bezichtigingen_geeft_toegevoegde_afspraken_terug():
