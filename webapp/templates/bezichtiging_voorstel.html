@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Voorstel bezichtiging - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Voorstel bezichtiging</h1>
+  <p class="muted">Op {{ datum.strftime('%d-%m-%Y') }} - controleer het voorstel en klik op Akkoord om iedereen een
+     bevestigingsmail te sturen.</p>
+</div>
+
+<div class="card">
+  <div class="tabel-scroll">
+  <table>
+    <tr>
+      <th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th><th>Te bellen nummer</th><th>Email</th>
+    </tr>
+    {% for a in afspraken %}
+    <tr>
+      <td>{{ a.tijd_start }} - {{ a.tijd_eind }}</td>
+      <td>{{ a.naam }}</td>
+      <td>{{ a.kamer }}</td>
+      <td>{{ a.bezichtiging }}</td>
+      <td>{{ a.bel_nummer }}</td>
+      <td>{{ a.email }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('bezichtiging_bevestigen', pand_slug=huidig_pand.slug) }}"
+        onsubmit="return confirm('Bevestigingsmails versturen naar alle {{ afspraken|length }} aanmelder(s) hierboven?');">
+    <input type="hidden" name="datum" value="{{ datum.isoformat() }}">
+    {% for r in ruwe_afspraken %}
+    <input type="hidden" name="afspraken" value="{{ r }}">
+    {% endfor %}
+    <div style="display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Akkoord - versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

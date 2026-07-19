@@ -261,6 +261,20 @@ zijn.
   huidige huurder van die kamer. Het vinkje "Gegevens ook terugschrijven naar
   de Huurders-sheet" (onderaan het formulier) bepaalt of dit ook echt de
   huidige huurder van die kamer vervangt.
+- Ook kun je vanuit het aanmeldingenoverzicht direct een bezichtiging
+  inplannen: vink de aanmelders aan die je wilt uitnodigen en klik op
+  **"Plan bezichtiging in"**. Vul een datum, begin-/eindtijd en de tijdsduur
+  per bezichtiging (in minuten) in - de aangevinkte aanmelders worden dan in
+  die volgorde achter elkaar ingepland. Je krijgt eerst een voorstel te zien
+  (naam, tijdstip, fysiek of videobellen, en het te bellen nummer) voordat er
+  iets verstuurd wordt. Klik je op **"Akkoord - versturen"**, dan krijgt elke
+  aanmelder een eigen bevestigingsmail met locatie, datum, tijdstip en manier
+  van bezichtigen - bewust alleen met `EMAIL_BCC_BEHEERDER` in de BCC (dus
+  niet alle mede-eigenaren). Daarnaast gaat er één Nederlandstalige
+  overzichtsmail met de volledige planning naar alle beheerders van dat pand
+  (`EMAIL_BCC` + eventuele `extra_bcc`). Niets hiervan wordt in de sheet
+  opgeslagen - het is puur een mailactie, dezelfde aanmeldingenlijst blijft
+  gewoon staan tot je hem zelf wist.
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 

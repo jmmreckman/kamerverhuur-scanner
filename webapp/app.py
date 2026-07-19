@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
@@ -30,7 +30,7 @@ from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, contracts, ondertekenen
+from . import ads, bezichtiging, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
@@ -852,6 +852,123 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         sheet.wis_aanmeldingen()
         flash("Lijst met aanmeldingen gewist.")
+        return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
+    # --- Bezichtiging inplannen (voor geselecteerde aanmelders) ---
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging", methods=["POST"])
+    @login_required
+    def bezichtiging_formulier(pand_slug: str):
+        ruwe_aanmelders = request.form.getlist("aanmelders")
+        if not ruwe_aanmelders:
+            flash("Selecteer minstens 1 aanmelder om een bezichtiging voor in te plannen.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        try:
+            aanmelders = [bezichtiging.parse_aanmelder(r) for r in ruwe_aanmelders]
+        except bezichtiging.BezichtigingFout as exc:
+            flash(str(exc))
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        return render_template(
+            "bezichtiging_plannen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
+            datum="", tijd_vanaf="", tijd_tot="", duur_minuten="15",
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/voorstel", methods=["POST"])
+    @login_required
+    def bezichtiging_voorstel(pand_slug: str):
+        ruwe_aanmelders = request.form.getlist("aanmelders")
+        datum_ruw = request.form.get("datum", "").strip()
+        tijd_vanaf_ruw = request.form.get("tijd_vanaf", "").strip()
+        tijd_tot_ruw = request.form.get("tijd_tot", "").strip()
+        duur_ruw = request.form.get("duur_minuten", "").strip()
+
+        def _terug_naar_formulier(foutmelding: str):
+            flash(foutmelding)
+            try:
+                aanmelders = [bezichtiging.parse_aanmelder(r) for r in ruwe_aanmelders]
+            except bezichtiging.BezichtigingFout:
+                return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+            return render_template(
+                "bezichtiging_plannen.html", aanmelders=aanmelders, ruwe_aanmelders=ruwe_aanmelders,
+                datum=datum_ruw, tijd_vanaf=tijd_vanaf_ruw, tijd_tot=tijd_tot_ruw, duur_minuten=duur_ruw,
+            )
+
+        if not ruwe_aanmelders:
+            flash("Selecteer minstens 1 aanmelder om een bezichtiging voor in te plannen.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        try:
+            aanmelders = [bezichtiging.parse_aanmelder(r) for r in ruwe_aanmelders]
+        except bezichtiging.BezichtigingFout as exc:
+            flash(str(exc))
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        try:
+            datum = date.fromisoformat(datum_ruw)
+        except ValueError:
+            return _terug_naar_formulier("Vul een geldige datum in.")
+        try:
+            tijd_vanaf = time.fromisoformat(tijd_vanaf_ruw)
+            tijd_tot = time.fromisoformat(tijd_tot_ruw)
+        except ValueError:
+            return _terug_naar_formulier("Vul een geldige begin- en eindtijd in.")
+        if tijd_tot <= tijd_vanaf:
+            return _terug_naar_formulier("De eindtijd moet na de begintijd liggen.")
+        try:
+            duur_minuten = int(duur_ruw)
+        except ValueError:
+            duur_minuten = 0
+        if duur_minuten <= 0:
+            return _terug_naar_formulier("Vul een tijdsduur per bezichtiging in van minstens 1 minuut.")
+
+        afspraken = bezichtiging.bereken_planning(aanmelders, tijd_vanaf, duur_minuten)
+        ruwe_afspraken = [bezichtiging.serialiseer_afspraak(a) for a in afspraken]
+        for a in afspraken:
+            a["bel_nummer"] = bezichtiging.bel_nummer(a)
+        if afspraken[-1]["tijd_eind"] > tijd_tot.strftime("%H:%M"):
+            flash(
+                f"Let op: dit past niet allemaal tussen {tijd_vanaf.strftime('%H:%M')} en "
+                f"{tijd_tot.strftime('%H:%M')} - de laatste bezichtiging eindigt om {afspraken[-1]['tijd_eind']}."
+            )
+        return render_template(
+            "bezichtiging_voorstel.html", afspraken=afspraken, datum=datum, ruwe_afspraken=ruwe_afspraken,
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/bevestigen", methods=["POST"])
+    @login_required
+    def bezichtiging_bevestigen(pand_slug: str):
+        try:
+            datum = date.fromisoformat(request.form.get("datum", ""))
+            afspraken = [bezichtiging.parse_afspraak(r) for r in request.form.getlist("afspraken")]
+        except (ValueError, bezichtiging.BezichtigingFout):
+            flash("Ongeldige aanvraag - probeer opnieuw vanaf de aanmeldingenlijst.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        if not afspraken:
+            flash("Geen bezichtigingen om te bevestigen.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
+        beheerder_bcc = config.email_bcc_beheerder or config.email_bcc
+        mislukt = []
+        for afspraak in afspraken:
+            mail = bezichtiging.bouw_bevestigingsmail(g.pand, afspraak, datum)
+            try:
+                verstuur_email(config, afspraak["email"], mail["onderwerp"], mail["tekst"], bcc=beheerder_bcc)
+            except MailError:
+                app.logger.exception("Bevestigingsmail bezichtiging mislukt voor %s.", afspraak["email"])
+                mislukt.append(afspraak["naam"])
+
+        alle_beheerders = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        if alle_beheerders:
+            overzicht = bezichtiging.bouw_overzichtsmail_beheerders(g.pand, afspraken, datum)
+            try:
+                verstuur_email(
+                    config, ", ".join(alle_beheerders), overzicht["onderwerp"], overzicht["tekst"], bcc=[],
+                )
+            except MailError:
+                app.logger.exception("Overzichtsmail bezichtigingen naar beheerders mislukt.")
+
+        gelukt = len(afspraken) - len(mislukt)
+        flash(f"Bezichtiging ingepland en bevestigingsmail verstuurd naar {gelukt} van {len(afspraken)} aanmelder(s).")
+        if mislukt:
+            flash("Mislukt voor: " + ", ".join(mislukt) + " - controleer het e-mailadres en probeer het opnieuw.")
         return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
 
     # --- Contracten ---

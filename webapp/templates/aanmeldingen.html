@@ -15,9 +15,11 @@
 
 <div class="card">
   {% if rijen %}
+  <form method="post" action="{{ url_for('bezichtiging_formulier', pand_slug=huidig_pand.slug) }}">
   <div class="tabel-scroll">
   <table>
     <tr>
+      <th>Uitnodigen</th>
       <th>Datum</th><th>Kamer</th><th>Naam</th><th>Email</th><th>Telefoon</th><th>Adres</th>
       <th>Studie</th><th>Studentnr.</th><th>Ingangsdatum</th><th>Huurduur</th>
       <th>Inkomstenbron</th><th>Inkomsten</th><th>Borgsteller</th><th>Bezichtiging</th>
@@ -26,6 +28,10 @@
     </tr>
     {% for r in rijen %}
     <tr>
+      <td>
+        <input type="checkbox" name="aanmelders"
+          value="{{ [r[1], r[2], r[3], r[4], r[13], r[14]] | join('|') }}" style="width:auto">
+      </td>
       {% for cel in r %}
         {% if loop.index0 == 15 and cel %}
           <td><a href="{{ cel }}" target="_blank" rel="noopener">Bekijken</a></td>
@@ -42,6 +48,10 @@
     {% endfor %}
   </table>
   </div>
+  <div style="margin-top:1rem">
+    <button class="btn" type="submit">Plan bezichtiging in</button>
+  </div>
+  </form>
   {% else %}
   <p class="muted">Nog geen aanmeldingen.</p>
   {% endif %}
