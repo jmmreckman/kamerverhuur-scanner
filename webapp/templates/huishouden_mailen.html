@@ -10,7 +10,7 @@
      BCC, en krijgen dus ook maar één keer een kopie.</p>
 </div>
 
-{% if tenants_met_mail %}
+{% if tenants_met_mail or oude_huurders_met_mail %}
 <div class="card">
   <form method="post" onsubmit="return confirm('Weet je zeker dat je deze mail nu wilt versturen naar de aangevinkte huurder(s)?');">
     <h2>Ontvangers</h2>
@@ -27,7 +27,26 @@
        kunnen dus niet aangevinkt worden.</p>
     {% endif %}
 
-    <label>Onderwerp
+    {% if oude_huurders_met_mail or oude_huurders_zonder_mail %}
+    <h2 style="margin-top:1.5rem">Oude huurders (recent vertrokken)</h2>
+    <p class="muted">Voor als een nieuwe huurder al in de sheet staat, maar de vorige huurder feitelijk nog in de
+       kamer woont (bv. tijdens hun opzegtermijn) - vink degene aan die je écht wilt bereiken.</p>
+    <div class="warning-box">
+      {% for h in oude_huurders_met_mail %}
+      <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem">
+        <input type="checkbox" name="oude_huurders" value="{{ h.row_index }}"
+          {% if h.row_index in geselecteerde_oude_huurders %}checked{% endif %} style="width:auto">
+        {{ h.naam }} <span class="muted">(kamer {{ h.kamer }}, {{ h.email }})</span>
+      </label>
+      {% endfor %}
+    </div>
+    {% if oude_huurders_zonder_mail %}
+    <p class="muted">Geen e-mailadres bekend voor: {{ oude_huurders_zonder_mail|map(attribute="naam")|join(", ") }} -
+       deze kunnen dus niet aangevinkt worden.</p>
+    {% endif %}
+    {% endif %}
+
+    <label style="margin-top:1rem; display:block">Onderwerp
       <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
     </label>
     <label>Tekst
@@ -41,7 +60,8 @@
 </div>
 {% else %}
 <div class="card">
-  <p class="muted">Geen enkele huidige huurder heeft een e-mailadres bekend - vul dit eerst in bij Huurders.</p>
+  <p class="muted">Geen enkele huidige (of recent vertrokken) huurder heeft een e-mailadres bekend - vul dit eerst
+     in bij Huurders.</p>
   {% if tenants_zonder_mail %}
   <p class="muted">Geen e-mailadres bekend voor: {{ tenants_zonder_mail|map(attribute="naam")|join(", ") }}.</p>
   {% endif %}

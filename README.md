@@ -163,7 +163,12 @@ nodig.
   ook maar één kopie, niet één per huurder. Huurders zonder bekend
   e-mailadres kunnen niet aangevinkt worden. Bij elke verstuurde groepsmail
   wordt de tekst automatisch ook toegevoegd aan de communicatielijst van elke
-  aangevinkte huurder afzonderlijk (zie hieronder).
+  aangevinkte huurder afzonderlijk (zie hieronder). Is er tot 2 maanden
+  geleden een huurder vertrokken, dan verschijnt die apart onder "Oude
+  huurders (recent vertrokken)" en is ook aan te vinken - handig als een
+  nieuwe huurder al in de sheet staat terwijl de vorige huurder feitelijk nog
+  de laatste weken van hun opzegtermijn in de kamer woont, en jij dus ècht
+  die vertrekkende huurder moet bereiken in plaats van de nieuwe.
 - **Communicatie + AI-sparpaneel per huurder** - via de knop "Communicatie" op
   de kamerpagina van een bewoonde kamer. Een tijdlijn houdt alle in-/uitgaande
   communicatie met die huurder bij (in een eigen "Communicatie"-tabblad per

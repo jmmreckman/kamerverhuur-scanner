@@ -7,9 +7,11 @@ from decimal import Decimal
 import pytest
 from werkzeug.security import generate_password_hash
 
+from datetime import date
+
 from kamerverhuur_scanner.config import Config
 from kamerverhuur_scanner.mailer import MailError
-from kamerverhuur_scanner.models import Tenant
+from kamerverhuur_scanner.models import Tenant, VertrokkenHuurder
 from webapp.app import create_app
 
 KAMER_1 = Tenant(row_index=2, naam="Luisa", kamer="1", verwacht_bedrag=Decimal("650.00"), email="luisa@example.com")
@@ -21,6 +23,7 @@ KAMER_LEEG = Tenant(row_index=5, naam="", kamer="4", verwacht_bedrag=Decimal("65
 class FakeSheetClient:
     def __init__(self, _config, _pand):
         self.communicatie = []
+        self.oude_huurders = []
 
     def get_tenants(self):
         return [KAMER_1, KAMER_2, KAMER_ZONDER_MAIL]
@@ -28,8 +31,8 @@ class FakeSheetClient:
     def get_kamers(self):
         return [KAMER_1, KAMER_2, KAMER_ZONDER_MAIL]
 
-    def get_recent_vertrokken_huurders(self):
-        return []
+    def get_recent_vertrokken_huurders(self, dagen=31):
+        return self.oude_huurders
 
     def add_communicatie(self, kamer, huurder_naam, richting, onderwerp, tekst):
         self.communicatie.append(
@@ -208,7 +211,7 @@ def test_zonder_huurders_met_mailadres_verstuurt_niets(app_client, verstuurde_ma
         def get_kamers(self):
             return [KAMER_ZONDER_MAIL]
 
-        def get_recent_vertrokken_huurders(self):
+        def get_recent_vertrokken_huurders(self, dagen=31):
             return []
 
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClientZonderMail)
@@ -221,3 +224,94 @@ def test_zonder_huurders_met_mailadres_verstuurt_niets(app_client, verstuurde_ma
     assert resp.status_code == 200
     assert verstuurde_mails == []
     assert "piet" in resp.get_data(as_text=True).lower()
+
+
+# --- Oude huurders (recent vertrokken, kunnen ook aangevinkt worden) ---
+
+
+OUDE_HUURDER = VertrokkenHuurder(
+    kamer="2", naam="Fred (vertrokken)", email="fred@example.com", telefoonnummer="0612345678",
+    contract_einddatum="01-07-2026", vertrokken_op=date(2026, 7, 1), row_index=5,
+)
+OUDE_HUURDER_ZONDER_MAIL = VertrokkenHuurder(
+    kamer="1", naam="Oud zonder mail", email=None, telefoonnummer=None,
+    contract_einddatum="01-06-2026", vertrokken_op=date(2026, 6, 1), row_index=6,
+)
+
+
+def _zet_oude_huurders(app_client, oude_huurders):
+    app_client.get("/pand/mahoniestraat/huurders/mailen")  # instantieert de FakeSheetClient-singleton
+    _fake_sheet_singleton["mahoniestraat"].oude_huurders = oude_huurders
+
+
+def test_formulier_toont_oude_huurders_sectie(app_client):
+    _zet_oude_huurders(app_client, [OUDE_HUURDER, OUDE_HUURDER_ZONDER_MAIL])
+    resp = app_client.get("/pand/mahoniestraat/huurders/mailen")
+    body = resp.get_data(as_text=True)
+    assert "Oude huurders" in body
+    assert "Fred (vertrokken)" in body
+    assert f'name="oude_huurders" value="{OUDE_HUURDER.row_index}"' in body
+    # niet vooraf aangevinkt, in tegenstelling tot de huidige huurders
+    assert f'value="{OUDE_HUURDER.row_index}" checked' not in body
+    assert "Oud zonder mail" in body  # staat in de "geen e-mailadres bekend"-lijst
+
+
+def test_zonder_oude_huurders_geen_sectie(app_client):
+    resp = app_client.get("/pand/mahoniestraat/huurders/mailen")
+    assert "Oude huurders" not in resp.get_data(as_text=True)
+
+
+def test_versturen_naar_oude_huurder_mailt_die_persoon(app_client, verstuurde_mails):
+    _zet_oude_huurders(app_client, [OUDE_HUURDER])
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Bezichtiging", "tekst": "...", "oude_huurders": [str(OUDE_HUURDER.row_index)]},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "fred@example.com"
+
+
+def test_versturen_mengt_huidige_en_oude_huurders(app_client, verstuurde_mails):
+    _zet_oude_huurders(app_client, [OUDE_HUURDER])
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={
+            "onderwerp": "Bezichtiging", "tekst": "...",
+            "kamers": ["1"], "oude_huurders": [str(OUDE_HUURDER.row_index)],
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert len(verstuurde_mails) == 1
+    aan = verstuurde_mails[0]["aan"]
+    assert "luisa@example.com" in aan
+    assert "fred@example.com" in aan
+
+
+def test_oude_huurder_kamernummer_botst_niet_met_huidige_huurder_op_dezelfde_kamer(app_client, verstuurde_mails):
+    # OUDE_HUURDER zit op kamer "2" - precies dezelfde kamer als de huidige
+    # huurder Vladislav (KAMER_2). Alleen het oude-huurder-vinkje aanvinken
+    # mag Vladislav niet per ongeluk meenemen (en andersom).
+    _zet_oude_huurders(app_client, [OUDE_HUURDER])
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Bezichtiging", "tekst": "...", "oude_huurders": [str(OUDE_HUURDER.row_index)]},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "fred@example.com"  # niet vlad@example.com
+
+
+def test_oude_huurders_worden_ook_gelogd_in_communicatielijst(app_client, verstuurde_mails):
+    _zet_oude_huurders(app_client, [OUDE_HUURDER])
+    app_client.post(
+        "/pand/mahoniestraat/huurders/mailen",
+        data={"onderwerp": "Bezichtiging", "tekst": "Er komt iemand kijken.", "oude_huurders": [str(OUDE_HUURDER.row_index)]},
+    )
+    communicatie = _fake_sheet_singleton["mahoniestraat"].communicatie
+    assert len(communicatie) == 1
+    assert communicatie[0]["kamer"] == "2"
+    assert communicatie[0]["huurder"] == "Fred (vertrokken)"

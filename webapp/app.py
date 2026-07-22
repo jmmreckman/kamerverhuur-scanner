@@ -599,12 +599,26 @@ def create_app(config: Config | None = None) -> Flask:
         tenants = sheet.get_tenants()
         tenants_met_mail = [t for t in tenants if t.email]
         tenants_zonder_mail = [t for t in tenants if not t.email]
+        # Ruimere termijn dan het grijze "recent vertrokken"-blokje op de
+        # Huurders-pagina (dat gaat om zichtbaarheid, dit om nog daadwerkelijk
+        # kunnen mailen) - soms staat een nieuwe huurder al in de sheet
+        # terwijl de vorige huurder de laatste weken van hun opzegtermijn nog
+        # gewoon in de kamer woont, en moet je dus de vertrokken huurder
+        # kunnen bereiken i.p.v. de nieuwe.
+        oude_huurders = sheet.get_recent_vertrokken_huurders(dagen=61)
+        oude_huurders_met_mail = [h for h in oude_huurders if h.email]
+        oude_huurders_zonder_mail = [h for h in oude_huurders if not h.email]
 
         if request.method == "POST":
             onderwerp = request.form.get("onderwerp", "").strip()
             tekst = request.form.get("tekst", "").strip()
             geselecteerde_kamers = request.form.getlist("kamers")
+            try:
+                geselecteerde_oude_huurders = [int(r) for r in request.form.getlist("oude_huurders")]
+            except ValueError:
+                geselecteerde_oude_huurders = []
             ontvangers = [t for t in tenants_met_mail if t.kamer in geselecteerde_kamers]
+            ontvangers += [h for h in oude_huurders_met_mail if h.row_index in geselecteerde_oude_huurders]
             if not onderwerp or not tekst or not ontvangers:
                 if not onderwerp or not tekst:
                     flash("Onderwerp en tekst zijn verplicht.")
@@ -612,8 +626,10 @@ def create_app(config: Config | None = None) -> Flask:
                     flash("Selecteer minstens 1 huurder om naar te mailen.")
                 return render_template(
                     "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
-                    tenants_zonder_mail=tenants_zonder_mail, onderwerp=onderwerp, tekst=tekst,
+                    tenants_zonder_mail=tenants_zonder_mail, oude_huurders_met_mail=oude_huurders_met_mail,
+                    oude_huurders_zonder_mail=oude_huurders_zonder_mail, onderwerp=onderwerp, tekst=tekst,
                     geselecteerde_kamers=geselecteerde_kamers,
+                    geselecteerde_oude_huurders=geselecteerde_oude_huurders,
                 )
             bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
             aan = ", ".join(t.email for t in ontvangers)
@@ -632,18 +648,20 @@ def create_app(config: Config | None = None) -> Flask:
                         )
             except MailError:
                 flash("Versturen van de mail is mislukt.")
-            if tenants_zonder_mail:
+            zonder_mail = tenants_zonder_mail + oude_huurders_zonder_mail
+            if zonder_mail:
                 flash(
                     "Geen e-mailadres bekend voor: "
-                    f"{', '.join(t.naam for t in tenants_zonder_mail)} - deze hebben niets ontvangen."
+                    f"{', '.join(t.naam for t in zonder_mail)} - deze hebben niets ontvangen."
                 )
             return redirect(url_for("huurders", pand_slug=pand_slug))
 
         return render_template(
             "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
-            tenants_zonder_mail=tenants_zonder_mail,
+            tenants_zonder_mail=tenants_zonder_mail, oude_huurders_met_mail=oude_huurders_met_mail,
+            oude_huurders_zonder_mail=oude_huurders_zonder_mail,
             onderwerp=request.args.get("onderwerp", ""), tekst=request.args.get("tekst", ""),
-            geselecteerde_kamers=[t.kamer for t in tenants_met_mail],
+            geselecteerde_kamers=[t.kamer for t in tenants_met_mail], geselecteerde_oude_huurders=[],
         )
 
     # --- Betalingen ---

@@ -711,18 +711,21 @@ class SheetClient:
         resultaat.sort(key=lambda v: v.vertrokken_op, reverse=True)
         return resultaat
 
-    def get_recent_vertrokken_huurders(self) -> list[VertrokkenHuurder]:
-        """Vertrokken huurders die nog binnen de archiveringstermijn vallen
-        (_VERTROKKEN_ZICHTBAAR_DAGEN, gerekend vanaf hun contract-einddatum,
-        of - als die onbekend/onherkenbaar is - vanaf het moment van
-        archiveren) - voor het grijze blokje bovenaan de Huurders-pagina.
-        Oudere regels blijven gewoon (permanent) in de sheet staan, zie
-        get_alle_vertrokken_huurders()."""
+    def get_recent_vertrokken_huurders(self, dagen: int = _VERTROKKEN_ZICHTBAAR_DAGEN) -> list[VertrokkenHuurder]:
+        """Vertrokken huurders die nog binnen `dagen` na hun contract-
+        einddatum vallen (of - als die onbekend/onherkenbaar is - na hun
+        moment van archiveren). Standaard _VERTROKKEN_ZICHTBAAR_DAGEN, voor
+        het grijze blokje bovenaan de Huurders-pagina - "Mail het hele
+        huishouden" geeft hier een langere termijn aan (zie webapp/app.py:
+        huishouden_mailen()), voor het geval een nieuwe huurder al in de
+        sheet staat terwijl de vorige huurder feitelijk nog een paar weken
+        in de kamer woont. Oudere regels blijven gewoon (permanent) in de
+        sheet staan, zie get_alle_vertrokken_huurders()."""
         vandaag = date.today()
         return [
             v for v in self._alle_vertrokken_huurders_ruw()
             if vandaag <= (_parse_contract_einddatum(v.contract_einddatum or "") or v.vertrokken_op)
-            + timedelta(days=_VERTROKKEN_ZICHTBAAR_DAGEN)
+            + timedelta(days=dagen)
         ]
 
     def get_alle_vertrokken_huurders(self) -> list[VertrokkenHuurder]:

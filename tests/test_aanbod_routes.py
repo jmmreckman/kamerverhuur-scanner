@@ -44,6 +44,9 @@ class FakeSheetClient:
     def get_tenants(self):
         return [k for k in self.get_kamers() if k.naam]
 
+    def get_recent_vertrokken_huurders(self, dagen=31):
+        return []
+
     def get_geschiedenis(self, kamer):
         return []
 

@@ -650,6 +650,25 @@ def test_get_recent_vertrokken_huurders_buiten_termijn_verdwijnt_vanzelf():
     assert client.get_recent_vertrokken_huurders() == []
 
 
+def test_get_recent_vertrokken_huurders_met_langere_termijn_toont_meer():
+    # 40 dagen na de contract-einddatum: buiten de standaardtermijn (31 dagen,
+    # voor het grijze blokje op Huurders), maar wel binnen een langere,
+    # expliciet opgegeven termijn (zie "Mail het hele huishouden" - webapp/
+    # app.py: huishouden_mailen()).
+    einddatum = (date.today() - timedelta(days=40)).strftime("%d-%m-%Y")
+    vertrokken_op = (date.today() - timedelta(days=40)).strftime("%d-%m-%Y")
+    rows = [
+        VERTROKKEN_HEADER,
+        ["1", "Bence Neumayer", "bence@example.com", "0612345678", einddatum, vertrokken_op],
+    ]
+    client, _ = _sheet_client_met_vertrokken(rows)
+
+    assert client.get_recent_vertrokken_huurders() == []  # standaardtermijn
+    resultaat = client.get_recent_vertrokken_huurders(dagen=61)
+    assert len(resultaat) == 1
+    assert resultaat[0].naam == "Bence Neumayer"
+
+
 def test_get_recent_vertrokken_huurders_zonder_einddatum_gebruikt_vertrokken_op():
     vertrokken_op = (date.today() - timedelta(days=5)).strftime("%d-%m-%Y")
     rows = [
