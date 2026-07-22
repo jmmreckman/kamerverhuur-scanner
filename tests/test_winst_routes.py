@@ -144,3 +144,63 @@ def test_pandkiezer_verdeelt_winst_bij_meerdere_beheerders(opzet):
     resp = client.get("/")
     body = resp.get_data(as_text=True)
     assert "1.000,00" in body  # 500 (mahoniestraat, verdeeld) + 500 (baumannlaan, onverdeeld)
+
+
+# --- Negeerlijst ---
+
+
+def test_winstpagina_toont_kruisje_per_last(opzet):
+    client, _config = opzet
+    resp = client.get("/pand/mahoniestraat/winst")
+    body = resp.get_data(as_text=True)
+    assert 'action="/pand/mahoniestraat/winst/negeer"' in body
+    assert 'value="nl91abna0417164300"' in body
+
+
+def test_last_negeren_verdwijnt_van_winstpagina(opzet):
+    client, _config = opzet
+    resp = client.post(
+        "/pand/mahoniestraat/winst/negeer",
+        data={"sleutel": "nl91abna0417164300", "omschrijving": "Energieleverancier"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "telt niet meer mee" in body.lower()
+    # 'Energieleverancier' staat nog wel in de flash-melding, maar niet meer
+    # in de lastentabel zelf (dat zou 2 losse plekken opleveren).
+    assert body.count("Energieleverancier") == 1
+
+
+def test_genegeerde_last_staat_op_negeerlijst(opzet):
+    client, config = opzet
+    state.negeer_last("mahoniestraat", "nl91abna0417164300", "Energieleverancier", config.state_dir)
+
+    resp = client.get("/pand/mahoniestraat/winst/negeerlijst")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Energieleverancier" in body
+
+
+def test_negeerlijst_zonder_items_toont_nette_melding(opzet):
+    client, _config = opzet
+    resp = client.get("/pand/mahoniestraat/winst/negeerlijst")
+    assert "nog niets genegeerd" in resp.get_data(as_text=True).lower()
+
+
+def test_negeerlijst_herstellen_laat_last_weer_meetellen(opzet):
+    client, config = opzet
+    state.negeer_last("mahoniestraat", "nl91abna0417164300", "Energieleverancier", config.state_dir)
+
+    resp = client.post(
+        "/pand/mahoniestraat/winst/negeerlijst/herstel",
+        data={"sleutel": "nl91abna0417164300"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "weer teruggezet" in resp.get_data(as_text=True).lower()
+    assert state.laad_genegeerde_lasten("mahoniestraat", config.state_dir) == {}
+
+    # en de last verschijnt weer op de winstpagina
+    body = client.get("/pand/mahoniestraat/winst").get_data(as_text=True)
+    assert "Energieleverancier" in body

@@ -28,6 +28,17 @@ def test_herken_terugkerende_lasten_vindt_maandelijks_terugkerende_tegenpartij()
     assert len(lasten) == 1
     assert lasten[0].omschrijving == "Energieleverancier"
     assert lasten[0].bedrag == Decimal("100.00")
+    assert lasten[0].sleutel == "nl91abna0417164300"
+
+
+def test_herken_terugkerende_lasten_negeert_expliciet_genegeerde_tegenpartij():
+    betalingen = [
+        _betaling("500.00", "2026-04-01", iban="NL00JUR000000000", naam="Jur"),
+        _betaling("500.00", "2026-05-01", iban="NL00JUR000000000", naam="Jur"),
+        _betaling("500.00", "2026-06-01", iban="NL00JUR000000000", naam="Jur"),
+    ]
+    lasten = herken_terugkerende_lasten(betalingen, genegeerd={"nl00jur000000000"})
+    assert lasten == []
 
 
 def test_herken_terugkerende_lasten_negeert_eenmalige_uitgave():

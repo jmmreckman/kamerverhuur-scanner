@@ -273,12 +273,16 @@ def bereken_winstoverzicht(config: Config, pand: Pand, inkomsten: Decimal) -> wi
     (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te
     herkennen, en zet dat samen met `inkomsten` (de al bekende 'ontvangen'-
     som van de betaalcontrole, zie webapp/app.py: dashboard()/winstberekening())
-    om in een compleet winstoverzicht. Kan BunqClientError laten doorstromen
-    (net als run_check()) als de bunq-koppeling niet werkt."""
+    om in een compleet winstoverzicht. Tegenpartijen die de beheerder zelf
+    definitief genegeerd heeft (zie state.negeer_last(), bv. een overboeking
+    naar zichzelf) tellen nooit mee, ongeacht het herkenningspatroon. Kan
+    BunqClientError laten doorstromen (net als run_check()) als de
+    bunq-koppeling niet werkt."""
     bunq = BunqClient(config)
     sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
     uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
-    lasten = winst.herken_terugkerende_lasten(uitgaven)
+    genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
+    lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
     return winst.bereken_winst(inkomsten, lasten, pand.onderhoud_reserve_per_maand)
 
 

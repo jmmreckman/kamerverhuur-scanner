@@ -44,6 +44,10 @@ SCAN_TERUGBLIK_DAGEN = 95
 class Last:
     omschrijving: str
     bedrag: Decimal  # gemiddeld bedrag per maand, over de gevonden periode
+    # Tegenpartij-sleutel (zie _tegenpartij_sleutel()) - gebruikt om deze last
+    # definitief te kunnen negeren (zie state.negeer_last(), webapp/app.py:
+    # winst_last_negeren()).
+    sleutel: str = ""
 
 
 @dataclass(frozen=True)
@@ -66,9 +70,15 @@ def _tegenpartij_sleutel(betaling: Payment) -> str:
     return (betaling.tegenpartij_iban or betaling.tegenpartij_naam or betaling.omschrijving).strip().lower()
 
 
-def herken_terugkerende_lasten(uitgaande_betalingen: list[Payment]) -> list[Last]:
+def herken_terugkerende_lasten(
+    uitgaande_betalingen: list[Payment], genegeerd: set[str] | None = None
+) -> list[Last]:
     """Groepeert uitgaande betalingen op tegenpartij (IBAN, of anders naam/
     omschrijving) en houdt alleen groepen over die:
+    - niet in `genegeerd` staan (zie state.laad_genegeerde_lasten() - een
+      beheerder kan een tegenpartij op de winstpagina definitief negeren,
+      bv. een overboeking naar zichzelf, ongeacht hoe vaak/regelmatig 'ie
+      terugkomt);
     - in minstens `_TERUGKEREND_MINIMUM_MAANDEN` verschillende kalendermaanden
       voorkomen (sluit een eenmalige uitgave of toevallige overboeking uit);
     - gemiddeld niet vaker dan `_MAX_TRANSACTIES_PER_MAAND` keer per maand
@@ -78,12 +88,16 @@ def herken_terugkerende_lasten(uitgaande_betalingen: list[Payment]) -> list[Last
     Bedrag per last = gemiddelde van de gevonden bedragen (vangt kleine
     schommelingen op, bv. een aangepast energie-voorschot), gesorteerd van
     hoog naar laag."""
+    genegeerd = genegeerd or set()
     groepen: dict[str, list[Payment]] = {}
     for betaling in uitgaande_betalingen:
-        groepen.setdefault(_tegenpartij_sleutel(betaling), []).append(betaling)
+        sleutel = _tegenpartij_sleutel(betaling)
+        if sleutel in genegeerd:
+            continue
+        groepen.setdefault(sleutel, []).append(betaling)
 
     lasten = []
-    for reeks in groepen.values():
+    for sleutel, reeks in groepen.items():
         maanden = {betaling.datum.strftime("%Y-%m") for betaling in reeks}
         if len(maanden) < _TERUGKEREND_MINIMUM_MAANDEN:
             continue
@@ -92,7 +106,7 @@ def herken_terugkerende_lasten(uitgaande_betalingen: list[Payment]) -> list[Last
         gemiddeld = sum((betaling.bedrag for betaling in reeks), Decimal("0")) / len(reeks)
         laatste = reeks[-1]
         omschrijving = laatste.tegenpartij_naam or laatste.omschrijving or "Onbekend"
-        lasten.append(Last(omschrijving=omschrijving, bedrag=gemiddeld.quantize(Decimal("0.01"))))
+        lasten.append(Last(omschrijving=omschrijving, bedrag=gemiddeld.quantize(Decimal("0.01")), sleutel=sleutel))
     return sorted(lasten, key=lambda last: last.bedrag, reverse=True)
 
 

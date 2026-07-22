@@ -325,6 +325,17 @@ def test_bereken_winstoverzicht_gebruikt_onderhoud_reserve_van_pand(monkeypatch)
     assert overzicht.onderhoud_reserve == Decimal("60.00")
 
 
+def test_bereken_winstoverzicht_negeert_op_de_negeerlijst_gezette_tegenpartij(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientUitgaven)
+    config = dataclasses.replace(_config(), state_dir=str(tmp_path))
+    from kamerverhuur_scanner import state
+    state.negeer_last(_pand().slug, "nl91abna0417164300", "Energieleverancier", state_dir=str(tmp_path))
+
+    overzicht = runner.bereken_winstoverzicht(config, _pand(), inkomsten=Decimal("1000.00"))
+
+    assert overzicht.lasten == []
+
+
 # --- netto_huurinkomsten_deze_maand ---
 
 

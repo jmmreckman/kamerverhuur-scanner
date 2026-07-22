@@ -549,6 +549,31 @@ def create_app(config: Config | None = None) -> Flask:
             geschiedenis=state.laad_winst_geschiedenis(pand_slug, config.state_dir),
         )
 
+    @app.route("/pand/<pand_slug>/winst/negeer", methods=["POST"])
+    @login_required
+    def winst_last_negeren(pand_slug: str):
+        sleutel = request.form.get("sleutel", "").strip()
+        omschrijving = request.form.get("omschrijving", "").strip() or sleutel
+        if sleutel:
+            state.negeer_last(pand_slug, sleutel, omschrijving, config.state_dir)
+            flash(f"'{omschrijving}' telt niet meer mee als vaste last.")
+        return redirect(url_for("winstberekening", pand_slug=pand_slug))
+
+    @app.route("/pand/<pand_slug>/winst/negeerlijst")
+    @login_required
+    def winst_negeerlijst(pand_slug: str):
+        genegeerd = state.laad_genegeerde_lasten(pand_slug, config.state_dir)
+        return render_template("winst_negeerlijst.html", genegeerd=genegeerd)
+
+    @app.route("/pand/<pand_slug>/winst/negeerlijst/herstel", methods=["POST"])
+    @login_required
+    def winst_negeerlijst_herstellen(pand_slug: str):
+        sleutel = request.form.get("sleutel", "").strip()
+        if sleutel:
+            state.verwijder_genegeerde_last(pand_slug, sleutel, config.state_dir)
+            flash("Weer teruggezet - telt weer mee als die aan de herkenningsregels voldoet.")
+        return redirect(url_for("winst_negeerlijst", pand_slug=pand_slug))
+
     @app.route("/winst-overzicht")
     @login_required
     def winst_overzicht():

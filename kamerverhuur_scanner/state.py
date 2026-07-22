@@ -126,3 +126,40 @@ def laad_winst_geschiedenis(pand_slug: str, state_dir: str = ".") -> list[dict]:
     if not p.exists():
         return []
     return json.loads(p.read_text())
+
+
+def _genegeerde_lasten_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"genegeerde_lasten_{veilige_slug}.json"
+
+
+def negeer_last(pand_slug: str, sleutel: str, omschrijving: str, state_dir: str = ".") -> None:
+    """Zet een tegenpartij (zie kamerverhuur_scanner.winst._tegenpartij_sleutel)
+    definitief op de negeerlijst van dit pand - komt daarna nooit meer voor
+    als "vaste last" op de winstpagina, ongeacht hoe vaak/regelmatig 'ie
+    terugkomt (zie webapp/app.py: winst_last_negeren())."""
+    p = _genegeerde_lasten_bestandsnaam(pand_slug, state_dir)
+    data = json.loads(p.read_text()) if p.exists() else {}
+    data[sleutel] = omschrijving
+    p.write_text(json.dumps(data, indent=2))
+
+
+def verwijder_genegeerde_last(pand_slug: str, sleutel: str, state_dir: str = ".") -> None:
+    """Haalt een tegenpartij weer van de negeerlijst af (zie webapp/app.py:
+    winst_negeerlijst_herstellen()) - komt daarna weer gewoon in aanmerking
+    als vaste last zodra 'ie weer aan de herkenningsregels voldoet."""
+    p = _genegeerde_lasten_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return
+    data = json.loads(p.read_text())
+    data.pop(sleutel, None)
+    p.write_text(json.dumps(data, indent=2))
+
+
+def laad_genegeerde_lasten(pand_slug: str, state_dir: str = ".") -> dict[str, str]:
+    """Geeft {sleutel: omschrijving} van alle genegeerde tegenpartijen van
+    dit pand."""
+    p = _genegeerde_lasten_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text())

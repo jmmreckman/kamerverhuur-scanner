@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Negeerlijst - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Negeerlijst</h1>
+  <p class="muted">{{ huidig_pand.naam }} - deze tegenpartijen tellen nooit meer mee als vaste last bij de
+     winstberekening, ongeacht hoe vaak/regelmatig ze terugkomen op de rekening van dit pand.</p>
+</div>
+
+<div class="card">
+  {% if genegeerd %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Omschrijving</th><th></th></tr>
+    {% for sleutel, omschrijving in genegeerd.items() %}
+    <tr>
+      <td>{{ omschrijving }}</td>
+      <td>
+        <form method="post" action="{{ url_for('winst_negeerlijst_herstellen', pand_slug=huidig_pand.slug) }}"
+              onsubmit="return confirm('\'{{ omschrijving }}\' weer laten meetellen als vaste last?');">
+          <input type="hidden" name="sleutel" value="{{ sleutel }}">
+          <button class="btn-link" type="submit">Terugzetten</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog niets genegeerd - klik op het kruisje achter een last op de
+     <a href="{{ url_for('winstberekening', pand_slug=huidig_pand.slug) }}">winstberekeningspagina</a> om iets
+     definitief te negeren.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -97,3 +97,29 @@ def test_winst_geschiedenis_per_pand_gescheiden(tmp_path):
     state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), state_dir=str(tmp_path))
     assert len(state.laad_winst_geschiedenis("mahoniestraat", state_dir=str(tmp_path))) == 1
     assert len(state.laad_winst_geschiedenis("baumannlaan", state_dir=str(tmp_path))) == 1
+
+
+def test_genegeerde_lasten_zonder_markering_geeft_leeg_dict(tmp_path):
+    assert state.laad_genegeerde_lasten("mahoniestraat", state_dir=str(tmp_path)) == {}
+
+
+def test_negeer_last_en_opvragen(tmp_path):
+    state.negeer_last("mahoniestraat", "nl91abna0417164300", "Jur", state_dir=str(tmp_path))
+    assert state.laad_genegeerde_lasten("mahoniestraat", state_dir=str(tmp_path)) == {
+        "nl91abna0417164300": "Jur",
+    }
+
+
+def test_verwijder_genegeerde_last_zet_hem_weer_terug(tmp_path):
+    state.negeer_last("mahoniestraat", "nl91abna0417164300", "Jur", state_dir=str(tmp_path))
+    state.verwijder_genegeerde_last("mahoniestraat", "nl91abna0417164300", state_dir=str(tmp_path))
+    assert state.laad_genegeerde_lasten("mahoniestraat", state_dir=str(tmp_path)) == {}
+
+
+def test_verwijder_genegeerde_last_zonder_bestand_faalt_niet(tmp_path):
+    state.verwijder_genegeerde_last("mahoniestraat", "onbekend", state_dir=str(tmp_path))
+
+
+def test_genegeerde_lasten_per_pand_gescheiden(tmp_path):
+    state.negeer_last("mahoniestraat", "nl91abna0417164300", "Jur", state_dir=str(tmp_path))
+    assert state.laad_genegeerde_lasten("baumannlaan", state_dir=str(tmp_path)) == {}

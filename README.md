@@ -251,7 +251,11 @@ nodig.
   telt mee zodra die in minstens 3 verschillende maanden voorkomt, met
   gemiddeld niet meer dan zo'n anderhalve keer per maand - dat laatste sluit
   bv. wekelijkse boodschappenbezorging uit, die anders ook als "elke maand
-  terugkerend" zou tellen), plus een
+  terugkerend" zou tellen). Bij elke last staat een kruisje om 'm definitief
+  te negeren (bv. een overboeking naar jezelf, of iets dat toch geen echte
+  vaste last blijkt) - genegeerde tegenpartijen tellen daarna nooit meer mee,
+  ongeacht het patroon, en zijn terug te zetten via "Negeerlijst beheren"
+  onderaan de winstpagina. Plus een
   vaste €75/maand belastingpost, plus een instelbare onderhoudsreserve (zelf
   in te vullen per pand bij "Panden beheren" - bewust geen automatische
   aanname). Leegstand telt niet mee. Elk bezoek aan de pagina legt een nieuw
