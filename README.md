@@ -245,7 +245,10 @@ nodig.
   met de laatst berekende winst van die maand erop. Inkomsten = de al bekende
   "ontvangen"-som van de betaalcontrole, met de waarborgsom eraf bij een
   huurder die deze maand (of de maand ervóór, bij vooruitbetaling) instapt -
-  de borg is geen inkomen, die moet ooit terugbetaald worden. Lasten = automatisch herkende
+  de borg is geen inkomen, die moet ooit terugbetaald worden. Een
+  "Huurinkomsten"-tabel op de winstpagina laat per kamer precies zien hoe dat
+  totaal is opgebouwd (ontvangen bedrag, afgetrokken waarborgsom, wat
+  overblijft), zodat je het altijd kunt natrekken. Lasten = automatisch herkende
   terugkerende uitgaande betalingen op de rekening van dat pand (energie,
   internet, VvE, hypotheek, wat er ook maandelijks afgaat - een tegenpartij
   telt mee zodra die in minstens 3 verschillende maanden voorkomt, met

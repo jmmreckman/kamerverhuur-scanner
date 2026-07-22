@@ -51,11 +51,27 @@ class Last:
 
 
 @dataclass(frozen=True)
+class Inkomst:
+    """Eén regel van de huurinkomsten-specificatie op de winstpagina - laat
+    per kamer zien hoe het totale inkomstenbedrag is opgebouwd (zie
+    kamerverhuur_scanner.runner.netto_huurinkomsten_specificatie())."""
+    kamer: str
+    naam: str
+    bruto: Decimal  # werkelijk ontvangen bedrag deze maand (incl. borg, als die kamer deze maand instapt)
+    borg_afgetrokken: Decimal
+    netto: Decimal  # bruto - borg_afgetrokken - dit telt mee als winst-inkomsten
+
+
+@dataclass(frozen=True)
 class Winstoverzicht:
-    inkomsten: Decimal
+    inkomsten_specificatie: list[Inkomst] = field(default_factory=list)
     lasten: list[Last] = field(default_factory=list)
     belasting: Decimal = BELASTING_PER_MAAND
     onderhoud_reserve: Decimal = Decimal("0")
+
+    @property
+    def inkomsten(self) -> Decimal:
+        return sum((regel.netto for regel in self.inkomsten_specificatie), Decimal("0"))
 
     @property
     def totaal_lasten(self) -> Decimal:
@@ -110,8 +126,13 @@ def herken_terugkerende_lasten(
     return sorted(lasten, key=lambda last: last.bedrag, reverse=True)
 
 
-def bereken_winst(inkomsten: Decimal, lasten: list[Last], onderhoud_reserve: Decimal | None) -> Winstoverzicht:
-    return Winstoverzicht(inkomsten=inkomsten, lasten=lasten, onderhoud_reserve=onderhoud_reserve or Decimal("0"))
+def bereken_winst(
+    inkomsten_specificatie: list[Inkomst], lasten: list[Last], onderhoud_reserve: Decimal | None
+) -> Winstoverzicht:
+    return Winstoverzicht(
+        inkomsten_specificatie=inkomsten_specificatie, lasten=lasten,
+        onderhoud_reserve=onderhoud_reserve or Decimal("0"),
+    )
 
 
 def verdeelde_winst(winst: Decimal, aantal_beheerders: int) -> Decimal:

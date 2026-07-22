@@ -4,11 +4,16 @@ from decimal import Decimal
 from kamerverhuur_scanner.models import Payment
 from kamerverhuur_scanner.winst import (
     BELASTING_PER_MAAND,
+    Inkomst,
     bereken_winst,
     gecombineerde_winst_over_tijd,
     herken_terugkerende_lasten,
     verdeelde_winst,
 )
+
+
+def _inkomsten(bedrag: str) -> list[Inkomst]:
+    return [Inkomst(kamer="1", naam="Jan", bruto=Decimal(bedrag), borg_afgetrokken=Decimal("0"), netto=Decimal(bedrag))]
 
 
 def _betaling(bedrag, datum, iban="NL91ABNA0417164300", naam="Energieleverancier", omschrijving="Energie"):
@@ -108,16 +113,26 @@ def test_bereken_winst_trekt_belasting_onderhoud_en_lasten_af():
     lasten = [herken_terugkerende_lasten([
         _betaling("100.00", "2026-04-01"), _betaling("100.00", "2026-05-01"), _betaling("100.00", "2026-06-01"),
     ])[0]]
-    overzicht = bereken_winst(inkomsten=Decimal("3507.01"), lasten=lasten, onderhoud_reserve=Decimal("60.00"))
+    overzicht = bereken_winst(_inkomsten("3507.01"), lasten=lasten, onderhoud_reserve=Decimal("60.00"))
+    assert overzicht.inkomsten == Decimal("3507.01")
     assert overzicht.belasting == BELASTING_PER_MAAND
     assert overzicht.totaal_lasten == Decimal("100.00") + BELASTING_PER_MAAND + Decimal("60.00")
     assert overzicht.winst == Decimal("3507.01") - overzicht.totaal_lasten
 
 
 def test_bereken_winst_zonder_onderhoud_reserve_telt_als_nul():
-    overzicht = bereken_winst(inkomsten=Decimal("1000.00"), lasten=[], onderhoud_reserve=None)
+    overzicht = bereken_winst(_inkomsten("1000.00"), lasten=[], onderhoud_reserve=None)
     assert overzicht.onderhoud_reserve == Decimal("0")
     assert overzicht.totaal_lasten == BELASTING_PER_MAAND
+
+
+def test_winstoverzicht_inkomsten_is_som_van_specificatie():
+    overzicht = bereken_winst(
+        [Inkomst(kamer="1", naam="Jan", bruto=Decimal("650.00"), borg_afgetrokken=Decimal("0"), netto=Decimal("650.00")),
+         Inkomst(kamer="2", naam="Piet", bruto=Decimal("700.00"), borg_afgetrokken=Decimal("0"), netto=Decimal("700.00"))],
+        lasten=[], onderhoud_reserve=None,
+    )
+    assert overzicht.inkomsten == Decimal("1350.00")
 
 
 def test_verdeelde_winst_bij_1_beheerder_blijft_gelijk():

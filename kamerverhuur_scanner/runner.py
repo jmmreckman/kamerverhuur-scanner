@@ -243,47 +243,55 @@ def run_check(
     return tenants, results, unmatched
 
 
-def netto_huurinkomsten_deze_maand(
+def netto_huurinkomsten_specificatie(
     tenants: list[Tenant], cache_resultaten: list[dict], vandaag: date | None = None
-) -> Decimal:
-    """Som van de werkelijk ontvangen huur deze maand voor de winstberekening
-    (zie webapp/app.py: winstberekening() en scripts/winst_snapshot.py) - MET
-    de waarborgsom eraf voor kamers die deze maand (of de maand ervóór, bij
-    vooruitbetaling) instappen. De borg is geen inkomen: die moet ooit weer
-    terugbetaald worden aan de huurder, en telt daarom bewust NIET mee als
-    winst - in tegenstelling tot de betaalcontrole zelf (run_check()), die 'm
-    wél in het verwachte bedrag meetelt om te bepalen of de instapmaand
-    volledig betaald is (zie _instapbedrag())."""
+) -> list[winst.Inkomst]:
+    """Specificatie (1 regel per kamer) van de werkelijk ontvangen huur deze
+    maand voor de winstberekening (zie webapp/app.py: winstberekening() en
+    scripts/winst_snapshot.py) - MET de waarborgsom eraf voor kamers die deze
+    maand (of de maand ervóór, bij vooruitbetaling) instappen. De borg is
+    geen inkomen: die moet ooit weer terugbetaald worden aan de huurder, en
+    telt daarom bewust NIET mee als winst - in tegenstelling tot de
+    betaalcontrole zelf (run_check()), die 'm wél in het verwachte bedrag
+    meetelt om te bepalen of de instapmaand volledig betaald is (zie
+    _instapbedrag()). Winstoverzicht.inkomsten telt deze specificatie zelf
+    op - zo is op de winstpagina precies te zien hoe het totaal is opgebouwd,
+    per kamer."""
     vandaag = vandaag or date.today()
     huidige_maand_sleutel = (vandaag.year, vandaag.month)
     tenants_bij_kamer = {t.kamer: t for t in tenants}
-    totaal = Decimal("0")
+    specificatie = []
     for regel in cache_resultaten:
-        ontvangen = Decimal(regel["ontvangen_bedrag"])
+        bruto = Decimal(regel["ontvangen_bedrag"])
         tenant = tenants_bij_kamer.get(regel["kamer"])
         start = _tenant_startdatum(tenant) if tenant else None
+        borg_afgetrokken = Decimal("0")
         if start and huidige_maand_sleutel in ((start.year, start.month), _vorige_maand(start.year, start.month)):
-            ontvangen = max(ontvangen - (tenant.borg_bedrag or Decimal("0")), Decimal("0"))
-        totaal += ontvangen
-    return totaal
+            borg_afgetrokken = min(tenant.borg_bedrag or Decimal("0"), bruto)
+        specificatie.append(winst.Inkomst(
+            kamer=regel["kamer"], naam=regel.get("naam", ""), bruto=bruto,
+            borg_afgetrokken=borg_afgetrokken, netto=bruto - borg_afgetrokken,
+        ))
+    return specificatie
 
 
-def bereken_winstoverzicht(config: Config, pand: Pand, inkomsten: Decimal) -> winst.Winstoverzicht:
+def bereken_winstoverzicht(
+    config: Config, pand: Pand, inkomsten_specificatie: list[winst.Inkomst]
+) -> winst.Winstoverzicht:
     """Haalt de uitgaande bunq-transacties van de rekening van dit pand op
     (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te
-    herkennen, en zet dat samen met `inkomsten` (de al bekende 'ontvangen'-
-    som van de betaalcontrole, zie webapp/app.py: dashboard()/winstberekening())
-    om in een compleet winstoverzicht. Tegenpartijen die de beheerder zelf
-    definitief genegeerd heeft (zie state.negeer_last(), bv. een overboeking
-    naar zichzelf) tellen nooit mee, ongeacht het herkenningspatroon. Kan
-    BunqClientError laten doorstromen (net als run_check()) als de
-    bunq-koppeling niet werkt."""
+    herkennen, en zet dat samen met `inkomsten_specificatie` (zie
+    netto_huurinkomsten_specificatie()) om in een compleet winstoverzicht.
+    Tegenpartijen die de beheerder zelf definitief genegeerd heeft (zie
+    state.negeer_last(), bv. een overboeking naar zichzelf) tellen nooit mee,
+    ongeacht het herkenningspatroon. Kan BunqClientError laten doorstromen
+    (net als run_check()) als de bunq-koppeling niet werkt."""
     bunq = BunqClient(config)
     sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
     uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
     genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
     lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
-    return winst.bereken_winst(inkomsten, lasten, pand.onderhoud_reserve_per_maand)
+    return winst.bereken_winst(inkomsten_specificatie, lasten, pand.onderhoud_reserve_per_maand)
 
 
 def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantResult], maand: str) -> None:

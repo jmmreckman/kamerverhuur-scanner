@@ -14,11 +14,13 @@ from webapp.app import create_app
 
 
 class FakeSheetClient:
+    kamers = [Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))]
+
     def __init__(self, _config, _pand):
         pass
 
     def get_kamers(self):
-        return [Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))]
+        return FakeSheetClient.kamers
 
 
 class FakeBunqClient:
@@ -42,6 +44,7 @@ def opzet(tmp_path, monkeypatch):
     import kamerverhuur_scanner.runner as runner_module
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
     monkeypatch.setattr(runner_module, "BunqClient", FakeBunqClient)
+    FakeSheetClient.kamers = [Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))]
 
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
@@ -204,3 +207,42 @@ def test_negeerlijst_herstellen_laat_last_weer_meetellen(opzet):
     # en de last verschijnt weer op de winstpagina
     body = client.get("/pand/mahoniestraat/winst").get_data(as_text=True)
     assert "Energieleverancier" in body
+
+
+# --- Huurinkomsten-specificatie ---
+
+
+def test_winstberekening_toont_huurinkomsten_specificatie_per_kamer(opzet):
+    client, config = opzet
+    resultaat = {
+        "resultaten": [{"kamer": "1", "naam": "Jan", "verwacht_bedrag": "650.00",
+                         "ontvangen_bedrag": "650.00", "status": "Betaald"}],
+        "niet_gekoppelde_betalingen": 0, "gecontroleerd_op": "01-07-2026 10:00",
+    }
+    (state._bestandsnaam("mahoniestraat", config.state_dir)).write_text(json.dumps(resultaat))
+
+    resp = client.get("/pand/mahoniestraat/winst")
+    body = resp.get_data(as_text=True)
+    assert "Huurinkomsten" in body
+    assert "<td>1</td>" in body
+    assert "<td>Jan</td>" in body
+
+
+def test_winstberekening_toont_waarborgsom_afgetrokken_bij_instapper(opzet):
+    client, config = opzet
+    vandaag = date.today()
+    FakeSheetClient.kamers = [Tenant(
+        row_index=2, naam="Nieuwe Huurder", kamer="1", verwacht_bedrag=Decimal("650.00"),
+        contract_startdatum=vandaag.strftime("%d-%m-%Y"), borg_bedrag=Decimal("500.00"),
+    )]
+    resultaat = {
+        "resultaten": [{"kamer": "1", "naam": "Nieuwe Huurder", "verwacht_bedrag": "650.00",
+                         "ontvangen_bedrag": "1000.00", "status": "Betaald"}],
+        "niet_gekoppelde_betalingen": 0, "gecontroleerd_op": "01-07-2026 10:00",
+    }
+    (state._bestandsnaam("mahoniestraat", config.state_dir)).write_text(json.dumps(resultaat))
+
+    resp = client.get("/pand/mahoniestraat/winst")
+    body = resp.get_data(as_text=True)
+    assert "Nieuwe Huurder" in body
+    assert "500,00" in body  # afgetrokken waarborgsom, apart zichtbaar

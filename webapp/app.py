@@ -30,7 +30,7 @@ from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_pro
 from kamerverhuur_scanner.runner import (
     backfill_geschiedenis,
     bereken_winstoverzicht,
-    netto_huurinkomsten_deze_maand,
+    netto_huurinkomsten_specificatie,
     run_check,
 )
 from kamerverhuur_scanner.sheet_client import SheetClient
@@ -539,10 +539,10 @@ def create_app(config: Config | None = None) -> Flask:
         cache = state.load(pand_slug, config.state_dir)
         if cache:
             sheet = SheetClient(config, g.pand)
-            inkomsten = netto_huurinkomsten_deze_maand(sheet.get_kamers(), cache["resultaten"])
+            specificatie = netto_huurinkomsten_specificatie(sheet.get_kamers(), cache["resultaten"])
         else:
-            inkomsten = Decimal("0")
-        overzicht = bereken_winstoverzicht(config, g.pand, inkomsten)
+            specificatie = []
+        overzicht = bereken_winstoverzicht(config, g.pand, specificatie)
         state.voeg_winst_snapshot_toe(pand_slug, overzicht.winst, config.state_dir)
         return render_template(
             "winst.html", overzicht=overzicht,
