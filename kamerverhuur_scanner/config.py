@@ -70,6 +70,11 @@ class Config:
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
 
+    # rclone-remote (bv. "gdrive:vastgoed") voor het automatisch wegschrijven
+    # van getekende contracten naar Drive - zie kamerverhuur_scanner/drive_sync.py.
+    # Optioneel: zonder deze instelling doet die module gewoon niets.
+    rclone_remote: str | None = None
+
     @staticmethod
     def load() -> "Config":
         return Config(

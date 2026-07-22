@@ -217,6 +217,11 @@ nodig.
 - **Documenten** - echte mappenstructuur van de Google Drive-map van het
   gekozen pand: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
   aanmaken en downloaden, rechtstreeks vanaf de site.
+- **Automatische Drive-back-up van getekende contracten** (optioneel, via
+  rclone) - per pand een map met "Huidige huurders"/"Oude huurders", waar
+  getekende contracten automatisch in belanden en huurdersmapjes automatisch
+  verhuizen bij vertrek. Zie "Drive-koppeling voor contracten (rclone)"
+  hieronder voor de eenmalige setup.
 - **Publieke aanbodpagina** (`/aanbod`, Engelstalig, geen login nodig) - toont
   alle kamers die je als "te huur" hebt aangevinkt, met foto's/video's en een
   "Apply"-knop die naar een aanmeldformulier leidt. Zie "Aanbod & aanmeldingen"
@@ -360,6 +365,72 @@ dus in theorie dezelfde upload-beperking (browsen/downloaden werkt daar prima,
 alleen nieuwe uploads zouden mislukken). Dat is bewust buiten scope gelaten
 toen dit werd opgelost - laat het weten als je dat ook lokaal opgeslagen wilt
 hebben.
+
+### Drive-koppeling voor contracten (rclone)
+
+Naast de lokale opslag hierboven kan de site getekende huurcontracten ook
+automatisch naar je **eigen** Google Drive wegschrijven (los van het service
+account, dat zoals hierboven beschreven zelf geen opslagruimte heeft). Dit
+gebruikt [rclone](https://rclone.org) - een los, al door Google goedgekeurd
+programma dat met een **echte inlog op jouw eigen Google-account** werkt (dus
+gewoon jouw eigen opslagruimte, geen storageQuotaExceeded), zonder dat er een
+eigen Google Cloud-app voor geverifieerd hoeft te worden.
+
+Zodra dit is ingesteld, gebeurt automatisch:
+
+- Per pand een map **"Steenhub &lt;pandnaam&gt;"** (onder het pad dat je bij
+  `RCLONE_REMOTE` instelt), met daarin **"Huidige huurders"** en **"Oude
+  huurders"**.
+- Zodra een kamer een (nieuwe) huurder krijgt (via een contract of via
+  "Huurders bewerken") verschijnt er een map met hun naam onder "Huidige
+  huurders".
+- Zodra alle partijen een contract elektronisch ondertekend hebben, komt de
+  definitieve, getekende PDF automatisch in de map van die huurder terecht.
+- Zodra een huurder vertrekt (een andere/geen naam wordt ingevuld) verhuist
+  hun hele mapje automatisch van "Huidige huurders" naar "Oude huurders".
+
+Dit is optioneel en faalt altijd stil (met een logregel) als het niet is
+ingesteld of een keer mislukt - bestanden blijven sowieso ook gewoon lokaal
+op de server staan (zie hierboven), dit is puur een extra, veilige kopie.
+
+**Eenmalige koppeling (moet je zelf doen, met je eigen Google-inlog):**
+
+1. rclone staat al in de Docker-image (zie Dockerfile). Log in op de VPS en
+   start de configuratiewizard **in de draaiende container**:
+   ```bash
+   cd /opt/kamerverhuur-scanner/deploy
+   docker compose exec app rclone config
+   ```
+2. Kies `n` (New remote). Geef als naam precies **`gdrive`** (moet
+   overeenkomen met stap 4 hieronder).
+3. Kies bij "Storage" de optie **Google Drive** (typ "drive" om te zoeken).
+4. `client_id` en `client_secret`: **leeg laten** (Enter) - dan gebruikt
+   rclone zijn eigen, al goedgekeurde app, en hoef je zelf niks bij Google
+   Cloud te verifiëren.
+5. `scope`: kies **1** (volledige toegang).
+6. `root_folder_id`, `service_account_file`: beide leeg laten.
+7. "Edit advanced config?" → `n`.
+8. "Use web browser to automatically authenticate?" → **`n`** (de VPS heeft
+   geen browser). rclone toont dan een commando (`rclone authorize "drive"`)
+   dat je **op je eigen laptop** draait (rclone daar lokaal installeren via
+   https://rclone.org/downloads/), waarna een normaal Google-inlogscherm
+   opent. Na inloggen krijg je een lange tekst terug - plak die in de SSH-
+   sessie op de VPS.
+9. "Configure this as a Shared Drive?" → `n`.
+10. Bevestigen, dan `q` om te stoppen.
+11. Test de koppeling:
+    ```bash
+    docker compose exec app rclone lsd gdrive:vastgoed
+    ```
+    (past de map "vastgoed" in je Drive aan, die moet al bestaan).
+12. Zet in `deploy/app.env`:
+    ```
+    RCLONE_REMOTE=gdrive:vastgoed
+    ```
+    en herstart: `docker compose up -d`.
+
+Zonder `RCLONE_REMOTE` gebeurt er niets (geen foutmelding, gewoon geen
+Drive-kopie) - je kunt dit dus altijd later nog instellen.
 
 ## Huurcontracten genereren
 

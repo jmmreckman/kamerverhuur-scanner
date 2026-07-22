@@ -392,6 +392,34 @@ def test_alle_partijen_tekenen_rondt_af_met_getekend_contract_en_mail(mock_smtp_
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_alle_partijen_tekenen_uploadt_getekend_contract_naar_drive(mock_smtp_cls, app_client, monkeypatch):
+    import webapp.app as appmodule
+
+    uploads = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "upload_bestand",
+        lambda config, pand, huurder_naam, bestandsnaam, inhoud: uploads.append((pand.slug, huurder_naam, bestandsnaam)),
+    )
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+
+    for rol_sleutel, naam in [("huurder", "Bence Neumayer"), ("verhuurder", "Jurian Reckman"), ("verhuurder-2", "Justin Winkelman")]:
+        app_client.post(
+            f"/tekenen/{tokens[rol_sleutel]['token']}",
+            data={"getekende_naam": naam, "akkoord": "on", "handtekening_data_url": TEST_HANDTEKENING_DATA_URL},
+        )
+
+    assert len(uploads) == 1
+    pand_slug, huurder_naam, geuploade_bestandsnaam = uploads[0]
+    assert pand_slug == "mahoniestraat"
+    assert huurder_naam == "Bence Neumayer"
+    assert geuploade_bestandsnaam.endswith(".pdf")
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
 def test_tekenverzoek_op_al_getekend_contract_geeft_foutmelding(mock_smtp_cls, app_client):
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance

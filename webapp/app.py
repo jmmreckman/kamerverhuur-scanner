@@ -19,7 +19,7 @@ from flask import Flask, Response, abort, flash, g, redirect, render_template, r
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import mail_voorkeuren, state
+from kamerverhuur_scanner import drive_sync, mail_voorkeuren, state
 from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
@@ -621,6 +621,9 @@ def create_app(config: Config | None = None) -> Flask:
                 # een andere (of geen) huurder komt voor deze kamer in de plaats -
                 # bewaar de vertrekkende huurder nog even (zie Huurders-pagina).
                 sheet.archiveer_vertrokken_huurder(kamer)
+                drive_sync.verhuis_naar_oude_huurders(config, g.pand, kamer.naam)
+            if velden["naam"] and velden["naam"] != kamer.naam:
+                drive_sync.maak_huurder_map(config, g.pand, velden["naam"])
             sheet.update_kamer(row_index=kamer.row_index, **velden)
             flash(f"Kamer {kamer_naam} bijgewerkt.")
             return redirect(url_for("huurders", pand_slug=pand_slug))
@@ -1354,6 +1357,9 @@ def create_app(config: Config | None = None) -> Flask:
             # een andere huurder komt voor deze kamer in de plaats - bewaar de
             # vertrekkende huurder nog even (zie Huurders-pagina).
             sheet.archiveer_vertrokken_huurder(bestaande)
+            drive_sync.verhuis_naar_oude_huurders(config, g.pand, bestaande.naam)
+        if nieuwe_naam and nieuwe_naam != bestaande.naam:
+            drive_sync.maak_huurder_map(config, g.pand, nieuwe_naam)
         kale = velden.get("kale_huurprijs", "").strip()
         service = velden.get("servicekosten", "").strip()
         borg = velden.get("borg", "").strip()
@@ -1665,6 +1671,9 @@ def create_app(config: Config | None = None) -> Flask:
             return
         mail = ondertekenen.bouw_getekend_contract_mail(pand, metadata)
         pdf_bestandsnaam = Path(getekend_bestandsnaam).with_suffix(".pdf").name
+        drive_sync.upload_bestand(
+            config, pand, metadata.get("huurder_naam") or "Onbekend", pdf_bestandsnaam, pdf
+        )
         bcc = _ontvangers(pand_slug, "contracten", config.email_bcc)
         for adres in dict.fromkeys(o["email"] for o in ronde["ondertekenaars"] if o["email"]):
             try:

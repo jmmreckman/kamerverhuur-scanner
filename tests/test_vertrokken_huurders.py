@@ -54,6 +54,23 @@ class FakeSheetClient:
 
 
 @pytest.fixture
+def drive_sync_calls(monkeypatch):
+    """Vangt aanroepen naar drive_sync op (i.p.v. echt rclone te draaien) - zie
+    kamerverhuur_scanner/drive_sync.py, gekoppeld in huurder_bewerken()."""
+    import webapp.app as appmodule
+    calls = {"verhuisd": [], "map_aangemaakt": []}
+    monkeypatch.setattr(
+        appmodule.drive_sync, "verhuis_naar_oude_huurders",
+        lambda config, pand, naam: calls["verhuisd"].append(naam) or True,
+    )
+    monkeypatch.setattr(
+        appmodule.drive_sync, "maak_huurder_map",
+        lambda config, pand, naam: calls["map_aangemaakt"].append(naam) or True,
+    )
+    return calls
+
+
+@pytest.fixture
 def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
@@ -117,6 +134,39 @@ def test_huurder_bewerken_kamer_leegmaken_archiveert(app_client):
     gearchiveerd = FakeSheetClient.archiveer_aangeroepen_met
     assert gearchiveerd is not None
     assert gearchiveerd.naam == "Bence Neumayer"
+
+
+def test_huurder_bewerken_naar_andere_naam_verhuist_drive_map_en_maakt_nieuwe(app_client, drive_sync_calls):
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/1/bewerken",
+        data={"kamer": "1", "naam": "Nieuwe Huurder", "verwacht_bedrag": "919,00"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert drive_sync_calls["verhuisd"] == ["Bence Neumayer"]
+    assert drive_sync_calls["map_aangemaakt"] == ["Nieuwe Huurder"]
+
+
+def test_huurder_bewerken_zelfde_naam_raakt_drive_niet_aan(app_client, drive_sync_calls):
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/1/bewerken",
+        data={"kamer": "1", "naam": "Bence Neumayer", "verwacht_bedrag": "925,00"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert drive_sync_calls["verhuisd"] == []
+    assert drive_sync_calls["map_aangemaakt"] == []
+
+
+def test_huurder_bewerken_kamer_leegmaken_verhuist_zonder_nieuwe_map(app_client, drive_sync_calls):
+    resp = app_client.post(
+        "/pand/mahoniestraat/huurders/1/bewerken",
+        data={"kamer": "1", "naam": "", "verwacht_bedrag": "919,00"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert drive_sync_calls["verhuisd"] == ["Bence Neumayer"]
+    assert drive_sync_calls["map_aangemaakt"] == []
 
 
 def test_huurders_pagina_toont_vertrokken_huurder_grijs_gemarkeerd(app_client):

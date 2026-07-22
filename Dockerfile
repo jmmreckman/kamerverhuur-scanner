@@ -2,6 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# rclone: voor het automatisch wegschrijven van getekende contracten naar
+# Drive (zie kamerverhuur_scanner/drive_sync.py) - gebruikt in plaats van het
+# Google service account, dat zelf 0 GB Drive-opslag heeft.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip \
+    && curl https://rclone.org/install.sh | bash \
+    && apt-get purge -y curl unzip && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -158,6 +158,31 @@ def test_contract_genereren_voor_andere_huurder_archiveert_de_vertrekkende(app_c
     assert gearchiveerd.naam == "Bence Neumayer"  # de oude huurder van kamer 1, niet de nieuwe
 
 
+def test_contract_genereren_voor_andere_huurder_verhuist_en_maakt_drive_map(app_client, monkeypatch):
+    import webapp.app as appmodule
+
+    calls = {"verhuisd": [], "map_aangemaakt": []}
+    monkeypatch.setattr(
+        appmodule.drive_sync, "verhuis_naar_oude_huurders",
+        lambda config, pand, naam: calls["verhuisd"].append(naam),
+    )
+    monkeypatch.setattr(
+        appmodule.drive_sync, "maak_huurder_map",
+        lambda config, pand, naam: calls["map_aangemaakt"].append(naam),
+    )
+    resp = app_client.post(
+        "/pand/mahoniestraat/contracten/nieuw",
+        data={
+            "kamer": "1", "huurder_naam": "Nieuwe Huurder", "huurprijs": "919,00",
+            "ingangsdatum": "2026-07-01", "schrijf_terug_naar_sheet": "on",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert calls["verhuisd"] == ["Bence Neumayer"]
+    assert calls["map_aangemaakt"] == ["Nieuwe Huurder"]
+
+
 def test_contract_genereren_zonder_vinkje_laat_sheet_ongemoeid(app_client):
     FakeSheetClient.laatste_update = None
     resp = app_client.post(
