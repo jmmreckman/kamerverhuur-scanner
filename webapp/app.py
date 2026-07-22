@@ -641,7 +641,8 @@ def create_app(config: Config | None = None) -> Flask:
 
         return render_template(
             "huishouden_mailen.html", tenants_met_mail=tenants_met_mail,
-            tenants_zonder_mail=tenants_zonder_mail, onderwerp="", tekst="",
+            tenants_zonder_mail=tenants_zonder_mail,
+            onderwerp=request.args.get("onderwerp", ""), tekst=request.args.get("tekst", ""),
             geselecteerde_kamers=[t.kamer for t in tenants_met_mail],
         )
 
@@ -1010,6 +1011,40 @@ def create_app(config: Config | None = None) -> Flask:
                 return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
         flash(f"{len(rijnummers)} bezichtiging(en) verwijderd - dat tijdslot is nu weer vrij.")
         return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+
+    def _licht_huurders_in_redirect(pand_slug: str, datum_iso: str, afspraken_op_datum: list[dict]):
+        datum = date.fromisoformat(datum_iso)
+        tijd_vanaf = min(a["tijd_start"] for a in afspraken_op_datum)
+        tijd_tot = max(a["tijd_eind"] for a in afspraken_op_datum)
+        mail = bezichtiging.bouw_huurders_inlichten_mail(datum, tijd_vanaf, tijd_tot)
+        return redirect(
+            url_for("huishouden_mailen", pand_slug=pand_slug, onderwerp=mail["onderwerp"], tekst=mail["tekst"])
+        )
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/huurders-inlichten")
+    @login_required
+    def licht_huurders_in(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        lijsten = bezichtiging.groepeer_per_datum(sheet.get_bezichtigingen())
+        if not lijsten:
+            flash("Nog geen bezichtiging ingepland om huurders over in te lichten.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        if len(lijsten) == 1:
+            datum_iso, afspraken = next(iter(lijsten.items()))
+            return _licht_huurders_in_redirect(pand_slug, datum_iso, afspraken)
+        return render_template("licht_huurders_in_kies_lijst.html", lijsten=lijsten)
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/huurders-inlichten/kies", methods=["POST"])
+    @login_required
+    def licht_huurders_in_kies(pand_slug: str):
+        sheet = SheetClient(config, g.pand)
+        lijsten = bezichtiging.groepeer_per_datum(sheet.get_bezichtigingen())
+        datum_iso = request.form.get("datum", "").strip()
+        afspraken = lijsten.get(datum_iso)
+        if afspraken is None:
+            flash("Deze lijst bestaat niet (meer) - kies opnieuw.")
+            return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+        return _licht_huurders_in_redirect(pand_slug, datum_iso, afspraken)
 
     # --- Bezichtiging inplannen (voor geselecteerde aanmelders) ---
 

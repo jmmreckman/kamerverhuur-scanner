@@ -20,6 +20,7 @@ KAMER_BESCHIKBAAR = Tenant(
 )
 KAMER_VERHUURD = Tenant(
     row_index=3, naam="Jan Jansen", kamer="2", verwacht_bedrag=Decimal("700.00"), beschikbaar=False,
+    email="jan@example.com",
 )
 KAMER_MET_ADVERTENTIEVELDEN = Tenant(
     row_index=4, naam="", kamer="3", verwacht_bedrag=Decimal("650.00"),
@@ -39,6 +40,9 @@ class FakeSheetClient:
 
     def get_kamers(self):
         return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN]
+
+    def get_tenants(self):
+        return [k for k in self.get_kamers() if k.naam]
 
     def get_geschiedenis(self, kamer):
         return []

@@ -94,6 +94,25 @@ def bouw_bevestigingsmail(pand: Pand, afspraak: dict, datum: date) -> dict[str, 
     return {"onderwerp": onderwerp, "tekst": tekst}
 
 
+def bouw_huurders_inlichten_mail(datum: date, tijd_vanaf: str, tijd_tot: str) -> dict[str, str]:
+    """De (Engelstalige) mail naar de huidige huurders om ze op de hoogte te
+    stellen van een ingeplande bezichtiging - ze hoeven zelf niets te doen,
+    maar krijgen wel te horen dat er in de gemeenschappelijke ruimtes iemand
+    rond kan lopen. Bedoeld als voorgevulde tekst voor "Mail het hele
+    huishouden" (zie webapp/app.py: licht_huurders_in())."""
+    onderwerp = f"Heads-up: room viewing on {datum.strftime('%d-%m-%Y')}"
+    tekst = (
+        "Hi all,\n\n"
+        f"Just a heads-up: we have a room viewing scheduled on {datum.strftime('%d-%m-%Y')} "
+        f"between {tijd_vanaf} and {tijd_tot}.\n\n"
+        "You don't need to do anything for this - we won't come into your room, but please be "
+        "aware that we (and the visitor(s)) may walk around in the shared/common areas "
+        "(kitchen, hallway, etc.) during this time.\n\n"
+        "Thanks,\nSteenhub"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
 def groepeer_per_datum(rijen: list[list[str]]) -> dict[str, list[dict]]:
     """Groepeert de rauwe rijen uit SheetClient.get_bezichtigingen() per datum
     (ISO-notatie, "jjjj-mm-dd"), oplopend gesorteerd - zowel de datums

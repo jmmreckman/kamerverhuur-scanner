@@ -433,3 +433,49 @@ def test_afwijzing_versturen_mislukte_mail_telt_mee(app_client, monkeypatch):
     body = resp.get_data(as_text=True)
     assert "0 van 1" in body
     assert "mislukt voor" in body.lower()
+
+
+# --- Licht huurders in ---
+
+
+def test_licht_huurders_in_zonder_bezichtiging_geeft_melding(app_client):
+    _login(app_client)
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/huurders-inlichten", follow_redirects=True)
+    assert resp.status_code == 200
+    assert "nog geen bezichtiging ingepland" in resp.get_data(as_text=True).lower()
+
+
+def test_licht_huurders_in_met_1_datum_redirect_naar_voorgevulde_mail(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    _bevestig(app_client, "2026-08-01", ["1|John Smith|john@example.com|+31611111111|In person||14:15|14:30"])
+
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/huurders-inlichten", follow_redirects=True)
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "01-08-2026" in body
+    assert "14:00" in body and "14:30" in body
+    assert "won&#39;t come into your room" in body or "won't come into your room" in body
+    assert "common areas" in body
+
+
+def test_licht_huurders_in_met_meerdere_datums_toont_kiezer(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    _bevestig(app_client, "2026-08-05", ["1|Jane Doe|jane@example.com|+31612345678|In person||10:00|10:15"])
+
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/huurders-inlichten")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "2026-08-01" in body and "2026-08-05" in body
+
+    kies = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/huurders-inlichten/kies", data={"datum": "2026-08-05"},
+        follow_redirects=True,
+    )
+    assert kies.status_code == 200
+    kies_body = kies.get_data(as_text=True)
+    assert "05-08-2026" in kies_body
+    assert "10:00" in kies_body and "10:15" in kies_body

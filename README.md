@@ -314,6 +314,16 @@ zijn.
   verstuurd wordt. Elke aanmelder krijgt een eigen mail (niet als groep), met
   bewust alleen `EMAIL_BCC_BEHEERDER` in de BCC (dus niet alle
   mede-eigenaren).
+- **Huurders inlichten**: knop **"Licht huurders in"** naast "Bekijk
+  ingeplande bezichtigingen" - stuurt de huidige huurders van dat pand een
+  Engelstalig kopje-koffie-berichtje dat er een bezichtiging gepland staat
+  (datum + tijdvak, automatisch overgenomen uit de ingeplande bezichtiging(en)
+  van die dag), met de melding dat ze zelf niets hoeven te doen, er niemand
+  hun kamer in gaat, maar dat er wel iemand door de gemeenschappelijke ruimtes
+  kan lopen. Is er meer dan één datum met bezichtigingen ingepland, dan kies
+  je eerst voor welke datum. Gebruikt daarna gewoon "Mail het hele
+  huishouden" (zie hierboven) met de tekst al voorgevuld - je kunt 'm nog
+  aanpassen en kiezen wie 'm krijgt voordat je verstuurt.
 
 ### Lokale opslag van foto's/video's/bewijsstukken
 
