@@ -243,6 +243,31 @@ def run_check(
     return tenants, results, unmatched
 
 
+def netto_huurinkomsten_deze_maand(
+    tenants: list[Tenant], cache_resultaten: list[dict], vandaag: date | None = None
+) -> Decimal:
+    """Som van de werkelijk ontvangen huur deze maand voor de winstberekening
+    (zie webapp/app.py: winstberekening() en scripts/winst_snapshot.py) - MET
+    de waarborgsom eraf voor kamers die deze maand (of de maand ervóór, bij
+    vooruitbetaling) instappen. De borg is geen inkomen: die moet ooit weer
+    terugbetaald worden aan de huurder, en telt daarom bewust NIET mee als
+    winst - in tegenstelling tot de betaalcontrole zelf (run_check()), die 'm
+    wél in het verwachte bedrag meetelt om te bepalen of de instapmaand
+    volledig betaald is (zie _instapbedrag())."""
+    vandaag = vandaag or date.today()
+    huidige_maand_sleutel = (vandaag.year, vandaag.month)
+    tenants_bij_kamer = {t.kamer: t for t in tenants}
+    totaal = Decimal("0")
+    for regel in cache_resultaten:
+        ontvangen = Decimal(regel["ontvangen_bedrag"])
+        tenant = tenants_bij_kamer.get(regel["kamer"])
+        start = _tenant_startdatum(tenant) if tenant else None
+        if start and huidige_maand_sleutel in ((start.year, start.month), _vorige_maand(start.year, start.month)):
+            ontvangen = max(ontvangen - (tenant.borg_bedrag or Decimal("0")), Decimal("0"))
+        totaal += ontvangen
+    return totaal
+
+
 def bereken_winstoverzicht(config: Config, pand: Pand, inkomsten: Decimal) -> winst.Winstoverzicht:
     """Haalt de uitgaande bunq-transacties van de rekening van dit pand op
     (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te

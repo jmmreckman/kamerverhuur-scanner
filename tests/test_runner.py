@@ -322,3 +322,61 @@ def test_bereken_winstoverzicht_gebruikt_onderhoud_reserve_van_pand(monkeypatch)
     overzicht = runner.bereken_winstoverzicht(_config(), pand, inkomsten=Decimal("1000.00"))
 
     assert overzicht.onderhoud_reserve == Decimal("60.00")
+
+
+# --- netto_huurinkomsten_deze_maand ---
+
+
+def _instapper(kamer="1", startdatum="05-07-2026", borg="500.00"):
+    return Tenant(
+        row_index=2, naam="Jan", kamer=kamer, verwacht_bedrag=Decimal("650.00"),
+        contract_startdatum=startdatum, borg_bedrag=Decimal(borg),
+    )
+
+
+def _cache_regel(kamer="1", ontvangen="1000.00"):
+    return {"kamer": kamer, "naam": "Jan", "verwacht_bedrag": "650.00", "ontvangen_bedrag": ontvangen}
+
+
+def test_netto_huurinkomsten_zonder_instapmaand_telt_volledig_mee():
+    tenant = Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))
+    totaal = runner.netto_huurinkomsten_deze_maand([tenant], [_cache_regel(ontvangen="650.00")], vandaag=date(2026, 7, 15))
+    assert totaal == Decimal("650.00")
+
+
+def test_netto_huurinkomsten_trekt_borg_af_in_de_instapmaand_zelf():
+    tenant = _instapper(startdatum="05-07-2026", borg="500.00")
+    # 1000 ontvangen (pro-rata huur + borg samen) - 500 borg = 500 netto
+    totaal = runner.netto_huurinkomsten_deze_maand([tenant], [_cache_regel(ontvangen="1000.00")], vandaag=date(2026, 7, 15))
+    assert totaal == Decimal("500.00")
+
+
+def test_netto_huurinkomsten_trekt_borg_af_bij_vooruitbetaling_maand_ervoor():
+    # startdatum is augustus, maar het instapbedrag (incl. borg) is al in
+    # juli vooruitbetaald - juli's cache moet de borg dan ook afgetrokken zien.
+    tenant = _instapper(startdatum="03-08-2026", borg="500.00")
+    totaal = runner.netto_huurinkomsten_deze_maand([tenant], [_cache_regel(ontvangen="1150.00")], vandaag=date(2026, 7, 20))
+    assert totaal == Decimal("650.00")
+
+
+def test_netto_huurinkomsten_gaat_niet_onder_nul():
+    tenant = _instapper(startdatum="28-07-2026", borg="500.00")
+    totaal = runner.netto_huurinkomsten_deze_maand([tenant], [_cache_regel(ontvangen="100.00")], vandaag=date(2026, 7, 30))
+    assert totaal == Decimal("0")
+
+
+def test_netto_huurinkomsten_kamer_niet_meer_in_tenants_telt_gewoon_mee():
+    totaal = runner.netto_huurinkomsten_deze_maand([], [_cache_regel(kamer="3", ontvangen="650.00")], vandaag=date(2026, 7, 15))
+    assert totaal == Decimal("650.00")
+
+
+def test_netto_huurinkomsten_meerdere_kamers_alleen_instapper_wordt_gecorrigeerd():
+    instapper = _instapper(kamer="1", startdatum="05-07-2026", borg="500.00")
+    zittende_huurder = Tenant(row_index=3, naam="Piet", kamer="2", verwacht_bedrag=Decimal("700.00"),
+                               contract_startdatum="01-01-2025", borg_bedrag=Decimal("500.00"))
+    totaal = runner.netto_huurinkomsten_deze_maand(
+        [instapper, zittende_huurder],
+        [_cache_regel(kamer="1", ontvangen="1000.00"), _cache_regel(kamer="2", ontvangen="700.00")],
+        vandaag=date(2026, 7, 15),
+    )
+    assert totaal == Decimal("500.00") + Decimal("700.00")

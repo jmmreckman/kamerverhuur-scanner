@@ -243,7 +243,9 @@ nodig.
   zelf gewoon goed opgeslagen - alleen de melding zelf mislukt dan stil.
 - **Winstberekening** - knop naast de huurpenningen-tegel op het dashboard,
   met de laatst berekende winst van die maand erop. Inkomsten = de al bekende
-  "ontvangen"-som van de betaalcontrole. Lasten = automatisch herkende
+  "ontvangen"-som van de betaalcontrole, met de waarborgsom eraf bij een
+  huurder die deze maand (of de maand ervóór, bij vooruitbetaling) instapt -
+  de borg is geen inkomen, die moet ooit terugbetaald worden. Lasten = automatisch herkende
   terugkerende uitgaande betalingen op de rekening van dat pand (energie,
   internet, VvE, hypotheek, wat er ook maandelijks afgaat - een tegenpartij
   telt mee zodra die in minstens 2 verschillende maanden voorkomt), plus een

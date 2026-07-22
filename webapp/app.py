@@ -27,7 +27,12 @@ from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.models import Status, Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
-from kamerverhuur_scanner.runner import backfill_geschiedenis, bereken_winstoverzicht, run_check
+from kamerverhuur_scanner.runner import (
+    backfill_geschiedenis,
+    bereken_winstoverzicht,
+    netto_huurinkomsten_deze_maand,
+    run_check,
+)
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
@@ -532,7 +537,11 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def winstberekening(pand_slug: str):
         cache = state.load(pand_slug, config.state_dir)
-        inkomsten = sum((Decimal(r["ontvangen_bedrag"]) for r in cache["resultaten"]), Decimal("0")) if cache else Decimal("0")
+        if cache:
+            sheet = SheetClient(config, g.pand)
+            inkomsten = netto_huurinkomsten_deze_maand(sheet.get_kamers(), cache["resultaten"])
+        else:
+            inkomsten = Decimal("0")
         overzicht = bereken_winstoverzicht(config, g.pand, inkomsten)
         state.voeg_winst_snapshot_toe(pand_slug, overzicht.winst, config.state_dir)
         return render_template(
