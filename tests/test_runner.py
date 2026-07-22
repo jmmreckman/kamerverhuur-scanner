@@ -292,6 +292,7 @@ class FakeBunqClientUitgaven:
     def get_outgoing_payments(self, pand, since):
         FakeBunqClientUitgaven.laatste_since = since
         return [
+            _uitgaande_betaling("100.00", date(2026, 4, 3)),
             _uitgaande_betaling("100.00", date(2026, 5, 3)),
             _uitgaande_betaling("100.00", date(2026, 6, 3)),
             _uitgaande_betaling("250.00", date(2026, 7, 1), iban="NL00EENMALIG00000", naam="Bouwmarkt"),

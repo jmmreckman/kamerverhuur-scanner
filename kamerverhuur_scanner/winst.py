@@ -23,11 +23,20 @@ BELASTING_PER_MAAND = Decimal("75.00")
 
 # Een tegenpartij moet in minstens dit aantal verschillende kalendermaanden
 # voorkomen om als "terugkerende vaste last" te tellen - onderscheidt een
-# vaste last (elke maand energie/internet/VvE) van een eenmalige uitgave.
-_TERUGKEREND_MINIMUM_MAANDEN = 2
+# vaste last (elke maand energie/internet/VvE/hypotheek) van een eenmalige
+# uitgave of toevallige overboeking.
+_TERUGKEREND_MINIMUM_MAANDEN = 3
+
+# Een tegenpartij mag gemiddeld niet vaker dan dit aantal keer per maand
+# voorkomen om nog als "vaste last" te tellen - een vaste last (energie,
+# water, internet, hypotheek, verzekering, abonnement) wordt normaal
+# gesproken precies 1x per maand afgeschreven, in tegenstelling tot bv.
+# boodschappenbezorging (Picnic/Flink) die vaak wekelijks (of vaker)
+# terugkomt bij dezelfde tegenpartij.
+_MAX_TRANSACTIES_PER_MAAND = 1.5
 
 # Hoe ver terug te scannen om terugkerende lasten te herkennen (~3 maanden
-# geeft normaal gesproken 2-3 kansen om eenzelfde tegenpartij terug te zien).
+# geeft precies genoeg kansen om 3x dezelfde tegenpartij terug te zien).
 SCAN_TERUGBLIK_DAGEN = 95
 
 
@@ -59,11 +68,16 @@ def _tegenpartij_sleutel(betaling: Payment) -> str:
 
 def herken_terugkerende_lasten(uitgaande_betalingen: list[Payment]) -> list[Last]:
     """Groepeert uitgaande betalingen op tegenpartij (IBAN, of anders naam/
-    omschrijving) en houdt alleen groepen over die in minstens
-    `_TERUGKEREND_MINIMUM_MAANDEN` verschillende kalendermaanden voorkomen.
+    omschrijving) en houdt alleen groepen over die:
+    - in minstens `_TERUGKEREND_MINIMUM_MAANDEN` verschillende kalendermaanden
+      voorkomen (sluit een eenmalige uitgave of toevallige overboeking uit);
+    - gemiddeld niet vaker dan `_MAX_TRANSACTIES_PER_MAAND` keer per maand
+      voorkomen (sluit bv. wekelijkse boodschappenbezorging uit, die anders
+      qua "komt elke maand terug" op een vaste last zou lijken).
+
     Bedrag per last = gemiddelde van de gevonden bedragen (vangt kleine
-    schommelingen op, bv. een variabel energiebedrag), gesorteerd van hoog
-    naar laag."""
+    schommelingen op, bv. een aangepast energie-voorschot), gesorteerd van
+    hoog naar laag."""
     groepen: dict[str, list[Payment]] = {}
     for betaling in uitgaande_betalingen:
         groepen.setdefault(_tegenpartij_sleutel(betaling), []).append(betaling)
@@ -72,6 +86,8 @@ def herken_terugkerende_lasten(uitgaande_betalingen: list[Payment]) -> list[Last
     for reeks in groepen.values():
         maanden = {betaling.datum.strftime("%Y-%m") for betaling in reeks}
         if len(maanden) < _TERUGKEREND_MINIMUM_MAANDEN:
+            continue
+        if len(reeks) / len(maanden) > _MAX_TRANSACTIES_PER_MAAND:
             continue
         gemiddeld = sum((betaling.bedrag for betaling in reeks), Decimal("0")) / len(reeks)
         laatste = reeks[-1]

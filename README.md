@@ -248,7 +248,10 @@ nodig.
   de borg is geen inkomen, die moet ooit terugbetaald worden. Lasten = automatisch herkende
   terugkerende uitgaande betalingen op de rekening van dat pand (energie,
   internet, VvE, hypotheek, wat er ook maandelijks afgaat - een tegenpartij
-  telt mee zodra die in minstens 2 verschillende maanden voorkomt), plus een
+  telt mee zodra die in minstens 3 verschillende maanden voorkomt, met
+  gemiddeld niet meer dan zo'n anderhalve keer per maand - dat laatste sluit
+  bv. wekelijkse boodschappenbezorging uit, die anders ook als "elke maand
+  terugkerend" zou tellen), plus een
   vaste €75/maand belastingpost, plus een instelbare onderhoudsreserve (zelf
   in te vullen per pand bij "Panden beheren" - bewust geen automatische
   aanname). Leegstand telt niet mee. Elk bezoek aan de pagina legt een nieuw

@@ -49,7 +49,8 @@
   </div>
   {% if not overzicht.lasten %}
   <p class="muted" style="margin-top:0.75rem">Nog geen terugkerende lasten herkend - een tegenpartij moet in
-     minstens 2 verschillende maanden voorkomen op de rekening van dit pand voordat 'ie hier verschijnt.</p>
+     minstens 3 verschillende maanden voorkomen (en gemiddeld niet vaker dan zo'n anderhalf keer per maand,
+     dus geen wekelijkse bezorgingen) op de rekening van dit pand voordat 'ie hier verschijnt.</p>
   {% endif %}
   {% if not overzicht.onderhoud_reserve %}
   <p class="muted">Geen onderhoudsreserve ingesteld voor dit pand{% if current_user.mag_gebruikers_beheren() %} - vul

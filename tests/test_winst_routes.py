@@ -28,6 +28,8 @@ class FakeBunqClient:
     def get_outgoing_payments(self, pand, since):
         return [
             Payment(bedrag=Decimal("100.00"), valuta="EUR", tegenpartij_naam="Energieleverancier",
+                    tegenpartij_iban="NL91ABNA0417164300", omschrijving="Energie", datum=date(2026, 4, 3)),
+            Payment(bedrag=Decimal("100.00"), valuta="EUR", tegenpartij_naam="Energieleverancier",
                     tegenpartij_iban="NL91ABNA0417164300", omschrijving="Energie", datum=date(2026, 5, 3)),
             Payment(bedrag=Decimal("100.00"), valuta="EUR", tegenpartij_naam="Energieleverancier",
                     tegenpartij_iban="NL91ABNA0417164300", omschrijving="Energie", datum=date(2026, 6, 3)),

@@ -47,6 +47,7 @@ def test_herken_terugkerende_lasten_dubbele_betaling_in_dezelfde_maand_telt_niet
 
 def test_herken_terugkerende_lasten_groepeert_op_naam_zonder_iban():
     betalingen = [
+        _betaling("40.00", "2026-04-05", iban=None, naam="VvE Beheer"),
         _betaling("40.00", "2026-05-05", iban=None, naam="VvE Beheer"),
         _betaling("40.00", "2026-06-05", iban=None, naam="VvE Beheer"),
     ]
@@ -57,8 +58,10 @@ def test_herken_terugkerende_lasten_groepeert_op_naam_zonder_iban():
 
 def test_herken_terugkerende_lasten_sorteert_van_hoog_naar_laag():
     betalingen = [
+        _betaling("40.00", "2026-04-01", iban="NL00A", naam="Internet"),
         _betaling("40.00", "2026-05-01", iban="NL00A", naam="Internet"),
         _betaling("40.00", "2026-06-01", iban="NL00A", naam="Internet"),
+        _betaling("1350.00", "2026-04-01", iban="NL00B", naam="Hypotheek"),
         _betaling("1350.00", "2026-05-01", iban="NL00B", naam="Hypotheek"),
         _betaling("1350.00", "2026-06-01", iban="NL00B", naam="Hypotheek"),
     ]
@@ -66,8 +69,34 @@ def test_herken_terugkerende_lasten_sorteert_van_hoog_naar_laag():
     assert [last.omschrijving for last in lasten] == ["Hypotheek", "Internet"]
 
 
+def test_herken_terugkerende_lasten_negeert_wekelijkse_boodschappenbezorging():
+    # Picnic/Flink e.d. komen vaak wekelijks (4-5x/maand) bij dezelfde
+    # tegenpartij terug - dat MOET geen "vaste last" worden, ook al voldoet
+    # het aan de 3-maanden-eis, want het is geen vast maandelijks bedrag.
+    betalingen = [
+        _betaling(bedrag, datum, iban="NL00PICNIC0000000", naam="Picnic")
+        for maand in ("04", "05", "06")
+        for bedrag, datum in [("35.00", f"2026-{maand}-03"), ("40.00", f"2026-{maand}-10"),
+                               ("28.00", f"2026-{maand}-17"), ("33.00", f"2026-{maand}-24")]
+    ]
+    assert herken_terugkerende_lasten(betalingen) == []
+
+
+def test_herken_terugkerende_lasten_precies_1x_per_maand_over_3_maanden_telt_wel():
+    betalingen = [
+        _betaling("49.99", "2026-04-15", iban="NL00KPN00000000000", naam="KPN"),
+        _betaling("49.99", "2026-05-15", iban="NL00KPN00000000000", naam="KPN"),
+        _betaling("49.99", "2026-06-15", iban="NL00KPN00000000000", naam="KPN"),
+    ]
+    lasten = herken_terugkerende_lasten(betalingen)
+    assert len(lasten) == 1
+    assert lasten[0].omschrijving == "KPN"
+
+
 def test_bereken_winst_trekt_belasting_onderhoud_en_lasten_af():
-    lasten = [herken_terugkerende_lasten([_betaling("100.00", "2026-05-01"), _betaling("100.00", "2026-06-01")])[0]]
+    lasten = [herken_terugkerende_lasten([
+        _betaling("100.00", "2026-04-01"), _betaling("100.00", "2026-05-01"), _betaling("100.00", "2026-06-01"),
+    ])[0]]
     overzicht = bereken_winst(inkomsten=Decimal("3507.01"), lasten=lasten, onderhoud_reserve=Decimal("60.00"))
     assert overzicht.belasting == BELASTING_PER_MAAND
     assert overzicht.totaal_lasten == Decimal("100.00") + BELASTING_PER_MAAND + Decimal("60.00")
