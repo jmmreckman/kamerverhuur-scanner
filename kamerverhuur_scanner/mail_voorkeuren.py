@@ -89,4 +89,14 @@ def ontvangers(users: dict, pand_slug: str, type_key: str, basis: list[str]) -> 
         gebruiker["email"].strip() for gebruiker in users.values()
         if gebruiker.get("email") and heeft_toegang(gebruiker, pand_slug) and wil_ontvangen(gebruiker, type_key)
     ]
-    return list(dict.fromkeys(gefilterd + aanvullend))
+    # Case-insensitief dedupliceren: als iemands EMAIL_BCC-adres en het adres
+    # dat ze zelf op de Mailvoorkeuren-pagina invullen alleen in hoofdletter-
+    # gebruik verschillen, mag dat niet leiden tot een dubbele mail.
+    gezien: set[str] = set()
+    resultaat = []
+    for adres in gefilterd + aanvullend:
+        sleutel = adres.strip().lower()
+        if sleutel not in gezien:
+            gezien.add(sleutel)
+            resultaat.append(adres)
+    return resultaat

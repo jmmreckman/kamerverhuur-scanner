@@ -66,6 +66,15 @@ def test_ontvangers_geeft_geen_dubbele_adressen():
     assert resultaat == ["jurian@example.com"]
 
 
+def test_ontvangers_dedupliceert_ongeacht_hoofdlettergebruik():
+    # Justin's adres staat al (met een andere schrijfwijze) in EMAIL_BCC via
+    # .env; als hij op de Mailvoorkeuren-pagina zijn eigen adres invult mag
+    # dat niet als los, tweede adres in de lijst belanden (dubbele mail).
+    users = {"justin": {"email": "Justin@Example.com", "alle_panden": True}}
+    resultaat = ontvangers(users, "mahoniestraat", "huishouden", ["justin@example.com"])
+    assert resultaat == ["justin@example.com"]
+
+
 def test_laad_users_ontbrekend_bestand_geeft_leeg_dict(tmp_path):
     assert laad_users(str(tmp_path / "bestaat-niet.json")) == {}
 
