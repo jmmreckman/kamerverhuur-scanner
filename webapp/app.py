@@ -262,15 +262,7 @@ def create_app(config: Config | None = None) -> Flask:
         eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
-        winst_totaal = sum(
-            (
-                winst.verdeelde_winst(laatste, _aantal_beheerders(pand.slug))
-                for pand in eigen_panden
-                for laatste in [_laatste_winst(pand.slug)]
-                if laatste is not None
-            ),
-            Decimal("0"),
-        )
+        winst_totaal = _totale_winst(_winst_specificatie_alle_panden(eigen_panden))
         return render_template("pand_kiezer.html", panden=eigen_panden, winst_totaal=winst_totaal)
 
     # --- Gebruikersbeheer (alleen voor beheerders met toegang tot alle panden) ---
@@ -486,6 +478,26 @@ def create_app(config: Config | None = None) -> Flask:
         aantal = sum(1 for gebruiker in users.values() if mail_voorkeuren.heeft_toegang(gebruiker, pand_slug))
         return aantal or 1
 
+    def _winst_specificatie_alle_panden(panden: list) -> list[dict]:
+        """Per pand: laatst bekende winst, aantal beheerders, en het eigen deel
+        daarvan (zie winst.verdeelde_winst()) - laat precies zien hoe de
+        "totale winst alle panden"-tegel tot stand komt. `laatste`/`verdeeld`
+        zijn None voor een pand zonder enig winst-datapunt (nog nooit de
+        winstpagina bezocht, en de wekelijkse snapshot nog niet geweest) -
+        telt dan niet mee in het totaal, maar staat wel in het rijtje."""
+        specificatie = []
+        for pand in panden:
+            laatste = _laatste_winst(pand.slug)
+            aantal_beheerders = _aantal_beheerders(pand.slug)
+            verdeeld = winst.verdeelde_winst(laatste, aantal_beheerders) if laatste is not None else None
+            specificatie.append({
+                "pand": pand, "laatste": laatste, "aantal_beheerders": aantal_beheerders, "verdeeld": verdeeld,
+            })
+        return specificatie
+
+    def _totale_winst(specificatie: list[dict]) -> Decimal:
+        return sum((regel["verdeeld"] for regel in specificatie if regel["verdeeld"] is not None), Decimal("0"))
+
     @app.route("/pand/<pand_slug>/")
     @login_required
     def dashboard(pand_slug: str):
@@ -577,7 +589,12 @@ def create_app(config: Config | None = None) -> Flask:
         reeksen = {p.slug: state.laad_winst_geschiedenis(p.slug, config.state_dir) for p in eigen_panden}
         aantal_beheerders = {p.slug: _aantal_beheerders(p.slug) for p in eigen_panden}
         geschiedenis = winst.gecombineerde_winst_over_tijd(reeksen, aantal_beheerders)
-        return render_template("winst_overzicht.html", geschiedenis=geschiedenis, panden=eigen_panden)
+        specificatie = _winst_specificatie_alle_panden(eigen_panden)
+        totaal = _totale_winst(specificatie)
+        return render_template(
+            "winst_overzicht.html", geschiedenis=geschiedenis, panden=eigen_panden,
+            specificatie=specificatie, totaal=totaal,
+        )
 
     @app.route("/pand/<pand_slug>/dashboard/aanzegging-afhandelen", methods=["POST"])
     @login_required

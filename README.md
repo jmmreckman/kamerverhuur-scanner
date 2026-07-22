@@ -266,10 +266,12 @@ nodig.
   winst-datapunt vast voor de grafiek ("Winst over tijd"), en dat gebeurt ook
   sowieso wekelijks automatisch (zie `scripts/winst_snapshot.py`). Op de
   pandkiezerpagina (bij meerdere panden) staat een "Totale winst alle
-  panden"-tegel met een eigen grafiek (`/winst-overzicht`) - bij een pand met
-  meerdere beheerders wordt de winst van dát pand gelijk over hen verdeeld
-  (1 beheerder = volle winst meetellen), bij minder panden of alleen-beheerder
-  telt het volledige bedrag.
+  panden"-tegel (`/winst-overzicht`) met een optelsom per pand (laatste winst,
+  aantal beheerders, jouw deel) zodat je precies ziet hoe het totaal tot
+  stand komt, plus een eigen grafiek - bij een pand met meerdere beheerders
+  wordt de winst van dát pand gelijk over hen verdeeld (1 beheerder = volle
+  winst meetellen), bij minder panden of alleen-beheerder telt het volledige
+  bedrag.
 - **Mailvoorkeuren** - knop rechtsboven in de navigatie (voor elke ingelogde
   beheerder zichtbaar), waar je zelf per mailsoort (huishouden-mails,
   Communicatie, betaalherinneringen, contracten, bezichtigingen, nieuwe

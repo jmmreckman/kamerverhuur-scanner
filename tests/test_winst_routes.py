@@ -120,6 +120,31 @@ def test_winst_overzicht_combineert_meerdere_panden(opzet):
     assert resp.status_code == 200
 
 
+def test_winst_overzicht_toont_optelsom_per_pand(opzet):
+    client, config = opzet
+    # justin heeft ook toegang tot mahoniestraat -> 2 beheerders, dus 1000/2 = 500 "jouw deel"
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), config.state_dir)
+    state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), config.state_dir)
+
+    resp = client.get("/winst-overzicht")
+    body = resp.get_data(as_text=True)
+    assert "Mahoniestraat 15" in body
+    assert "Burgemeester Baumannlaan 70b" in body
+    assert "1.000,00" in body  # laatste winst mahoniestraat
+    assert body.count("500,00") >= 2  # jouw deel mahoniestraat (verdeeld) + laatste winst baumannlaan
+    assert "1.000,00" in body  # totaal: 500 (mahoniestraat verdeeld) + 500 (baumannlaan) = 1000
+
+
+def test_winst_overzicht_pand_zonder_snapshot_toont_streepje(opzet):
+    client, config = opzet
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), config.state_dir)
+    # baumannlaan heeft bewust geen snapshot
+
+    resp = client.get("/winst-overzicht")
+    body = resp.get_data(as_text=True)
+    assert "nog geen winst-datapunt" in body.lower()
+
+
 def test_pandkiezer_toont_totale_winst_alle_panden(opzet):
     client, config = opzet
     # baumannlaan heeft in deze fixture maar 1 beheerder ("beheerder" zelf,

@@ -10,6 +10,29 @@
 </div>
 
 <div class="card">
+  <h2>Optelsom</h2>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Pand</th><th>Laatste winst</th><th>Beheerders</th><th>Jouw deel</th></tr>
+    {% for regel in specificatie %}
+    <tr>
+      <td><a href="{{ url_for('winstberekening', pand_slug=regel.pand.slug) }}">{{ regel.pand.naam }}</a></td>
+      <td>{{ regel.laatste|eur if regel.laatste is not none else "-" }}</td>
+      <td>{{ regel.aantal_beheerders }}</td>
+      <td>{{ regel.verdeeld|eur if regel.verdeeld is not none else "-" }}</td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight:700"><td colspan="3">Totaal</td><td style="color:{{ 'var(--ok)' if totaal >= 0 else 'var(--bad)' }}">{{ totaal|eur }}</td></tr>
+  </table>
+  </div>
+  {% if specificatie|selectattr("laatste", "none")|list %}
+  <p class="muted" style="margin-top:0.75rem">Panden met "-" hebben nog geen winst-datapunt - bezoek de
+     winstberekeningspagina van dat pand eenmalig, of wacht op de wekelijkse automatische snapshot.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Winst over tijd</h2>
   {{ winst_grafiek(geschiedenis) }}
 </div>
 {% endblock %}
