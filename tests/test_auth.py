@@ -1,5 +1,5 @@
 import pytest
-from webapp.auth import User, user_uit_gegevens, verify_login, zet_gebruiker
+from webapp.auth import User, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -52,3 +52,45 @@ def test_zet_gebruiker_zonder_wachtwoord_behoudt_bestaand_wachtwoord():
 def test_zet_gebruiker_zonder_wachtwoord_voor_nieuwe_gebruiker_geeft_fout():
     with pytest.raises(ValueError):
         zet_gebruiker({}, "nieuw", None, True, [])
+
+
+def test_user_uit_gegevens_leest_email_en_mail_voorkeuren():
+    gegevens = {
+        "wachtwoord_hash": "x", "alle_panden": True, "panden": [],
+        "email": "jij@example.com", "mail_voorkeuren": {"huishouden": False},
+    }
+    user = user_uit_gegevens("jij", gegevens)
+    assert user.email == "jij@example.com"
+    assert user.mail_voorkeuren == {"huishouden": False}
+
+
+def test_user_zonder_email_of_voorkeuren_heeft_lege_standaardwaarden():
+    user = user_uit_gegevens("jij", {"wachtwoord_hash": "x", "alle_panden": True, "panden": []})
+    assert user.email is None
+    assert user.mail_voorkeuren == {}
+
+
+def test_zet_mail_voorkeuren_werkt_alleen_eigen_account_bij():
+    users = {
+        "jij": {"wachtwoord_hash": "x", "alle_panden": True, "panden": []},
+        "justin": {"wachtwoord_hash": "y", "alle_panden": False, "panden": ["mahoniestraat"]},
+    }
+    zet_mail_voorkeuren(users, "jij", "jij@example.com", {"huishouden": False})
+    assert users["jij"]["email"] == "jij@example.com"
+    assert users["jij"]["mail_voorkeuren"] == {"huishouden": False}
+    # het wachtwoord en de toegang van "jij" blijven onaangeroerd
+    assert users["jij"]["wachtwoord_hash"] == "x"
+    assert users["jij"]["alle_panden"] is True
+    # andere gebruikers blijven volledig onaangeroerd
+    assert "email" not in users["justin"]
+
+
+def test_zet_mail_voorkeuren_leeg_email_wordt_none():
+    users = {"jij": {"wachtwoord_hash": "x", "alle_panden": True, "panden": [], "email": "oud@example.com"}}
+    zet_mail_voorkeuren(users, "jij", "", {})
+    assert users["jij"]["email"] is None
+
+
+def test_zet_mail_voorkeuren_onbekende_gebruiker_geeft_fout():
+    with pytest.raises(ValueError):
+        zet_mail_voorkeuren({}, "onbekend", "x@example.com", {})

@@ -19,7 +19,7 @@ from flask import Flask, Response, abort, flash, g, redirect, render_template, r
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import state
+from kamerverhuur_scanner import mail_voorkeuren, state
 from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
@@ -34,7 +34,7 @@ from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 from . import ads, afwijzing, bezichtiging, communicatie, contracts, ondertekenen
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
-from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker
+from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
 from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
 from .reminders import bouw_herinnering, bouw_ingebrekestelling
 
@@ -214,6 +214,40 @@ def create_app(config: Config | None = None) -> Flask:
     def logout():
         logout_user()
         return redirect(url_for("login"))
+
+    # --- Mailvoorkeuren (zelfbediening: welke soorten BCC/meldingen wil ik) ---
+
+    @app.route("/account/mail-voorkeuren", methods=["GET", "POST"])
+    @login_required
+    def mail_voorkeuren_overzicht():
+        users = load_users(config.users_file)
+        gebruiker = users.get(current_user.id, {})
+        if request.method == "POST":
+            email = request.form.get("email", "").strip()
+            if email and "@" not in email:
+                flash("Vul een geldig e-mailadres in (of laat het leeg).")
+            else:
+                voorkeuren = {
+                    type_key: request.form.get(f"voorkeur_{type_key}") == "on"
+                    for type_key in mail_voorkeuren.NOTIFICATIE_TYPES
+                }
+                zet_mail_voorkeuren(users, current_user.id, email, voorkeuren)
+                save_users(config.users_file, users)
+                flash("Mailvoorkeuren opgeslagen.")
+                return redirect(url_for("mail_voorkeuren_overzicht"))
+        return render_template(
+            "mail_voorkeuren.html", types=mail_voorkeuren.NOTIFICATIE_TYPES, email=gebruiker.get("email") or "",
+            voorkeuren={k: mail_voorkeuren.wil_ontvangen(gebruiker, k) for k in mail_voorkeuren.NOTIFICATIE_TYPES},
+        )
+
+    def _ontvangers(pand_slug: str, type_key: str, basis: list[str]) -> list[str]:
+        """Past de mailvoorkeuren van gebruikers met een account toe op
+        `basis` (de bestaande EMAIL_BCC/EMAIL_BCC_BEHEERDER/extra_bcc-lijst)
+        - zie kamerverhuur_scanner/mail_voorkeuren.py. `pand_slug` bewust
+        expliciet (i.p.v. impliciet g.pand) - deze functie wordt ook gebruikt
+        vanuit /tekenen/<token>, een publieke route zonder pand_slug in de
+        URL, waar g.pand niet gezet wordt (zie _laad_pand_en_check_toegang())."""
+        return mail_voorkeuren.ontvangers(load_users(config.users_file), pand_slug, type_key, basis)
 
     # --- Pandkiezer (landingspagina na het inloggen) ---
 
@@ -631,7 +665,7 @@ def create_app(config: Config | None = None) -> Flask:
                     geselecteerde_kamers=geselecteerde_kamers,
                     geselecteerde_oude_huurders=geselecteerde_oude_huurders,
                 )
-            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+            bcc = _ontvangers(g.pand.slug, "huishouden", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
             aan = ", ".join(t.email for t in ontvangers)
             try:
                 verstuur_email(config, aan, onderwerp, tekst, bcc=bcc)
@@ -723,7 +757,7 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             onderwerp = request.form.get("onderwerp", "").strip()
             tekst = request.form.get("tekst", "").strip()
-            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+            bcc = _ontvangers(g.pand.slug, "herinneringen", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
             try:
                 verstuur_email(config, kamer.email, onderwerp, tekst, bcc=bcc)
             except MailError as exc:
@@ -872,9 +906,9 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Vul een ontvanger, onderwerp en tekst in.")
             return render_template("communicatie_versturen.html", kamer=kamer, aan=aan, onderwerp=onderwerp, tekst=tekst)
 
-        alle_beheerders = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        bcc = _ontvangers(g.pand.slug, "communicatie", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
         try:
-            verstuur_email(config, aan, onderwerp, tekst, bcc=alle_beheerders)
+            verstuur_email(config, aan, onderwerp, tekst, bcc=bcc)
         except MailError as exc:
             flash(str(exc))
             return render_template("communicatie_versturen.html", kamer=kamer, aan=aan, onderwerp=onderwerp, tekst=tekst)
@@ -1223,7 +1257,7 @@ def create_app(config: Config | None = None) -> Flask:
             except Exception:
                 app.logger.exception("Bezichtiging wegschrijven naar de sheet mislukt voor %s.", afspraak["naam"])
 
-        beheerder_bcc = config.email_bcc_beheerder or config.email_bcc
+        beheerder_bcc = _ontvangers(g.pand.slug, "bezichtigingen", config.email_bcc_beheerder or config.email_bcc)
         mislukt = []
         for afspraak in afspraken:
             mail = bezichtiging.bouw_bevestigingsmail(g.pand, afspraak, datum)
@@ -1233,7 +1267,7 @@ def create_app(config: Config | None = None) -> Flask:
                 app.logger.exception("Bevestigingsmail bezichtiging mislukt voor %s.", afspraak["email"])
                 mislukt.append(afspraak["naam"])
 
-        alle_beheerders = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        alle_beheerders = _ontvangers(g.pand.slug, "bezichtigingen", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
         if alle_beheerders:
             # De volledige, actuele lijst voor deze datum (dus incl. eerder al
             # bevestigde bezichtigingen als dit een aanvulling was) - niet
@@ -1284,7 +1318,7 @@ def create_app(config: Config | None = None) -> Flask:
                 onderwerp=onderwerp, tekst=tekst,
             )
 
-        beheerder_bcc = config.email_bcc_beheerder or config.email_bcc
+        beheerder_bcc = _ontvangers(g.pand.slug, "bezichtigingen", config.email_bcc_beheerder or config.email_bcc)
         mislukt = []
         for aanmelder in aanmelders:
             try:
@@ -1437,7 +1471,7 @@ def create_app(config: Config | None = None) -> Flask:
                 return redirect(url_for(
                     "contract_bevestiging", pand_slug=pand_slug, bestandsnaam=bestandsnaam,
                 ))
-            bcc = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+            bcc = _ontvangers(g.pand.slug, "contracten", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
             try:
                 verstuur_email(config, metadata["email"], onderwerp, tekst, bcc=bcc)
             except MailError:
@@ -1523,7 +1557,7 @@ def create_app(config: Config | None = None) -> Flask:
         except FileNotFoundError:
             abort(404)
         metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
-        bcc_adressen = list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc))
+        bcc_adressen = _ontvangers(g.pand.slug, "contracten", list(dict.fromkeys(config.email_bcc + g.pand.extra_bcc)))
 
         if request.method == "POST":
             aan = request.form.get("aan", "").strip()
@@ -1597,6 +1631,7 @@ def create_app(config: Config | None = None) -> Flask:
         de tekenlink. Geeft de e-mailadressen terug waarvoor het versturen
         mislukte (best-effort, net als bij 'mail het hele huishouden')."""
         mislukt = []
+        bcc = _ontvangers(g.pand.slug, "contracten", config.email_bcc)
         for o in ronde["ondertekenaars"]:
             if not o["email"] or o["ondertekend_op"]:
                 continue
@@ -1606,7 +1641,7 @@ def create_app(config: Config | None = None) -> Flask:
             else:
                 mail = ondertekenen.bouw_tekenmail_overig(o["rol"], o["naam"], g.pand, metadata, teken_url)
             try:
-                verstuur_email(config, o["email"], mail["onderwerp"], mail["tekst"])
+                verstuur_email(config, o["email"], mail["onderwerp"], mail["tekst"], bcc=bcc)
             except MailError:
                 app.logger.exception("Ondertekenverzoek-mail naar %s is mislukt.", o["email"])
                 mislukt.append(o["email"])
@@ -1630,10 +1665,11 @@ def create_app(config: Config | None = None) -> Flask:
             return
         mail = ondertekenen.bouw_getekend_contract_mail(pand, metadata)
         pdf_bestandsnaam = Path(getekend_bestandsnaam).with_suffix(".pdf").name
+        bcc = _ontvangers(pand_slug, "contracten", config.email_bcc)
         for adres in dict.fromkeys(o["email"] for o in ronde["ondertekenaars"] if o["email"]):
             try:
                 verstuur_email(
-                    config, adres, mail["onderwerp"], mail["tekst"],
+                    config, adres, mail["onderwerp"], mail["tekst"], bcc=bcc,
                     bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
                 )
             except MailError:
@@ -1732,7 +1768,7 @@ def create_app(config: Config | None = None) -> Flask:
             # Bewust een smallere BCC dan de rest van de app (config.email_bcc,
             # alle mede-eigenaren) - deze herinneringen gaan alleen naar de
             # beheerder, zie EMAIL_BCC_BEHEERDER in config.py.
-            bcc = config.email_bcc_beheerder or config.email_bcc
+            bcc = _ontvangers(pand_slug, "contracten", config.email_bcc_beheerder or config.email_bcc)
             try:
                 verstuur_email(config, doelwit["email"], onderwerp, tekst, bcc=bcc)
             except MailError:
@@ -1955,7 +1991,7 @@ def create_app(config: Config | None = None) -> Flask:
             # laten mislukken) - bewust alleen naar de beheerder(s) uit
             # EMAIL_BCC_BEHEERDER (standaard alleen jmmreckman@gmail.com),
             # niet naar alle mede-eigenaren uit EMAIL_BCC.
-            ontvangers = config.email_bcc_beheerder or config.email_bcc
+            ontvangers = _ontvangers(pand_slug, "aanmeldingen", config.email_bcc_beheerder or config.email_bcc)
             if ontvangers:
                 mail = bouw_nieuwe_aanmelding_mail(
                     g.pand, kamer_naam, aanmelding,

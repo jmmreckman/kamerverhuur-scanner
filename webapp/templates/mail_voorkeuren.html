@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Mailvoorkeuren{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Mailvoorkeuren</h1>
+  <p class="muted">Welke soorten mail je als BCC (of als rechtstreekse melding) van Steenhub krijgt - alleen van
+     invloed op je eigen account ({{ current_user.id }}), niet op andere beheerders. Vul hieronder je e-mailadres
+     in om dit te laten werken; zonder e-mailadres blijf je de bestaande instellingen uit <code>.env</code>
+     (EMAIL_BCC/EMAIL_BCC_BEHEERDER) volgen.</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    <label>Jouw e-mailadres
+      <input type="email" name="email" value="{{ email }}" placeholder="jij@example.com">
+    </label>
+
+    <h2 style="margin-top:1.5rem">Meldingen</h2>
+    <div class="warning-box">
+      {% for key, info in types.items() %}
+      <label style="display:flex; align-items:flex-start; gap:0.5rem; margin-bottom:0.8rem">
+        <input type="checkbox" name="voorkeur_{{ key }}" {% if voorkeuren[key] %}checked{% endif %} style="width:auto; margin-top:0.2rem">
+        <span>
+          <strong>{{ info[0] }}</strong><br>
+          <span class="muted">{{ info[1] }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div style="margin-top:1rem">
+      <button class="btn" type="submit">Opslaan</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

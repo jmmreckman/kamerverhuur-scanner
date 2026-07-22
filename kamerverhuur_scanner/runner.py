@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 from decimal import Decimal
 
-from . import state
+from . import mail_voorkeuren, state
 from .bunq_client import BunqClient
 from .config import Config
 from .mailer import MailError, verstuur_email
@@ -253,7 +253,9 @@ def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantR
     if state.email_verzonden_op(pand.slug, _ALLES_BETAALD_KAMER_SLEUTEL, _ALLES_BETAALD_SOORT, maand, config.state_dir):
         return  # deze maand al eerder gemeld
 
-    ontvangers = list(dict.fromkeys(config.email_bcc + pand.extra_bcc))
+    basis = list(dict.fromkeys(config.email_bcc + pand.extra_bcc))
+    users = mail_voorkeuren.laad_users(config.users_file)
+    ontvangers = mail_voorkeuren.ontvangers(users, pand.slug, "betalingsstatus", basis)
     if not ontvangers:
         logger.info(
             "[%s] Geen EMAIL_BCC/extra_bcc-adressen ingesteld - 'alles betaald'-melding overgeslagen.", pand.slug

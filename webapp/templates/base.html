@@ -50,6 +50,7 @@
         <a class="nav-link {{ 'actief' if ep.startswith('pand_') or ep.startswith('panden_') }}" href="{{ url_for('panden_overzicht') }}">{{ icon_panden() }} Panden</a>
         <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
         {% endif %}
+        <a class="nav-link {{ 'actief' if ep == 'mail_voorkeuren_overzicht' }}" href="{{ url_for('mail_voorkeuren_overzicht') }}">{{ icon_instellingen() }} Mailvoorkeuren</a>
         <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
       </div>
     </div>

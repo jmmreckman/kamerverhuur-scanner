@@ -230,6 +230,18 @@ nodig.
   met de belangrijkste gegevens en een link naar het volledige overzicht.
   Lukt het versturen niet (bv. een SMTP-hapering), dan blijft de aanmelding
   zelf gewoon goed opgeslagen - alleen de melding zelf mislukt dan stil.
+- **Mailvoorkeuren** - knop rechtsboven in de navigatie (voor elke ingelogde
+  beheerder zichtbaar), waar je zelf per mailsoort (huishouden-mails,
+  Communicatie, betaalherinneringen, contracten, bezichtigingen, nieuwe
+  aanmeldingen, "alles betaald"-melding) aan-/uit kunt vinken of je die als
+  BCC of melding in je mailbox wilt. Standaard staat alles aan (opt-out) -
+  er verandert dus niets totdat je zelf deze pagina bezoekt. Vereist wel dat
+  je eerst je eigen e-mailadres invult op diezelfde pagina; zonder adres
+  blijf je gewoon de bestaande `EMAIL_BCC`/`EMAIL_BCC_BEHEERDER`-instelling
+  uit `.env` volgen. Werkt alleen op je eigen account, nooit op dat van
+  andere beheerders. Adressen zonder eigen inlogaccount (bv. een
+  mede-eigenaar die de site zelf niet gebruikt) blijven gewoon via
+  `EMAIL_BCC`/`extra_bcc` meegenomen, ongeacht deze instelling.
 
 ## Aanbod & aanmeldingen (publieke kamerlisting)
 
