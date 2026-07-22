@@ -4,9 +4,17 @@ en bunq-koppeling met de andere panden."""
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from .models import Pand, Verhuurder
+from .utils import parse_bedrag
+
+
+def _parse_onderhoud_reserve(waarde) -> Decimal | None:
+    if waarde in (None, ""):
+        return None
+    return parse_bedrag(str(waarde))
 
 
 class PropertiesError(RuntimeError):
@@ -89,6 +97,7 @@ def load_properties(path: str) -> list[Pand]:
                     bijzondere_bepalingen=item.get("bijzondere_bepalingen", ""),
                     gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
                     heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
+                    onderhoud_reserve_per_maand=_parse_onderhoud_reserve(item.get("onderhoud_reserve_per_maand")),
                 )
             )
         except KeyError as exc:

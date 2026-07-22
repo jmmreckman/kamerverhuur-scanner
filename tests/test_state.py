@@ -71,3 +71,29 @@ def test_markeer_aanzegging_afgehandeld_reset_bij_nieuwe_einddatum(tmp_path):
     # een nieuw contract met een andere einddatum voor dezelfde kamer is een
     # nieuwe aanzegging - de oude markering geldt daar niet voor
     assert state.aanzegging_is_afgehandeld("mahoniestraat", "3", "2027-01-31", state_dir=str(tmp_path)) is False
+
+
+def test_winst_geschiedenis_zonder_snapshots_geeft_lege_lijst(tmp_path):
+    assert state.laad_winst_geschiedenis("mahoniestraat", state_dir=str(tmp_path)) == []
+
+
+def test_voeg_winst_snapshot_toe_en_laad(tmp_path):
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1234.56"), state_dir=str(tmp_path))
+    geschiedenis = state.laad_winst_geschiedenis("mahoniestraat", state_dir=str(tmp_path))
+    assert len(geschiedenis) == 1
+    assert geschiedenis[0]["winst"] == "1234.56"
+
+
+def test_voeg_winst_snapshot_toe_zelfde_dag_overschrijft_ipv_dupliceert(tmp_path):
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), state_dir=str(tmp_path))
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1100.00"), state_dir=str(tmp_path))
+    geschiedenis = state.laad_winst_geschiedenis("mahoniestraat", state_dir=str(tmp_path))
+    assert len(geschiedenis) == 1
+    assert geschiedenis[0]["winst"] == "1100.00"
+
+
+def test_winst_geschiedenis_per_pand_gescheiden(tmp_path):
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), state_dir=str(tmp_path))
+    state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), state_dir=str(tmp_path))
+    assert len(state.laad_winst_geschiedenis("mahoniestraat", state_dir=str(tmp_path))) == 1
+    assert len(state.laad_winst_geschiedenis("baumannlaan", state_dir=str(tmp_path))) == 1

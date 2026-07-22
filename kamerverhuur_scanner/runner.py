@@ -6,11 +6,11 @@ from __future__ import annotations
 import calendar
 import dataclasses
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from decimal import Decimal
 
-from . import mail_voorkeuren, state
+from . import mail_voorkeuren, state, winst
 from .bunq_client import BunqClient
 from .config import Config
 from .mailer import MailError, verstuur_email
@@ -241,6 +241,20 @@ def run_check(
         _meld_indien_alles_betaald(config, pand, results, maand)
 
     return tenants, results, unmatched
+
+
+def bereken_winstoverzicht(config: Config, pand: Pand, inkomsten: Decimal) -> winst.Winstoverzicht:
+    """Haalt de uitgaande bunq-transacties van de rekening van dit pand op
+    (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te
+    herkennen, en zet dat samen met `inkomsten` (de al bekende 'ontvangen'-
+    som van de betaalcontrole, zie webapp/app.py: dashboard()/winstberekening())
+    om in een compleet winstoverzicht. Kan BunqClientError laten doorstromen
+    (net als run_check()) als de bunq-koppeling niet werkt."""
+    bunq = BunqClient(config)
+    sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
+    uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
+    lasten = winst.herken_terugkerende_lasten(uitgaven)
+    return winst.bereken_winst(inkomsten, lasten, pand.onderhoud_reserve_per_maand)
 
 
 def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantResult], maand: str) -> None:

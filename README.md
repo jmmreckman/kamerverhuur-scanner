@@ -82,6 +82,12 @@ nodig.
   van een pand voor de huidige maand "Betaald" staan, gaat er - eenmalig die
   maand - een mailtje naar de beheerder(s) (`EMAIL_BCC` + eventuele
   pand-specifieke "Extra BCC") met de melding dat de huur compleet binnen is.
+- **Automatische winst-snapshot, elke week** - legt daarnaast wekelijks
+  vanzelf een winst-datapunt vast per pand voor de grafiek op de
+  Winstberekening-pagina (zie `scripts/winst_snapshot.py` en de
+  `winst-snapshot`-service in `deploy/docker-compose.yml`) - zo blijft die
+  grafiek aangroeien ook als niemand de pagina zelf bezoekt (elk bezoek legt
+  daarnaast ook al een eigen datapunt vast).
   Geen SMTP ingesteld? Dan wordt die melding gewoon overgeslagen (de rest van
   de controle werkt door). Lukt het wegschrijven van de Historie-sheet een
   keer niet (bv. een tijdelijke Google Sheets-hapering), dan wordt dat alleen
@@ -235,6 +241,22 @@ nodig.
   met de belangrijkste gegevens en een link naar het volledige overzicht.
   Lukt het versturen niet (bv. een SMTP-hapering), dan blijft de aanmelding
   zelf gewoon goed opgeslagen - alleen de melding zelf mislukt dan stil.
+- **Winstberekening** - knop naast de huurpenningen-tegel op het dashboard,
+  met de laatst berekende winst van die maand erop. Inkomsten = de al bekende
+  "ontvangen"-som van de betaalcontrole. Lasten = automatisch herkende
+  terugkerende uitgaande betalingen op de rekening van dat pand (energie,
+  internet, VvE, hypotheek, wat er ook maandelijks afgaat - een tegenpartij
+  telt mee zodra die in minstens 2 verschillende maanden voorkomt), plus een
+  vaste €75/maand belastingpost, plus een instelbare onderhoudsreserve (zelf
+  in te vullen per pand bij "Panden beheren" - bewust geen automatische
+  aanname). Leegstand telt niet mee. Elk bezoek aan de pagina legt een nieuw
+  winst-datapunt vast voor de grafiek ("Winst over tijd"), en dat gebeurt ook
+  sowieso wekelijks automatisch (zie `scripts/winst_snapshot.py`). Op de
+  pandkiezerpagina (bij meerdere panden) staat een "Totale winst alle
+  panden"-tegel met een eigen grafiek (`/winst-overzicht`) - bij een pand met
+  meerdere beheerders wordt de winst van dát pand gelijk over hen verdeeld
+  (1 beheerder = volle winst meetellen), bij minder panden of alleen-beheerder
+  telt het volledige bedrag.
 - **Mailvoorkeuren** - knop rechtsboven in de navigatie (voor elke ingelogde
   beheerder zichtbaar), waar je zelf per mailsoort (huishouden-mails,
   Communicatie, betaalherinneringen, contracten, bezichtigingen, nieuwe

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_grafiek.html" import winst_grafiek %}
+{% block title %}Totale winst alle panden{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Totale winst alle panden</h1>
+  <p class="muted">Som van de laatst berekende winst per pand (zie de winstberekeningspagina van elk pand),
+     gedeeld door het aantal beheerders bij panden met meerdere beheerders - jouw eigen deel dus, niet per se
+     de volledige winst van elk pand.</p>
+</div>
+
+<div class="card">
+  {{ winst_grafiek(geschiedenis) }}
+</div>
+{% endblock %}

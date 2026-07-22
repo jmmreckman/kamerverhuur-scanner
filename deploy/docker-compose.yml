@@ -30,6 +30,19 @@ services:
       - ./data:/app/data
     command: ["python3", "-m", "scripts.dagelijkse_controle"]
 
+  # Legt elke week automatisch een winst-datapunt vast per pand (zie
+  # scripts/winst_snapshot.py), zodat de winst-grafiek op de site blijft
+  # aangroeien ook als niemand de winstberekeningspagina bezoekt.
+  winst-snapshot:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "-m", "scripts.winst_snapshot"]
+
   # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
   # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
   # verder dan gedeelde hosting. Code + Dockerfile staan op een aparte

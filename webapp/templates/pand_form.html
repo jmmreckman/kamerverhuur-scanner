@@ -53,6 +53,12 @@
       altijd mee, voor alle panden.
       <input type="text" name="extra_bcc" value="{{ pand.extra_bcc|join(', ') if pand else '' }}">
     </label>
+    <label>Onderhoudsreserve per maand (optioneel - telt mee als kostenpost bij "Winstberekening" op
+      het dashboard van dit pand, naast de vaste €75/maand belasting en automatisch herkende vaste
+      lasten. Leeg = €0 onderhoudsreserve.)
+      <input type="text" name="onderhoud_reserve_per_maand"
+             value="{{ pand.onderhoud_reserve_per_maand|eur if pand and pand.onderhoud_reserve_per_maand is not none else '' }}">
+    </label>
 
     <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
     <p class="muted">Deze velden worden gebruikt om automatisch een huurcontract te genereren (zie

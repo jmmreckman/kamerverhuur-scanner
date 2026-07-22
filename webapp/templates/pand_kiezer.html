@@ -1,10 +1,20 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_kamers %}
+{% from "_icons.html" import icon_kamers, icon_euro %}
 {% block title %}Kies een pand{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Kies een pand</h1>
 </div>
+
+{% if panden %}
+<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-bottom:1.5rem; max-width:320px">
+  <div class="stat-icon {{ 'ok' if winst_totaal >= 0 else 'bad' }}">{{ icon_euro() }}</div>
+  <div>
+    <div class="stat-value" style="color:{{ 'var(--ok)' if winst_totaal >= 0 else 'var(--bad)' }}">{{ winst_totaal|eur }}</div>
+    <div class="stat-label">totale winst alle panden</div>
+  </div>
+</a>
+{% endif %}
 
 {% if panden %}
 <div class="grid">

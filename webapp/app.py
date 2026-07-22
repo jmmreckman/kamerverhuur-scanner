@@ -19,7 +19,7 @@ from flask import Flask, Response, abort, flash, g, redirect, render_template, r
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import drive_sync, mail_voorkeuren, state
+from kamerverhuur_scanner import drive_sync, mail_voorkeuren, state, winst
 from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
@@ -27,7 +27,7 @@ from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.models import Status, Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
-from kamerverhuur_scanner.runner import backfill_geschiedenis, run_check
+from kamerverhuur_scanner.runner import backfill_geschiedenis, bereken_winstoverzicht, run_check
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
@@ -257,7 +257,16 @@ def create_app(config: Config | None = None) -> Flask:
         eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
-        return render_template("pand_kiezer.html", panden=eigen_panden)
+        winst_totaal = sum(
+            (
+                winst.verdeelde_winst(laatste, _aantal_beheerders(pand.slug))
+                for pand in eigen_panden
+                for laatste in [_laatste_winst(pand.slug)]
+                if laatste is not None
+            ),
+            Decimal("0"),
+        )
+        return render_template("pand_kiezer.html", panden=eigen_panden, winst_totaal=winst_totaal)
 
     # --- Gebruikersbeheer (alleen voor beheerders met toegang tot alle panden) ---
 
@@ -365,6 +374,7 @@ def create_app(config: Config | None = None) -> Flask:
             "bijzondere_bepalingen": form.get("bijzondere_bepalingen", "").strip(),
             "gemeente_meldpunt": form.get("gemeente_meldpunt", "").strip(),
             "heeft_bold_slot": form.get("heeft_bold_slot") == "on",
+            "onderhoud_reserve_per_maand": form.get("onderhoud_reserve_per_maand", "").strip() or None,
         }
 
     @app.route("/beheer/panden")
@@ -458,6 +468,19 @@ def create_app(config: Config | None = None) -> Flask:
 
     _AANZEG_TEGEL_DAGEN = 60  # ~2 maanden, voor de "loopt binnenkort af"-tegel
 
+    def _laatste_winst(pand_slug: str) -> Decimal | None:
+        """Winst van het laatst opgeslagen datapunt (zie state.laad_winst_geschiedenis())
+        - GEEN live bunq-aanroep, dat zou elk dashboardbezoek trager maken.
+        Wordt bijgewerkt zodra iemand de winstberekeningspagina van dat pand
+        bezoekt (en sowieso wekelijks via scripts/winst_snapshot.py)."""
+        geschiedenis = state.laad_winst_geschiedenis(pand_slug, config.state_dir)
+        return Decimal(geschiedenis[-1]["winst"]) if geschiedenis else None
+
+    def _aantal_beheerders(pand_slug: str) -> int:
+        users = load_users(config.users_file)
+        aantal = sum(1 for gebruiker in users.values() if mail_voorkeuren.heeft_toegang(gebruiker, pand_slug))
+        return aantal or 1
+
     @app.route("/pand/<pand_slug>/")
     @login_required
     def dashboard(pand_slug: str):
@@ -502,7 +525,29 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "dashboard.html", cache=cache, totalen=totalen,
             aanzeg_waarschuwingen=aanzeg_waarschuwingen, aflopende_contracten=aflopende_contracten,
+            winst_laatste=_laatste_winst(pand_slug),
         )
+
+    @app.route("/pand/<pand_slug>/winst")
+    @login_required
+    def winstberekening(pand_slug: str):
+        cache = state.load(pand_slug, config.state_dir)
+        inkomsten = sum((Decimal(r["ontvangen_bedrag"]) for r in cache["resultaten"]), Decimal("0")) if cache else Decimal("0")
+        overzicht = bereken_winstoverzicht(config, g.pand, inkomsten)
+        state.voeg_winst_snapshot_toe(pand_slug, overzicht.winst, config.state_dir)
+        return render_template(
+            "winst.html", overzicht=overzicht,
+            geschiedenis=state.laad_winst_geschiedenis(pand_slug, config.state_dir),
+        )
+
+    @app.route("/winst-overzicht")
+    @login_required
+    def winst_overzicht():
+        eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
+        reeksen = {p.slug: state.laad_winst_geschiedenis(p.slug, config.state_dir) for p in eigen_panden}
+        aantal_beheerders = {p.slug: _aantal_beheerders(p.slug) for p in eigen_panden}
+        geschiedenis = winst.gecombineerde_winst_over_tijd(reeksen, aantal_beheerders)
+        return render_template("winst_overzicht.html", geschiedenis=geschiedenis, panden=eigen_panden)
 
     @app.route("/pand/<pand_slug>/dashboard/aanzegging-afhandelen", methods=["POST"])
     @login_required

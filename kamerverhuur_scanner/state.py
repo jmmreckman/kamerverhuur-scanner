@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 from .models import TenantResult
@@ -96,3 +97,32 @@ def aanzegging_is_afgehandeld(pand_slug: str, kamer: str, einddatum: str, state_
         return False
     data = json.loads(p.read_text())
     return f"{kamer}|{einddatum}" in data
+
+
+def _winst_geschiedenis_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"winst_geschiedenis_{veilige_slug}.json"
+
+
+def voeg_winst_snapshot_toe(pand_slug: str, winst: Decimal, state_dir: str = ".") -> None:
+    """Voegt een winst-datapunt toe voor vandaag (overschrijft een eventueel
+    al bestaand punt van dezelfde dag, zodat vaker draaien op 1 dag geen
+    dubbele punten in de grafiek geeft) - wekelijks aangeroepen door
+    scripts/winst_snapshot.py, zodat de grafiek op de winstpagina langzaam
+    langer wordt. Bewaart alleen datum + winst (geen inkomsten/lasten-detail
+    - dat verandert toch elke keer je 'm bekijkt, de grafiek is puur voor de
+    trend over tijd)."""
+    p = _winst_geschiedenis_bestandsnaam(pand_slug, state_dir)
+    data = json.loads(p.read_text()) if p.exists() else []
+    vandaag = datetime.now().strftime("%Y-%m-%d")
+    data = [punt for punt in data if punt["datum"] != vandaag]
+    data.append({"datum": vandaag, "winst": str(winst)})
+    data.sort(key=lambda punt: punt["datum"])
+    p.write_text(json.dumps(data, indent=2))
+
+
+def laad_winst_geschiedenis(pand_slug: str, state_dir: str = ".") -> list[dict]:
+    p = _winst_geschiedenis_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return []
+    return json.loads(p.read_text())

@@ -126,6 +126,27 @@ def test_paginering_stopt_pas_voorbij_since_datum():
     assert calls["n"] == 2
 
 
+def test_get_outgoing_payments_geeft_alleen_uitgaande_bedragen_als_positief_getal():
+    account = _account(1, "NL81BUNQ2163127125")
+    payments = [
+        _payment(1, "-45.50", "2026-07-05 10:00:00.000000"),  # uitgaand -> hoort erbij (als 45.50)
+        _payment(2, "919.00", "2026-07-03 09:00:00.000000"),  # inkomend (huur) -> hoort er NIET bij
+    ]
+
+    with mock.patch("kamerverhuur_scanner.bunq_client.MonetaryAccountBank") as MockAccount, mock.patch(
+        "kamerverhuur_scanner.bunq_client.BunqPayment"
+    ) as MockPayment:
+        MockAccount.list.return_value = SimpleNamespace(value=[account])
+        MockPayment.list.side_effect = lambda monetary_account_id, params: SimpleNamespace(
+            value=[] if params.get("older_id") else payments
+        )
+
+        result = BunqClient(FakeConfig()).get_outgoing_payments(_pand(), since=date(2026, 7, 1))
+
+    assert len(result) == 1
+    assert result[0].bedrag == Decimal("45.50")
+
+
 def test_geen_matchende_rekening_geeft_duidelijke_fout():
     with mock.patch("kamerverhuur_scanner.bunq_client.MonetaryAccountBank") as MockAccount:
         MockAccount.list.return_value = SimpleNamespace(value=[_account(1, "NL00WATANDERS00000")])

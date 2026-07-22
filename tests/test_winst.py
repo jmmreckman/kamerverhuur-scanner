@@ -1,0 +1,124 @@
+from datetime import date
+from decimal import Decimal
+
+from kamerverhuur_scanner.models import Payment
+from kamerverhuur_scanner.winst import (
+    BELASTING_PER_MAAND,
+    bereken_winst,
+    gecombineerde_winst_over_tijd,
+    herken_terugkerende_lasten,
+    verdeelde_winst,
+)
+
+
+def _betaling(bedrag, datum, iban="NL91ABNA0417164300", naam="Energieleverancier", omschrijving="Energie"):
+    return Payment(
+        bedrag=Decimal(bedrag), valuta="EUR", tegenpartij_naam=naam, tegenpartij_iban=iban,
+        omschrijving=omschrijving, datum=date.fromisoformat(datum),
+    )
+
+
+def test_herken_terugkerende_lasten_vindt_maandelijks_terugkerende_tegenpartij():
+    betalingen = [
+        _betaling("99.00", "2026-05-03"),
+        _betaling("101.00", "2026-06-03"),
+        _betaling("100.00", "2026-07-03"),
+    ]
+    lasten = herken_terugkerende_lasten(betalingen)
+    assert len(lasten) == 1
+    assert lasten[0].omschrijving == "Energieleverancier"
+    assert lasten[0].bedrag == Decimal("100.00")
+
+
+def test_herken_terugkerende_lasten_negeert_eenmalige_uitgave():
+    betalingen = [_betaling("250.00", "2026-07-10", iban="NL00EENMALIG000000", naam="Bouwmarkt")]
+    assert herken_terugkerende_lasten(betalingen) == []
+
+
+def test_herken_terugkerende_lasten_dubbele_betaling_in_dezelfde_maand_telt_niet_als_terugkerend():
+    # twee keer dezelfde tegenpartij binnen 1 kalendermaand is geen bewijs
+    # van een MAANDELIJKS terugkerende last (kan toeval zijn).
+    betalingen = [
+        _betaling("50.00", "2026-07-01", iban="NL00EENMAAND000000"),
+        _betaling("50.00", "2026-07-15", iban="NL00EENMAAND000000"),
+    ]
+    assert herken_terugkerende_lasten(betalingen) == []
+
+
+def test_herken_terugkerende_lasten_groepeert_op_naam_zonder_iban():
+    betalingen = [
+        _betaling("40.00", "2026-05-05", iban=None, naam="VvE Beheer"),
+        _betaling("40.00", "2026-06-05", iban=None, naam="VvE Beheer"),
+    ]
+    lasten = herken_terugkerende_lasten(betalingen)
+    assert len(lasten) == 1
+    assert lasten[0].omschrijving == "VvE Beheer"
+
+
+def test_herken_terugkerende_lasten_sorteert_van_hoog_naar_laag():
+    betalingen = [
+        _betaling("40.00", "2026-05-01", iban="NL00A", naam="Internet"),
+        _betaling("40.00", "2026-06-01", iban="NL00A", naam="Internet"),
+        _betaling("1350.00", "2026-05-01", iban="NL00B", naam="Hypotheek"),
+        _betaling("1350.00", "2026-06-01", iban="NL00B", naam="Hypotheek"),
+    ]
+    lasten = herken_terugkerende_lasten(betalingen)
+    assert [last.omschrijving for last in lasten] == ["Hypotheek", "Internet"]
+
+
+def test_bereken_winst_trekt_belasting_onderhoud_en_lasten_af():
+    lasten = [herken_terugkerende_lasten([_betaling("100.00", "2026-05-01"), _betaling("100.00", "2026-06-01")])[0]]
+    overzicht = bereken_winst(inkomsten=Decimal("3507.01"), lasten=lasten, onderhoud_reserve=Decimal("60.00"))
+    assert overzicht.belasting == BELASTING_PER_MAAND
+    assert overzicht.totaal_lasten == Decimal("100.00") + BELASTING_PER_MAAND + Decimal("60.00")
+    assert overzicht.winst == Decimal("3507.01") - overzicht.totaal_lasten
+
+
+def test_bereken_winst_zonder_onderhoud_reserve_telt_als_nul():
+    overzicht = bereken_winst(inkomsten=Decimal("1000.00"), lasten=[], onderhoud_reserve=None)
+    assert overzicht.onderhoud_reserve == Decimal("0")
+    assert overzicht.totaal_lasten == BELASTING_PER_MAAND
+
+
+def test_verdeelde_winst_bij_1_beheerder_blijft_gelijk():
+    assert verdeelde_winst(Decimal("1000.00"), aantal_beheerders=1) == Decimal("1000.00")
+
+
+def test_verdeelde_winst_bij_meerdere_beheerders_wordt_gelijk_verdeeld():
+    assert verdeelde_winst(Decimal("1000.00"), aantal_beheerders=2) == Decimal("500.00")
+    assert verdeelde_winst(Decimal("1000.00"), aantal_beheerders=3) == Decimal("333.33")
+
+
+def test_gecombineerde_winst_over_tijd_telt_panden_op_per_datum():
+    reeksen = {
+        "mahoniestraat": [{"datum": "2026-07-01", "winst": "1000.00"}],
+        "baumannlaan": [{"datum": "2026-07-01", "winst": "500.00"}],
+    }
+    resultaat = gecombineerde_winst_over_tijd(reeksen, {"mahoniestraat": 1, "baumannlaan": 1})
+    assert resultaat == [{"datum": "2026-07-01", "winst": "1500.00"}]
+
+
+def test_gecombineerde_winst_over_tijd_deelt_bij_meerdere_beheerders():
+    reeksen = {"mahoniestraat": [{"datum": "2026-07-01", "winst": "1000.00"}]}
+    resultaat = gecombineerde_winst_over_tijd(reeksen, {"mahoniestraat": 2})
+    assert resultaat == [{"datum": "2026-07-01", "winst": "500.00"}]
+
+
+def test_gecombineerde_winst_over_tijd_forward_fillt_ontbrekende_datums():
+    # baumannlaan heeft alleen een punt op 1 juli, mahoniestraat ook op 8 juli
+    # - op 8 juli moet baumannlaan's LAATST BEKENDE punt (1 juli) nog meetellen.
+    reeksen = {
+        "mahoniestraat": [{"datum": "2026-07-01", "winst": "1000.00"}, {"datum": "2026-07-08", "winst": "1100.00"}],
+        "baumannlaan": [{"datum": "2026-07-01", "winst": "500.00"}],
+    }
+    resultaat = gecombineerde_winst_over_tijd(reeksen, {"mahoniestraat": 1, "baumannlaan": 1})
+    assert resultaat == [
+        {"datum": "2026-07-01", "winst": "1500.00"},
+        {"datum": "2026-07-08", "winst": "1600.00"},
+    ]
+
+
+def test_gecombineerde_winst_over_tijd_pand_zonder_datapunten_telt_niet_mee():
+    reeksen = {"mahoniestraat": [{"datum": "2026-07-01", "winst": "1000.00"}], "leegpand": []}
+    resultaat = gecombineerde_winst_over_tijd(reeksen, {"mahoniestraat": 1, "leegpand": 1})
+    assert resultaat == [{"datum": "2026-07-01", "winst": "1000.00"}]

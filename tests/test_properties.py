@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from kamerverhuur_scanner.properties import load_properties, verwijder_pand, zet_pand
 
@@ -44,6 +45,27 @@ def test_extra_bcc_als_lijst_uit_zet_pand(tmp_path):
     })
     panden = load_properties(str(path))
     assert panden[0].extra_bcc == ["justin@example.com"]
+
+
+def test_onderhoud_reserve_wordt_geparsed_naar_decimal(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x",
+        "bunq_rekening_iban": "NL81BUNQ2163127125", "onderhoud_reserve_per_maand": "€ 50,00",
+    })
+    panden = load_properties(str(path))
+    assert panden[0].onderhoud_reserve_per_maand == Decimal("50.00")
+
+
+def test_onderhoud_reserve_ontbreekt_geeft_none(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x", "bunq_rekening_iban": "NL81BUNQ2163127125",
+    })
+    panden = load_properties(str(path))
+    assert panden[0].onderhoud_reserve_per_maand is None
 
 
 def test_extra_bcc_ontbreekt_geeft_lege_lijst(tmp_path):

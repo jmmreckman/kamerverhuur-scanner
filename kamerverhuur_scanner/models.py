@@ -152,6 +152,11 @@ class Pand:
     # webapp/ondertekenen.py: bouw_betaal_en_tekenmail()) - niet elk pand
     # heeft een Bold slim slot.
     heeft_bold_slot: bool = True
+    # Vaste maandelijkse onderhoudsreserve die als kostenpost meetelt in de
+    # winstberekening (zie kamerverhuur_scanner/winst.py) - bewust een vrij
+    # in te vullen bedrag per pand (geen automatische aanname/percentage),
+    # zelf in te stellen bij "Panden beheren".
+    onderhoud_reserve_per_maand: Decimal | None = None
 
 
 @dataclass(frozen=True)

@@ -5,6 +5,7 @@ huurderslijst - en de maand-voor-maand verdeling op basis van de vaste
 t/m einde van de maand voor de maand erna). Bewust GEEN cumulatieve/lopende-
 balans-aanpak over de hele periode - dat zou een huurverhoging halverwege de
 reeks alle latere maanden laten verschuiven."""
+import dataclasses
 from datetime import date
 from decimal import Decimal
 
@@ -277,3 +278,47 @@ def test_backfill_geschiedenis_gebruikt_effectieve_maand_per_betaling(monkeypatc
     juni_resultaat = per_maand["2026-06"][0]
     assert juni_resultaat.status == Status.BETAALD
     assert juni_resultaat.gematchte_betalingen[0].datum == date(2026, 5, 20)
+
+
+# --- bereken_winstoverzicht ---
+
+
+class FakeBunqClientUitgaven:
+    laatste_since = None
+
+    def __init__(self, _config):
+        pass
+
+    def get_outgoing_payments(self, pand, since):
+        FakeBunqClientUitgaven.laatste_since = since
+        return [
+            _uitgaande_betaling("100.00", date(2026, 5, 3)),
+            _uitgaande_betaling("100.00", date(2026, 6, 3)),
+            _uitgaande_betaling("250.00", date(2026, 7, 1), iban="NL00EENMALIG00000", naam="Bouwmarkt"),
+        ]
+
+
+def _uitgaande_betaling(bedrag, datum, iban="NL91ABNA0417164300", naam="Energieleverancier"):
+    return Payment(bedrag=Decimal(bedrag), valuta="EUR", tegenpartij_naam=naam, tegenpartij_iban=iban,
+                   omschrijving="Energie", datum=datum)
+
+
+def test_bereken_winstoverzicht_herkent_terugkerende_lasten_en_negeert_eenmalige(monkeypatch):
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientUitgaven)
+
+    overzicht = runner.bereken_winstoverzicht(_config(), _pand(), inkomsten=Decimal("1000.00"))
+
+    assert [last.omschrijving for last in overzicht.lasten] == ["Energieleverancier"]
+    assert overzicht.lasten[0].bedrag == Decimal("100.00")
+    assert overzicht.belasting == Decimal("75.00")
+    assert overzicht.onderhoud_reserve == Decimal("0")
+    assert overzicht.winst == Decimal("1000.00") - Decimal("100.00") - Decimal("75.00")
+
+
+def test_bereken_winstoverzicht_gebruikt_onderhoud_reserve_van_pand(monkeypatch):
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientUitgaven)
+    pand = dataclasses.replace(_pand(), onderhoud_reserve_per_maand=Decimal("60.00"))
+
+    overzicht = runner.bereken_winstoverzicht(_config(), pand, inkomsten=Decimal("1000.00"))
+
+    assert overzicht.onderhoud_reserve == Decimal("60.00")

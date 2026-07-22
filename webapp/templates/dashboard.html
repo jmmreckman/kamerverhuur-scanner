@@ -29,6 +29,13 @@
       <div class="stat-label">het hele huishouden</div>
     </div>
   </a>
+  <a class="stat-card" href="{{ url_for('winstberekening', pand_slug=huidig_pand.slug) }}">
+    <div class="stat-icon {{ 'ok' if winst_laatste is none or winst_laatste >= 0 else 'bad' }}">{{ icon_euro() }}</div>
+    <div>
+      <div class="stat-value">{{ winst_laatste|eur if winst_laatste is not none else 'Bereken' }}</div>
+      <div class="stat-label">winstberekening</div>
+    </div>
+  </a>
   <a class="stat-card" href="{{ url_for('huuropzegging_doorgeven', pand_slug=huidig_pand.slug) }}">
     <div class="stat-icon">{{ icon_clock() }}</div>
     <div>
