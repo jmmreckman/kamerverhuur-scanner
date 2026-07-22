@@ -4,10 +4,13 @@
 {% block content %}
 <div class="page-header">
   <h1>Winstberekening</h1>
-  <p class="muted">{{ huidig_pand.naam }} - deze maand. Lasten worden automatisch herkend uit terugkerende
-     uitgaande betalingen op de rekening van dit pand (energie, internet, VvE, hypotheek, etc.), aangevuld
-     met een vaste belastingpost en de onderhoudsreserve die je bij "Panden beheren" hebt ingesteld.
-     Leegstand telt hier niet mee.</p>
+  <p class="muted">{{ huidig_pand.naam }} - wat dit pand in principe per maand oplevert als alles normaal
+     betaald wordt. Inkomsten = de nominale huur (kale huur + servicekosten) per bewoonde kamer, NIET wat er
+     deze specifieke maand daadwerkelijk is binnengekomen (dat kan vertekend zijn door een ingelopen
+     achterstand of een te laat betaalde maand - zie de Betalingen-pagina voor de actuele stand). Lasten
+     worden automatisch herkend uit terugkerende uitgaande betalingen op de rekening van dit pand (energie,
+     internet, VvE, hypotheek, etc.), aangevuld met een vaste belastingpost en de onderhoudsreserve die je
+     bij "Panden beheren" hebt ingesteld. Leegstand telt hier niet mee.</p>
 </div>
 
 <div class="stat-grid">
@@ -15,7 +18,7 @@
     <div class="stat-icon ok">€</div>
     <div>
       <div class="stat-value" style="color:var(--ok)">{{ overzicht.inkomsten|eur }}</div>
-      <div class="stat-label">huurinkomsten (IN)</div>
+      <div class="stat-label">verwachte huurinkomsten (IN)</div>
     </div>
   </div>
   <div class="stat-card">
@@ -38,22 +41,19 @@
   <h2>Huurinkomsten</h2>
   <div class="tabel-scroll">
   <table>
-    <tr><th>Kamer</th><th>Huurder</th><th>Ontvangen</th><th>Waarborgsom eraf</th><th>Telt mee</th></tr>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwachte huur</th></tr>
     {% for regel in overzicht.inkomsten_specificatie %}
     <tr>
       <td>{{ regel.kamer }}</td>
       <td>{{ regel.naam }}</td>
-      <td>{{ regel.bruto|eur }}</td>
-      <td>{{ regel.borg_afgetrokken|eur if regel.borg_afgetrokken else "-" }}</td>
-      <td>{{ regel.netto|eur }}</td>
+      <td>{{ regel.verwacht_bedrag|eur }}</td>
     </tr>
     {% endfor %}
-    <tr style="font-weight:700"><td colspan="4">Totaal huurinkomsten</td><td style="color:var(--ok)">{{ overzicht.inkomsten|eur }}</td></tr>
+    <tr style="font-weight:700"><td colspan="2">Totaal huurinkomsten</td><td style="color:var(--ok)">{{ overzicht.inkomsten|eur }}</td></tr>
   </table>
   </div>
   {% if not overzicht.inkomsten_specificatie %}
-  <p class="muted" style="margin-top:0.75rem">Nog geen betaalcontrole uitgevoerd deze maand - zie de
-     <a href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Betalingen-pagina</a>.</p>
+  <p class="muted" style="margin-top:0.75rem">Geen bewoonde kamers gevonden voor dit pand.</p>
   {% endif %}
 </div>
 

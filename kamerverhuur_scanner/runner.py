@@ -243,36 +243,20 @@ def run_check(
     return tenants, results, unmatched
 
 
-def netto_huurinkomsten_specificatie(
-    tenants: list[Tenant], cache_resultaten: list[dict], vandaag: date | None = None
-) -> list[winst.Inkomst]:
-    """Specificatie (1 regel per kamer) van de werkelijk ontvangen huur deze
-    maand voor de winstberekening (zie webapp/app.py: winstberekening() en
-    scripts/winst_snapshot.py) - MET de waarborgsom eraf voor kamers die deze
-    maand (of de maand ervóór, bij vooruitbetaling) instappen. De borg is
-    geen inkomen: die moet ooit weer terugbetaald worden aan de huurder, en
-    telt daarom bewust NIET mee als winst - in tegenstelling tot de
-    betaalcontrole zelf (run_check()), die 'm wél in het verwachte bedrag
-    meetelt om te bepalen of de instapmaand volledig betaald is (zie
-    _instapbedrag()). Winstoverzicht.inkomsten telt deze specificatie zelf
-    op - zo is op de winstpagina precies te zien hoe het totaal is opgebouwd,
-    per kamer."""
-    vandaag = vandaag or date.today()
-    huidige_maand_sleutel = (vandaag.year, vandaag.month)
-    tenants_bij_kamer = {t.kamer: t for t in tenants}
-    specificatie = []
-    for regel in cache_resultaten:
-        bruto = Decimal(regel["ontvangen_bedrag"])
-        tenant = tenants_bij_kamer.get(regel["kamer"])
-        start = _tenant_startdatum(tenant) if tenant else None
-        borg_afgetrokken = Decimal("0")
-        if start and huidige_maand_sleutel in ((start.year, start.month), _vorige_maand(start.year, start.month)):
-            borg_afgetrokken = min(tenant.borg_bedrag or Decimal("0"), bruto)
-        specificatie.append(winst.Inkomst(
-            kamer=regel["kamer"], naam=regel.get("naam", ""), bruto=bruto,
-            borg_afgetrokken=borg_afgetrokken, netto=bruto - borg_afgetrokken,
-        ))
-    return specificatie
+def verwachte_huurinkomsten_specificatie(tenants: list[Tenant]) -> list[winst.Inkomst]:
+    """Specificatie (1 regel per bewoonde kamer) van de NOMINALE/verwachte
+    maandhuur (kale huur + servicekosten, Tenant.verwacht_bedrag) voor de
+    winstberekening (zie webapp/app.py: winstberekening() en
+    scripts/winst_snapshot.py) - dus wat een pand in principe elke maand
+    oplevert als alles normaal betaald wordt, NIET wat er deze specifieke
+    maand daadwerkelijk is binnengekomen (dat kan vertekend zijn door een
+    ingelopen achterstand, een instapmaand met extra borg, een net te laat
+    betaalde maand, etc. - de betaalcontrole/Betalingen-pagina blijft de plek
+    om dát te volgen). Leegstaande kamers (geen huurder) tellen niet mee."""
+    return [
+        winst.Inkomst(kamer=t.kamer, naam=t.naam, verwacht_bedrag=t.verwacht_bedrag)
+        for t in tenants if t.naam
+    ]
 
 
 def bereken_winstoverzicht(
@@ -281,7 +265,7 @@ def bereken_winstoverzicht(
     """Haalt de uitgaande bunq-transacties van de rekening van dit pand op
     (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te
     herkennen, en zet dat samen met `inkomsten_specificatie` (zie
-    netto_huurinkomsten_specificatie()) om in een compleet winstoverzicht.
+    verwachte_huurinkomsten_specificatie()) om in een compleet winstoverzicht.
     Tegenpartijen die de beheerder zelf definitief genegeerd heeft (zie
     state.negeer_last(), bv. een overboeking naar zichzelf) tellen nooit mee,
     ongeacht het herkenningspatroon. Kan BunqClientError laten doorstromen

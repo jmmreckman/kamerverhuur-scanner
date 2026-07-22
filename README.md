@@ -242,13 +242,14 @@ nodig.
   Lukt het versturen niet (bv. een SMTP-hapering), dan blijft de aanmelding
   zelf gewoon goed opgeslagen - alleen de melding zelf mislukt dan stil.
 - **Winstberekening** - knop naast de huurpenningen-tegel op het dashboard,
-  met de laatst berekende winst van die maand erop. Inkomsten = de al bekende
-  "ontvangen"-som van de betaalcontrole, met de waarborgsom eraf bij een
-  huurder die deze maand (of de maand ervóór, bij vooruitbetaling) instapt -
-  de borg is geen inkomen, die moet ooit terugbetaald worden. Een
-  "Huurinkomsten"-tabel op de winstpagina laat per kamer precies zien hoe dat
-  totaal is opgebouwd (ontvangen bedrag, afgetrokken waarborgsom, wat
-  overblijft), zodat je het altijd kunt natrekken. Lasten = automatisch herkende
+  met de laatst berekende winst van die maand erop. Laat zien wat een pand in
+  principe elke maand oplevert als alles normaal betaald wordt: inkomsten =
+  de NOMINALE huur (kale huur + servicekosten) van elke bewoonde kamer, niet
+  wat er deze specifieke maand daadwerkelijk is binnengekomen - dat laatste
+  kan vertekend zijn door bv. een ingelopen achterstand die in één keer wordt
+  betaald (de betaalcontrole/Betalingen-pagina blijft de plek om de actuele
+  betaalstatus te volgen). Een "Huurinkomsten"-tabel op de winstpagina laat
+  per kamer zien hoe dat totaal is opgebouwd. Lasten = automatisch herkende
   terugkerende uitgaande betalingen op de rekening van dat pand (energie,
   internet, VvE, hypotheek, wat er ook maandelijks afgaat - een tegenpartij
   telt mee zodra die in minstens 3 verschillende maanden voorkomt, met

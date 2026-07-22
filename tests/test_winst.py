@@ -13,7 +13,7 @@ from kamerverhuur_scanner.winst import (
 
 
 def _inkomsten(bedrag: str) -> list[Inkomst]:
-    return [Inkomst(kamer="1", naam="Jan", bruto=Decimal(bedrag), borg_afgetrokken=Decimal("0"), netto=Decimal(bedrag))]
+    return [Inkomst(kamer="1", naam="Jan", verwacht_bedrag=Decimal(bedrag))]
 
 
 def _betaling(bedrag, datum, iban="NL91ABNA0417164300", naam="Energieleverancier", omschrijving="Energie"):
@@ -128,8 +128,8 @@ def test_bereken_winst_zonder_onderhoud_reserve_telt_als_nul():
 
 def test_winstoverzicht_inkomsten_is_som_van_specificatie():
     overzicht = bereken_winst(
-        [Inkomst(kamer="1", naam="Jan", bruto=Decimal("650.00"), borg_afgetrokken=Decimal("0"), netto=Decimal("650.00")),
-         Inkomst(kamer="2", naam="Piet", bruto=Decimal("700.00"), borg_afgetrokken=Decimal("0"), netto=Decimal("700.00"))],
+        [Inkomst(kamer="1", naam="Jan", verwacht_bedrag=Decimal("650.00")),
+         Inkomst(kamer="2", naam="Piet", verwacht_bedrag=Decimal("700.00"))],
         lasten=[], onderhoud_reserve=None,
     )
     assert overzicht.inkomsten == Decimal("1350.00")

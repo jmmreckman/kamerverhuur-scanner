@@ -10,8 +10,14 @@ Kosten bestaan uit drie delen:
   rekening van dit pand (zie herken_terugkerende_lasten()).
 
 Leegstand telt bewust niet mee (in de praktijk verwaarloosbaar voor deze
-panden) - de huurinkomsten komen rechtstreeks uit de bestaande betaalcontrole
-(dezelfde "ontvangen"-som als op het dashboard), niet uit een aparte aanname."""
+panden). De huurinkomsten zijn de NOMINALE/verwachte maandhuur van elke
+bewoonde kamer (kale huur + servicekosten, Tenant.verwacht_bedrag) - dus wat
+een pand in principe elke maand oplevert als alles normaal betaald wordt,
+niet wat er déze specifieke maand daadwerkelijk is binnengekomen. Dat laatste
+kan vertekend zijn door een ingelopen achterstand, een net te laat betaalde
+maand, of iets dergelijks - de betaalcontrole (Betalingen-pagina) blijft de
+plek om dát te volgen, deze pagina laat zien wat het pand structureel
+oplevert (zie kamerverhuur_scanner.runner.verwachte_huurinkomsten_specificatie())."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -52,14 +58,13 @@ class Last:
 
 @dataclass(frozen=True)
 class Inkomst:
-    """Eén regel van de huurinkomsten-specificatie op de winstpagina - laat
-    per kamer zien hoe het totale inkomstenbedrag is opgebouwd (zie
-    kamerverhuur_scanner.runner.netto_huurinkomsten_specificatie())."""
+    """Eén regel van de huurinkomsten-specificatie op de winstpagina - de
+    NOMINALE/verwachte maandhuur van een bewoonde kamer (kale huur +
+    servicekosten), niet wat er die maand daadwerkelijk is binnengekomen.
+    Zie kamerverhuur_scanner.runner.verwachte_huurinkomsten_specificatie()."""
     kamer: str
     naam: str
-    bruto: Decimal  # werkelijk ontvangen bedrag deze maand (incl. borg, als die kamer deze maand instapt)
-    borg_afgetrokken: Decimal
-    netto: Decimal  # bruto - borg_afgetrokken - dit telt mee als winst-inkomsten
+    verwacht_bedrag: Decimal
 
 
 @dataclass(frozen=True)
@@ -71,7 +76,7 @@ class Winstoverzicht:
 
     @property
     def inkomsten(self) -> Decimal:
-        return sum((regel.netto for regel in self.inkomsten_specificatie), Decimal("0"))
+        return sum((regel.verwacht_bedrag for regel in self.inkomsten_specificatie), Decimal("0"))
 
     @property
     def totaal_lasten(self) -> Decimal:

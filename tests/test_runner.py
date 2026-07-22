@@ -306,7 +306,7 @@ def _uitgaande_betaling(bedrag, datum, iban="NL91ABNA0417164300", naam="Energiel
 
 
 def _specificatie(bedrag="1000.00") -> list[winst.Inkomst]:
-    return [winst.Inkomst(kamer="1", naam="Jan", bruto=Decimal(bedrag), borg_afgetrokken=Decimal("0"), netto=Decimal(bedrag))]
+    return [winst.Inkomst(kamer="1", naam="Jan", verwacht_bedrag=Decimal(bedrag))]
 
 
 def test_bereken_winstoverzicht_herkent_terugkerende_lasten_en_negeert_eenmalige(monkeypatch):
@@ -342,65 +342,31 @@ def test_bereken_winstoverzicht_negeert_op_de_negeerlijst_gezette_tegenpartij(mo
     assert overzicht.lasten == []
 
 
-# --- netto_huurinkomsten_specificatie ---
+# --- verwachte_huurinkomsten_specificatie ---
 
 
-def _instapper(kamer="1", startdatum="05-07-2026", borg="500.00"):
-    return Tenant(
-        row_index=2, naam="Jan", kamer=kamer, verwacht_bedrag=Decimal("650.00"),
-        contract_startdatum=startdatum, borg_bedrag=Decimal(borg),
-    )
-
-
-def _cache_regel(kamer="1", ontvangen="1000.00"):
-    return {"kamer": kamer, "naam": "Jan", "verwacht_bedrag": "650.00", "ontvangen_bedrag": ontvangen}
-
-
-def test_netto_huurinkomsten_zonder_instapmaand_telt_volledig_mee():
+def test_verwachte_huurinkomsten_geeft_nominale_huur_per_bewoonde_kamer():
     tenant = Tenant(row_index=2, naam="Jan", kamer="1", verwacht_bedrag=Decimal("650.00"))
-    specificatie = runner.netto_huurinkomsten_specificatie([tenant], [_cache_regel(ontvangen="650.00")], vandaag=date(2026, 7, 15))
-    assert len(specificatie) == 1
-    assert specificatie[0].bruto == Decimal("650.00")
-    assert specificatie[0].borg_afgetrokken == Decimal("0")
-    assert specificatie[0].netto == Decimal("650.00")
+    specificatie = runner.verwachte_huurinkomsten_specificatie([tenant])
+    assert specificatie == [winst.Inkomst(kamer="1", naam="Jan", verwacht_bedrag=Decimal("650.00"))]
 
 
-def test_netto_huurinkomsten_trekt_borg_af_in_de_instapmaand_zelf():
-    tenant = _instapper(startdatum="05-07-2026", borg="500.00")
-    # 1000 ontvangen (pro-rata huur + borg samen) - 500 borg = 500 netto
-    specificatie = runner.netto_huurinkomsten_specificatie([tenant], [_cache_regel(ontvangen="1000.00")], vandaag=date(2026, 7, 15))
-    assert specificatie[0].bruto == Decimal("1000.00")
-    assert specificatie[0].borg_afgetrokken == Decimal("500.00")
-    assert specificatie[0].netto == Decimal("500.00")
+def test_verwachte_huurinkomsten_negeert_achterstand_of_extra_ontvangen_bedragen():
+    # de nominale huur telt, ongeacht wat er die maand daadwerkelijk (met een
+    # ingelopen achterstand erbovenop) is binnengekomen - dat is precies het
+    # verschil met de oude, op de betaalcontrole-cache gebaseerde aanpak.
+    instapper = Tenant(row_index=2, naam="Henri", kamer="1", verwacht_bedrag=Decimal("650.00"),
+                        contract_startdatum="05-07-2026", borg_bedrag=Decimal("500.00"))
+    specificatie = runner.verwachte_huurinkomsten_specificatie([instapper])
+    assert specificatie == [winst.Inkomst(kamer="1", naam="Henri", verwacht_bedrag=Decimal("650.00"))]
 
 
-def test_netto_huurinkomsten_trekt_borg_af_bij_vooruitbetaling_maand_ervoor():
-    # startdatum is augustus, maar het instapbedrag (incl. borg) is al in
-    # juli vooruitbetaald - juli's cache moet de borg dan ook afgetrokken zien.
-    tenant = _instapper(startdatum="03-08-2026", borg="500.00")
-    specificatie = runner.netto_huurinkomsten_specificatie([tenant], [_cache_regel(ontvangen="1150.00")], vandaag=date(2026, 7, 20))
-    assert specificatie[0].netto == Decimal("650.00")
+def test_verwachte_huurinkomsten_leegstaande_kamer_telt_niet_mee():
+    leeg = Tenant(row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("650.00"))
+    bewoond = Tenant(row_index=3, naam="Piet", kamer="2", verwacht_bedrag=Decimal("700.00"))
+    specificatie = runner.verwachte_huurinkomsten_specificatie([leeg, bewoond])
+    assert specificatie == [winst.Inkomst(kamer="2", naam="Piet", verwacht_bedrag=Decimal("700.00"))]
 
 
-def test_netto_huurinkomsten_gaat_niet_onder_nul():
-    tenant = _instapper(startdatum="28-07-2026", borg="500.00")
-    specificatie = runner.netto_huurinkomsten_specificatie([tenant], [_cache_regel(ontvangen="100.00")], vandaag=date(2026, 7, 30))
-    assert specificatie[0].netto == Decimal("0")
-
-
-def test_netto_huurinkomsten_kamer_niet_meer_in_tenants_telt_gewoon_mee():
-    specificatie = runner.netto_huurinkomsten_specificatie([], [_cache_regel(kamer="3", ontvangen="650.00")], vandaag=date(2026, 7, 15))
-    assert specificatie[0].netto == Decimal("650.00")
-
-
-def test_netto_huurinkomsten_meerdere_kamers_alleen_instapper_wordt_gecorrigeerd():
-    instapper = _instapper(kamer="1", startdatum="05-07-2026", borg="500.00")
-    zittende_huurder = Tenant(row_index=3, naam="Piet", kamer="2", verwacht_bedrag=Decimal("700.00"),
-                               contract_startdatum="01-01-2025", borg_bedrag=Decimal("500.00"))
-    specificatie = runner.netto_huurinkomsten_specificatie(
-        [instapper, zittende_huurder],
-        [_cache_regel(kamer="1", ontvangen="1000.00"), _cache_regel(kamer="2", ontvangen="700.00")],
-        vandaag=date(2026, 7, 15),
-    )
-    totaal = sum((regel.netto for regel in specificatie), Decimal("0"))
-    assert totaal == Decimal("500.00") + Decimal("700.00")
+def test_verwachte_huurinkomsten_zonder_kamers_geeft_lege_lijst():
+    assert runner.verwachte_huurinkomsten_specificatie([]) == []

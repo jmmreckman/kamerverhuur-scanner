@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from kamerverhuur_scanner import state
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.properties import PropertiesError, load_properties
-from kamerverhuur_scanner.runner import bereken_winstoverzicht, netto_huurinkomsten_specificatie
+from kamerverhuur_scanner.runner import bereken_winstoverzicht, verwachte_huurinkomsten_specificatie
 from kamerverhuur_scanner.sheet_client import SheetClient
 
 _INTERVAL_SECONDEN = timedelta(days=7).total_seconds()
@@ -36,12 +36,8 @@ def _leg_snapshot_vast_voor_alle_panden(config: Config) -> None:
         return
     for pand in panden:
         try:
-            cache = state.load(pand.slug, config.state_dir)
-            if cache:
-                sheet = SheetClient(config, pand)
-                specificatie = netto_huurinkomsten_specificatie(sheet.get_kamers(), cache["resultaten"])
-            else:
-                specificatie = []
+            sheet = SheetClient(config, pand)
+            specificatie = verwachte_huurinkomsten_specificatie(sheet.get_kamers())
             overzicht = bereken_winstoverzicht(config, pand, specificatie)
             state.voeg_winst_snapshot_toe(pand.slug, overzicht.winst, config.state_dir)
             logger.info("[%s] Winst-snapshot vastgelegd: %s.", pand.slug, overzicht.winst)
