@@ -7,16 +7,6 @@
 </div>
 
 {% if panden %}
-<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-bottom:1.5rem; max-width:320px">
-  <div class="stat-icon {{ 'ok' if winst_totaal >= 0 else 'bad' }}">{{ icon_euro() }}</div>
-  <div>
-    <div class="stat-value" style="color:{{ 'var(--ok)' if winst_totaal >= 0 else 'var(--bad)' }}">{{ winst_totaal|eur }}</div>
-    <div class="stat-label">totale winst alle panden</div>
-  </div>
-</a>
-{% endif %}
-
-{% if panden %}
 <div class="grid">
   {% for pand in panden %}
   <a class="card kamer-tile" href="{{ url_for('dashboard', pand_slug=pand.slug) }}">
@@ -25,6 +15,14 @@
   </a>
   {% endfor %}
 </div>
+
+<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-top:1.5rem; max-width:320px">
+  <div class="stat-icon {{ 'ok' if winst_totaal >= 0 else 'bad' }}">{{ icon_euro() }}</div>
+  <div>
+    <div class="stat-value" style="color:{{ 'var(--ok)' if winst_totaal >= 0 else 'var(--bad)' }}">{{ winst_totaal|eur }}</div>
+    <div class="stat-label">totale winst alle panden</div>
+  </div>
+</a>
 {% else %}
 <div class="card">
   <p>Je hebt nog geen toegang tot een pand. Vraag de beheerder om je toegang te geven.</p>
