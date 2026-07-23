@@ -93,6 +93,7 @@ def start_documentverzoek(
         "email": email, "telefoon": telefoon, "token": secrets.token_urlsafe(32),
         "aangemaakt_op": datetime.now().isoformat(timespec="seconds"),
         "verzonden_op": None, "documenten": [], "ontvangen_op": None,
+        "ai_resultaat": None, "mismatches": [], "concept_contract_bestandsnaam": None,
     }
     _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
 
@@ -132,6 +133,24 @@ def voeg_documenten_toe(pand_slug: str, sleutel: str, documenten: list[dict], st
         raise ValueError(f"Geen documentverzoek gevonden voor '{sleutel}'.")
     verzoek["documenten"].extend(documenten)
     verzoek["ontvangen_op"] = datetime.now().isoformat(timespec="seconds")
+    _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
+    return verzoek
+
+
+def zet_ai_resultaat(
+    pand_slug: str, sleutel: str, ai_resultaat: dict | None, mismatches: list[str],
+    concept_contract_bestandsnaam: str | None, state_dir: str = ".",
+) -> dict:
+    """Legt vast wat de AI-uitlezing van de documenten heeft opgeleverd (zie
+    kamerverhuur_scanner/document_ai.py), eventuele afwijkingen t.o.v. de
+    aanmelding, en de bestandsnaam van het automatisch gegenereerde concept-
+    huurcontract (indien gelukt) - zichtbaar op de documentverzoek-statuspagina."""
+    verzoek = lees_verzoek(pand_slug, sleutel, state_dir)
+    if verzoek is None:
+        raise ValueError(f"Geen documentverzoek gevonden voor '{sleutel}'.")
+    verzoek["ai_resultaat"] = ai_resultaat
+    verzoek["mismatches"] = mismatches
+    verzoek["concept_contract_bestandsnaam"] = concept_contract_bestandsnaam
     _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
     return verzoek
 

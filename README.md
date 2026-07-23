@@ -364,6 +364,34 @@ zijn.
   is uitgenodigd), vink een andere aanmelder aan, en gebruik "Bezichtigers
   toevoegen aan bestaande lijst" - pas de vooraf ingevulde begintijd aan naar
   het vrijgekomen tijdslot om iemand anders daarvoor in te plannen.
+- **Documenten verzoeken bij de gekozen kandidaat**: op de "Ingeplande
+  bezichtigingen"-pagina vink je de kandidaat aan die je hebt gekozen en klik
+  je op **"Documenten verzoeken"** - je krijgt eerst een bewerkbaar
+  voorbeeld te zien (Engelstalige mail met een unieke, niet te raden link)
+  voordat er iets verstuurd wordt. Op die link kan de kandidaat een kopie
+  van ID/paspoort en bewijs van inkomen (of van een garantsteller) uploaden,
+  en krijgt daarna een bevestiging op de site. Alles wat binnenkomt (ook het
+  eerder aangeleverde bewijs van inschrijving uit de oorspronkelijke
+  aanmelding) gaat automatisch:
+  1. lokaal op de server opgeslagen, en - als `RCLONE_REMOTE` is ingesteld
+     (zie Stap 2a) - een kopie naar de Drive-map van de kandidaat;
+  2. met AI uitgelezen (naam, geboortedatum, geboorteplaats van het
+     ID-document; studierichting/studentnummer van het inschrijvingsbewijs -
+     vereist `ANTHROPIC_API_KEY`, zie Stap 2b) en vergeleken met wat de
+     kandidaat zelf in de aanmelding invulde - een eventuele afwijking wordt
+     gewoon getoond, niet stilgehouden;
+  3. gebruikt om automatisch een **concept-huurcontract** op te stellen
+     (dezelfde generator als "Contract maken"), met een bevestigingsmail naar
+     `jmmreckman@gmail.com` zodra het klaarstaat. Vanaf daar werkt alles
+     zoals bij een handmatig aangemaakt concept: bekijken, aanpassen, mailen,
+     en uiteindelijk het echte ondertekenverzoek versturen.
+  Elke stap hierboven is best-effort: ontbreekt `ANTHROPIC_API_KEY` of
+  `RCLONE_REMOTE`, of gaat er iets mis bij het uitlezen, dan blijft de rest
+  van de site gewoon werken - je kunt het concept dan nog steeds handmatig
+  opstellen via "Contract maken" bij Aanmeldingen. De voortgang (verzonden,
+  ontvangen documenten, AI-resultaat, link naar het concept) staat op de
+  documentverzoek-statuspagina, bereikbaar via de meldingsmail die je krijgt
+  zodra de kandidaat iets uploadt.
 - **Afwijzing sturen**: knop **"Stuur afwijzing"** naast "Plan bezichtiging
   in", voor aanmelders die niet worden uitgenodigd. Vink ze aan (de
   "✓ Ingepland"-labels maken duidelijk wie er al wél is uitgenodigd) en klik

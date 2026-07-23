@@ -11,6 +11,7 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from kamerverhuur_scanner.config import Config
+from kamerverhuur_scanner.models import Tenant
 from webapp.app import create_app
 
 
@@ -19,9 +20,10 @@ class FakeSheetClient:
         self.pand = pand
         self.bezichtigingen = []
         self.aanmeldingen_rijen = []
+        self.kamers = []
 
     def get_kamers(self):
-        return []
+        return self.kamers
 
     def add_bezichtiging(self, datum_iso, afspraak):
         self.bezichtigingen.append((datum_iso, dict(afspraak)))
@@ -350,3 +352,114 @@ def test_documenten_upload_zonder_gevonden_aanmelding_slaat_studiebewijs_over(ap
     bestandsnamen = [b for _n, b, _i in drive_sync_calls]
     assert len(bestandsnamen) == 1
     assert "id.jpg" in bestandsnamen[0]
+
+
+# --- AI-uitlezen + automatisch concept-huurcontract ---
+
+
+_AI_RESULTAAT = {
+    "volledige_naam": "Jane Doe", "geboortedatum": "01-01-2000", "geboorteplaats": "Rotterdam",
+    "studierichting": "Computer Science", "studentnummer": "123456",
+}
+
+
+@pytest.fixture
+def fake_ai(monkeypatch):
+    """Vangt aanroepen naar document_ai.lees_documenten_uit op (geen echte
+    Anthropic-aanroep in tests) - zie webapp.app._verwerk_documenten_met_ai()."""
+    import webapp.app as appmodule
+    calls = []
+
+    def _fake_lees_documenten_uit(config, documenten):
+        calls.append(documenten)
+        return dict(_AI_RESULTAAT)
+
+    monkeypatch.setattr(appmodule.document_ai, "lees_documenten_uit", _fake_lees_documenten_uit)
+    return calls
+
+
+def test_zonder_ai_ingesteld_wordt_ai_stap_stil_overgeslagen(app_client, verstuurde_mails):
+    # Zonder ANTHROPIC_API_KEY (de standaard in de testconfig) faalt
+    # document_ai.lees_documenten_uit met een DocumentAIError - dat mag de
+    # rest van de upload nooit laten crashen, en er wordt geen concept-
+    # contract gegenereerd of jmmreckman@gmail.com gemaild.
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    # alleen de "documenten ontvangen"-meldingsmail aan de beheerder, geen concept-contractmail
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] != "jmmreckman@gmail.com"
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    assert "Concept-huurcontract" not in status.get_data(as_text=True)
+
+
+def test_upload_genereert_automatisch_concept_contract_en_mailt_beheerder(app_client, verstuurde_mails, fake_ai):
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+            "inkomen_bestanden": (io.BytesIO(b"fake-inkomen-bytes"), "loon.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    assert len(fake_ai) == 1  # AI is precies 1x aangeroepen, met de geuploade documenten
+
+    onderwerpen = [m["onderwerp"] for m in verstuurde_mails]
+    assert any("Concept-huurcontract klaar" in o for o in onderwerpen)
+    concept_mail = next(m for m in verstuurde_mails if "Concept-huurcontract klaar" in m["onderwerp"])
+    assert concept_mail["aan"] == "jmmreckman@gmail.com"
+    assert "Jane Doe" in concept_mail["tekst"]
+
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    body = status.get_data(as_text=True)
+    assert "Concept-huurcontract" in body
+    assert "Bekijk concept" in body
+
+
+def test_concept_contract_bevat_kamerprijs_en_ai_gegevens(app_client, fake_ai):
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.kamers = [
+        Tenant(
+            row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("930.00"),
+            kale_huurprijs=Decimal("800.00"), servicekosten=Decimal("130.00"),
+        ),
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    match = re.search(r'/contracten/([^/"]+\.html)"', status.get_data(as_text=True))
+    assert match
+    contract = app_client.get(f"/pand/mahoniestraat/contracten/{match.group(1)}")
+    body = contract.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert "€930,00" in body
+    assert "Rotterdam" in body  # geboorteplaats, uit de AI-uitlezing
+
+
+def test_concept_contract_toont_mismatch_met_aanmelding(app_client, fake_ai):
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "Physics", "999999", "", "", "", "",
+         "", "", "", "", "", "", ""],
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    body = status.get_data(as_text=True)
+    assert "mogelijk afwijkende gegevens" in body.lower()
+    assert "999999" in body
+    assert "Physics" in body

@@ -41,4 +41,30 @@
     <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar bezichtigingen</a>
   </p>
 </div>
+
+{% if verzoek.concept_contract_bestandsnaam %}
+<div class="card">
+  <h2>Concept-huurcontract</h2>
+  <p>Automatisch opgesteld op basis van de aangeleverde documenten.</p>
+  {% if verzoek.mismatches %}
+  <div class="warning-box">
+    <p><strong>Let op, mogelijk afwijkende gegevens</strong> - controleer dit voor je het concept verstuurt:</p>
+    <ul>
+      {% for mismatch in verzoek.mismatches %}
+      <li>{{ mismatch }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <p>
+    <a class="btn" href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=verzoek.concept_contract_bestandsnaam) }}" target="_blank" rel="noopener">Bekijk concept</a>
+    <a class="btn btn-secondary" href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=verzoek.concept_contract_bestandsnaam) }}">Mailen / verder afhandelen</a>
+  </p>
+</div>
+{% elif verzoek.ontvangen_op %}
+<div class="card">
+  <p class="muted">Nog geen concept-huurcontract - de AI-uitlezing is (nog) niet gelukt of nog niet
+     ingesteld. Je kunt het concept ook handmatig opstellen via "Contract maken" bij Aanmeldingen.</p>
+</div>
+{% endif %}
 {% endblock %}

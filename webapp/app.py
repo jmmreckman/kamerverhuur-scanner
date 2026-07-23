@@ -17,9 +17,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
+from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import drive_sync, mail_voorkeuren, state, winst
+from kamerverhuur_scanner import document_ai, drive_sync, mail_voorkeuren, state, winst
 from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.drive_client import DriveClient
@@ -1167,23 +1168,32 @@ def create_app(config: Config | None = None) -> Flask:
     def _upload_url(token: str) -> str:
         return url_for("kandidaat_documenten_upload", token=token, _external=True)
 
+    def _vind_aanmelding_rij(pand, verzoek: dict) -> list[str] | None:
+        """Zoekt de aanmelding van deze kandidaat op, via kamer+naam+email -
+        dezelfde combinatie waarmee het documentverzoek zelf is aangemaakt
+        (zie documentverzoek.maak_sleutel()). None als er geen (meer) te
+        vinden is (bv. de aanmeldingenlijst is intussen gewist)."""
+        sheet = SheetClient(config, pand)
+        return next(
+            (r for r in sheet.get_aanmeldingen() if r[1] == verzoek["kamer"] and r[2] == verzoek["naam"] and r[3] == verzoek["email"]),
+            None,
+        )
+
+    def _studiebewijs_van_aanmelding(pand, verzoek: dict, aanmelding_rij: list[str] | None) -> tuple[str, str, bytes] | None:
+        if aanmelding_rij is None or not aanmelding_rij[15]:
+            return None
+        bestand_id = aanmelding_rij[15].rsplit("/", 1)[-1]
+        return _aanmeldingen_media(pand).lees_bestand(verzoek["kamer"], bestand_id)
+
     def _kopieer_studie_bewijs_naar_drive(pand, verzoek: dict) -> None:
-        """Zoekt de aanmelding van deze kandidaat op (via kamer+naam+email) en
-        kopieert het eerder aangeleverde bewijs van inschrijving (indien
-        aanwezig) ook naar haar/zijn Drive-map - zo staan alle documenten van
-        deze kandidaat straks bij elkaar, ongeacht wanneer ze zijn aangeleverd.
-        Best-effort: een ontbrekende/onvindbare aanmelding mag de rest van de
-        upload nooit laten mislukken."""
+        """Kopieert het eerder aangeleverde bewijs van inschrijving (indien
+        aanwezig) ook naar de Drive-map van de kandidaat - zo staan alle
+        documenten van deze kandidaat straks bij elkaar, ongeacht wanneer ze
+        zijn aangeleverd. Best-effort: een ontbrekende/onvindbare aanmelding
+        mag de rest van de upload nooit laten mislukken."""
         try:
-            sheet = SheetClient(config, pand)
-            rij = next(
-                (r for r in sheet.get_aanmeldingen() if r[1] == verzoek["kamer"] and r[2] == verzoek["naam"] and r[3] == verzoek["email"]),
-                None,
-            )
-            if rij is None or not rij[15]:
-                return
-            bestand_id = rij[15].rsplit("/", 1)[-1]
-            gevonden = _aanmeldingen_media(pand).lees_bestand(verzoek["kamer"], bestand_id)
+            aanmelding_rij = _vind_aanmelding_rij(pand, verzoek)
+            gevonden = _studiebewijs_van_aanmelding(pand, verzoek, aanmelding_rij)
             if gevonden is None:
                 return
             bestandsnaam, _mimetype, inhoud = gevonden
@@ -1191,6 +1201,87 @@ def create_app(config: Config | None = None) -> Flask:
         except Exception:
             app.logger.exception(
                 "Kopiëren van bewijs inschrijving naar Drive is mislukt (pand %s, sleutel %s).",
+                pand.slug, verzoek["sleutel"],
+            )
+
+    def _genereer_concept_contract_uit_ai_resultaat(pand, pand_slug: str, verzoek: dict, ai_resultaat: dict, aanmelding_rij: list[str] | None) -> str:
+        sheet = SheetClient(config, pand)
+        kamers = sheet.get_kamers()
+        kamer_tenant = next((k for k in kamers if k.kamer == verzoek["kamer"]), None)
+        aantal_bewoners = len([k for k in kamers if k.naam]) or len(kamers) or 1
+
+        def _geld(bedrag):
+            return f"€{format_bedrag_nl(bedrag)}" if bedrag is not None else ""
+
+        form_data = {
+            "kamer": verzoek["kamer"],
+            "kamer_omschrijving": "",
+            "huurder_naam": (aanmelding_rij[2] if aanmelding_rij else "") or verzoek["naam"],
+            "geboortedatum": ai_resultaat.get("geboortedatum") or "",
+            "geboorteplaats": ai_resultaat.get("geboorteplaats") or "",
+            "studentnummer": ai_resultaat.get("studentnummer") or (aanmelding_rij[7] if aanmelding_rij else ""),
+            "studierichting": ai_resultaat.get("studierichting") or (aanmelding_rij[6] if aanmelding_rij else ""),
+            "email": verzoek["email"],
+            "borgsteller_naam": aanmelding_rij[16] if aanmelding_rij else "",
+            "borgsteller_relatie": aanmelding_rij[17] if aanmelding_rij else "",
+            "borgsteller_email": aanmelding_rij[18] if aanmelding_rij else "",
+            "kale_huurprijs": _geld(kamer_tenant.kale_huurprijs) if kamer_tenant else "",
+            "servicekosten": _geld(kamer_tenant.servicekosten) if kamer_tenant else "",
+            "huurprijs": _geld(kamer_tenant.verwacht_bedrag) if kamer_tenant else "",
+            "borg": "",
+            "aantal_bewoners": str(aantal_bewoners),
+            "ingangsdatum": (aanmelding_rij[8] if aanmelding_rij else "") or date.today().isoformat(),
+            "einddatum": "",
+            "bijzonderheden": "",
+        }
+        return contracts.genereer_contract(pand_slug, pand, ImmutableMultiDict(form_data), config.state_dir)
+
+    def _verwerk_documenten_met_ai(pand, pand_slug: str, verzoek: dict) -> None:
+        """De "magie": leest de zojuist geuploade documenten (+ het eerder
+        aangeleverde bewijs van inschrijving) met AI uit, vergelijkt dat met
+        de aanmelding, en stelt op basis daarvan automatisch een concept-
+        huurcontract op - met een bevestigingsmail naar de beheerder. Volledig
+        best-effort en op de achtergrond van de uploadaanvraag: als AI niet
+        is ingesteld, een document onleesbaar is, of er iets anders misgaat,
+        blijft gewoon alles staan zoals het is - de beheerder kan het concept
+        dan nog steeds handmatig opstellen via de bestaande "Contract maken"-
+        knop bij Aanmeldingen."""
+        try:
+            aanmelding_rij = _vind_aanmelding_rij(pand, verzoek)
+            documenten: list[tuple[str, str, bytes]] = []
+            for doc in verzoek["documenten"]:
+                gevonden = _documenten_media(pand).lees_bestand(verzoek["sleutel"], doc["bestand_id"])
+                if gevonden:
+                    documenten.append(gevonden)
+            studiebewijs = _studiebewijs_van_aanmelding(pand, verzoek, aanmelding_rij)
+            if studiebewijs:
+                documenten.append(studiebewijs)
+
+            ai_resultaat = document_ai.lees_documenten_uit(config, documenten)
+            mismatches = document_ai.vergelijk_met_aanmelding(
+                ai_resultaat, verzoek["naam"],
+                aanmelding_rij[6] if aanmelding_rij else "", aanmelding_rij[7] if aanmelding_rij else "",
+            )
+            bestandsnaam = _genereer_concept_contract_uit_ai_resultaat(pand, pand_slug, verzoek, ai_resultaat, aanmelding_rij)
+            documentverzoek.zet_ai_resultaat(pand_slug, verzoek["sleutel"], ai_resultaat, mismatches, bestandsnaam, config.state_dir)
+
+            contract_url = url_for("contract_mailen", pand_slug=pand_slug, bestandsnaam=bestandsnaam, _external=True)
+            mismatch_tekst = ("\n\nLet op, mogelijk afwijkende gegevens:\n- " + "\n- ".join(mismatches)) if mismatches else ""
+            verstuur_email(
+                config, "jmmreckman@gmail.com",
+                f"Concept-huurcontract klaar - kamer {verzoek['kamer']}, {pand.naam}",
+                f"Het concept-huurcontract voor {verzoek['naam']} (kamer {verzoek['kamer']}, {pand.naam}) "
+                f"staat klaar, automatisch opgesteld op basis van de aangeleverde documenten:\n{contract_url}"
+                f"{mismatch_tekst}",
+                bcc=[],
+            )
+        except document_ai.DocumentAIError as exc:
+            app.logger.warning(
+                "AI-uitlezen van documenten is overgeslagen (pand %s, sleutel %s): %s", pand.slug, verzoek["sleutel"], exc
+            )
+        except Exception:
+            app.logger.exception(
+                "Automatisch verwerken van documenten (AI + concept-contract) is mislukt (pand %s, sleutel %s).",
                 pand.slug, verzoek["sleutel"],
             )
 
@@ -1313,8 +1404,9 @@ def create_app(config: Config | None = None) -> Flask:
                     "documenten_upload.html", pand=pand, verzoek=verzoek,
                     fout="Please select at least one file to upload.",
                 ), 400
-            documentverzoek.voeg_documenten_toe(pand_slug, verzoek["sleutel"], geuploade_documenten, config.state_dir)
+            verzoek = documentverzoek.voeg_documenten_toe(pand_slug, verzoek["sleutel"], geuploade_documenten, config.state_dir)
             _kopieer_studie_bewijs_naar_drive(pand, verzoek)
+            _verwerk_documenten_met_ai(pand, pand_slug, verzoek)
             # Meldingsmail aan de beheerder(s) is best-effort, mag een
             # geslaagde upload nooit laten mislukken.
             ontvangers = _ontvangers(pand_slug, "contracten", config.email_bcc)
