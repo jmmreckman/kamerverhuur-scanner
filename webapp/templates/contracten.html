@@ -15,36 +15,39 @@
 
 <div class="card">
   {% if contracten %}
-    <ul>
     {% for item in contracten %}
-      {% set c = item.bestandsnaam %}
-      <li>
+    {% set c = item.bestandsnaam %}
+    <div class="item-box">
+      <p style="margin:0">
         {% if item.getekend %}
           <span class="pil status-betaald">Getekend</span>
         {% else %}
           <span class="pil pil-neutral">Concept</span>
         {% endif %}
-        <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a>
-        - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Download als PDF</a>
+        <strong>{{ c }}</strong>
+      </p>
+      <div class="item-box-acties">
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">Bekijken</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Download als PDF</a>
         {% if not item.getekend %}
-        - <a href="{{ url_for('contract_bewerken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Bewerken</a>
-        - <a href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mailen naar huurder</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_bewerken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Bewerken</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mailen naar huurder</a>
         {% if item.ronde %}
-        - <a href="{{ url_for('contract_ondertekenstatus', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Ondertekenstatus{% if item.ronde.afgerond_op %} (afgerond){% endif %}</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_ondertekenstatus', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Ondertekenstatus{% if item.ronde.afgerond_op %} (afgerond){% endif %}</a>
         {% else %}
-        - <a href="{{ url_for('contract_tekenverzoek', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Verzoek tot tekenen</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_tekenverzoek', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Verzoek tot tekenen</a>
         {% endif %}
         {% endif %}
         {% if item.kan_bevestiging_mailen %}
-        - <a href="{{ url_for('contract_bevestiging', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mail bevestiging</a>
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_bevestiging', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mail bevestiging</a>
         {% endif %}
-        - <form method="post" action="{{ url_for('contract_verwijderen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}"
-                style="display:inline" onsubmit="return confirm('Contract \'{{ c }}\' definitief verwijderen?');">
-            <button type="submit" class="btn-link-danger">Verwijderen</button>
-          </form>
-      </li>
+        <form method="post" action="{{ url_for('contract_verwijderen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}"
+              style="margin-left:auto" onsubmit="return confirm('Contract \'{{ c }}\' definitief verwijderen?');">
+          <button type="submit" class="btn-link-danger">Verwijderen</button>
+        </form>
+      </div>
+    </div>
     {% endfor %}
-    </ul>
   {% else %}
     <p class="muted">Nog geen contracten gegenereerd.</p>
   {% endif %}

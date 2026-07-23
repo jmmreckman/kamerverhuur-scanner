@@ -13,6 +13,7 @@
     <button class="btn btn-secondary" type="submit">Lijst wissen</button>
   </form>
   <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Bekijk ingeplande bezichtigingen</a>
+  <a class="btn btn-secondary" href="{{ url_for('documentverzoeken_overzicht', pand_slug=huidig_pand.slug) }}">Documentverzoeken bekijken</a>
   <a class="btn btn-secondary" href="{{ url_for('licht_huurders_in', pand_slug=huidig_pand.slug) }}">Licht huurders in</a>
 </div>
 

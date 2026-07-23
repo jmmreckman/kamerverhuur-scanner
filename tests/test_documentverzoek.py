@@ -70,6 +70,35 @@ def test_voeg_documenten_toe_vult_lijst_aan(tmp_path):
     assert bijgewerkt["ontvangen_op"] is not None
 
 
+def test_list_verzoeken_zonder_verzoeken_geeft_lege_lijst(tmp_path):
+    assert documentverzoek.list_verzoeken("mahoniestraat", str(tmp_path)) == []
+
+
+def test_list_verzoeken_geeft_alle_verzoeken_nieuwste_eerst(tmp_path, monkeypatch):
+    import time
+
+    documentverzoek.start_documentverzoek(
+        "mahoniestraat", "1", "Jane Doe", "jane@example.com", "+31612345678", str(tmp_path)
+    )
+    time.sleep(1.1)  # aangemaakt_op heeft secondenprecisie
+    documentverzoek.start_documentverzoek(
+        "mahoniestraat", "2", "John Smith", "john@example.com", "+31612345678", str(tmp_path)
+    )
+
+    verzoeken = documentverzoek.list_verzoeken("mahoniestraat", str(tmp_path))
+    assert [v["naam"] for v in verzoeken] == ["John Smith", "Jane Doe"]
+
+
+def test_list_verzoeken_alleen_voor_dit_pand(tmp_path):
+    documentverzoek.start_documentverzoek(
+        "mahoniestraat", "1", "Jane Doe", "jane@example.com", "+31612345678", str(tmp_path)
+    )
+    documentverzoek.start_documentverzoek(
+        "baumannlaan", "1", "John Smith", "john@example.com", "+31612345678", str(tmp_path)
+    )
+    assert [v["naam"] for v in documentverzoek.list_verzoeken("mahoniestraat", str(tmp_path))] == ["Jane Doe"]
+
+
 def test_bouw_documentverzoek_mail_bevat_kamer_en_link():
     mail = documentverzoek.bouw_documentverzoek_mail(PAND, "1", "Jane Doe", "https://steenhub.nl/documenten/abc")
     assert "Jane Doe" in mail["tekst"]

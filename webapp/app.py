@@ -1348,6 +1348,13 @@ def create_app(config: Config | None = None) -> Flask:
         flash(f"Documentverzoek verstuurd naar {verzoek['naam'] or verzoek['email']}.")
         return redirect(url_for("documentverzoek_status", pand_slug=pand_slug, sleutel=sleutel))
 
+    @app.route("/pand/<pand_slug>/documentverzoeken")
+    @login_required
+    def documentverzoeken_overzicht(pand_slug: str):
+        return render_template(
+            "documentverzoeken_overzicht.html", verzoeken=documentverzoek.list_verzoeken(pand_slug, config.state_dir)
+        )
+
     @app.route("/pand/<pand_slug>/documentverzoek/<sleutel>")
     @login_required
     def documentverzoek_status(pand_slug: str, sleutel: str):

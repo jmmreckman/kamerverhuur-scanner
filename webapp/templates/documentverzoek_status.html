@@ -38,6 +38,7 @@
   {% endif %}
 
   <p style="margin-top:1rem">
+    <a class="btn btn-secondary" href="{{ url_for('documentverzoeken_overzicht', pand_slug=huidig_pand.slug) }}">Alle documentverzoeken</a>
     <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar bezichtigingen</a>
   </p>
 </div>

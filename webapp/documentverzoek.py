@@ -67,6 +67,24 @@ def lees_verzoek(pand_slug: str, sleutel: str, state_dir: str = ".") -> dict | N
     return json.loads(pad.read_text())
 
 
+def list_verzoeken(pand_slug: str, state_dir: str = ".") -> list[dict]:
+    """Alle documentverzoeken van dit pand, nieuwste eerst - voor het
+    overzichtsscherm (zie webapp/app.py: documentverzoeken_overzicht()),
+    want zonder dit scherm is een verzoek alleen terug te vinden via de
+    link in de meldingsmail."""
+    map_pad = Path(state_dir) / "documentverzoeken" / _slugify(pand_slug)
+    if not map_pad.is_dir():
+        return []
+    verzoeken = []
+    for bestand in map_pad.glob("*.json"):
+        try:
+            verzoeken.append(json.loads(bestand.read_text()))
+        except json.JSONDecodeError:
+            continue
+    verzoeken.sort(key=lambda v: v.get("aangemaakt_op") or "", reverse=True)
+    return verzoeken
+
+
 def _schrijf_verzoek(pand_slug: str, sleutel: str, state_dir: str, verzoek: dict) -> None:
     pad = _verzoek_pad(pand_slug, sleutel, state_dir)
     pad.parent.mkdir(parents=True, exist_ok=True)

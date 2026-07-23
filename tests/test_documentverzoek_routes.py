@@ -280,6 +280,29 @@ def test_documentverzoek_status_onbekende_sleutel_geeft_404(app_client):
     assert resp.status_code == 404
 
 
+# --- Overzichtspagina van alle documentverzoeken (anders alleen bereikbaar via de meldingsmail) ---
+
+
+def test_documentverzoeken_overzicht_leeg(app_client):
+    resp = app_client.get("/pand/mahoniestraat/documentverzoeken")
+    assert resp.status_code == 200
+    assert "nog geen documenten opgevraagd" in resp.get_data(as_text=True).lower()
+
+
+def test_documentverzoeken_overzicht_toont_verzoeken_met_link(app_client):
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.get("/pand/mahoniestraat/documentverzoeken")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert f"/pand/mahoniestraat/documentverzoek/{sleutel}" in body
+
+
+def test_aanmeldingen_pagina_linkt_naar_documentverzoeken_overzicht(app_client):
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen")
+    assert "/pand/mahoniestraat/documentverzoeken" in resp.get_data(as_text=True)
+
+
 # --- Drive-sync: geuploade documenten (en het eerder aangeleverde bewijs
 # van inschrijving) komen ook in de Drive-map van de kandidaat terecht ---
 
