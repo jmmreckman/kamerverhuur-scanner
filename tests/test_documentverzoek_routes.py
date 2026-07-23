@@ -252,7 +252,7 @@ def test_documentverzoek_status_toont_geuploade_bestanden(app_client):
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "id.jpg" in body
-    assert "Copy of ID/passport" in body
+    assert "Copy of ID or passport" in body
 
 
 def test_documentverzoek_bestand_download_werkt(app_client):

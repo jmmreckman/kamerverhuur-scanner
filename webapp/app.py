@@ -1387,8 +1387,8 @@ def create_app(config: Config | None = None) -> Flask:
 
         if request.method == "POST":
             categorieen = {
-                "id_bestanden": "Copy of ID/passport",
-                "inkomen_bestanden": "Proof of income/guarantor",
+                "id_bestanden": "Copy of ID or passport",
+                "inkomen_bestanden": "Proof of income or guarantor",
             }
             geuploade_documenten = []
             try:

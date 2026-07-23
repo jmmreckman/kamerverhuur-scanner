@@ -100,4 +100,5 @@ class Config:
             ],
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip() or None,
             anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5",
+            rclone_remote=os.environ.get("RCLONE_REMOTE", "").strip() or None,
         )
