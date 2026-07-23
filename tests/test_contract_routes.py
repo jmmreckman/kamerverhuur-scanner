@@ -389,3 +389,59 @@ def test_contractsjabloon_vereist_alle_panden_toegang(app_client, tmp_path):
     app_client.post("/login", data={"username": "justin", "password": "geheim123"})
     resp = app_client.get("/beheer/contractsjabloon", follow_redirects=True)
     assert "geen toegang" in resp.get_data(as_text=True).lower()
+
+
+# --- Concept-huurcontract bewerken (na generatie, ook via het documentverzoek) ---
+
+
+def test_contract_bewerken_toont_ingevulde_velden(app_client):
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client, geboorteplaats="Rotterdam", studentnummer="123456")
+    resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}/bewerken")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'value="Bence Neumayer"' in body
+    assert 'value="Rotterdam"' in body
+    assert 'value="123456"' in body
+    assert 'value="2026-07-01"' in body  # ingangsdatum
+
+
+def test_contract_bewerken_post_werkt_gegevens_bij_zonder_sheet_te_raken(app_client):
+    FakeSheetClient.laatste_update = None
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/bewerken",
+        data={
+            "kamer": "1", "huurder_naam": "Bence Neumayer - gecorrigeerd", "huurprijs": "919,00",
+            "ingangsdatum": "2026-08-01", "borg": "1000,00", "email": "bence@example.com",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "bijgewerkt" in resp.get_data(as_text=True).lower()
+
+    contract_resp = app_client.get(f"/pand/mahoniestraat/contracten/{bestandsnaam}")
+    body = contract_resp.get_data(as_text=True)
+    assert "Bence Neumayer - gecorrigeerd" in body
+    assert "01-08-2026" in body  # nieuwe ingangsdatum
+
+    # De sheet wordt hierbij niet aangeraakt - dat gebeurt pas bij "Verzoek tot tekenen"
+    assert FakeSheetClient.laatste_update is None
+
+    # geen nieuw/dubbel contract aangemaakt - nog steeds precies 1 in de lijst
+    import re as _re
+    overzicht = app_client.get("/pand/mahoniestraat/contracten").get_data(as_text=True)
+    bestandsnamen = set(_re.findall(r'contracten/([^/"]+\.html)/pdf', overzicht))
+    assert bestandsnamen == {bestandsnaam}
+
+
+def test_contract_bewerken_van_getekend_contract_wordt_geweigerd(app_client):
+    resp = app_client.get(
+        "/pand/mahoniestraat/contracten/2026-01-01_1-iemand-getekend.html/bewerken", follow_redirects=True
+    )
+    assert resp.status_code == 200
+    assert "niet meer bewerkt" in resp.get_data(as_text=True).lower()
+
+
+def test_contract_bewerken_onbekend_bestand_geeft_404(app_client):
+    resp = app_client.get("/pand/mahoniestraat/contracten/onbekend.html/bewerken")
+    assert resp.status_code == 404

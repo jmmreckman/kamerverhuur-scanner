@@ -446,6 +446,33 @@ def test_concept_contract_bevat_kamerprijs_en_ai_gegevens(app_client, fake_ai):
     assert "Rotterdam" in body  # geboorteplaats, uit de AI-uitlezing
 
 
+def test_concept_contract_gebruikt_ai_naam_niet_de_oude_aanmeldingsnaam(app_client, monkeypatch):
+    # De naam op het ID-document is leidend voor het contract (dat is de
+    # wettelijke naam) - een afwijking t.o.v. de eerder ingevulde aanmelding
+    # mag niet betekenen dat de oude naam alsnog in het contract belandt.
+    import webapp.app as appmodule
+    monkeypatch.setattr(
+        appmodule.document_ai, "lees_documenten_uit",
+        lambda config, documenten: {**_AI_RESULTAAT, "volledige_naam": "Jane Elizabeth Doe"},
+    )
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "", "", "", "", "", "", "", "", "",
+         "", "", "", ""],
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    match = re.search(r'/contracten/([^/"]+\.html)"', status.get_data(as_text=True))
+    assert match
+    contract = app_client.get(f"/pand/mahoniestraat/contracten/{match.group(1)}")
+    assert "Jane Elizabeth Doe" in contract.get_data(as_text=True)
+
+
 def test_concept_contract_toont_mismatch_met_aanmelding(app_client, fake_ai):
     sheet = _fake_sheet_singleton["mahoniestraat"]
     sheet.aanmeldingen_rijen = [

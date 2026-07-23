@@ -1222,7 +1222,10 @@ def create_app(config: Config | None = None) -> Flask:
         form_data = {
             "kamer": verzoek["kamer"],
             "kamer_omschrijving": "",
-            "huurder_naam": (aanmelding_rij[2] if aanmelding_rij else "") or verzoek["naam"],
+            # De naam op het ID-document is leidend voor het contract (dat is
+            # de wettelijke naam) - valt terug op de aanmelding/het
+            # documentverzoek zelf als de AI geen naam kon uitlezen.
+            "huurder_naam": ai_resultaat.get("volledige_naam") or (aanmelding_rij[2] if aanmelding_rij else "") or verzoek["naam"],
             "geboortedatum": ai_resultaat.get("geboortedatum") or "",
             "geboorteplaats": ai_resultaat.get("geboorteplaats") or "",
             "studentnummer": ai_resultaat.get("studentnummer") or (aanmelding_rij[7] if aanmelding_rij else ""),
@@ -1900,6 +1903,23 @@ def create_app(config: Config | None = None) -> Flask:
             "contract_nieuw.html", kamers=kamers, vandaag=date.today(), aantal_bewoners=aantal_bewoners,
             vooringevulde_velden=vooringevulde_velden,
         )
+
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/bewerken", methods=["GET", "POST"])
+    @login_required
+    def contract_bewerken(pand_slug: str, bestandsnaam: str):
+        if contracts.is_getekend_contract(bestandsnaam):
+            flash("Een al ondertekend contract kan niet meer bewerkt worden.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        try:
+            contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            abort(404)
+        if request.method == "POST":
+            contracts.bewerk_contract(pand_slug, g.pand, bestandsnaam, request.form, config.state_dir)
+            flash("Concept-huurcontract bijgewerkt.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)
+        return render_template("contract_bewerken.html", bestandsnaam=bestandsnaam, metadata=metadata)
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>")
     @login_required

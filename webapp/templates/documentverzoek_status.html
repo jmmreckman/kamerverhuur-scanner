@@ -58,6 +58,7 @@
   {% endif %}
   <p>
     <a class="btn" href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=verzoek.concept_contract_bestandsnaam) }}" target="_blank" rel="noopener">Bekijk concept</a>
+    <a class="btn btn-secondary" href="{{ url_for('contract_bewerken', pand_slug=huidig_pand.slug, bestandsnaam=verzoek.concept_contract_bestandsnaam) }}">Bewerken</a>
     <a class="btn btn-secondary" href="{{ url_for('contract_mailen', pand_slug=huidig_pand.slug, bestandsnaam=verzoek.concept_contract_bestandsnaam) }}">Mailen / verder afhandelen</a>
   </p>
 </div>

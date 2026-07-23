@@ -172,6 +172,36 @@ def _datum_lang(iso_datum: str) -> str:
         return iso_datum
 
 
+def _metadata_uit_form(form: ImmutableMultiDict, context: dict) -> dict:
+    """Bouwt de metadata (naast het contract zelf opgeslagen, zie
+    _schrijf_metadata()) die nodig is om het concept later opnieuw te kunnen
+    mailen, bewerken (zie bewerk_contract()), of - bij "Verzoek tot tekenen"
+    (webapp/ondertekenen.py) - de sheet nog te kunnen bijwerken op basis van
+    dít contract, ook al is de generatie zelf allang voorbij. Zelfde velden/
+    formaat als het huurcontract-formulier zelf."""
+    return {
+        "email": form.get("email", "").strip(),
+        "huurder_naam": context["huurder_naam"],
+        "kamer": context["kamer"],
+        "kamer_omschrijving": form.get("kamer_omschrijving", "").strip(),
+        "borg": context["borg"],
+        "huurprijs": context["huurprijs"],
+        "kale_huurprijs": form.get("kale_huurprijs", "").strip(),
+        "servicekosten": form.get("servicekosten", "").strip(),
+        "aantal_bewoners": form.get("aantal_bewoners", "").strip(),
+        "ingangsdatum_iso": form.get("ingangsdatum", "").strip(),
+        "einddatum_iso": form.get("einddatum", "").strip(),
+        "geboortedatum": form.get("geboortedatum", "").strip(),
+        "geboorteplaats": form.get("geboorteplaats", "").strip(),
+        "studentnummer": form.get("studentnummer", "").strip(),
+        "studierichting": form.get("studierichting", "").strip(),
+        "borgsteller_naam": context["borgsteller_naam"],
+        "borgsteller_relatie": form.get("borgsteller_relatie", "").strip(),
+        "borgsteller_email": form.get("borgsteller_email", "").strip(),
+        "bijzonderheden": form.get("bijzonderheden", "").strip(),
+    }
+
+
 def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, state_dir: str = ".") -> str:
     output_dir = _output_dir(pand_slug, state_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -183,29 +213,23 @@ def genereer_contract(pand_slug: str, pand: Pand, form: ImmutableMultiDict, stat
 
     html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
     (output_dir / bestandsnaam).write_text(html)
-    _schrijf_metadata(output_dir, bestandsnaam, {
-        "email": form.get("email", "").strip(),
-        "huurder_naam": context["huurder_naam"],
-        "kamer": context["kamer"],
-        "borg": context["borg"],
-        "huurprijs": context["huurprijs"],
-        # onderstaande velden staan hier alleen zodat een later "Verzoek tot
-        # tekenen" (zie webapp/ondertekenen.py) de sheet nog kan bijwerken op
-        # basis van dít contract, ook al is de generatie zelf allang voorbij -
-        # zelfde velden/formaat als het huurcontract-formulier zelf.
-        "kale_huurprijs": form.get("kale_huurprijs", "").strip(),
-        "servicekosten": form.get("servicekosten", "").strip(),
-        "ingangsdatum_iso": form.get("ingangsdatum", "").strip(),
-        "einddatum_iso": form.get("einddatum", "").strip(),
-        "geboortedatum": form.get("geboortedatum", "").strip(),
-        "geboorteplaats": form.get("geboorteplaats", "").strip(),
-        "studentnummer": form.get("studentnummer", "").strip(),
-        "studierichting": form.get("studierichting", "").strip(),
-        "borgsteller_naam": context["borgsteller_naam"],
-        "borgsteller_relatie": form.get("borgsteller_relatie", "").strip(),
-        "borgsteller_email": form.get("borgsteller_email", "").strip(),
-    })
+    _schrijf_metadata(output_dir, bestandsnaam, _metadata_uit_form(form, context))
     return bestandsnaam
+
+
+def bewerk_contract(pand_slug: str, pand: Pand, bestandsnaam: str, form: ImmutableMultiDict, state_dir: str = ".") -> None:
+    """Herschrijft een al bestaand concept-contract (zelfde bestandsnaam) met
+    aangepaste gegevens - voor als er iets moet worden gecorrigeerd na het
+    genereren (bv. een fout uitgelezen naam, een andere ingangsdatum). Alleen
+    voor nog niet ondertekende concepten; is_getekend_contract() moet vooraf
+    gecontroleerd zijn door de aanroeper."""
+    output_dir = _output_dir(pand_slug, state_dir)
+    context = _bouw_context(pand, form)
+    context["pdf_url"] = f"/pand/{pand_slug}/contracten/{bestandsnaam}/pdf"
+
+    html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
+    (output_dir / bestandsnaam).write_text(html)
+    _schrijf_metadata(output_dir, bestandsnaam, _metadata_uit_form(form, context))
 
 
 def _metadata_pad(output_dir: Path, bestandsnaam: str) -> Path:
