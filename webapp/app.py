@@ -1167,6 +1167,33 @@ def create_app(config: Config | None = None) -> Flask:
     def _upload_url(token: str) -> str:
         return url_for("kandidaat_documenten_upload", token=token, _external=True)
 
+    def _kopieer_studie_bewijs_naar_drive(pand, verzoek: dict) -> None:
+        """Zoekt de aanmelding van deze kandidaat op (via kamer+naam+email) en
+        kopieert het eerder aangeleverde bewijs van inschrijving (indien
+        aanwezig) ook naar haar/zijn Drive-map - zo staan alle documenten van
+        deze kandidaat straks bij elkaar, ongeacht wanneer ze zijn aangeleverd.
+        Best-effort: een ontbrekende/onvindbare aanmelding mag de rest van de
+        upload nooit laten mislukken."""
+        try:
+            sheet = SheetClient(config, pand)
+            rij = next(
+                (r for r in sheet.get_aanmeldingen() if r[1] == verzoek["kamer"] and r[2] == verzoek["naam"] and r[3] == verzoek["email"]),
+                None,
+            )
+            if rij is None or not rij[15]:
+                return
+            bestand_id = rij[15].rsplit("/", 1)[-1]
+            gevonden = _aanmeldingen_media(pand).lees_bestand(verzoek["kamer"], bestand_id)
+            if gevonden is None:
+                return
+            bestandsnaam, _mimetype, inhoud = gevonden
+            drive_sync.upload_bestand(config, pand, verzoek["naam"], bestandsnaam, inhoud)
+        except Exception:
+            app.logger.exception(
+                "Kopiëren van bewijs inschrijving naar Drive is mislukt (pand %s, sleutel %s).",
+                pand.slug, verzoek["sleutel"],
+            )
+
     @app.route("/pand/<pand_slug>/aanmeldingen/bezichtigingen/documenten-verzoeken", methods=["POST"])
     @login_required
     def documentverzoek_voorbeeld(pand_slug: str):
@@ -1263,13 +1290,18 @@ def create_app(config: Config | None = None) -> Flask:
                         if not bestand or not bestand.filename:
                             continue
                         bestandsnaam = f"{categorie_label} - {bestand.filename}"
+                        inhoud = bestand.read()
                         bestand_id = _documenten_media(pand).upload_bestand(
-                            verzoek["sleutel"], bestandsnaam, bestand.mimetype, bestand.read()
+                            verzoek["sleutel"], bestandsnaam, bestand.mimetype, inhoud
                         )
                         geuploade_documenten.append({
                             "categorie": categorie_label, "bestand_id": bestand_id,
                             "naam": bestandsnaam, "mimetype": bestand.mimetype or "application/octet-stream",
                         })
+                        # Drive-kopie is best-effort (zie drive_sync.py) - een
+                        # haperende rclone-upload mag de upload zelf nooit
+                        # laten mislukken.
+                        drive_sync.upload_bestand(config, pand, verzoek["naam"], bestandsnaam, inhoud)
             except Exception:
                 app.logger.exception("Uploaden van documenten is mislukt (pand %s, sleutel %s).", pand_slug, verzoek["sleutel"])
                 return render_template(
@@ -1282,6 +1314,7 @@ def create_app(config: Config | None = None) -> Flask:
                     fout="Please select at least one file to upload.",
                 ), 400
             documentverzoek.voeg_documenten_toe(pand_slug, verzoek["sleutel"], geuploade_documenten, config.state_dir)
+            _kopieer_studie_bewijs_naar_drive(pand, verzoek)
             # Meldingsmail aan de beheerder(s) is best-effort, mag een
             # geslaagde upload nooit laten mislukken.
             ontvangers = _ontvangers(pand_slug, "contracten", config.email_bcc)

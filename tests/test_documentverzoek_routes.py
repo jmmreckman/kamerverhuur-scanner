@@ -18,12 +18,16 @@ class FakeSheetClient:
     def __init__(self, _config, pand):
         self.pand = pand
         self.bezichtigingen = []
+        self.aanmeldingen_rijen = []
 
     def get_kamers(self):
         return []
 
     def add_bezichtiging(self, datum_iso, afspraak):
         self.bezichtigingen.append((datum_iso, dict(afspraak)))
+
+    def get_aanmeldingen(self):
+        return self.aanmeldingen_rijen
 
     def get_bezichtigingen(self):
         return [
@@ -81,6 +85,7 @@ def app_client(tmp_path, monkeypatch):
     client = app.test_client()
     client.post("/login", data={"username": "beheerder", "password": "geheim123"})
     client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")  # instantieert de FakeSheetClient-singleton
+    client.test_config = config  # handig voor tests die zelf al bestanden willen wegschrijven
     return client
 
 
@@ -271,3 +276,77 @@ def test_documentverzoek_bestand_onbekend_geeft_404(app_client):
 def test_documentverzoek_status_onbekende_sleutel_geeft_404(app_client):
     resp = app_client.get("/pand/mahoniestraat/documentverzoek/onbekende-sleutel")
     assert resp.status_code == 404
+
+
+# --- Drive-sync: geuploade documenten (en het eerder aangeleverde bewijs
+# van inschrijving) komen ook in de Drive-map van de kandidaat terecht ---
+
+
+@pytest.fixture
+def drive_sync_calls(monkeypatch):
+    """Vangt aanroepen naar drive_sync op i.p.v. echt rclone te draaien - zie
+    kamerverhuur_scanner/drive_sync.py, gekoppeld in kandidaat_documenten_upload()."""
+    import webapp.app as appmodule
+    calls = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "upload_bestand",
+        lambda config, pand, huurder_naam, bestandsnaam, inhoud: calls.append(
+            (huurder_naam, bestandsnaam, inhoud)
+        ) or True,
+    )
+    return calls
+
+
+def test_documenten_upload_kopieert_naar_drive_map_van_kandidaat(app_client, drive_sync_calls):
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+            "inkomen_bestanden": (io.BytesIO(b"fake-inkomen-bytes"), "loonstrook.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    namen = [huurder_naam for huurder_naam, _bestandsnaam, _inhoud in drive_sync_calls]
+    assert namen == ["Jane Doe", "Jane Doe"]
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert any("id.jpg" in b for b in bestandsnamen)
+    assert any("loonstrook.pdf" in b for b in bestandsnamen)
+
+
+def test_documenten_upload_kopieert_ook_eerder_aangeleverd_bewijs_inschrijving(app_client, drive_sync_calls):
+    from kamerverhuur_scanner.lokale_media import LokaleMediaClient
+
+    file_id = LokaleMediaClient(
+        app_client.test_config, _fake_sheet_singleton["mahoniestraat"].pand, "aanmeldingen"
+    ).upload_bestand("1", "enrollment.pdf", "application/pdf", b"fake-enrollment-bytes")
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "", "", "", "", "", "", "", "", "",
+         f"/pand/mahoniestraat/aanmeldingen/bewijs/1/{file_id}", "", "", ""],
+    ]
+
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert "enrollment.pdf" in bestandsnamen
+    inhoud_per_naam = {b: i for _n, b, i in drive_sync_calls}
+    assert inhoud_per_naam["enrollment.pdf"] == b"fake-enrollment-bytes"
+
+
+def test_documenten_upload_zonder_gevonden_aanmelding_slaat_studiebewijs_over(app_client, drive_sync_calls):
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    # geen aanmeldingen geregistreerd voor deze kandidaat - alleen het net
+    # geuploade ID-document wordt naar Drive gekopieerd, verder geen fout
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert len(bestandsnamen) == 1
+    assert "id.jpg" in bestandsnamen[0]
