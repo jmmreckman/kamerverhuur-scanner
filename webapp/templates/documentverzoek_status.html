@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Documentverzoek - {{ verzoek.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Documentverzoek</h1>
+  <p class="muted">{{ verzoek.naam }} - kamer {{ verzoek.kamer }}</p>
+</div>
+
+<div class="card">
+  <p>
+    {% if verzoek.verzonden_op %}
+      <span class="pil status-betaald">Verzonden op {{ verzoek.verzonden_op }}</span>
+    {% else %}
+      <span class="pil pil-neutral">Nog niet verzonden</span>
+    {% endif %}
+    {% if verzoek.ontvangen_op %}
+      <span class="pil status-betaald">Documenten ontvangen op {{ verzoek.ontvangen_op }}</span>
+    {% else %}
+      <span class="pil pil-neutral">Nog geen documenten ontvangen</span>
+    {% endif %}
+  </p>
+
+  {% if verzoek.documenten %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Categorie</th><th>Bestand</th><th></th></tr>
+    {% for doc in verzoek.documenten %}
+    <tr>
+      <td>{{ doc.categorie }}</td>
+      <td>{{ doc.naam }}</td>
+      <td><a href="{{ url_for('documentverzoek_bestand', pand_slug=huidig_pand.slug, sleutel=verzoek.sleutel, bestand_id=doc.bestand_id) }}" target="_blank" rel="noopener">Bekijken</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen documenten geupload.</p>
+  {% endif %}
+
+  <p style="margin-top:1rem">
+    <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar bezichtigingen</a>
+  </p>
+</div>
+{% endblock %}

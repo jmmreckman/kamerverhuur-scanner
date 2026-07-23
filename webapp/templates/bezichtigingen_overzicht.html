@@ -10,12 +10,11 @@
 
 <div class="card">
   {% if rijen %}
-  <form method="post" action="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}"
-        onsubmit="return confirm('Aangevinkte bezichtiging(en) verwijderen? Dat tijdslot komt dan weer vrij.')">
+  <form method="post" action="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}">
     <div class="tabel-scroll">
     <table>
       <tr>
-        <th>Verwijderen</th><th>Datum</th><th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th>
+        <th>Kies</th><th>Datum</th><th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th>
         <th>Bel nummer</th><th>Email</th>
       </tr>
       {% for rijnummer, r in rijen %}
@@ -32,8 +31,14 @@
       {% endfor %}
     </table>
     </div>
-    <div style="margin-top:1rem; display:flex; gap:0.6rem">
-      <button class="btn btn-secondary" type="submit">Verwijderen</button>
+    <p class="muted" style="margin-top:0.75rem">Kandidaat gekozen? Vink diegene aan en klik op "Documenten
+       verzoeken" om een mail te sturen met een link om ID/paspoort en bewijs van inkomen/garantsteller aan
+       te leveren.</p>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+      <button class="btn" type="submit" formaction="{{ url_for('documentverzoek_voorbeeld', pand_slug=huidig_pand.slug) }}">Documenten verzoeken</button>
+      <button class="btn btn-secondary" type="submit"
+              formaction="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}"
+              onclick="return confirm('Aangevinkte bezichtiging(en) verwijderen? Dat tijdslot komt dan weer vrij.')">Verwijderen</button>
       <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar aanmeldingen</a>
     </div>
   </form>

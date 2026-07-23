@@ -36,7 +36,7 @@ from kamerverhuur_scanner.runner import (
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, afwijzing, bezichtiging, communicatie, contracts, ondertekenen
+from . import ads, afwijzing, bezichtiging, communicatie, contracts, documentverzoek, ondertekenen
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
@@ -1158,6 +1158,150 @@ def create_app(config: Config | None = None) -> Flask:
                 return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
         flash(f"{len(rijnummers)} bezichtiging(en) verwijderd - dat tijdslot is nu weer vrij.")
         return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+
+    # --- Documenten opvragen bij de gekozen kandidaat (na de bezichtiging) ---
+
+    def _documenten_media(pand=None) -> LokaleMediaClient:
+        return LokaleMediaClient(config, pand or g.pand, "documentverzoeken")
+
+    def _upload_url(token: str) -> str:
+        return url_for("kandidaat_documenten_upload", token=token, _external=True)
+
+    @app.route("/pand/<pand_slug>/aanmeldingen/bezichtigingen/documenten-verzoeken", methods=["POST"])
+    @login_required
+    def documentverzoek_voorbeeld(pand_slug: str):
+        try:
+            rijnummers = [int(r) for r in request.form.getlist("rijnummers")]
+        except ValueError:
+            flash("Ongeldige aanvraag - probeer opnieuw.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        if len(rijnummers) != 1:
+            flash("Selecteer precies 1 kandidaat om documenten bij op te vragen.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+
+        sheet = SheetClient(config, g.pand)
+        gekozen = next((r for rijnummer, r in sheet.get_bezichtigingen_met_rijnummer() if rijnummer == rijnummers[0]), None)
+        if gekozen is None:
+            flash("Deze bezichtiging bestaat niet meer.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        _datum, _tijd_start, _tijd_eind, kamer, naam, email, telefoon, _manier, _bel_nr, _bevestigd_op = gekozen
+        if not email:
+            flash(f"Geen e-mailadres bekend voor {naam or 'deze kandidaat'} - kan geen documentverzoek versturen.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+
+        # Het verzoek (en dus de echte, unieke upload-link) wordt al hier
+        # aangemaakt zodat het voorbeeldscherm de kloppende link kan tonen -
+        # er wordt pas gemaild na bevestiging (zie documentverzoek_versturen).
+        verzoek = documentverzoek.start_documentverzoek(pand_slug, kamer, naam, email, telefoon, config.state_dir)
+        mail = documentverzoek.bouw_documentverzoek_mail(g.pand, kamer, naam, _upload_url(verzoek["token"]))
+        return render_template(
+            "documentverzoek_voorbeeld.html", sleutel=verzoek["sleutel"], kandidaat_naam=naam,
+            onderwerp=mail["onderwerp"], tekst=mail["tekst"],
+        )
+
+    @app.route("/pand/<pand_slug>/documentverzoek/<sleutel>/versturen", methods=["POST"])
+    @login_required
+    def documentverzoek_versturen(pand_slug: str, sleutel: str):
+        verzoek = documentverzoek.lees_verzoek(pand_slug, sleutel, config.state_dir)
+        if verzoek is None:
+            abort(404)
+        onderwerp = request.form.get("onderwerp", "").strip()
+        tekst = request.form.get("tekst", "").strip()
+        if not onderwerp or not tekst:
+            flash("Onderwerp en tekst zijn verplicht.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        bcc = _ontvangers(pand_slug, "contracten", config.email_bcc)
+        try:
+            verstuur_email(config, verzoek["email"], onderwerp, tekst, bcc=bcc)
+        except MailError:
+            app.logger.exception("Documentverzoek-mail naar %s is mislukt.", verzoek["email"])
+            flash("Versturen van het documentverzoek is mislukt - probeer het nog eens.")
+            return redirect(url_for("bezichtigingen_overzicht", pand_slug=pand_slug))
+        documentverzoek.markeer_verzonden(pand_slug, sleutel, config.state_dir)
+        flash(f"Documentverzoek verstuurd naar {verzoek['naam'] or verzoek['email']}.")
+        return redirect(url_for("documentverzoek_status", pand_slug=pand_slug, sleutel=sleutel))
+
+    @app.route("/pand/<pand_slug>/documentverzoek/<sleutel>")
+    @login_required
+    def documentverzoek_status(pand_slug: str, sleutel: str):
+        verzoek = documentverzoek.lees_verzoek(pand_slug, sleutel, config.state_dir)
+        if verzoek is None:
+            abort(404)
+        return render_template("documentverzoek_status.html", verzoek=verzoek)
+
+    @app.route("/pand/<pand_slug>/documentverzoek/<sleutel>/bestand/<bestand_id>")
+    @login_required
+    def documentverzoek_bestand(pand_slug: str, sleutel: str, bestand_id: str):
+        gevonden = _documenten_media().lees_bestand(sleutel, bestand_id)
+        if not gevonden:
+            abort(404)
+        naam, mimetype, inhoud = gevonden
+        return Response(inhoud, mimetype=mimetype, headers={"Content-Disposition": f'inline; filename="{naam}"'})
+
+    @app.route("/documenten/<token>", methods=["GET", "POST"])
+    def kandidaat_documenten_upload(token: str):
+        """Publieke uploadpagina (geen login) waarop de kandidaat-huurder,
+        via de link uit het documentverzoek, een kopie van ID/paspoort en
+        bewijs van inkomen/garantsteller kan aanleveren."""
+        gevonden = documentverzoek.zoek_via_token(token, config.state_dir)
+        if gevonden is None:
+            abort(404)
+        pand_slug, verzoek = gevonden
+        pand = find_pand(_properties(), pand_slug)
+        if pand is None:
+            abort(404)
+
+        if request.method == "POST":
+            categorieen = {
+                "id_bestanden": "Copy of ID/passport",
+                "inkomen_bestanden": "Proof of income/guarantor",
+            }
+            geuploade_documenten = []
+            try:
+                for veldnaam, categorie_label in categorieen.items():
+                    for bestand in request.files.getlist(veldnaam):
+                        if not bestand or not bestand.filename:
+                            continue
+                        bestandsnaam = f"{categorie_label} - {bestand.filename}"
+                        bestand_id = _documenten_media(pand).upload_bestand(
+                            verzoek["sleutel"], bestandsnaam, bestand.mimetype, bestand.read()
+                        )
+                        geuploade_documenten.append({
+                            "categorie": categorie_label, "bestand_id": bestand_id,
+                            "naam": bestandsnaam, "mimetype": bestand.mimetype or "application/octet-stream",
+                        })
+            except Exception:
+                app.logger.exception("Uploaden van documenten is mislukt (pand %s, sleutel %s).", pand_slug, verzoek["sleutel"])
+                return render_template(
+                    "documenten_upload.html", pand=pand, verzoek=verzoek,
+                    fout="Sorry, uploading your documents failed. Please try again with smaller files, or contact us directly.",
+                ), 500
+            if not geuploade_documenten:
+                return render_template(
+                    "documenten_upload.html", pand=pand, verzoek=verzoek,
+                    fout="Please select at least one file to upload.",
+                ), 400
+            documentverzoek.voeg_documenten_toe(pand_slug, verzoek["sleutel"], geuploade_documenten, config.state_dir)
+            # Meldingsmail aan de beheerder(s) is best-effort, mag een
+            # geslaagde upload nooit laten mislukken.
+            ontvangers = _ontvangers(pand_slug, "contracten", config.email_bcc)
+            if ontvangers:
+                status_url = url_for(
+                    "documentverzoek_status", pand_slug=pand_slug, sleutel=verzoek["sleutel"], _external=True
+                )
+                try:
+                    verstuur_email(
+                        config, ", ".join(ontvangers),
+                        f"Documents received - room {verzoek['kamer']}, {pand.naam}",
+                        f"{verzoek['naam']} heeft documenten aangeleverd voor kamer {verzoek['kamer']} "
+                        f"({pand.naam}):\n{status_url}",
+                        bcc=[],
+                    )
+                except MailError:
+                    app.logger.exception("Melding van geuploade documenten (sleutel %s) is mislukt.", verzoek["sleutel"])
+            return render_template("documenten_upload_bedankt.html", pand=pand, verzoek=verzoek)
+
+        return render_template("documenten_upload.html", pand=pand, verzoek=verzoek, fout=None)
 
     def _licht_huurders_in_redirect(pand_slug: str, datum_iso: str, afspraken_op_datum: list[dict]):
         datum = date.fromisoformat(datum_iso)

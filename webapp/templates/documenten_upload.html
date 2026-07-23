@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Upload documents - {{ pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Upload your documents</h1>
+  <p class="muted">{{ pand.naam }} - room {{ verzoek.kamer }}</p>
+</div>
+
+<div class="card">
+  <p>To draw up the draft rental agreement, please upload the documents below. You can select
+     multiple files per field if needed (e.g. front and back of your ID card).</p>
+</div>
+
+{% if fout %}
+<div class="flash"><p>{{ fout }}</p></div>
+{% endif %}
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data">
+    <label>Copy of your ID card or passport
+      <input type="file" name="id_bestanden" accept="image/*,.pdf" multiple>
+    </label>
+    <label>Proof of income (payslip/employment contract) or guarantor's proof of income
+      <input type="file" name="inkomen_bestanden" accept="image/*,.pdf" multiple>
+    </label>
+    <button class="btn" type="submit">Upload</button>
+  </form>
+</div>
+{% endblock %}
