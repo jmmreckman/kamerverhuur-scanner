@@ -17,6 +17,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV PYTHONUNBUFFERED=1
+# rclone's config (incl. de Drive-inlogtoken, zie hierboven) moet in de
+# blijvend gekoppelde data-map staan (STATE_DIR=/app/data, gekoppeld aan een
+# volume in docker-compose.yml) - anders staat 'ie alleen in de schrijfbare
+# laag van de container, en verdwijnt hij zodra de container een keer
+# opnieuw wordt opgebouwd (bv. bij elke herdeploy).
+ENV RCLONE_CONFIG=/app/data/rclone.conf
 
 EXPOSE 8000
 

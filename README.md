@@ -466,6 +466,11 @@ Dit is optioneel en faalt altijd stil (met een logregel) als het niet is
 ingesteld of een keer mislukt - bestanden blijven sowieso ook gewoon lokaal
 op de server staan (zie hierboven), dit is puur een extra, veilige kopie.
 
+rclone's eigen inloggegevens (het token) staan in `/app/data/rclone.conf`
+(via `RCLONE_CONFIG` in het Dockerfile) - dus in dezelfde blijvend gekoppelde
+map als de rest van de data, en overleven dus een herbuild/redeploy net als
+alles onder STATE_DIR.
+
 **Eenmalige koppeling (moet je zelf doen, met je eigen Google-inlog):**
 
 1. rclone staat al in de Docker-image (zie Dockerfile). Log in op de VPS en
