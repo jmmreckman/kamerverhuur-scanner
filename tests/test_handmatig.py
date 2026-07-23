@@ -2,11 +2,13 @@ from datetime import date
 
 from rotterdam_scanner.handmatig import (
     HandmatigeRegelError,
+    listing_state_naar_funda_listing,
     parse_bestand,
     parse_funda_tekstdump,
     parse_regel,
     parse_regels,
 )
+from rotterdam_scanner.state import ListingState
 
 
 def test_parse_regel_met_toevoeging_en_zonder_link():
@@ -168,3 +170,36 @@ def test_parse_funda_tekstdump_datum_loopt_niet_over_naar_volgende_woning():
     by_id = {l.object_id: l for l in listings}
     assert by_id["3078CN-44"].eerst_gezien_override is None
     assert by_id["3077MN-15"].eerst_gezien_override == date(2026, 6, 21)
+
+
+def _afgevallen_state(object_id="3073KJ-47A", straatnaam="Hillevliet", url="https://example.com/x"):
+    return ListingState(
+        object_id=object_id,
+        url=url,
+        weergavenaam=f"{straatnaam} 47A, Rotterdam",
+        eerst_gezien="2026-06-01",
+        laatst_gezien="2026-07-01",
+        status="afgevallen",
+        straatnaam=straatnaam,
+        huisnummer="47A",
+        afvalreden="Ligt binnen 50 meter van een bestaande kamerverhuurvergunning.",
+    )
+
+
+def test_listing_state_naar_funda_listing_met_toevoeging():
+    listing = listing_state_naar_funda_listing(_afgevallen_state())
+    assert listing.postcode == "3073KJ"
+    assert listing.huisnummer == "47"
+    assert listing.toevoeging == "A"
+    assert listing.object_id == "3073KJ-47A"
+    assert listing.url == "https://example.com/x"
+
+
+def test_listing_state_naar_funda_listing_zonder_toevoeging():
+    listing = listing_state_naar_funda_listing(_afgevallen_state(object_id="3078CN-44"))
+    assert listing.huisnummer == "44"
+    assert listing.toevoeging == ""
+
+
+def test_listing_state_naar_funda_listing_onherkende_id_geeft_none():
+    assert listing_state_naar_funda_listing(_afgevallen_state(object_id="niet-een-postcode")) is None

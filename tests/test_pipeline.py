@@ -122,6 +122,37 @@ def test_50m_vergunning_laat_huis_afvallen(tmp_path):
     assert "50 meter" in result.afvalreden
 
 
+def test_50m_regel_geldt_niet_meer_bij_3_kamers_of_minder(tmp_path):
+    # 54 m2 BAG-oppervlakte -> floor(54/18) = 3 kamers, precies op de grens.
+    p1, p2, p3, p4, p5 = _patch_geo_checks(binnen_50m=True, oppervlakte=54)
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "actief"
+    assert result.aantal_kamers_mogelijk == 3
+    assert "50-meter-regel niet van toepassing" in result.opmerking
+
+
+def test_50m_regel_geldt_nog_gewoon_bij_4_kamers(tmp_path):
+    # 72 m2 BAG-oppervlakte -> floor(72/18) = 4 kamers, net boven de grens.
+    p1, p2, p3, p4, p5 = _patch_geo_checks(binnen_50m=True, oppervlakte=72)
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "afgevallen"
+    assert "50 meter" in result.afvalreden
+
+
+def test_50m_regel_blijft_gelden_als_aantal_kamers_onbekend_is(tmp_path):
+    # BAG-storing -> aantal kamers onbekend -> voor de zekerheid blijft de regel gelden.
+    with patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo()), patch(
+        "rotterdam_scanner.pipeline.in_nulquotum_gebied", return_value=False
+    ), patch("rotterdam_scanner.pipeline.binnen_50m_van_kamerverhuurvergunning", return_value=True), patch(
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", side_effect=RuntimeError("BAG plat")
+    ):
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "afgevallen"
+    assert "50 meter" in result.afvalreden
+
+
 def test_huis_dat_alle_geo_checks_doorstaat_wordt_actief_met_woz_vlag(tmp_path):
     p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Middelland")
     with p1, p2, p3, p4, p5:

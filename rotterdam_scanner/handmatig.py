@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from urllib.parse import quote_plus
 
 from .funda_mail import FundaListing
+from .state import ListingState
 
 # Verwacht formaat per regel: "POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]", bijv.
 # "3073KJ 47A" of "3078 CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-.../123/".
@@ -14,6 +15,30 @@ _REGEL_RE = re.compile(
     r"^(?P<postcode>\d{4}\s?[A-Za-z]{2})\s+(?P<huisnummer>\d+)-?(?P<toevoeging>[A-Za-z0-9]*)"
     r"(?:\s+(?P<url>\S+))?\s*$"
 )
+
+# Zelfde vorm als funda_mail._maak_object_id(): "POSTCODE-HUISNUMMERTOEVOEGING", bijv.
+# "3073KJ-47A". Elk "afgevallen"-adres in state.json heeft altijd zo'n ID, want afvallen
+# kan pas nadat het adres al succesvol geocodeerd is (zie pipeline._process_new_listing).
+_OBJECT_ID_RE = re.compile(r"^(?P<postcode>\d{4}[A-Z]{2})-(?P<huisnummer>\d+)(?P<toevoeging>[A-Za-z0-9]*)$")
+
+
+def listing_state_naar_funda_listing(item: ListingState) -> FundaListing | None:
+    """Reconstrueert een opnieuw te scannen FundaListing uit een bestaande
+    state.json-regel, voor herscan_afgevallen.py - geeft None als de object_id niet
+    het verwachte postcode-huisnummer-formaat heeft (zou niet moeten voorkomen bij een
+    "afgevallen"-adres, maar voorkomt een crash op onverwacht oude/handmatige state)."""
+    match = _OBJECT_ID_RE.match(item.object_id)
+    if not match:
+        return None
+    return FundaListing(
+        object_id=item.object_id,
+        url=item.url,
+        straatnaam=item.straatnaam,
+        huisnummer=match.group("huisnummer"),
+        toevoeging=match.group("toevoeging"),
+        postcode=match.group("postcode"),
+        woonplaats="Rotterdam",
+    )
 
 
 def _fallback_zoeklink(*adresdelen: str) -> str:

@@ -73,7 +73,29 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             afvalreden="Ligt in een nul-quotumgebied voor kamerverhuur.",
         )
 
-    if binnen_50m_van_kamerverhuurvergunning(geo.rd_x, geo.rd_y):
+    # Het aantal kamers moet al bekend zijn vóór de 50-meter-check hieronder: bij
+    # kleinschalige kamerverhuur (t/m 3 kamers) geldt de 50-meter-afstandsregel niet
+    # (bron: gemeentelijk kamerverhuurbeleid) - vandaar dat de BAG-oppervlakte hier
+    # eerder wordt opgehaald dan voorheen (was verderop, na alle geo-checks).
+    opmerking = None
+    try:
+        bag = fetch_bag_gegevens(geo.adresseerbaarobject_id)
+    except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
+        bag = None
+        opmerking = f"BAG-gegevens konden niet opgehaald worden ({exc})."
+    bag_oppervlakte = bag.oppervlakte if bag else None
+    bouwjaar = bag.bouwjaar if bag else None
+    aantal_kamers = bereken_aantal_kamers_mogelijk(bag_oppervlakte) if bag_oppervlakte else None
+
+    # Onbekend aantal kamers (bv. BAG-storing) telt NIET als vrijgesteld - dan blijft de
+    # 50-meter-regel voor de zekerheid gewoon gelden.
+    vrijgesteld_van_50m_regel = aantal_kamers is not None and aantal_kamers <= 3
+    if vrijgesteld_van_50m_regel:
+        opmerking = (opmerking + " " if opmerking else "") + (
+            f"50-meter-regel niet van toepassing: bij {aantal_kamers} kamer(s) "
+            "(kleinschalige kamerverhuur, t/m 3) geldt die uitzondering."
+        )
+    elif binnen_50m_van_kamerverhuurvergunning(geo.rd_x, geo.rd_y):
         return ListingState(
             object_id=listing.object_id,
             url=listing.url,
@@ -88,17 +110,20 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         )
 
     opkoop = check_opkoopbescherming(geo.rotterdam_wijk, config.opkoopbescherming_woz_grens)
-    opmerking = None
 
     if opkoop.in_beschermde_wijk:
         try:
             woz = meest_recente_woz_waarde(geo.nummeraanduiding_id)
         except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
             woz = None
-            opmerking = f"WOZ-waarde kon niet automatisch opgehaald worden ({exc}); handmatig checken."
+            opmerking = (opmerking + " " if opmerking else "") + (
+                f"WOZ-waarde kon niet automatisch opgehaald worden ({exc}); handmatig checken."
+            )
         else:
             if woz is None:
-                opmerking = "Geen publieke WOZ-waarde gevonden voor dit adres; handmatig checken."
+                opmerking = (opmerking + " " if opmerking else "") + (
+                    "Geen publieke WOZ-waarde gevonden voor dit adres; handmatig checken."
+                )
             else:
                 opkoop = check_opkoopbescherming(
                     geo.rotterdam_wijk, config.opkoopbescherming_woz_grens, woz_waarde=woz.bedrag
@@ -118,14 +143,6 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             afvalreden=opkoop.toelichting,
         )
 
-    try:
-        bag = fetch_bag_gegevens(geo.adresseerbaarobject_id)
-    except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
-        bag = None
-        opmerking = (opmerking + " " if opmerking else "") + f"BAG-gegevens konden niet opgehaald worden ({exc})."
-    bag_oppervlakte = bag.oppervlakte if bag else None
-    bouwjaar = bag.bouwjaar if bag else None
-
     opslag_percentage = 0.0
     try:
         opslag_signalen = bepaal_huurprijsopslag(geo.rd_x, geo.rd_y, bouwjaar)
@@ -135,11 +152,6 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         opmerking = (
             opmerking + " " if opmerking else ""
         ) + f"Monumenten-/opslagcheck kon niet uitgevoerd worden ({exc})."
-
-    # Aantal kamers is al bekend zodra de BAG-oppervlakte er is, ook als de
-    # vraagprijs (nog) ontbreekt - los tonen in de rapporttabel heeft dus meer bereik
-    # dan de volledige investeringsberekening (die ook de vraagprijs nodig heeft).
-    aantal_kamers = bereken_aantal_kamers_mogelijk(bag_oppervlakte) if bag_oppervlakte else None
 
     winst_pm_pp = None
     eigen_inleg_pp = None

@@ -17,7 +17,9 @@ Elke ochtend om 09:00:
    combinatie hoort bij precies één adres in Nederland.
 3. Checkt automatisch:
    - **Nul-quotumgebied** — via de officiële GIS-kaartlaag van de gemeente Rotterdam.
-   - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem.
+   - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem. Geldt **niet**
+     bij kleinschalige kamerverhuur (t/m 3 kamers, op basis van de BAG-oppervlakte) —
+     die uitzondering wordt automatisch toegepast en staat er als opmerking bij.
    - **Opkoopbescherming (wijk + WOZ-waarde)** — vergelijkt de buurt met de 16 wijken
      waar opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming) én haalt voor
      die huizen automatisch en **gratis** de WOZ-waarde op bij de officiële
@@ -189,6 +191,9 @@ docker compose exec fundazoeker python3 main.py
 # een medegebruiker mee te mailen) - REPORT_TO_ADDRESS in fundazoeker.env blijft
 # ongewijzigd, dit geldt alleen voor deze ene aanroep
 docker compose exec -e REPORT_TO_ADDRESS=jmmreckman@gmail.com fundazoeker python3 main.py
+
+# Eerder afgevallen huizen opnieuw checken (bijv. na een bugfix in een van de regels)
+docker compose exec fundazoeker python3 herscan_afgevallen.py
 ```
 
 ## Het dagrapport lezen
@@ -327,6 +332,23 @@ wordt het toch "vandaag" (dag 1 van 30). Dit heeft geen invloed op de 30-dagen-e
 zelf — die kijkt naar wanneer dit systeem een huis voor het laatst zag, niet naar hoe
 oud de advertentie is — dus een huis dat al een jaar te koop staat valt niet meteen
 weg omdat de datum ver in het verleden ligt.
+
+## Eerder afgevallen huizen opnieuw checken (na een bugfix in een van de regels)
+
+Als een van de checks zelf gecorrigeerd wordt (bijv. de 50-meter-vrijstelling bij t/m
+3 kamers hierboven), kunnen huizen die daardoor destijds ten onrechte afvielen alsnog
+kansrijk blijken. In plaats van zelf een adressenlijst te verzamelen en die met
+`handmatig_toevoegen.py --herprocessen` opnieuw aan te bieden, leest
+`herscan_afgevallen.py` gewoon rechtstreeks `state.json` uit en laat elk daar bekend
+"afgevallen"-adres opnieuw door alle checks lopen:
+
+```powershell
+venv\Scripts\python herscan_afgevallen.py
+```
+
+Stuurt daarna een rapport-mail met wat er alsnog kansrijk bleek. Adressen die je zelf
+handmatig hebt verwijderd (via de verwijder-link) worden hierbij, net als bij
+`--herprocessen`, nooit opnieuw actief.
 
 ## Databronnen (en waarom ze robuust genoeg zijn om op te bouwen)
 
