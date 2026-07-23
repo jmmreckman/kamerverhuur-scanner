@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro, icon_contracten, icon_inbox %}
+{% from "_icons.html" import icon_check, icon_alert, icon_clock, icon_euro, icon_contracten, icon_inbox, icon_sleutel %}
 {% block title %}Dashboard - {{ huidig_pand.naam }}{% endblock %}
 
 {% macro overige_tegels() %}
@@ -41,6 +41,13 @@
     <div>
       <div class="stat-value">Opzegging</div>
       <div class="stat-label">geef huuropzegging door</div>
+    </div>
+  </a>
+  <a class="stat-card" href="{{ url_for('sleuteloverzicht', pand_slug=huidig_pand.slug) }}">
+    <div class="stat-icon">{{ icon_sleutel() }}</div>
+    <div>
+      <div class="stat-value">Sleutels</div>
+      <div class="stat-label">sleuteloverzicht</div>
     </div>
   </a>
 {% endmacro %}

@@ -149,6 +149,42 @@ def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
     assert pand["gemeente_meldpunt"] == "www.rotterdam.nl/ongewenst-verhuurgedrag-melden"
 
 
+def test_beheerder_kan_sleutels_opslaan(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "sleutels": "Lips 961 zolder straatkant\nLips 961 zolder tuinkant\n\nNemef 1240 BG straatkant",
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    panden = json.loads(properties_file.read_text())
+    assert panden[0]["sleutels"] == [
+        "Lips 961 zolder straatkant", "Lips 961 zolder tuinkant", "Nemef 1240 BG straatkant",
+    ]
+
+
+def test_sleuteloverzicht_toont_sleutels_van_pand(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "sleutels": "Lips 961 zolder straatkant\nNemef 1240 BG straatkant",
+    })
+    resp = c.get("/pand/mahoniestraat/sleutels")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Lips 961 zolder straatkant" in body
+    assert "Nemef 1240 BG straatkant" in body
+
+
+def test_sleuteloverzicht_zonder_sleutels_toont_lege_melding(client):
+    c, _properties_file = client
+    _login(c, "beheerder")
+    resp = c.get("/pand/mahoniestraat/sleutels")
+    assert resp.status_code == 200
+    assert "nog geen sleutels" in resp.get_data(as_text=True).lower()
+
+
 def test_nieuw_pand_toont_bold_slot_vinkje_standaard_aangevinkt(client):
     c, _properties_file = client
     _login(c, "beheerder")

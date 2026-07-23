@@ -72,6 +72,22 @@ def bereken_planning(aanmelders: list[dict], tijd_vanaf: time, duur_minuten: int
     return afspraken
 
 
+def vind_dubbele_emails(afspraken: list[dict], bestaande_emails: set[str]) -> set[str]:
+    """Geeft de (genormaliseerde, lowercase) e-mailadressen terug waarvoor de
+    beheerder gewaarschuwd moet worden vóór het versturen: adressen die
+    vaker dan 1x voorkomen onder de aangevinkte aanmelders in dit voorstel,
+    of die al eerder zijn uitgenodigd (staan in bestaande_emails, ongeacht
+    op welke datum) - bv. iemand die het aanmeldformulier per ongeluk twee
+    keer heeft ingevuld en zo ongemerkt twee keer wordt uitgenodigd."""
+    tellingen: dict[str, int] = {}
+    for afspraak in afspraken:
+        email = (afspraak.get("email") or "").strip().lower()
+        if email:
+            tellingen[email] = tellingen.get(email, 0) + 1
+    bestaand_genormaliseerd = {e.strip().lower() for e in bestaande_emails if e.strip()}
+    return {email for email, aantal in tellingen.items() if aantal > 1 or email in bestaand_genormaliseerd}
+
+
 def bouw_bevestigingsmail(pand: Pand, afspraak: dict, datum: date) -> dict[str, str]:
     """De (Engelstalige) bevestigingsmail naar de aanmelder zelf, met locatie,
     datum, tijdstip en manier van bezichtigen."""

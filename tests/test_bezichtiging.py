@@ -7,7 +7,7 @@ import io
 import pytest
 
 from tests.test_aanbod_routes import VOLLEDIG_FORMULIER, _bouw_app_client, _fake_sheet_singleton
-from webapp.bezichtiging import bel_nummer, bereken_planning, parse_aanmelder, serialiseer_aanmelder
+from webapp.bezichtiging import bel_nummer, bereken_planning, parse_aanmelder, serialiseer_aanmelder, vind_dubbele_emails
 from datetime import time
 
 
@@ -71,6 +71,26 @@ def test_bereken_planning_plant_achter_elkaar():
     assert [(a["tijd_start"], a["tijd_eind"]) for a in afspraken] == [
         ("14:00", "14:15"), ("14:15", "14:30"), ("14:30", "14:45"),
     ]
+
+
+def test_vind_dubbele_emails_binnen_hetzelfde_voorstel():
+    afspraken = [{"email": "jane@example.com"}, {"email": "Jane@Example.com"}, {"email": "john@example.com"}]
+    assert vind_dubbele_emails(afspraken, set()) == {"jane@example.com"}
+
+
+def test_vind_dubbele_emails_al_eerder_uitgenodigd():
+    afspraken = [{"email": "jane@example.com"}]
+    assert vind_dubbele_emails(afspraken, {"Jane@Example.com"}) == {"jane@example.com"}
+
+
+def test_vind_dubbele_emails_zonder_overlap_geeft_lege_set():
+    afspraken = [{"email": "jane@example.com"}, {"email": "john@example.com"}]
+    assert vind_dubbele_emails(afspraken, {"someone-else@example.com"}) == set()
+
+
+def test_vind_dubbele_emails_negeert_lege_adressen():
+    afspraken = [{"email": ""}, {"email": ""}]
+    assert vind_dubbele_emails(afspraken, set()) == set()
 
 
 # --- Routes ---
@@ -155,6 +175,72 @@ def test_volledige_bezichtigingsflow_stuurt_bevestiging_en_overzicht(app_client,
     assert "Jane Doe" in overzicht_mail["tekst"]
     assert "John Smith" in overzicht_mail["tekst"]
     assert overzicht_mail["bcc"] == []
+
+
+def test_bezichtiging_voorstel_waarschuwt_bij_zelfde_email_in_1_voorstel(app_client):
+    _login(app_client)
+    # dezelfde persoon vulde het aanmeldformulier twee keer in - twee losse
+    # aanmelder-regels, maar hetzelfde e-mailadres
+    aanmelder_1 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    aanmelder_2 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/voorstel",
+        data={
+            "aanmelders": [aanmelder_1, aanmelder_2],
+            "datum": "2026-08-01", "tijd_vanaf": "14:00", "tijd_tot": "15:00", "duur_minuten": "15",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "dubbel uitgenodigd" in body.lower()
+    assert "jane@example.com" in body
+
+
+def test_bezichtiging_voorstel_waarschuwt_bij_al_eerder_uitgenodigd(app_client, verstuurde_mails):
+    _login(app_client)
+    aanmelder_1 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/voorstel",
+        data={
+            "aanmelders": [aanmelder_1],
+            "datum": "2026-08-01", "tijd_vanaf": "14:00", "tijd_tot": "15:00", "duur_minuten": "15",
+        },
+    )
+    app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/bevestigen",
+        data={"datum": "2026-08-01", "afspraken": ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"]},
+    )
+
+    # Jane vulde het formulier nogmaals in (2e aanmelding), en wordt nu voor
+    # een ANDER tijdslot voorgesteld - de beheerder moet hiervoor gewaarschuwd worden
+    aanmelder_2 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/voorstel",
+        data={
+            "aanmelders": [aanmelder_2],
+            "datum": "2026-08-02", "tijd_vanaf": "10:00", "tijd_tot": "11:00", "duur_minuten": "15",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "dubbel uitgenodigd" in body.lower()
+    assert "jane@example.com" in body
+
+
+def test_bezichtiging_voorstel_zonder_duplicaten_toont_geen_waarschuwing(app_client):
+    _login(app_client)
+    aanmelder_1 = serialiseer_aanmelder("1", "Jane Doe", "jane@example.com", "+31612345678", "In person", "")
+    aanmelder_2 = serialiseer_aanmelder("1", "John Smith", "john@example.com", "+31612345678", "In person", "")
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtiging/voorstel",
+        data={
+            "aanmelders": [aanmelder_1, aanmelder_2],
+            "datum": "2026-08-01", "tijd_vanaf": "14:00", "tijd_tot": "15:00", "duur_minuten": "15",
+        },
+    )
+    assert resp.status_code == 200
+    assert "dubbel uitgenodigd" not in resp.get_data(as_text=True).lower()
 
 
 def test_bezichtiging_voorstel_met_ongeldige_tijden_toont_foutmelding(app_client):

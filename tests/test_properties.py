@@ -137,6 +137,39 @@ def test_verhuurders_ontbreekt_geeft_lege_lijst(tmp_path):
     ]))
     panden = load_properties(str(path))
     assert panden[0].verhuurders == []
+
+
+def test_sleutels_als_lijst_strings_uit_zet_pand(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x",
+        "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "sleutels": ["Lips 961 zolder straatkant", "Nemef 1240 BG straatkant"],
+    })
+    panden = load_properties(str(path))
+    assert panden[0].sleutels == ["Lips 961 zolder straatkant", "Nemef 1240 BG straatkant"]
+
+
+def test_sleutels_als_tekst_per_regel_wordt_genormaliseerd(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "x",
+         "bunq_rekening_iban": "NL81BUNQ2163127125",
+         "sleutels": "Lips 961 zolder straatkant\n\nNemef 1240 BG straatkant\n"},
+    ]))
+    panden = load_properties(str(path))
+    assert panden[0].sleutels == ["Lips 961 zolder straatkant", "Nemef 1240 BG straatkant"]
+
+
+def test_sleutels_ontbreekt_geeft_lege_lijst(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "baumannlaan", "naam": "Baumannlaan 70b", "google_sheet_id": "y",
+         "bunq_rekening_iban": "NL00TEST0000000000"},
+    ]))
+    panden = load_properties(str(path))
+    assert panden[0].sleutels == []
     assert panden[0].postcode == ""
     assert panden[0].plaats == ""
 

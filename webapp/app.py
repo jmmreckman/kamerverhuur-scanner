@@ -373,6 +373,7 @@ def create_app(config: Config | None = None) -> Flask:
             "gemeente_meldpunt": form.get("gemeente_meldpunt", "").strip(),
             "heeft_bold_slot": form.get("heeft_bold_slot") == "on",
             "onderhoud_reserve_per_maand": form.get("onderhoud_reserve_per_maand", "").strip() or None,
+            "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
         }
 
     @app.route("/beheer/panden")
@@ -545,6 +546,11 @@ def create_app(config: Config | None = None) -> Flask:
             aanzeg_waarschuwingen=aanzeg_waarschuwingen, aflopende_contracten=aflopende_contracten,
             winst_laatste=_laatste_winst(pand_slug),
         )
+
+    @app.route("/pand/<pand_slug>/sleutels")
+    @login_required
+    def sleuteloverzicht(pand_slug: str):
+        return render_template("sleuteloverzicht.html", sleutels=g.pand.sleutels)
 
     @app.route("/pand/<pand_slug>/winst")
     @login_required
@@ -1595,8 +1601,12 @@ def create_app(config: Config | None = None) -> Flask:
                 f"Let op: dit past niet allemaal tussen {tijd_vanaf.strftime('%H:%M')} en "
                 f"{tijd_tot.strftime('%H:%M')} - de laatste bezichtiging eindigt om {afspraken[-1]['tijd_eind']}."
             )
+        sheet = SheetClient(config, g.pand)
+        bestaande_emails = {b[5] for b in sheet.get_bezichtigingen()}
+        dubbele_emails = bezichtiging.vind_dubbele_emails(afspraken, bestaande_emails)
         return render_template(
             "bezichtiging_voorstel.html", afspraken=afspraken, datum=datum, ruwe_afspraken=ruwe_afspraken,
+            dubbele_emails=dubbele_emails,
         )
 
     @app.route("/pand/<pand_slug>/aanmeldingen/bezichtiging/bevestigen", methods=["POST"])

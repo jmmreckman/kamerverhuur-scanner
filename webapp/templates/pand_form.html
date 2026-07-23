@@ -59,6 +59,11 @@
       <input type="text" name="onderhoud_reserve_per_maand"
              value="{{ pand.onderhoud_reserve_per_maand|eur if pand and pand.onderhoud_reserve_per_maand is not none else '' }}">
     </label>
+    <label>Sleutels (één per regel, bv. "Lips 961 zolder straatkant") - getoond op het
+      Sleuteloverzicht van dit pand.
+      <textarea name="sleutels" rows="4">{% if pand %}{% for s in pand.sleutels %}{{ s }}
+{% endfor %}{% endif %}</textarea>
+    </label>
 
     <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
     <p class="muted">Deze velden worden gebruikt om automatisch een huurcontract te genereren (zie

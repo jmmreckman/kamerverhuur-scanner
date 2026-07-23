@@ -32,6 +32,16 @@ def _normaliseer_extra_bcc(waarde) -> list[str]:
     return [str(e).strip() for e in waarde if str(e).strip()]
 
 
+def _parse_sleutels(waarde) -> list[str]:
+    """sleutels mag in properties.json een lijst met strings zijn (normale
+    vorm, zoals zet_pand 'm opslaat) of - bij handmatig bewerken - een
+    string met per regel één sleutelomschrijving."""
+    if not waarde:
+        return []
+    regels = waarde.splitlines() if isinstance(waarde, str) else waarde
+    return [str(regel).strip() for regel in regels if str(regel).strip()]
+
+
 def _parse_verhuurders(waarde) -> list[Verhuurder]:
     """verhuurders mag in properties.json een lijst met {'naam', 'adres'}-
     dicts zijn (normale vorm, zoals zet_pand 'm opslaat) of - bij handmatig
@@ -98,6 +108,7 @@ def load_properties(path: str) -> list[Pand]:
                     gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
                     heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
                     onderhoud_reserve_per_maand=_parse_onderhoud_reserve(item.get("onderhoud_reserve_per_maand")),
+                    sleutels=_parse_sleutels(item.get("sleutels")),
                 )
             )
         except KeyError as exc:

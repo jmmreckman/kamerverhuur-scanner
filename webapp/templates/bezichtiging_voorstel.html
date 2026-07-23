@@ -7,6 +7,20 @@
      bevestigingsmail te sturen.</p>
 </div>
 
+{% if dubbele_emails %}
+<div class="card warning-box">
+  <p><strong>Let op: mogelijk dezelfde persoon dubbel uitgenodigd.</strong> Onderstaand e-mailadres
+     komt vaker dan 1x voor in dit voorstel, of is al eerder uitgenodigd voor een andere bezichtiging -
+     controleer of dit niet per ongeluk dezelfde kandidaat is (bv. iemand die het aanmeldformulier twee
+     keer heeft ingevuld) voor je de mails verstuurt:</p>
+  <ul>
+    {% for email in dubbele_emails %}
+    <li>{{ email }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="tabel-scroll">
   <table>
@@ -14,13 +28,13 @@
       <th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th><th>Te bellen nummer</th><th>Email</th>
     </tr>
     {% for a in afspraken %}
-    <tr>
+    <tr{% if a.email|lower in dubbele_emails %} style="background:var(--warn-bg, rgba(230,160,20,0.12))"{% endif %}>
       <td>{{ a.tijd_start }} - {{ a.tijd_eind }}</td>
       <td>{{ a.naam }}</td>
       <td>{{ a.kamer }}</td>
       <td>{{ a.bezichtiging }}</td>
       <td>{{ a.bel_nummer }}</td>
-      <td>{{ a.email }}</td>
+      <td>{{ a.email }}{% if a.email|lower in dubbele_emails %} ⚠️{% endif %}</td>
     </tr>
     {% endfor %}
   </table>
@@ -29,7 +43,7 @@
 
 <div class="card">
   <form method="post" action="{{ url_for('bezichtiging_bevestigen', pand_slug=huidig_pand.slug) }}"
-        onsubmit="return confirm('Bevestigingsmails versturen naar alle {{ afspraken|length }} aanmelder(s) hierboven?');">
+        onsubmit="return confirm('{% if dubbele_emails %}Let op: mogelijk dubbele uitnodiging (zie waarschuwing hierboven). {% endif %}Bevestigingsmails versturen naar alle {{ afspraken|length }} aanmelder(s) hierboven?');">
     <input type="hidden" name="datum" value="{{ datum.isoformat() }}">
     {% for r in ruwe_afspraken %}
     <input type="hidden" name="afspraken" value="{{ r }}">

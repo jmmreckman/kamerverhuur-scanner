@@ -47,6 +47,10 @@ nodig.
   gewoon staan (aangezegd hebben betekent niet dat de kamer al weer verhuurd
   is) - die verdwijnt vanzelf zodra de kamer een nieuwe huurder (en dus een
   nieuwe einddatum) heeft.
+- **Sleuteloverzicht** - knop op het dashboard ("Sleutels") toont een simpel
+  tabelletje met de sleutelomschrijvingen van dat pand (bv. "Lips 961 zolder
+  straatkant") - puur informatief, in te vullen bij "Panden beheren" (veld
+  "Sleutels", één omschrijving per regel).
 - **Huuropzegging doorgeven** - knop op het dashboard: kies een huurder uit een
   dropdown, geef de nieuwe einddatum op en sla op. Die einddatum wordt direct
   weggeschreven naar kolom F ("Contract einddatum") van de Huurders-sheet -
@@ -339,7 +343,11 @@ zijn.
   per bezichtiging (in minuten) in - de aangevinkte aanmelders worden dan in
   die volgorde achter elkaar ingepland. Je krijgt eerst een voorstel te zien
   (naam, tijdstip, fysiek of videobellen, en het te bellen nummer) voordat er
-  iets verstuurd wordt. Klik je op **"Akkoord - versturen"**, dan krijgt elke
+  iets verstuurd wordt. Komt hetzelfde e-mailadres meer dan 1x voor in dat
+  voorstel, of is dat adres al eerder (op een andere datum) uitgenodigd, dan
+  verschijnt bovenaan een waarschuwing - handig als iemand het
+  aanmeldformulier per ongeluk twee keer heeft ingevuld en daardoor bijna
+  twee keer wordt uitgenodigd. Klik je op **"Akkoord - versturen"**, dan krijgt elke
   aanmelder een eigen bevestigingsmail met locatie, datum, tijdstip en manier
   van bezichtigen - bewust alleen met `EMAIL_BCC_BEHEERDER` in de BCC (dus
   niet alle mede-eigenaren). Daarnaast gaat er één Nederlandstalige

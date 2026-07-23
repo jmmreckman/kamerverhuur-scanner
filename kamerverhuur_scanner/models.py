@@ -157,6 +157,9 @@ class Pand:
     # in te vullen bedrag per pand (geen automatische aanname/percentage),
     # zelf in te stellen bij "Panden beheren".
     onderhoud_reserve_per_maand: Decimal | None = None
+    # Vrije lijst met sleutelomschrijvingen van dit pand (bv. "Lips 961 zolder
+    # straatkant") - puur informatief, getoond op de Sleuteloverzicht-pagina.
+    sleutels: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
