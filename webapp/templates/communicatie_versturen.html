@@ -10,7 +10,7 @@
 <div class="card">
   <form method="post" action="{{ url_for('communicatie_versturen', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
     <label>Aan
-      <input type="email" name="aan" value="{{ aan }}" required>
+      <input type="email" name="aan" value="{{ aan }}" multiple required>
     </label>
     <label>Onderwerp
       <input type="text" name="onderwerp" value="{{ onderwerp }}" required>

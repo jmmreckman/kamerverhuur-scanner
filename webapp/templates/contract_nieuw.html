@@ -62,7 +62,7 @@
       <input type="text" name="studierichting" id="veld-studierichting" value="{{ request.args.get('studierichting', '') }}">
     </label>
     <label>E-mailadres huurder (voor het versturen van het concept-contract)
-      <input type="email" name="email" id="veld-email" value="{{ request.args.get('email', '') }}">
+      <input type="email" name="email" id="veld-email" value="{{ request.args.get('email', '') }}" multiple>
     </label>
 
     <h2>Borgsteller (optioneel)</h2>
@@ -73,7 +73,7 @@
       <input type="text" name="borgsteller_relatie" id="veld-borgstellerrelatie" placeholder="bv. Vader" value="{{ request.args.get('borgsteller_relatie', '') }}">
     </label>
     <label>E-mailadres borgsteller (voor het verzoek tot ondertekenen, alleen nodig als er een borgsteller is)
-      <input type="email" name="borgsteller_email" id="veld-borgstelleremail" value="{{ request.args.get('borgsteller_email', '') }}">
+      <input type="email" name="borgsteller_email" id="veld-borgstelleremail" value="{{ request.args.get('borgsteller_email', '') }}" multiple>
     </label>
 
     <h2>Kamer en huurprijs</h2>

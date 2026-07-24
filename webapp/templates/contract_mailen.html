@@ -17,7 +17,7 @@
 
   <form method="post" onsubmit="return confirm('Concept-huurcontract nu versturen naar ' + this.aan.value + '?');">
     <label>Aan (e-mailadres huurder)
-      <input type="email" name="aan" value="{{ aan }}" required>
+      <input type="email" name="aan" value="{{ aan }}" multiple required>
     </label>
     <label>Onderwerp
       <input type="text" name="onderwerp" value="{{ onderwerp }}" required>

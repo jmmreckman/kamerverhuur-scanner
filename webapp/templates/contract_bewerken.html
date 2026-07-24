@@ -26,7 +26,7 @@
       <input type="text" name="studierichting" value="{{ metadata.studierichting or '' }}">
     </label>
     <label>E-mailadres huurder (voor het versturen van het concept-contract)
-      <input type="email" name="email" value="{{ metadata.email or '' }}">
+      <input type="email" name="email" value="{{ metadata.email or '' }}" multiple>
     </label>
 
     <h2>Borgsteller (optioneel)</h2>
@@ -37,7 +37,7 @@
       <input type="text" name="borgsteller_relatie" placeholder="bv. Vader" value="{{ metadata.borgsteller_relatie or '' }}">
     </label>
     <label>E-mailadres borgsteller (voor het verzoek tot ondertekenen, alleen nodig als er een borgsteller is)
-      <input type="email" name="borgsteller_email" value="{{ metadata.borgsteller_email or '' }}">
+      <input type="email" name="borgsteller_email" value="{{ metadata.borgsteller_email or '' }}" multiple>
     </label>
 
     <h2>Kamer en huurprijs</h2>
