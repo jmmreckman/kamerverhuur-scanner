@@ -6,7 +6,7 @@ from webapp import documentverzoek
 PAND = Pand(
     slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="fake",
     google_sheet_worksheet="Huurders", history_worksheet="Historie",
-    google_drive_folder_id=None, bunq_rekening_iban="NL81BUNQ2163127125",
+    bunq_rekening_iban="NL81BUNQ2163127125",
 )
 
 

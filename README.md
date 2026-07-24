@@ -224,14 +224,18 @@ nodig.
   de mail te staan); voor Burgemeester Baumannlaan (geen Bold slot, wel een
   sleutelbox aan de voordeur) staat de sleutelbox-code er al standaard in;
   overige panden zonder Bold slot krijgen alleen de algemene bevestiging.
-- **Documenten** - echte mappenstructuur van de Google Drive-map van het
-  gekozen pand: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
-  aanmaken en downloaden, rechtstreeks vanaf de site.
-- **Automatische Drive-back-up van getekende contracten** (optioneel, via
-  rclone) - per pand een map met "Huidige huurders"/"Oude huurders", waar
-  getekende contracten automatisch in belanden en huurdersmapjes automatisch
-  verhuizen bij vertrek. Zie "Drive-koppeling voor contracten (rclone)"
-  hieronder voor de eenmalige setup.
+- **Documenten** (optioneel, via rclone) - echte mappenstructuur van de
+  automatisch aangemaakte "Steenhub &lt;pandnaam&gt;"-map in je eigen Google
+  Drive: mappen openen, bestanden slepen om te uploaden, nieuwe mappen
+  aanmaken en downloaden, rechtstreeks vanaf de site. Dezelfde map waar
+  getekende contracten en documentverzoek-uploads ook automatisch in
+  belanden (zie hieronder) - één centrale plek, geen aparte, handmatig
+  gedeelde Drive-map meer nodig. Zie "Drive-koppeling voor contracten
+  (rclone)" hieronder voor de eenmalige setup (`RCLONE_REMOTE`).
+- **Automatische Drive-back-up van getekende contracten** (dezelfde
+  rclone-koppeling) - per pand een map met "Huidige huurders"/"Oude
+  huurders", waar getekende contracten automatisch in belanden en
+  huurdersmapjes automatisch verhuizen bij vertrek.
 - **Publieke aanbodpagina** (`/aanbod`, Engelstalig, geen login nodig) - toont
   alle kamers die je als "te huur" hebt aangevinkt, met foto's/video's en een
   "Apply"-knop die naar een aanmeldformulier leidt. Zie "Aanbod & aanmeldingen"
@@ -744,15 +748,11 @@ https://docs.google.com/spreadsheets/d/DIT_IS_HET_SHEET_ID/edit
 6. Kopieer het `client_email` adres uit het JSON-bestand.
 7. Deel **elke** Google Sheet (knop **Delen**) met dat e-mailadres als
    **Bewerker**.
-8. **APIs & Services > Library**, zoek **Google Drive API**, klik **Enable**
-   (voor de Documenten-pagina).
-9. Deel de Drive-map met documenten van **elk pand** ook met hetzelfde
-   `client_email` adres, als **Bewerker** (anders kan er niet geupload
-   worden). Onthoud per pand het map-ID uit de URL van de map:
-   `https://drive.google.com/drive/folders/DIT_IS_HET_MAP_ID`.
 
 Eén service account volstaat voor alle panden - je deelt hem gewoon met meer
-sheets en Drive-mappen.
+sheets. Voor Drive-toegang (de Documenten-pagina, getekende contracten e.d.)
+is dit service account niet nodig - dat gaat via je eigen Google-account, zie
+"Drive-koppeling voor contracten (rclone)" verderop.
 
 ## Stap 2b: e-mail versturen instellen (optioneel, voor de herinnering/ingebrekestelling-knoppen)
 
@@ -851,7 +851,6 @@ cp properties.json.example properties.json
     "google_sheet_id": "...het sheet ID uit stap 1...",
     "google_sheet_worksheet": "Mahoniestraat",
     "history_worksheet": "Historie",
-    "google_drive_folder_id": "...het map-ID uit stap 2, of null...",
     "bunq_rekening_iban": "NL81BUNQ2163127125"
   }
 ]

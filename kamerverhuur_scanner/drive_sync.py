@@ -36,14 +36,18 @@ OUDE_HUURDERS = "Oude huurders"
 _TIMEOUT_SECONDEN = 120
 
 
-def _root(config: Config, pand: Pand) -> str | None:
+def pand_root(config: Config, pand: Pand) -> str | None:
+    """Het rclone-pad van de hoofdmap van dit pand ("Steenhub <pandnaam>") -
+    ook gebruikt door drive_browse.py om dezelfde map te doorbladeren op de
+    Documenten-pagina, zodat er geen aparte, los gedeelde Drive-map meer
+    nodig is naast deze automatisch aangemaakte."""
     if not config.rclone_remote:
         return None
     return f"{config.rclone_remote.rstrip('/')}/Steenhub {pand.naam}"
 
 
 def _huurder_pad(config: Config, pand: Pand, huurder_naam: str, map_naam: str) -> str | None:
-    root = _root(config, pand)
+    root = pand_root(config, pand)
     if root is None or not huurder_naam:
         return None
     return f"{root}/{map_naam}/{huurder_naam}"

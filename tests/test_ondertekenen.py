@@ -13,7 +13,7 @@ def _pand(**overrides) -> Pand:
     basis = dict(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="x",
         google_sheet_worksheet="Huurders", history_worksheet="Historie",
-        google_drive_folder_id=None, bunq_rekening_iban="NL81BUNQ2163127125",
+        bunq_rekening_iban="NL81BUNQ2163127125",
         verhuurders=[
             Verhuurder(naam="Jurian Reckman", adres="Batavierenplantsoen 33, Haarlem"),
             Verhuurder(naam="Justin Winkelman", adres="Rijksstraatweg 98, Haarlem"),

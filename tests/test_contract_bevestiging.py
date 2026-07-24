@@ -56,7 +56,7 @@ def _maak_app_client(tmp_path, monkeypatch, pand_overrides=None):
 
     pand = {
         "slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-        "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "bunq_rekening_iban": "NL81BUNQ2163127125",
         "postcode": "3077WD", "plaats": "Rotterdam", "rekeninghouder_naam": "JMM Reckman",
         "gedeelde_ruimtes": "keuken, badkamer, tuin", "extra_bcc": ["justin@example.com"],
         "verhuurders": [{"naam": "Jurian Reckman", "adres": "Batavierenplantsoen 33, Haarlem"}],

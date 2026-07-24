@@ -15,7 +15,7 @@ def _pand(**overrides) -> Pand:
     basis = dict(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="x",
         google_sheet_worksheet="Huurders", history_worksheet="Historie",
-        google_drive_folder_id=None, bunq_rekening_iban="NL91ABNA0417164300",
+        bunq_rekening_iban="NL91ABNA0417164300",
     )
     basis.update(overrides)
     return Pand(**basis)

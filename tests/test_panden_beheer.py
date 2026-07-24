@@ -72,7 +72,6 @@ def test_beheerder_kan_nieuw_pand_toevoegen(client):
         "google_sheet_worksheet": "Huurders",
         "history_worksheet": "Historie",
         "aanmeldingen_worksheet": "Aanmeldingen",
-        "google_drive_folder_id": "",
         "bunq_rekening_iban": "nl00 test 0000000000",
     }, follow_redirects=True)
     assert resp.status_code == 200
@@ -111,7 +110,6 @@ def test_beheerder_kan_pand_bewerken(client):
         "google_sheet_worksheet": "Huurders",
         "history_worksheet": "Historie",
         "aanmeldingen_worksheet": "Aanmeldingen",
-        "google_drive_folder_id": "",
         "bunq_rekening_iban": "NL81BUNQ2163127125",
     }, follow_redirects=True)
     assert resp.status_code == 200

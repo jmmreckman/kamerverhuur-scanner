@@ -3,27 +3,28 @@
 {% block content %}
 <div class="page-header">
   <h1>Documenten</h1>
-  <p class="muted">Gedeelde Drive-map met puntentellingen, huurcontracten e.d.</p>
+  <p class="muted">De Drive-map "Steenhub {{ huidig_pand.naam }}" - dezelfde map waar getekende contracten en
+     aangeleverde documenten automatisch al in terechtkomen.</p>
 </div>
 
-{% if bestanden is none %}
+{% if not ingesteld %}
 <div class="card">
-  <p>Deze pagina is nog niet ingesteld. Zet <code>google_drive_folder_id</code> voor dit pand in
-     <code>properties.json</code> om de gedeelde Drive-map te koppelen (zie README).</p>
+  <p>Deze pagina is nog niet ingesteld. Zet <code>RCLONE_REMOTE</code> in <code>.env</code> om de Drive-koppeling
+     te activeren (zie README, "Drive-koppeling voor contracten (rclone)").</p>
 </div>
 {% else %}
 
 <nav class="breadcrumb">
   <a href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">Documenten</a>
-  {% for k in kruimels %}
+  {% for naam, kruimel_pad in kruimels %}
     <span class="breadcrumb-sep">/</span>
-    <a href="{{ url_for('documenten_map', pand_slug=huidig_pand.slug, folder_id=k.id) }}">{{ k.naam }}</a>
+    <a href="{{ url_for('documenten', pand_slug=huidig_pand.slug, pad=kruimel_pad) }}">{{ naam }}</a>
   {% endfor %}
 </nav>
 
 <div class="card">
   <form id="upload-form" method="post" action="{{ url_for('documenten_upload', pand_slug=huidig_pand.slug) }}" enctype="multipart/form-data">
-    <input type="hidden" name="folder_id" value="{{ folder_id or '' }}">
+    <input type="hidden" name="pad" value="{{ pad }}">
     <div id="dropzone" class="dropzone">
       <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -37,7 +38,7 @@
   <details class="nieuwe-map">
     <summary>+ Nieuwe map</summary>
     <form method="post" action="{{ url_for('documenten_nieuwe_map', pand_slug=huidig_pand.slug) }}" class="inline-form">
-      <input type="hidden" name="folder_id" value="{{ folder_id or '' }}">
+      <input type="hidden" name="pad" value="{{ pad }}">
       <input type="text" name="naam" placeholder="Naam van de map" required>
       <button class="btn btn-secondary" type="submit">Aanmaken</button>
     </form>
@@ -46,7 +47,7 @@
 
 <div class="bestand-grid">
   {% for b in bestanden if b.is_map %}
-  <a class="bestand-tile" href="{{ url_for('documenten_map', pand_slug=huidig_pand.slug, folder_id=b.id) }}">
+  <a class="bestand-tile" href="{{ url_for('documenten', pand_slug=huidig_pand.slug, pad=b.pad) }}">
     <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" stroke-linejoin="round"/>
     </svg>
@@ -54,13 +55,13 @@
   </a>
   {% endfor %}
   {% for b in bestanden if not b.is_map %}
-  <a class="bestand-tile" href="{{ url_for('documenten_download', pand_slug=huidig_pand.slug, file_id=b.id) }}">
+  <a class="bestand-tile" href="{{ url_for('documenten_download', pand_slug=huidig_pand.slug, pad=b.pad) }}">
     <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
       <path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" stroke-linejoin="round"/>
       <path d="M15 2v5h5" stroke-linejoin="round"/>
     </svg>
     <div class="tile-naam">{{ b.naam }}</div>
-    <div class="tile-meta">{{ b.gewijzigd_op[:10] }}</div>
+    <div class="tile-meta">{{ b.gewijzigd_op }}</div>
   </a>
   {% endfor %}
   {% if not bestanden %}

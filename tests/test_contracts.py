@@ -10,7 +10,7 @@ def _pand(**overrides) -> Pand:
     basis = dict(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="x",
         google_sheet_worksheet="Huurders", history_worksheet="Historie",
-        google_drive_folder_id=None, bunq_rekening_iban="NL81BUNQ2163127125",
+        bunq_rekening_iban="NL81BUNQ2163127125",
         postcode="3077WD", plaats="Rotterdam",
         verhuurders=[
             Verhuurder(naam="Jurian Reckman", adres="Batavierenplantsoen 33, Haarlem"),
@@ -70,7 +70,7 @@ def test_genereer_contract_zonder_borgsteller_laat_artikel_12_niet_van_toepassin
 def test_genereer_contract_zonder_pandgegevens_toont_invulplekken(tmp_path):
     leeg_pand = Pand(
         slug="baumannlaan", naam="Baumannlaan 70b", google_sheet_id="y", google_sheet_worksheet="Huurders",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     bestandsnaam = contracts.genereer_contract(
         "baumannlaan", leeg_pand, _form(kamer="2"), state_dir=str(tmp_path)

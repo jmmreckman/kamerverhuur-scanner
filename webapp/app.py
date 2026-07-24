@@ -8,6 +8,7 @@ Starten (productie): zie README (gunicorn + webapp.app:create_app()).
 from __future__ import annotations
 
 import dataclasses
+import mimetypes
 import re
 from datetime import date, time
 from decimal import Decimal
@@ -20,10 +21,9 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import document_ai, drive_sync, mail_voorkeuren, state, winst
+from kamerverhuur_scanner import document_ai, drive_browse, drive_sync, mail_voorkeuren, state, winst
 from kamerverhuur_scanner.ai_client import AIError, genereer_reactie
 from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.drive_client import DriveClient
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.models import Status, Tenant
@@ -361,7 +361,6 @@ def create_app(config: Config | None = None) -> Flask:
             "history_worksheet": form.get("history_worksheet", "").strip() or "Historie",
             "aanmeldingen_worksheet": form.get("aanmeldingen_worksheet", "").strip() or "Aanmeldingen",
             "vertrokken_worksheet": form.get("vertrokken_worksheet", "").strip() or "Vertrokken",
-            "google_drive_folder_id": form.get("google_drive_folder_id", "").strip() or None,
             "bunq_rekening_iban": form.get("bunq_rekening_iban", "").strip().replace(" ", "").upper(),
             "extra_bcc": [e.strip() for e in form.get("extra_bcc", "").split(",") if e.strip()],
             "postcode": form.get("postcode", "").strip(),
@@ -2253,75 +2252,93 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
         return Response(html_inhoud, mimetype="text/html")
 
-    # --- Documenten ---
+    # --- Documenten (dezelfde automatisch aangemaakte "Steenhub <pandnaam>"-
+    # Drive-map als drive_sync.py, doorbladerd via rclone - zie drive_browse.py) ---
 
-    def _documenten_url(pand_slug: str, folder_id: str | None):
-        if folder_id:
-            return url_for("documenten_map", pand_slug=pand_slug, folder_id=folder_id)
+    def _documenten_url(pand_slug: str, pad: str):
+        if pad:
+            return url_for("documenten", pand_slug=pand_slug, pad=pad)
         return url_for("documenten", pand_slug=pand_slug)
 
+    def _documenten_kruimels(pad: str) -> list[tuple[str, str]]:
+        """(naam, cumulatief-pad) voor elk segment van `pad`, voor het
+        broodkruimelpad op de Documenten-pagina."""
+        if not pad:
+            return []
+        cumulatief = []
+        kruimels = []
+        for deel in pad.strip("/").split("/"):
+            cumulatief.append(deel)
+            kruimels.append((deel, "/".join(cumulatief)))
+        return kruimels
+
     @app.route("/pand/<pand_slug>/documenten")
+    @app.route("/pand/<pand_slug>/documenten/<path:pad>")
     @login_required
-    def documenten(pand_slug: str):
-        return _documenten_view(pand_slug, None)
-
-    @app.route("/pand/<pand_slug>/documenten/map/<folder_id>")
-    @login_required
-    def documenten_map(pand_slug: str, folder_id: str):
-        return _documenten_view(pand_slug, folder_id)
-
-    def _documenten_view(pand_slug: str, folder_id: str | None):
-        if not g.pand.google_drive_folder_id:
-            return render_template("documenten.html", bestanden=None, kruimels=[], folder_id=None)
-        drive = DriveClient(config, g.pand)
+    def documenten(pand_slug: str, pad: str = ""):
+        if not drive_browse.is_ingesteld(config):
+            return render_template("documenten.html", ingesteld=False, bestanden=[], kruimels=[], pad="")
+        try:
+            bestanden = drive_browse.list_bestanden(config, g.pand, pad)
+        except drive_browse.DriveBrowseError as exc:
+            flash(str(exc))
+            bestanden = []
         return render_template(
-            "documenten.html",
-            bestanden=drive.list_bestanden(folder_id),
-            kruimels=drive.get_pad(folder_id),
-            folder_id=folder_id,
+            "documenten.html", ingesteld=True, bestanden=bestanden,
+            kruimels=_documenten_kruimels(pad), pad=pad,
         )
 
     @app.route("/pand/<pand_slug>/documenten/upload", methods=["POST"])
     @login_required
     def documenten_upload(pand_slug: str):
-        folder_id = request.form.get("folder_id") or None
-        if not g.pand.google_drive_folder_id:
-            flash("Documenten zijn nog niet ingesteld (google_drive_folder_id ontbreekt in properties.json).")
-            return redirect(_documenten_url(pand_slug, folder_id))
-        drive = DriveClient(config, g.pand)
-        try:
-            aantal = 0
-            for bestand in request.files.getlist("bestand"):
-                if bestand and bestand.filename:
-                    drive.upload_bestand(bestand.filename, bestand.mimetype, bestand.read(), folder_id=folder_id)
+        pad = request.form.get("pad", "")
+        if not drive_browse.is_ingesteld(config):
+            flash("Documenten zijn nog niet ingesteld (RCLONE_REMOTE ontbreekt, zie README).")
+            return redirect(_documenten_url(pand_slug, pad))
+        aantal = 0
+        mislukt = False
+        for bestand in request.files.getlist("bestand"):
+            if bestand and bestand.filename:
+                try:
+                    drive_browse.upload_bestand(config, g.pand, pad, bestand.filename, bestand.read())
                     aantal += 1
+                except drive_browse.DriveBrowseError:
+                    app.logger.exception("Uploaden van een document is mislukt (pand %s).", pand_slug)
+                    mislukt = True
+        if mislukt:
+            flash("Uploaden van (een deel van) de bestanden is helaas mislukt - probeer het opnieuw.")
+        else:
             flash(f"{aantal} bestand(en) geupload." if aantal else "Geen bestand geselecteerd.")
-        except Exception:
-            app.logger.exception("Uploaden van een document is mislukt (pand %s).", pand_slug)
-            flash("Uploaden is helaas mislukt (probeer het opnieuw, of met een kleiner bestand).")
-        return redirect(_documenten_url(pand_slug, folder_id))
+        return redirect(_documenten_url(pand_slug, pad))
 
     @app.route("/pand/<pand_slug>/documenten/nieuwe-map", methods=["POST"])
     @login_required
     def documenten_nieuwe_map(pand_slug: str):
-        folder_id = request.form.get("folder_id") or None
-        if not g.pand.google_drive_folder_id:
-            flash("Documenten zijn nog niet ingesteld (google_drive_folder_id ontbreekt in properties.json).")
-            return redirect(_documenten_url(pand_slug, folder_id))
+        pad = request.form.get("pad", "")
+        if not drive_browse.is_ingesteld(config):
+            flash("Documenten zijn nog niet ingesteld (RCLONE_REMOTE ontbreekt, zie README).")
+            return redirect(_documenten_url(pand_slug, pad))
         naam = request.form.get("naam", "").strip()
         if naam:
-            DriveClient(config, g.pand).maak_map(naam, folder_id=folder_id)
-            flash(f"Map '{naam}' aangemaakt.")
-        return redirect(_documenten_url(pand_slug, folder_id))
+            try:
+                drive_browse.maak_map(config, g.pand, pad, naam)
+                flash(f"Map '{naam}' aangemaakt.")
+            except drive_browse.DriveBrowseError:
+                app.logger.exception("Aanmaken van een map is mislukt (pand %s).", pand_slug)
+                flash("Aanmaken van de map is helaas mislukt.")
+        return redirect(_documenten_url(pand_slug, pad))
 
-    @app.route("/pand/<pand_slug>/documenten/<file_id>/download")
+    @app.route("/pand/<pand_slug>/documenten/bestand/<path:pad>")
     @login_required
-    def documenten_download(pand_slug: str, file_id: str):
-        drive = DriveClient(config, g.pand)
-        naam, mimetype, inhoud = drive.download_bestand(file_id)
+    def documenten_download(pand_slug: str, pad: str):
+        try:
+            inhoud = drive_browse.lees_bestand(config, g.pand, pad)
+        except drive_browse.DriveBrowseError:
+            abort(404)
+        naam = pad.rsplit("/", 1)[-1]
+        mimetype, _ = mimetypes.guess_type(naam)
         return Response(
-            inhoud,
-            mimetype=mimetype,
+            inhoud, mimetype=mimetype or "application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{naam}"'},
         )
 

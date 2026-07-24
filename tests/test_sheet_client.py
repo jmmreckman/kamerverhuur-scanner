@@ -64,7 +64,7 @@ def _sheet_client(rows) -> tuple[SheetClient, FakeWorksheet]:
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     ws = FakeWorksheet(rows)
     client._worksheet = ws
@@ -75,7 +75,7 @@ def _sheet_client_met_historie(historie_rows) -> tuple[SheetClient, FakeWorkshee
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     historie_ws = FakeWorksheet(historie_rows)
     client._history_worksheet = lambda: historie_ws
@@ -86,7 +86,7 @@ def _sheet_client_met_vertrokken(vertrokken_rows) -> tuple[SheetClient, FakeWork
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     vertrokken_ws = FakeWorksheet(vertrokken_rows)
     client._vertrokken_worksheet = lambda: vertrokken_ws
@@ -770,7 +770,7 @@ def _sheet_client_met_aanmeldingen(rows) -> tuple[SheetClient, FakeWorksheet]:
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     ws = FakeWorksheet(rows)
     client._spreadsheet = FakeSpreadsheet(ws)
@@ -838,7 +838,7 @@ def _sheet_client_met_bezichtigingen(rows) -> tuple[SheetClient, FakeWorksheet]:
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     ws = FakeWorksheet(rows)
     client._spreadsheet = FakeSpreadsheet(ws)
@@ -883,7 +883,7 @@ def _sheet_client_met_communicatie(rows) -> tuple[SheetClient, FakeWorksheet]:
     client = object.__new__(SheetClient)
     client._pand = Pand(
         slug="test", naam="Test", google_sheet_id="x", google_sheet_worksheet="y",
-        history_worksheet="Historie", google_drive_folder_id=None, bunq_rekening_iban="NL00TEST0000000000",
+        history_worksheet="Historie", bunq_rekening_iban="NL00TEST0000000000",
     )
     ws = FakeWorksheet(rows)
     client._spreadsheet = FakeSpreadsheet(ws)

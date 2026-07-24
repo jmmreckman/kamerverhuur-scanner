@@ -128,7 +128,6 @@ class Pand:
     google_sheet_id: str
     google_sheet_worksheet: str
     history_worksheet: str
-    google_drive_folder_id: str | None
     bunq_rekening_iban: str
     aanmeldingen_worksheet: str = "Aanmeldingen"
     bezichtigingen_worksheet: str = "Bezichtigingen"

@@ -71,7 +71,7 @@ def app_client(tmp_path, monkeypatch):
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "google_drive_folder_id": None, "bunq_rekening_iban": "NL81BUNQ2163127125",
+         "bunq_rekening_iban": "NL81BUNQ2163127125",
          "extra_bcc": ["justin@example.com"]},
     ]))
     users_file = tmp_path / "users.json"

@@ -10,8 +10,7 @@ def test_zet_pand_voegt_nieuw_pand_toe(tmp_path):
     zet_pand(str(path), "baumannlaan", {
         "naam": "Burgemeester Baumannlaan 70b", "google_sheet_id": "abc",
         "google_sheet_worksheet": "Huurders", "history_worksheet": "Historie",
-        "aanmeldingen_worksheet": "Aanmeldingen", "google_drive_folder_id": None,
-        "bunq_rekening_iban": "NL00TEST0000000000",
+        "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL00TEST0000000000",
     })
     panden = load_properties(str(path))
     assert len(panden) == 1
@@ -28,8 +27,7 @@ def test_zet_pand_werkt_bestaand_pand_bij_op_basis_van_slug(tmp_path):
     zet_pand(str(path), "mahoniestraat", {
         "naam": "Mahoniestraat 15 (bijgewerkt)", "google_sheet_id": "x",
         "google_sheet_worksheet": "Huurders", "history_worksheet": "Historie",
-        "aanmeldingen_worksheet": "Aanmeldingen", "google_drive_folder_id": None,
-        "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL81BUNQ2163127125",
     })
     panden = load_properties(str(path))
     assert len(panden) == 1

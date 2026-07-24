@@ -42,9 +42,6 @@
     <label>Tabbladnaam voor vertrokken huurders
       <input type="text" name="vertrokken_worksheet" value="{{ pand.vertrokken_worksheet if pand else 'Vertrokken' }}">
     </label>
-    <label>Google Drive map-ID (optioneel - voor Documenten en aanbod-foto's/video's)
-      <input type="text" name="google_drive_folder_id" value="{{ (pand.google_drive_folder_id or '') if pand else '' }}">
-    </label>
     <label>bunq IBAN van de rekening waar de huur van dit pand op binnenkomt
       <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>
     </label>

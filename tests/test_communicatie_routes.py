@@ -91,7 +91,7 @@ def _bouw_app_client(tmp_path, monkeypatch, config_overrides=None):
     pand = Pand(
         slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="fake",
         google_sheet_worksheet="Huurders", history_worksheet="Historie",
-        google_drive_folder_id=None, bunq_rekening_iban="NL81BUNQ2163127125", extra_bcc=["justin@example.com"],
+        bunq_rekening_iban="NL81BUNQ2163127125", extra_bcc=["justin@example.com"],
     )
     app = create_app(config)
     app.testing = True

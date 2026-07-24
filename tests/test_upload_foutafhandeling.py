@@ -44,36 +44,22 @@ class FalendeLokaleMediaClient:
         return []
 
 
-class FalendeDriveClient:
-    """Simuleert een Google Drive-fout (bv. een time-out bij een groot bestand)."""
-    def __init__(self, _config, _pand):
-        pass
-
-    def vind_of_maak_map(self, naam, folder_id=None):
-        return "map123"
-
-    def upload_bestand(self, *args, **kwargs):
-        raise RuntimeError("simulated Google Drive-fout (bv. time-out bij een groot bestand)")
-
-    def list_bestanden(self, *args, **kwargs):
-        return []
-
-    def get_pad(self, *args, **kwargs):
-        return []
-
-
 @pytest.fixture
 def app_client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", FakeSheetClient)
     monkeypatch.setattr(appmodule, "LokaleMediaClient", FalendeLokaleMediaClient)
-    monkeypatch.setattr(appmodule, "DriveClient", FalendeDriveClient)
+
+    def _falende_upload_bestand(*args, **kwargs):
+        raise appmodule.drive_browse.DriveBrowseError("simulated Google Drive-fout (bv. time-out bij een groot bestand)")
+
+    monkeypatch.setattr(appmodule.drive_browse, "upload_bestand", _falende_upload_bestand)
     monkeypatch.chdir(tmp_path)
 
     properties_file = tmp_path / "properties.json"
     properties_file.write_text(json.dumps([
         {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "google_drive_folder_id": "drive-root", "bunq_rekening_iban": "NL81BUNQ2163127125"},
+         "bunq_rekening_iban": "NL81BUNQ2163127125"},
     ]))
     users_file = tmp_path / "users.json"
     users_file.write_text(json.dumps({
@@ -84,6 +70,7 @@ def app_client(tmp_path, monkeypatch):
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
         bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+        rclone_remote="gdrive:vastgoed",
     )
     app = create_app(config)
     app.testing = True
