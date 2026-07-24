@@ -380,15 +380,24 @@ def test_alle_partijen_tekenen_rondt_af_met_getekend_contract_en_mail(mock_smtp_
     assert "data:image/png;base64," in getekend_html
     assert getekend_html.count("data:image/png;base64,") == 3  # huurder + 2 verhuurders
 
-    # mail 3: het ondertekende contract als PDF-bijlage naar alle 3 partijen
-    ontvangers = {call.args[0]["To"] for call in smtp_instance.send_message.call_args_list}
-    assert ontvangers == {"bence@example.com", "jurian@example.com", "justin@example.com"}
-    for call in smtp_instance.send_message.call_args_list:
-        bericht = call.args[0]
-        assert "Signed rental agreement" in bericht["Subject"]
+    # mail 3: het ondertekende contract als PDF-bijlage naar alle 3 partijen,
+    # elk met een eigen aanhef/inhoud passend bij hun rol
+    berichten = {call.args[0]["To"]: call.args[0] for call in smtp_instance.send_message.call_args_list}
+    assert set(berichten) == {"bence@example.com", "jurian@example.com", "justin@example.com"}
+    for bericht in berichten.values():
         bijlagen = list(bericht.iter_attachments())
         assert len(bijlagen) == 1
         assert bijlagen[0].get_content_type() == "application/pdf"
+
+    assert "Signed rental agreement" in berichten["bence@example.com"]["Subject"]
+    huurder_tekst = berichten["bence@example.com"].get_body(("plain",)).get_content()
+    assert huurder_tekst.startswith("Dear Bence Neumayer,")
+
+    for adres, naam in [("jurian@example.com", "Jurian Reckman"), ("justin@example.com", "Justin Winkelman")]:
+        assert "Getekend huurcontract" in berichten[adres]["Subject"]
+        tekst = berichten[adres].get_body(("plain",)).get_content()
+        assert tekst.startswith(f"Beste {naam},")
+        assert "Documenten" in tekst
 
 
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")

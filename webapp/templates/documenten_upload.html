@@ -16,7 +16,8 @@
 {% endif %}
 
 <div class="card">
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data"
+        onsubmit="this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = 'Uploading...';">
     <label>Copy of your ID card or passport
       <input type="file" name="id_bestanden" accept="image/*,.pdf" multiple>
     </label>

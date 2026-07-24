@@ -410,14 +410,44 @@ def bouw_tekenmail_overig_herinnering(rol: str, naam: str, pand: Pand, metadata:
     return {"onderwerp": onderwerp, "tekst": tekst}
 
 
-def bouw_getekend_contract_mail(pand: Pand, metadata: dict) -> dict[str, str]:
+def bouw_getekend_contract_mail(
+    pand: Pand, metadata: dict, rol: str, naam: str, documenten_url: str | None = None,
+) -> dict[str, str]:
     """Mail met het volledig ondertekende contract als bijlage, verstuurd
-    naar alle partijen zodra iedereen getekend heeft."""
-    naam = metadata.get("huurder_naam") or "there"
+    naar elke partij zodra iedereen getekend heeft - met een eigen aanhef en
+    passende inhoud per rol (huurder/borgsteller/verhuurder), i.p.v. dezelfde
+    mail met de naam van de huurder als aanhef naar iedereen."""
     kamer = metadata.get("kamer", "")
+    huurder_naam = metadata.get("huurder_naam") or ""
+
+    if rol == "verhuurder":
+        onderwerp = f"Getekend huurcontract - kamer {kamer}, {pand.naam}".strip()
+        drive_regel = (
+            f"\n\nJe kunt het ook terugvinden onder Documenten op de website:\n{documenten_url}"
+            if documenten_url else ""
+        )
+        tekst = (
+            f"Beste {naam},\n\n"
+            f"Bijgevoegd het volledig ondertekende huurcontract voor kamer {kamer} bij {pand.naam} "
+            f"(huurder: {huurder_naam}) - alle partijen hebben nu getekend."
+            f"{drive_regel}\n\n"
+            f"Met vriendelijke groet,\n{AFZENDER_NAAM}"
+        )
+        return {"onderwerp": onderwerp, "tekst": tekst}
+
     onderwerp = f"Signed rental agreement - room {kamer}, {pand.naam}".strip()
+    if rol == "borgsteller":
+        tekst = (
+            f"Dear {naam or 'there'},\n\n"
+            f"Please find attached the fully signed rental agreement for room {kamer} at {pand.naam} "
+            f"(tenant: {huurder_naam}) - all parties have now signed. This is for your own records as "
+            f"guarantor.\n\n"
+            f"Kind regards,\n{AFZENDER_NAAM}"
+        )
+        return {"onderwerp": onderwerp, "tekst": tekst}
+
     tekst = (
-        f"Dear {naam},\n\n"
+        f"Dear {naam or 'there'},\n\n"
         f"Please find attached the fully signed rental agreement for room {kamer} at {pand.naam} - "
         f"all parties have now signed.\n\n"
         f"You will need this document to register (inschrijven) at this address with the municipality "

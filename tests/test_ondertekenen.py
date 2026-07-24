@@ -147,6 +147,46 @@ def test_bouw_tekenmail_overig_herinnering_is_altijd_een_herinnering():
     assert "https://steenhub.nl/tekenen/def" in mail["tekst"]
 
 
+# --- bouw_getekend_contract_mail ---
+
+
+def test_bouw_getekend_contract_mail_huurder_engels_met_gemeente_hint():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(pand, _metadata(), "huurder", "Bence Neumayer")
+    assert mail["onderwerp"] == "Signed rental agreement - room 1, Mahoniestraat 15"
+    assert mail["tekst"].startswith("Dear Bence Neumayer,")
+    assert "register (inschrijven)" in mail["tekst"]
+
+
+def test_bouw_getekend_contract_mail_borgsteller_engels_eigen_administratie():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(
+        pand, _metadata(borgsteller_naam="Ouder van Bence"), "borgsteller", "Ouder van Bence",
+    )
+    assert mail["tekst"].startswith("Dear Ouder van Bence,")
+    assert "own records as guarantor" in mail["tekst"]
+    assert "Bence Neumayer" in mail["tekst"]  # noemt de huurder
+
+
+def test_bouw_getekend_contract_mail_verhuurder_nederlands_met_documenten_link():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(
+        pand, _metadata(), "verhuurder", "Jurian Reckman",
+        documenten_url="https://steenhub.nl/pand/mahoniestraat/documenten/Huidige%20huurders/Bence%20Neumayer",
+    )
+    assert mail["onderwerp"] == "Getekend huurcontract - kamer 1, Mahoniestraat 15"
+    assert mail["tekst"].startswith("Beste Jurian Reckman,")
+    assert "Bence Neumayer" in mail["tekst"]
+    assert "https://steenhub.nl/pand/mahoniestraat/documenten/Huidige%20huurders/Bence%20Neumayer" in mail["tekst"]
+
+
+def test_bouw_getekend_contract_mail_verhuurder_zonder_documenten_url():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(pand, _metadata(), "verhuurder", "Justin Winkelman")
+    assert mail["tekst"].startswith("Beste Justin Winkelman,")
+    assert "Documenten" not in mail["tekst"]
+
+
 # --- start_ondertekenronde ---
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import mimetypes
 import re
+import threading
 from datetime import date, time
 from decimal import Decimal
 from functools import wraps
@@ -1403,11 +1404,8 @@ def create_app(config: Config | None = None) -> Flask:
                         geuploade_documenten.append({
                             "categorie": categorie_label, "bestand_id": bestand_id,
                             "naam": bestandsnaam, "mimetype": bestand.mimetype or "application/octet-stream",
+                            "inhoud": inhoud,
                         })
-                        # Drive-kopie is best-effort (zie drive_sync.py) - een
-                        # haperende rclone-upload mag de upload zelf nooit
-                        # laten mislukken.
-                        drive_sync.upload_bestand(config, pand, verzoek["naam"], bestandsnaam, inhoud)
             except Exception:
                 app.logger.exception("Uploaden van documenten is mislukt (pand %s, sleutel %s).", pand_slug, verzoek["sleutel"])
                 return render_template(
@@ -1419,26 +1417,52 @@ def create_app(config: Config | None = None) -> Flask:
                     "documenten_upload.html", pand=pand, verzoek=verzoek,
                     fout="Please select at least one file to upload.",
                 ), 400
-            verzoek = documentverzoek.voeg_documenten_toe(pand_slug, verzoek["sleutel"], geuploade_documenten, config.state_dir)
-            _kopieer_studie_bewijs_naar_drive(pand, verzoek)
-            _verwerk_documenten_met_ai(pand, pand_slug, verzoek)
-            # Meldingsmail aan de beheerder(s) is best-effort, mag een
-            # geslaagde upload nooit laten mislukken.
-            ontvangers = _ontvangers(pand_slug, "contracten", config.email_bcc)
-            if ontvangers:
-                status_url = url_for(
-                    "documentverzoek_status", pand_slug=pand_slug, sleutel=verzoek["sleutel"], _external=True
-                )
-                try:
-                    verstuur_email(
-                        config, ", ".join(ontvangers),
-                        f"Documents received - room {verzoek['kamer']}, {pand.naam}",
-                        f"{verzoek['naam']} heeft documenten aangeleverd voor kamer {verzoek['kamer']} "
-                        f"({pand.naam}):\n{status_url}",
-                        bcc=[],
+            verzoek = documentverzoek.voeg_documenten_toe(
+                pand_slug, verzoek["sleutel"],
+                [{k: v for k, v in d.items() if k != "inhoud"} for d in geuploade_documenten],
+                config.state_dir,
+            )
+
+            # De rest - Drive-kopieen, AI-uitlezen en het opstellen van het
+            # concept-huurcontract - kan makkelijk 10+ seconden duren (Drive-
+            # uploads + Claude-aanroepen). Dat op de achtergrond doen zodat de
+            # kandidaat meteen de bevestiging ziet, i.p.v. een hangende pagina
+            # die uitnodigt om nog een paar keer op "Upload" te klikken (met
+            # dubbel aangeleverde documenten tot gevolg).
+            basis_url = request.url_root
+
+            def _verwerk_op_achtergrond() -> None:
+                with app.test_request_context(base_url=basis_url):
+                    for doc in geuploade_documenten:
+                        drive_sync.upload_bestand(config, pand, verzoek["naam"], doc["naam"], doc["inhoud"])
+                    _kopieer_studie_bewijs_naar_drive(pand, verzoek)
+                    _verwerk_documenten_met_ai(pand, pand_slug, verzoek)
+                    # Meldingsmail aan de beheerder(s) is best-effort, mag een
+                    # geslaagde upload nooit laten mislukken.
+                    ontvangers = _ontvangers(pand_slug, "contracten", config.email_bcc)
+                    if not ontvangers:
+                        return
+                    status_url = url_for(
+                        "documentverzoek_status", pand_slug=pand_slug, sleutel=verzoek["sleutel"], _external=True
                     )
-                except MailError:
-                    app.logger.exception("Melding van geuploade documenten (sleutel %s) is mislukt.", verzoek["sleutel"])
+                    try:
+                        verstuur_email(
+                            config, ", ".join(ontvangers),
+                            f"Documents received - room {verzoek['kamer']}, {pand.naam}",
+                            f"{verzoek['naam']} heeft documenten aangeleverd voor kamer {verzoek['kamer']} "
+                            f"({pand.naam}):\n{status_url}",
+                            bcc=[],
+                        )
+                    except MailError:
+                        app.logger.exception("Melding van geuploade documenten (sleutel %s) is mislukt.", verzoek["sleutel"])
+
+            if app.testing:
+                # Synchroon in tests, zodat die niet op een achtergrondthread
+                # hoeven te wachten om de effecten (mails, Drive-uploads,
+                # concept-contract) te kunnen verifieren.
+                _verwerk_op_achtergrond()
+            else:
+                threading.Thread(target=_verwerk_op_achtergrond, daemon=True).start()
             return render_template("documenten_upload_bedankt.html", pand=pand, verzoek=verzoek)
 
         return render_template("documenten_upload.html", pand=pand, verzoek=verzoek, fout=None)
@@ -2066,20 +2090,25 @@ def create_app(config: Config | None = None) -> Flask:
         except contracts.PdfGenerationError:
             app.logger.exception("PDF-generatie van het ondertekende contract %s is mislukt.", getekend_bestandsnaam)
             return
-        mail = ondertekenen.bouw_getekend_contract_mail(pand, metadata)
+        huurder_naam = metadata.get("huurder_naam") or "Onbekend"
         pdf_bestandsnaam = Path(getekend_bestandsnaam).with_suffix(".pdf").name
-        drive_sync.upload_bestand(
-            config, pand, metadata.get("huurder_naam") or "Onbekend", pdf_bestandsnaam, pdf
-        )
+        drive_sync.upload_bestand(config, pand, huurder_naam, pdf_bestandsnaam, pdf)
+        documenten_url = _documenten_url(pand_slug, f"Huidige huurders/{huurder_naam}", extern=True)
         bcc = _ontvangers(pand_slug, "contracten", config.email_bcc)
-        for adres in dict.fromkeys(o["email"] for o in ronde["ondertekenaars"] if o["email"]):
+        for o in ronde["ondertekenaars"]:
+            if not o["email"]:
+                continue
+            mail = ondertekenen.bouw_getekend_contract_mail(
+                pand, metadata, o["rol"], o["getekende_naam"] or o["naam"],
+                documenten_url=documenten_url if o["rol"] == "verhuurder" else None,
+            )
             try:
                 verstuur_email(
-                    config, adres, mail["onderwerp"], mail["tekst"], bcc=bcc,
+                    config, o["email"], mail["onderwerp"], mail["tekst"], bcc=bcc,
                     bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
                 )
             except MailError:
-                app.logger.exception("Mail met ondertekend contract naar %s is mislukt.", adres)
+                app.logger.exception("Mail met ondertekend contract naar %s is mislukt.", o["email"])
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/tekenverzoek", methods=["GET", "POST"])
     @login_required
@@ -2255,10 +2284,10 @@ def create_app(config: Config | None = None) -> Flask:
     # --- Documenten (dezelfde automatisch aangemaakte "Steenhub <pandnaam>"-
     # Drive-map als drive_sync.py, doorbladerd via rclone - zie drive_browse.py) ---
 
-    def _documenten_url(pand_slug: str, pad: str):
+    def _documenten_url(pand_slug: str, pad: str, extern: bool = False):
         if pad:
-            return url_for("documenten", pand_slug=pand_slug, pad=pad)
-        return url_for("documenten", pand_slug=pand_slug)
+            return url_for("documenten", pand_slug=pand_slug, pad=pad, _external=extern)
+        return url_for("documenten", pand_slug=pand_slug, _external=extern)
 
     def _documenten_kruimels(pad: str) -> list[tuple[str, str]]:
         """(naam, cumulatief-pad) voor elk segment van `pad`, voor het
