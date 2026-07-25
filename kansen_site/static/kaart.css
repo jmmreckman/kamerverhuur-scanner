@@ -260,6 +260,11 @@ body {
   font-size: 0.9em;
 }
 
+.url-label {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
 .url-form {
   display: flex;
   gap: 0.5rem;

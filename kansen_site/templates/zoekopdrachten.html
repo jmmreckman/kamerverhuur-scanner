@@ -35,13 +35,16 @@
       Voeg zelf zoveel toe als je wilt (bv. per gemeente een aparte URL met eigen filters).
     </p>
 
-    {% if urls %}
+    {% if opdrachten %}
     <ul class="url-lijst">
-      {% for url in urls %}
+      {% for opdracht in opdrachten %}
       <li class="url-item">
-        <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
+        <span>
+          {% if opdracht.label %}<span class="url-label">{{ opdracht.label }}</span><br>{% endif %}
+          <a href="{{ opdracht.url }}" target="_blank" rel="noopener">{{ opdracht.url }}</a>
+        </span>
         <form method="post" action="{{ url_for('zoekopdrachten_verwijderen') }}">
-          <input type="hidden" name="url" value="{{ url }}">
+          <input type="hidden" name="url" value="{{ opdracht.url }}">
           <button type="submit" class="link-knop" onclick="return confirm('Deze zoekopdracht verwijderen?');">Verwijderen</button>
         </form>
       </li>
@@ -54,9 +57,11 @@
     <h2>Nieuwe zoekopdracht toevoegen</h2>
     <p class="muted">
       Stel op funda.nl zelf een zoekopdracht samen (locatie, prijs, type, oppervlakte, etc.)
-      en plak de URL uit je adresbalk hieronder.
+      en plak de URL uit je adresbalk hieronder. Het label is optioneel maar houdt de lijst
+      herkenbaar (bv. "RDAM 100 m2+ &lt;400k").
     </p>
     <form method="post" action="{{ url_for('zoekopdrachten_toevoegen') }}" class="url-form">
+      <input type="text" name="label" placeholder="Label (optioneel), bv. RDAM 100 m2+ <400k">
       <input type="url" name="url" placeholder="https://www.funda.nl/zoeken/koop?..." required>
       <button type="submit">Toevoegen</button>
     </form>

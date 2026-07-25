@@ -215,6 +215,22 @@ def test_zoekopdracht_toevoegen_slaat_op(app_client, tmp_path):
     assert zoek_urls.laad(_config(tmp_path)) == ["https://www.funda.nl/zoeken/koop?selected_area=rotterdam"]
 
 
+def test_zoekopdracht_toevoegen_met_label_slaat_label_op(app_client, tmp_path):
+    from rotterdam_scanner import zoek_urls
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post(
+        "/zoekopdrachten/toevoegen",
+        data={"url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam", "label": "RDAM 100 m2+ <400k"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "RDAM 100 m2+ &lt;400k" in resp.get_data(as_text=True)
+    assert zoek_urls.laad_met_labels(_config(tmp_path)) == [
+        {"label": "RDAM 100 m2+ <400k", "url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam"}
+    ]
+
+
 def test_zoekopdracht_toevoegen_wijst_niet_funda_url_af(app_client, tmp_path):
     from rotterdam_scanner import zoek_urls
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})

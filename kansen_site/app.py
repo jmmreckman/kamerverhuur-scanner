@@ -177,18 +177,19 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def zoekopdrachten():
         return render_template(
-            "zoekopdrachten.html", urls=zoek_urls.laad(config), apify_ingesteld=bool(config.apify_api_token),
-            gebruiker=session["gebruiker"],
+            "zoekopdrachten.html", opdrachten=zoek_urls.laad_met_labels(config),
+            apify_ingesteld=bool(config.apify_api_token), gebruiker=session["gebruiker"],
         )
 
     @app.route("/zoekopdrachten/toevoegen", methods=["POST"])
     @login_required
     def zoekopdrachten_toevoegen():
         url = request.form.get("url", "").strip()
+        label = request.form.get("label", "").strip()
         if not url.startswith(_FUNDA_URL_PREFIXES):
             flash("Dit lijkt geen Funda-zoek-URL - moet beginnen met https://www.funda.nl/")
         else:
-            zoek_urls.voeg_toe(config, url)
+            zoek_urls.voeg_toe(config, url, label)
             flash("Zoekopdracht toegevoegd.")
         return redirect(url_for("zoekopdrachten"))
 
