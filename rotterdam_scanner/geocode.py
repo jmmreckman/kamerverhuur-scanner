@@ -8,6 +8,11 @@ import requests
 PDOK_FREE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free"
 
 _RD_POINT_RE = re.compile(r"POINT\(([-\d.]+) ([-\d.]+)\)")
+# WGS84 (lon/lat, in die volgorde binnen de WKT POINT) - voor de kaart op
+# kansen.steenhub.nl. Los van _RD_POINT_RE omdat een ontbrekende centroide_ll
+# niet fataal hoeft te zijn (de rest van de pipeline heeft alleen de
+# RD-coördinaten nodig), in tegenstelling tot een ontbrekende centroide_rd.
+_LL_POINT_RE = re.compile(r"POINT\(([-\d.]+) ([-\d.]+)\)")
 
 
 class GeocodeError(RuntimeError):
@@ -29,6 +34,8 @@ class GeocodeResult:
     cbs_wijknaam: str
     rd_x: float
     rd_y: float
+    lon: float | None
+    lat: float | None
     nummeraanduiding_id: str
     adresseerbaarobject_id: str
 
@@ -37,6 +44,8 @@ def _doc_naar_resultaat(doc: dict, fallback_naam: str) -> GeocodeResult:
     rd_match = _RD_POINT_RE.match(doc.get("centroide_rd", ""))
     if not rd_match:
         raise GeocodeError(f"Geen RD-coördinaat in PDOK-resultaat voor '{fallback_naam}'")
+
+    ll_match = _LL_POINT_RE.match(doc.get("centroide_ll", ""))
 
     return GeocodeResult(
         weergavenaam=doc.get("weergavenaam", fallback_naam),
@@ -48,6 +57,8 @@ def _doc_naar_resultaat(doc: dict, fallback_naam: str) -> GeocodeResult:
         cbs_wijknaam=doc.get("wijknaam", ""),
         rd_x=float(rd_match.group(1)),
         rd_y=float(rd_match.group(2)),
+        lon=float(ll_match.group(1)) if ll_match else None,
+        lat=float(ll_match.group(2)) if ll_match else None,
         nummeraanduiding_id=doc.get("nummeraanduiding_id", ""),
         adresseerbaarobject_id=doc.get("adresseerbaarobject_id", ""),
     )

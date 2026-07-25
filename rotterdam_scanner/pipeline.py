@@ -70,6 +70,8 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             straatnaam=geo.straatnaam,
             huisnummer=geo.huisnummer,
             wijknaam=geo.rotterdam_wijk,
+            lat=geo.lat,
+            lon=geo.lon,
             afvalreden="Ligt in een nul-quotumgebied voor kamerverhuur.",
         )
 
@@ -106,6 +108,8 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             straatnaam=geo.straatnaam,
             huisnummer=geo.huisnummer,
             wijknaam=geo.rotterdam_wijk,
+            lat=geo.lat,
+            lon=geo.lon,
             afvalreden="Ligt binnen 50 meter van een bestaande kamerverhuurvergunning.",
         )
 
@@ -140,6 +144,8 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             straatnaam=geo.straatnaam,
             huisnummer=geo.huisnummer,
             wijknaam=geo.rotterdam_wijk,
+            lat=geo.lat,
+            lon=geo.lon,
             afvalreden=opkoop.toelichting,
         )
 
@@ -171,6 +177,8 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         straatnaam=geo.straatnaam,
         huisnummer=geo.huisnummer,
         wijknaam=geo.rotterdam_wijk,
+        lat=geo.lat,
+        lon=geo.lon,
         woz_check_nodig=opkoop.woz_check_nodig,
         woz_check_url=opkoop.woz_check_url,
         opmerking=opmerking,

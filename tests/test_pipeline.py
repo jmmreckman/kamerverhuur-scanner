@@ -76,6 +76,8 @@ def _geo(wijk="Rotterdam Centrum"):
         cbs_wijknaam="Rotterdam Centrum",
         rd_x=90000.0,
         rd_y=435000.0,
+        lon=4.4800,
+        lat=51.9200,
         nummeraanduiding_id="0599200000239721",
         adresseerbaarobject_id="0599010000156729",
     )
@@ -168,6 +170,23 @@ def test_huis_buiten_beschermde_wijk_heeft_geen_woz_vlag(tmp_path):
         result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
     assert result.status == "actief"
     assert result.woz_check_nodig is False
+
+
+def test_actieve_woning_krijgt_coordinaten_voor_de_kaart(tmp_path):
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum")
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.lat == 51.9200
+    assert result.lon == 4.4800
+
+
+def test_afgevallen_woning_krijgt_ook_coordinaten(tmp_path):
+    p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum", nulquotum=True)
+    with p1, p2, p3, p4, p5:
+        result = pipeline._process_new_listing(_listing(), _config(tmp_path), date(2026, 7, 5))
+    assert result.status == "afgevallen"
+    assert result.lat == 51.9200
+    assert result.lon == 4.4800
 
 
 def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):

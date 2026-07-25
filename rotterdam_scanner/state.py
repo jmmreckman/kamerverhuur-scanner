@@ -17,6 +17,8 @@ class ListingState:
     straatnaam: str | None = None
     huisnummer: str | None = None
     wijknaam: str | None = None
+    lat: float | None = None
+    lon: float | None = None
     afvalreden: str | None = None
     woz_check_nodig: bool = False
     woz_check_url: str | None = None
