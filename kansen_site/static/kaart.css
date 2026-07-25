@@ -176,7 +176,8 @@ body {
 }
 
 .lijst-item {
-  padding: 0.6rem 0.3rem;
+  position: relative;
+  padding: 0.6rem 1.8rem 0.6rem 0.3rem;
   border-bottom: 1px solid var(--rand);
   cursor: pointer;
 }
@@ -184,6 +185,25 @@ body {
 .lijst-item:hover { background: var(--achtergrond); }
 
 .lijst-item .adres { font-weight: 600; }
+
+.verwijder-knop {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.3rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  line-height: 1.5rem;
+  text-align: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--tekst-zwak);
+  font-size: 1.1em;
+  cursor: pointer;
+}
+
+.verwijder-knop:hover { background: #fbe7e5; color: #b3261e; }
 
 .lijst-item .cijfers {
   display: flex;

@@ -372,6 +372,34 @@ def test_run_haalt_bestaande_actieve_woning_weg_bij_verwijder_commando(tmp_path)
     assert "Handmatig verwijderd" in result_dag2.handmatig_verwijderd[0].afvalreden
 
 
+def test_run_negeert_woning_met_handmatig_verwijderd_vlag_ongeacht_afvalreden_tekst(tmp_path):
+    # De bescherming tegen automatisch heractiveren werkt op de handmatig_verwijderd-
+    # vlag, niet op de exacte afvalreden-tekst - zo beschermt hetzelfde mechanisme ook
+    # een verwijdering via het kruisje op kansen.steenhub.nl (met een eigen, door de
+    # gebruiker getypte reden) net zo goed als via de mail-link.
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(ListingState(
+        object_id="3000AA-1", url="https://example.com/3000AA-1", weergavenaam="Teststraat 1",
+        eerst_gezien="2026-06-01", laatst_gezien="2026-06-30", status="afgevallen",
+        afvalreden="Zelfbewoningsplicht", handmatig_verwijderd=True,
+    ))
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
+        return_value=FundaMailScan(listings=[_listing()]),
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    assert result.alle_actief == []
+    bijgewerkt = StateStore(config.state_path).get("3000AA-1")
+    assert bijgewerkt.status == "afgevallen"
+    assert bijgewerkt.afvalreden == "Zelfbewoningsplicht"
+
+
 def test_run_nieuwe_listing_met_meteen_verwijder_commando_wordt_niet_actief(tmp_path):
     config = _config(tmp_path)
     p1, p2, p3, p4, p5 = _patch_geo_checks()

@@ -133,11 +133,52 @@ def create_app(config: Config | None = None) -> Flask:
             "fouten": fouten,
         })
 
+    @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
+    @login_required
+    def kans_verwijderen(object_id):
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+        reden = request.form.get("reden", "").strip() or "Handmatig verwijderd via kansen.steenhub.nl."
+        item.status = "afgevallen"
+        item.handmatig_verwijderd = True
+        item.afvalreden = reden
+        state.upsert(item)
+        state.save()
+        return jsonify({"ok": True})
+
+    @app.route("/kansen/<object_id>/terugplaatsen", methods=["POST"])
+    @login_required
+    def kans_terugplaatsen(object_id):
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+        item.status = "actief"
+        item.handmatig_verwijderd = False
+        item.afvalreden = None
+        state.upsert(item)
+        state.save()
+        flash(f"{item.weergavenaam} teruggeplaatst.")
+        return redirect(url_for("verwijderd"))
+
+    @app.route("/verwijderd")
+    @login_required
+    def verwijderd():
+        state = StateStore(config.state_path)
+        items = sorted(
+            (item for item in state.all() if item.handmatig_verwijderd),
+            key=lambda item: item.laatst_gezien, reverse=True,
+        )
+        return render_template("verwijderd.html", items=items, gebruiker=session["gebruiker"])
+
     @app.route("/zoekopdrachten")
     @login_required
     def zoekopdrachten():
         return render_template(
             "zoekopdrachten.html", urls=zoek_urls.laad(config), apify_ingesteld=bool(config.apify_api_token),
+            gebruiker=session["gebruiker"],
         )
 
     @app.route("/zoekopdrachten/toevoegen", methods=["POST"])

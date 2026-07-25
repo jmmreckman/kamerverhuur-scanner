@@ -36,6 +36,14 @@ class ListingState:
     # meer in voorkwam - bij 2 wordt hij automatisch op "afgevallen" gezet
     # (vermoedelijk verkocht), i.p.v. te wachten op de 30-dagen-expiry.
     weken_gemist_in_volledige_scan: int = 0
+    # Gezet zodra een gebruiker deze woning zelf verwijderd heeft (via de
+    # "Verwijderen"-link in het dagrapport, of het kruisje op
+    # kansen.steenhub.nl) - i.p.v. een automatische afvaller (nulquotum,
+    # 50-meter, opkoopbescherming). Zorgt dat de woning nooit vanzelf
+    # opnieuw "actief" wordt zolang dit aan staat (zie pipeline.py), ook al
+    # blijft hij nog gewoon in het Funda-aanbod staan. afvalreden bevat de
+    # (evt. door de gebruiker zelf opgegeven) reden.
+    handmatig_verwijderd: bool = False
 
     @property
     def prijs_per_m2(self) -> float | None:

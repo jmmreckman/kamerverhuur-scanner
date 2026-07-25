@@ -243,3 +243,103 @@ def test_zoekopdracht_verwijderen(app_client, tmp_path):
 def test_zoekopdrachten_zonder_login_kan_niet_toevoegen(app_client):
     resp = app_client.post("/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/koop/rotterdam/"})
     assert resp.status_code == 302
+
+
+# --- Kansen handmatig verwijderen + terugplaatsen ---
+
+
+def test_kans_verwijderen_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/kansen/3000AA-1/verwijderen")
+    assert resp.status_code == 302
+
+
+def test_kans_verwijderen_onbekende_woning_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/kansen/onbekend/verwijderen")
+    assert resp.status_code == 404
+
+
+def test_kans_verwijderen_zet_status_en_vlag(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/verwijderen", data={"reden": "Zelfbewoningsplicht"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"ok": True}
+
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.status == "afgevallen"
+    assert item.handmatig_verwijderd is True
+    assert item.afvalreden == "Zelfbewoningsplicht"
+
+
+def test_kans_verwijderen_zonder_reden_gebruikt_standaardtekst(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    app_client.post("/kansen/3000AA-1/verwijderen")
+
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.afvalreden == "Handmatig verwijderd via kansen.steenhub.nl."
+
+
+def test_kans_verwijderd_valt_niet_meer_uit_api_kansen(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    app_client.post("/kansen/3000AA-1/verwijderen")
+
+    resp = app_client.get("/api/kansen")
+    assert resp.get_json() == []
+
+
+def test_kans_terugplaatsen_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/kansen/3000AA-1/terugplaatsen")
+    assert resp.status_code == 302
+
+
+def test_kans_terugplaatsen_onbekende_woning_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/kansen/onbekend/terugplaatsen")
+    assert resp.status_code == 404
+
+
+def test_kans_terugplaatsen_zet_weer_actief(app_client, tmp_path):
+    _zet_listing(
+        tmp_path, status="afgevallen", handmatig_verwijderd=True, afvalreden="Zelfbewoningsplicht",
+    )
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/terugplaatsen", follow_redirects=True)
+    assert resp.status_code == 200
+
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.status == "actief"
+    assert item.handmatig_verwijderd is False
+    assert item.afvalreden is None
+
+
+def test_verwijderd_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/verwijderd")
+    assert resp.status_code == 302
+
+
+def test_verwijderd_toont_alleen_handmatig_verwijderde_woningen(app_client, tmp_path):
+    _zet_listing(
+        tmp_path, object_id="a", status="afgevallen", handmatig_verwijderd=True,
+        afvalreden="Zelfbewoningsplicht", weergavenaam="Handmatig verwijderde straat 1",
+    )
+    _zet_listing(
+        tmp_path, object_id="b", status="afgevallen", handmatig_verwijderd=False,
+        afvalreden="Buiten opkoopbescherming", weergavenaam="Automatisch afgevallen straat 2",
+    )
+    _zet_listing(tmp_path, object_id="c", status="actief", weergavenaam="Nog actieve straat 3")
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.get("/verwijderd")
+    tekst = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Handmatig verwijderde straat 1" in tekst
+    assert "Zelfbewoningsplicht" in tekst
+    assert "Automatisch afgevallen straat 2" not in tekst
+    assert "Nog actieve straat 3" not in tekst

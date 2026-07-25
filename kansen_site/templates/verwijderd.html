@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verwijderd - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Verwijderd</h1>
+    <div class="topbar-acties">
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <main class="content">
+    {% with berichten = get_flashed_messages() %}
+      {% if berichten %}
+        {% for bericht in berichten %}<p class="flash-bericht">{{ bericht }}</p>{% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <h2>Handmatig verwijderde woningen</h2>
+    <p class="muted">
+      Woningen die je zelf uit de kansenlijst hebt gehaald (bv. vanwege zelfbewoningsplicht of
+      een lastige indeling) staan hier. Ze komen nooit vanzelf terug, ook niet als de scan ze
+      weer tegenkomt - alleen "Terugplaatsen" zet ze weer op "actief".
+    </p>
+
+    {% if items %}
+    <ul class="url-lijst">
+      {% for item in items %}
+      <li class="url-item">
+        <span>
+          <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.weergavenaam }}</a><br>
+          <span class="muted">{{ item.afvalreden }}</span>
+        </span>
+        <form method="post" action="{{ url_for('kans_terugplaatsen', object_id=item.object_id) }}">
+          <button type="submit" class="link-knop" onclick="return confirm('{{ item.weergavenaam }} terugplaatsen als kans?');">Terugplaatsen</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nog geen woningen handmatig verwijderd.</p>
+    {% endif %}
+  </main>
+</body>
+</html>

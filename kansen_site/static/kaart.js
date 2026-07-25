@@ -91,6 +91,7 @@ function renderLijst(kansen) {
     const li = document.createElement("li");
     li.className = "lijst-item";
     li.innerHTML = `
+      <button type="button" class="verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
       <span class="adres">${kans.weergavenaam}</span>
       <div class="cijfers">
         <span>${formatEuro(kans.prijs)}</span>
@@ -103,6 +104,10 @@ function renderLijst(kansen) {
       const marker = markerPerId.get(kans.object_id);
       if (marker) marker.openPopup();
       sluitZijbalk();
+    });
+    li.querySelector(".verwijder-knop").addEventListener("click", (event) => {
+      event.stopPropagation();
+      verwijderKans(kans);
     });
     lijstEl.appendChild(li);
   }
@@ -127,6 +132,30 @@ function toggleZijbalk() {
 
 zijbalkKnop.addEventListener("click", toggleZijbalk);
 zijbalkSluitenKnop.addEventListener("click", sluitZijbalk);
+
+async function verwijderKans(kans) {
+  const reden = window.prompt(
+    `${kans.weergavenaam} verwijderen uit de kansenlijst?\n\nLaat staan voor een standaardreden, of typ zelf een reden (bv. "zelfbewoningsplicht"). Annuleren = niet verwijderen.`,
+    ""
+  );
+  if (reden === null) return;
+
+  try {
+    const body = new URLSearchParams();
+    if (reden.trim()) body.set("reden", reden.trim());
+    const resp = await fetch(`/kansen/${encodeURIComponent(kans.object_id)}/verwijderen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!resp.ok) throw new Error("verwijderen mislukt");
+    alleKansen = alleKansen.filter((k) => k.object_id !== kans.object_id);
+    vulWijkFilter(alleKansen);
+    renderAlles();
+  } catch (err) {
+    alert("Verwijderen is mislukt - probeer het nog eens.");
+  }
+}
 
 async function laadKansen() {
   const resp = await fetch("/api/kansen");

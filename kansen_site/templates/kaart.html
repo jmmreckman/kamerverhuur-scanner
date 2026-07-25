@@ -16,6 +16,7 @@
       <button id="ververs-knop" type="button">Ververs nu</button>
       <button id="zijbalk-knop" type="button" class="link-knop">Toon lijst</button>
       <a href="{{ url_for('zoekopdrachten') }}" class="link-knop">Zoekopdrachten</a>
+      <a href="{{ url_for('verwijderd') }}" class="link-knop">Verwijderd</a>
       <span class="muted">{{ gebruiker }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
     </div>

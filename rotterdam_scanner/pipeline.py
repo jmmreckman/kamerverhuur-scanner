@@ -275,6 +275,7 @@ def _verwerk_listings(
         if existing.object_id in te_verwijderen_ids and existing.status == "actief":
             existing.status = "afgevallen"
             existing.afvalreden = _HANDMATIG_VERWIJDERD_REDEN
+            existing.handmatig_verwijderd = True
             existing.laatst_gezien = today_iso
             state.upsert(existing)
             result.handmatig_verwijderd.append(existing)
@@ -283,8 +284,9 @@ def _verwerk_listings(
         existing = state.get(listing.object_id)
         # Een handmatig verwijderde woning nooit opnieuw laten opduiken, ook niet bij
         # forceer_herprocessen (dat is bedoeld om verouderde check-uitkomsten te
-        # corrigeren, niet om verwijder-verzoeken van de gebruiker ongedaan te maken).
-        handmatig_verwijderd = existing is not None and existing.afvalreden == _HANDMATIG_VERWIJDERD_REDEN
+        # corrigeren, niet om verwijder-verzoeken van de gebruiker ongedaan te maken) -
+        # ongeacht of dat via de mail-link of het kruisje op kansen.steenhub.nl ging.
+        handmatig_verwijderd = existing is not None and existing.handmatig_verwijderd
         if existing is not None and (not forceer_herprocessen or handmatig_verwijderd):
             existing.laatst_gezien = today_iso
             existing.url = listing.url
@@ -304,6 +306,7 @@ def _verwerk_listings(
         if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
             processed.afvalreden = _HANDMATIG_VERWIJDERD_REDEN
+            processed.handmatig_verwijderd = True
 
         state.upsert(processed)
         if processed.status == "actief":
