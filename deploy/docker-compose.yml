@@ -66,16 +66,16 @@ services:
       - "8420"
 
   # Los, derde project (fundazoeker) dat meelift op dezelfde VPS - geen
-  # relatie met de andere twee projecten verder dan gedeelde hosting. Geen
-  # webinterface: draait zelf elke dag om 09:00 (Europe/Amsterdam) een scan
-  # naar geschikte Rotterdamse kamerverhuur-panden en mailt een rapport -
-  # dus geen expose/Caddy-blok/subdomein nodig, in tegenstelling tot de
-  # andere twee projecten. Code + Dockerfile staan op een aparte branch in
-  # deze repo; Docker bouwt rechtstreeks vanaf die branch als git-context.
-  # SCANNER_GMAIL_ADDRESS/SCANNER_GMAIL_APP_PASSWORD (en evt.
-  # REPORT_TO_ADDRESS/SMTP_*) in fundazoeker.env (kopieer van
-  # fundazoeker.env.example) - zonder de Gmail-gegevens start de container
-  # niet.
+  # relatie met de andere twee projecten verder dan gedeelde hosting. Draait
+  # zelf elke dag om 09:00 (Europe/Amsterdam) een scan naar geschikte
+  # Rotterdamse kamerverhuur-panden en mailt een rapport - dus geen
+  # expose/Caddy-blok/subdomein nodig voor deze service zelf (de bijbehorende
+  # kaart-website draait als de aparte 'kansen'-service hieronder). Code +
+  # Dockerfile staan op een aparte branch in deze repo; Docker bouwt
+  # rechtstreeks vanaf die branch als git-context. SCANNER_GMAIL_ADDRESS/
+  # SCANNER_GMAIL_APP_PASSWORD (en evt. REPORT_TO_ADDRESS/SMTP_*) in
+  # fundazoeker.env (kopieer van fundazoeker.env.example) - zonder de
+  # Gmail-gegevens start de container niet.
   fundazoeker:
     build:
       context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
@@ -85,6 +85,26 @@ services:
       - ./fundazoeker.env
     volumes:
       - fundazoeker-data:/app/data
+
+  # Kaart-website (https://kansen.steenhub.nl) bij fundazoeker: zelfde image/
+  # branch/git-context, alleen een ander opstartcommando (gunicorn i.p.v. de
+  # dagelijkse scan) - en deelt daarom ook hetzelfde fundazoeker-data-volume,
+  # zodat hij dezelfde state.json ziet die de dagelijkse scan bijhoudt.
+  # KANSEN_APP_USERS/KANSEN_APP_SECRET_KEY in fundazoeker.env (zie
+  # fundazoeker.env.example) - zonder die twee weigert de container te
+  # starten (geen kaart zonder wachtwoord).
+  kansen:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: kansen
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2"]
+    expose:
+      - "8080"
 
   caddy:
     image: caddy:2-alpine
@@ -99,6 +119,7 @@ services:
     depends_on:
       - app
       - weight-tracker
+      - kansen
 
 volumes:
   caddy_data:

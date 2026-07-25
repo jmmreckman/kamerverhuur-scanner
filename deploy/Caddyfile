@@ -14,3 +14,10 @@ www.steenhub.nl {
 gewicht.steenhub.nl {
     reverse_proxy weight-tracker:8420
 }
+
+# Kaart-website bij fundazoeker (kansen.steenhub.nl) - zie de 'kansen'-service
+# in docker-compose.yml. DNS-record voor dit subdomein moet nog wel handmatig
+# aangemaakt worden bij de domeinregistrar (zelfde IP als steenhub.nl).
+kansen.steenhub.nl {
+    reverse_proxy kansen:8080
+}
