@@ -9,6 +9,9 @@ from dataclasses import dataclass
 # _normaliseer), in plaats van hier exact PDOK's schrijfwijze te moeten volgen.
 # Check deze lijst en de WOZ-grens af en toe tegen de website, de gemeente kan dit
 # beleid aanpassen of uitbreiden naar meer wijken.
+#
+# Rozenburg is sinds de gemeentelijke herindeling van 2010 onderdeel van de gemeente
+# Rotterdam en valt onder hetzelfde opkoopbeschermingsbeleid als de rest van de stad.
 BESCHERMDE_WIJKEN = {
     "bergpolder",
     "blijdorp",
@@ -24,6 +27,7 @@ BESCHERMDE_WIJKEN = {
     "nieuwe westen",
     "oud-charlois",
     "oud-mathenesse",
+    "rozenburg",
     "rubroek",
     "tarwewijk",
 }

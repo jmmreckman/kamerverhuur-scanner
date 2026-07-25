@@ -58,3 +58,10 @@ def test_wijknaam_met_spatie_matcht_lijst_met_koppelteken():
     for wijknaam in ("Oud Charlois", "Groot IJsselmonde", "Hillegersberg Zuid", "Kralingen Oost", "Kralingen West", "Oud Mathenesse"):
         result = check_opkoopbescherming(wijknaam, 470_000)
         assert result.in_beschermde_wijk is True, wijknaam
+
+
+def test_rozenburg_valt_onder_dezelfde_opkoopbescherming_als_rotterdam():
+    # Rozenburg is sinds 2010 onderdeel van de gemeente Rotterdam en valt onder
+    # hetzelfde opkoopbeschermingsbeleid.
+    result = check_opkoopbescherming("Rozenburg", 470_000)
+    assert result.in_beschermde_wijk is True
