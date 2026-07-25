@@ -102,11 +102,11 @@ services:
       - ./fundazoeker.env
     volumes:
       - fundazoeker-data:/app/data
-    # --timeout 600: de "Ververs nu"-knop roept zowel de mail-scan als (indien
-    # ingesteld) Apify aan, en "Totale sweep" haalt in één keer tot
-    # APIFY_MAX_ITEMS_WEKELIJKS resultaten op - dat kan samen ruim langer
-    # duren dan gunicorn's standaard 30 seconden.
-    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "600"]
+    # --timeout 1800: apify_scraper.py pollt de asynchrone Apify-run tot hij
+    # klaar is (budget 25 minuten, zie _MAX_WACHTTIJD_SECONDEN) - de
+    # gunicorn-timeout moet ruimer zijn dan dat interne budget, anders wordt
+    # de HTTP-request al eerder afgebroken dan onze eigen polling opgeeft.
+    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "1800"]
     expose:
       - "8080"
 
