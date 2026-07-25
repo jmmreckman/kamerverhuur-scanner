@@ -1,7 +1,9 @@
 """Tests voor het ophalen van het Funda-aanbod via Apify - de echte Apify-API
-wordt hier nooit aangeroepen, alleen requests.post gemockt. Het voorbeeld-item
-is gebaseerd op de gedocumenteerde output van de easyapi/funda-nl-scraper-
-actor (juli 2026)."""
+wordt hier nooit aangeroepen, alleen requests.post/get gemockt (en
+time.sleep, zodat de polling-tests niet echt hoeven te wachten). Het
+voorbeeld-item is gebaseerd op de gedocumenteerde output van de
+easyapi/funda-nl-scraper-actor (juli 2026), bevestigd tegen een echte
+productie-aanroep."""
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -31,6 +33,9 @@ _VOORBEELD_ITEM = {
     "publish_date": "2024-10-25T15:15:02.5130000",
 }
 
+_RUN_ID = "abc123"
+_DATASET_ID = "dataset456"
+
 
 def _config(**overrides):
     defaults = dict(
@@ -43,6 +48,27 @@ def _config(**overrides):
 
 
 _URLS = ["https://www.funda.nl/koop/rotterdam/"]
+
+
+def _start_resp(status="SUCCEEDED"):
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = {"data": {"id": _RUN_ID, "defaultDatasetId": _DATASET_ID, "status": status}}
+    return resp
+
+
+def _status_resp(status):
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = {"data": {"status": status}}
+    return resp
+
+
+def _items_resp(items):
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = items
+    return resp
 
 
 # --- is_ingesteld ---
@@ -122,7 +148,7 @@ def test_item_met_toevoeging_in_huisnummer():
     assert listing.object_id == "5854PC-38A"
 
 
-# --- fetch_apify_listings ---
+# --- fetch_apify_listings (asynchrone flow: start run -> poll -> dataset) ---
 
 
 def test_fetch_apify_listings_zonder_token_geeft_apify_error():
@@ -135,12 +161,13 @@ def test_fetch_apify_listings_zonder_search_urls_geeft_apify_error():
         apify_scraper.fetch_apify_listings(_config(), [], max_items=100)
 
 
-def test_fetch_apify_listings_bouwt_juiste_aanroep():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = [_VOORBEELD_ITEM]
-
-    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp) as mock_post:
+def test_fetch_apify_listings_bouwt_juiste_start_aanroep_en_haalt_resultaat_op():
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")) as mock_post, \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=[_status_resp("SUCCEEDED"), _items_resp([_VOORBEELD_ITEM])],
+         ) as mock_get:
         listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
 
     assert len(listings) == 1
@@ -151,41 +178,48 @@ def test_fetch_apify_listings_bouwt_juiste_aanroep():
     assert kwargs["json"]["searchUrls"] == ["https://www.funda.nl/koop/rotterdam/"]
     assert kwargs["json"]["maxItems"] == 150
     assert kwargs["json"]["proxyConfiguration"]["useApifyProxy"] is True
-    assert "acts/easyapi~funda-nl-scraper/run-sync-get-dataset-items" in mock_post.call_args.args[0]
+    assert "acts/easyapi~funda-nl-scraper/runs" in mock_post.call_args.args[0]
+
+    dataset_kwargs = mock_get.call_args.kwargs
+    assert dataset_kwargs["params"]["token"] == "apify-token"
+    assert f"datasets/{_DATASET_ID}/items" in mock_get.call_args.args[0]
 
 
 def test_fetch_apify_listings_gebruikt_meegegeven_search_urls_niet_config():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = []
-
     andere_urls = ["https://www.funda.nl/koop/hoek-van-holland/"]
-    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp) as mock_post:
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")) as mock_post, \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=[_status_resp("SUCCEEDED"), _items_resp([])],
+         ):
         apify_scraper.fetch_apify_listings(_config(), andere_urls, max_items=150)
     assert mock_post.call_args.kwargs["json"]["searchUrls"] == andere_urls
 
 
 def test_fetch_apify_listings_dedupt_op_object_id():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = [_VOORBEELD_ITEM, dict(_VOORBEELD_ITEM)]
-
-    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=[_status_resp("SUCCEEDED"), _items_resp([_VOORBEELD_ITEM, dict(_VOORBEELD_ITEM)])],
+         ):
         listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
     assert len(listings) == 1
 
 
 def test_fetch_apify_listings_slaat_onherkende_items_over():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = [_VOORBEELD_ITEM, {"address": {}}]
-
-    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=[_status_resp("SUCCEEDED"), _items_resp([_VOORBEELD_ITEM, {"address": {}}])],
+         ):
         listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
     assert len(listings) == 1
 
 
-def test_fetch_apify_listings_netwerkfout_geeft_apify_error():
+def test_fetch_apify_listings_netwerkfout_bij_starten_geeft_apify_error():
     import requests as requests_module
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", side_effect=requests_module.ConnectionError("boom")):
@@ -193,11 +227,83 @@ def test_fetch_apify_listings_netwerkfout_geeft_apify_error():
             apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
 
 
-def test_fetch_apify_listings_geen_lijst_geeft_apify_error():
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-    mock_resp.json.return_value = {"error": "iets ging mis"}
+def test_fetch_apify_listings_geen_run_of_dataset_id_geeft_apify_error():
+    resp = MagicMock()
+    resp.raise_for_status.return_value = None
+    resp.json.return_value = {"data": {"status": "READY"}}  # geen id/defaultDatasetId
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=resp):
+        with pytest.raises(ApifyError):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
 
-    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
+
+def test_fetch_apify_listings_pollt_tot_eindstatus():
+    status_responses = [_status_resp("RUNNING"), _status_resp("RUNNING"), _status_resp("SUCCEEDED")]
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("READY")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep") as mock_sleep, \
+         patch("rotterdam_scanner.apify_scraper.requests.get", side_effect=status_responses + [_items_resp([])]) as mock_get:
+        listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+    assert listings == []
+    assert mock_sleep.call_count == 3  # 1x per statuscheck, ook de laatste (SUCCEEDED)
+    assert mock_get.call_count == 4  # 3x status + 1x dataset
+
+
+def test_fetch_apify_listings_mislukte_run_status_geeft_apify_error():
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("READY")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch("rotterdam_scanner.apify_scraper.requests.get", return_value=_status_resp("FAILED")):
+        with pytest.raises(ApifyError, match="FAILED"):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+
+def test_fetch_apify_listings_aborted_status_geeft_apify_error():
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("READY")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch("rotterdam_scanner.apify_scraper.requests.get", return_value=_status_resp("ABORTED")):
+        with pytest.raises(ApifyError, match="ABORTED"):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+
+def test_fetch_apify_listings_polling_geeft_op_na_max_wachttijd():
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("READY")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch("rotterdam_scanner.apify_scraper.requests.get", return_value=_status_resp("RUNNING")):
+        with pytest.raises(ApifyError, match="afgebroken met wachten"):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+
+def test_fetch_apify_listings_netwerkfout_bij_statuscheck_geeft_apify_error():
+    import requests as requests_module
+
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("READY")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=requests_module.ConnectionError("boom"),
+         ):
+        with pytest.raises(ApifyError):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+
+def test_fetch_apify_listings_netwerkfout_bij_dataset_ophalen_geeft_apify_error():
+    import requests as requests_module
+
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=requests_module.ConnectionError("boom"),
+         ):
+        with pytest.raises(ApifyError):
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
+
+
+def test_fetch_apify_listings_geen_lijst_geeft_apify_error():
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=_start_resp("SUCCEEDED")), \
+         patch("rotterdam_scanner.apify_scraper.time.sleep"), \
+         patch(
+             "rotterdam_scanner.apify_scraper.requests.get",
+             side_effect=[_status_resp("SUCCEEDED"), _items_resp({"error": "iets ging mis"})],
+         ):
         with pytest.raises(ApifyError):
             apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
