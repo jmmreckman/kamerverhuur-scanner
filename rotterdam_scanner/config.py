@@ -28,6 +28,12 @@ class Config:
     smtp_from_email: str = ""
     smtp_from_naam: str = ""
     state_path: Path = field(default_factory=lambda: BASE_DIR / "data" / "state.json")
+    # Login voor de kaart-website (kansen.steenhub.nl) - los van bovenstaande
+    # Gmail-/SMTP-instellingen. Leeg = de website weigert te starten (zie
+    # kansen_site/app.py), zodat de kaart nooit per ongeluk zonder wachtwoord
+    # open komt te staan.
+    kansen_app_users: dict[str, str] = field(default_factory=dict)
+    kansen_app_secret_key: str = ""
 
     @property
     def imap_host(self) -> str:
@@ -73,7 +79,19 @@ def load_config(env_path: Path | None = None) -> Config:
         smtp_password=os.environ.get("SMTP_PASSWORD", ""),
         smtp_from_email=os.environ.get("SMTP_FROM_EMAIL", ""),
         smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
+        kansen_app_users=_parse_kansen_app_users(os.environ.get("KANSEN_APP_USERS", "")),
+        kansen_app_secret_key=os.environ.get("KANSEN_APP_SECRET_KEY", ""),
     )
+
+
+def _parse_kansen_app_users(raw: str) -> dict[str, str]:
+    """Formaat: "gebruiker1:wachtwoord1,gebruiker2:wachtwoord2"."""
+    gebruikers = {}
+    for paar in raw.split(","):
+        naam, _, wachtwoord = paar.strip().partition(":")
+        if naam and wachtwoord:
+            gebruikers[naam] = wachtwoord
+    return gebruikers
 
 
 def _require(name: str) -> str:

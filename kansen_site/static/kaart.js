@@ -1,0 +1,143 @@
+const kaart = L.map("kaart").setView([51.9225, 4.47917], 12);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap-medewerkers",
+  maxZoom: 19,
+}).addTo(kaart);
+
+const markerLaag = L.layerGroup().addTo(kaart);
+const lijstEl = document.getElementById("lijst");
+const aantalTekstEl = document.getElementById("aantal-tekst");
+const statusTekstEl = document.getElementById("status-tekst");
+const filterWijkEl = document.getElementById("filter-wijk");
+const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
+const filterWinstEl = document.getElementById("filter-winst");
+const filterZoekEl = document.getElementById("filter-zoek");
+const verversKnop = document.getElementById("ververs-knop");
+
+let alleKansen = [];
+const markerPerId = new Map();
+
+function formatEuro(bedrag) {
+  if (bedrag === null || bedrag === undefined) return "onbekend";
+  return "€" + Math.round(bedrag).toLocaleString("nl-NL");
+}
+
+function vulWijkFilter(kansen) {
+  const huidige = filterWijkEl.value;
+  const wijken = [...new Set(kansen.map((k) => k.wijknaam).filter(Boolean))].sort();
+  filterWijkEl.innerHTML = '<option value="">Alle wijken</option>';
+  for (const wijk of wijken) {
+    const optie = document.createElement("option");
+    optie.value = wijk;
+    optie.textContent = wijk;
+    filterWijkEl.appendChild(optie);
+  }
+  filterWijkEl.value = huidige;
+}
+
+function gefilterd() {
+  const wijk = filterWijkEl.value;
+  const maxEigenInleg = parseFloat(filterEigenInlegEl.value);
+  const minWinst = parseFloat(filterWinstEl.value);
+  const zoek = filterZoekEl.value.trim().toLowerCase();
+
+  return alleKansen.filter((k) => {
+    if (wijk && k.wijknaam !== wijk) return false;
+    if (!isNaN(maxEigenInleg) && (k.eigen_inleg_pp === null || k.eigen_inleg_pp > maxEigenInleg)) return false;
+    if (!isNaN(minWinst) && (k.winst_pm_pp === null || k.winst_pm_pp < minWinst)) return false;
+    if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
+    return true;
+  });
+}
+
+function bouwPopup(kans) {
+  const div = document.createElement("div");
+  div.className = "popup-inhoud";
+  div.innerHTML = `
+    <span class="adres">${kans.weergavenaam}</span>
+    ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
+    Vraagprijs: ${formatEuro(kans.prijs)}<br>
+    ${kans.bag_oppervlakte ? kans.bag_oppervlakte + " m²<br>" : ""}
+    ${kans.aantal_kamers_mogelijk ? kans.aantal_kamers_mogelijk + " kamer(s) mogelijk<br>" : ""}
+    ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
+    ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}
+    ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
+    <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
+  `;
+  return div;
+}
+
+function renderMarkers(kansen) {
+  markerLaag.clearLayers();
+  markerPerId.clear();
+  for (const kans of kansen) {
+    const marker = L.marker([kans.lat, kans.lon]).bindPopup(bouwPopup(kans));
+    marker.addTo(markerLaag);
+    markerPerId.set(kans.object_id, marker);
+  }
+}
+
+function renderLijst(kansen) {
+  lijstEl.innerHTML = "";
+  const gesorteerd = [...kansen].sort((a, b) => {
+    if (a.eigen_inleg_pp === null) return 1;
+    if (b.eigen_inleg_pp === null) return -1;
+    return a.eigen_inleg_pp - b.eigen_inleg_pp;
+  });
+  for (const kans of gesorteerd) {
+    const li = document.createElement("li");
+    li.className = "lijst-item";
+    li.innerHTML = `
+      <span class="adres">${kans.weergavenaam}</span>
+      <div class="cijfers">
+        <span>${formatEuro(kans.prijs)}</span>
+        ${kans.winst_pm_pp !== null ? `<span class="goed">+${formatEuro(kans.winst_pm_pp)} p.p./mnd</span>` : ""}
+        ${kans.eigen_inleg_pp !== null ? `<span>${formatEuro(kans.eigen_inleg_pp)} inleg p.p.</span>` : ""}
+      </div>
+    `;
+    li.addEventListener("click", () => {
+      kaart.setView([kans.lat, kans.lon], 16);
+      const marker = markerPerId.get(kans.object_id);
+      if (marker) marker.openPopup();
+    });
+    lijstEl.appendChild(li);
+  }
+  aantalTekstEl.textContent = `${kansen.length} van ${alleKansen.length} kansen`;
+}
+
+function renderAlles() {
+  const kansen = gefilterd();
+  renderMarkers(kansen);
+  renderLijst(kansen);
+}
+
+async function laadKansen() {
+  const resp = await fetch("/api/kansen");
+  alleKansen = await resp.json();
+  vulWijkFilter(alleKansen);
+  renderAlles();
+}
+
+for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl]) {
+  el.addEventListener("input", renderAlles);
+}
+
+verversKnop.addEventListener("click", async () => {
+  verversKnop.disabled = true;
+  statusTekstEl.textContent = "Bezig met verversen (kan even duren)...";
+  try {
+    const resp = await fetch("/ververs", { method: "POST" });
+    const data = await resp.json();
+    statusTekstEl.textContent = `Klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
+    if (data.fouten && data.fouten.length) {
+      statusTekstEl.textContent += ` (${data.fouten.length} waarschuwing(en), zie logs)`;
+    }
+    await laadKansen();
+  } catch (err) {
+    statusTekstEl.textContent = "Verversen mislukt - probeer het nog eens.";
+  } finally {
+    verversKnop.disabled = false;
+  }
+});
+
+laadKansen();

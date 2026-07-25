@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inloggen - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+</head>
+<body class="login-body">
+  <form class="login-card" method="post">
+    <h1>Kansen</h1>
+    <p class="muted">Rotterdamse kamerverhuur-kansen op de kaart</p>
+    {% if fout %}<p class="fout">{{ fout }}</p>{% endif %}
+    <label>Gebruikersnaam
+      <input type="text" name="gebruiker" autocomplete="username" required autofocus>
+    </label>
+    <label>Wachtwoord
+      <input type="password" name="wachtwoord" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Inloggen</button>
+  </form>
+</body>
+</html>

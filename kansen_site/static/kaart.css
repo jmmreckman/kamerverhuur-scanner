@@ -1,0 +1,161 @@
+:root {
+  --groen: #1b7a43;
+  --rand: #d8dde3;
+  --tekst-zwak: #66707a;
+  --achtergrond: #f7f8f9;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #1c2126;
+  background: var(--achtergrond);
+}
+
+.muted { color: var(--tekst-zwak); font-size: 0.9em; }
+
+/* --- Login --- */
+
+.login-body {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 12px;
+  padding: 2rem;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.login-card h1 { margin: 0; }
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9em;
+}
+
+.login-card input {
+  padding: 0.5rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  font-size: 1em;
+}
+
+.login-card button, .topbar button {
+  background: var(--groen);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.login-card button:hover, .topbar button:hover { opacity: 0.9; }
+
+.fout { color: #b3261e; font-size: 0.9em; margin: 0; }
+
+/* --- Kaartpagina --- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: white;
+  border-bottom: 1px solid var(--rand);
+}
+
+.topbar h1 { font-size: 1.2em; margin: 0; }
+
+.topbar-acties { display: flex; align-items: center; gap: 0.8rem; }
+
+.link-knop {
+  background: none;
+  border: none;
+  color: var(--tekst-zwak);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.layout {
+  display: flex;
+  height: calc(100vh - 53px);
+}
+
+.zijbalk {
+  width: 340px;
+  min-width: 340px;
+  overflow-y: auto;
+  border-right: 1px solid var(--rand);
+  background: white;
+  padding: 0.8rem;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--rand);
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85em;
+}
+
+.filters input, .filters select {
+  padding: 0.4rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+
+.kaart { flex: 1; }
+
+.lijst {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lijst-item {
+  padding: 0.6rem 0.3rem;
+  border-bottom: 1px solid var(--rand);
+  cursor: pointer;
+}
+
+.lijst-item:hover { background: var(--achtergrond); }
+
+.lijst-item .adres { font-weight: 600; }
+
+.lijst-item .cijfers {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+  color: var(--tekst-zwak);
+  margin-top: 0.15rem;
+}
+
+.lijst-item .cijfers .goed { color: var(--groen); font-weight: 600; }
+
+.popup-inhoud { font-size: 0.9em; }
+.popup-inhoud .adres { font-weight: 600; display: block; margin-bottom: 0.3rem; }
+.popup-inhoud a { color: var(--groen); }
