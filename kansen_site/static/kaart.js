@@ -187,6 +187,47 @@ verversKnop.addEventListener("click", async () => {
   }
 });
 
+const SWEEP_POLL_INTERVAL_MS = 15000;
+
+// De sweep draait server-side in een achtergrondthread, losgekoppeld van
+// deze fetch-verbindingen - een mobiele browser onderbreekt een lang
+// openstaande fetch() al snel zodra het tabblad naar de achtergrond gaat
+// (bv. om de Apify-billing te checken), dus we pollen periodiek i.p.v. op
+// één doorlopende aanvraag te wachten. Werkt daarom ook prima als je
+// tussentijds herlaadt of het tabblad sluit en later teruggaat.
+async function pollSweepStatus() {
+  try {
+    const resp = await fetch("/sweep/status");
+    const data = await resp.json();
+
+    if (data.status === "bezig") {
+      sweepKnop.disabled = true;
+      statusTekstEl.textContent =
+        "Bezig met totale sweep (kan lang duren - dit tabblad mag gerust op de achtergrond staan of dicht, de voortgang wordt gewoon bijgehouden)...";
+      setTimeout(pollSweepStatus, SWEEP_POLL_INTERVAL_MS);
+      return;
+    }
+
+    sweepKnop.disabled = false;
+    if (data.status === "klaar") {
+      statusTekstEl.textContent = `Sweep klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
+      if (data.fouten && data.fouten.length) {
+        statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
+      }
+      await laadKansen();
+    } else if (data.status === "mislukt") {
+      statusTekstEl.textContent = "Totale sweep mislukt.";
+      if (data.fouten && data.fouten.length) {
+        statusTekstEl.textContent += ` ${data.fouten.join(" | ")}`;
+      }
+    }
+  } catch (err) {
+    // Netwerkfout tijdens het pollen zelf - de sweep loopt intussen gewoon
+    // door op de server, dus straks nog eens proberen i.p.v. opgeven.
+    setTimeout(pollSweepStatus, SWEEP_POLL_INTERVAL_MS);
+  }
+}
+
 sweepKnop.addEventListener("click", async () => {
   const maxItems = sweepKnop.dataset.maxItems;
   const maxKosten = parseFloat(sweepKnop.dataset.maxKosten);
@@ -199,24 +240,35 @@ sweepKnop.addEventListener("click", async () => {
   if (!bevestigd) return;
 
   sweepKnop.disabled = true;
-  statusTekstEl.textContent = "Bezig met totale sweep (kan een paar minuten duren)...";
+  statusTekstEl.textContent = "Totale sweep starten...";
   try {
     const resp = await fetch("/sweep", { method: "POST" });
     const data = await resp.json();
     if (data.fout) {
       statusTekstEl.textContent = data.fout;
+      sweepKnop.disabled = false;
     } else {
-      statusTekstEl.textContent = `Sweep klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
-      if (data.fouten && data.fouten.length) {
-        statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
-      }
-      await laadKansen();
+      pollSweepStatus();
     }
   } catch (err) {
-    statusTekstEl.textContent = "Totale sweep mislukt - probeer het nog eens.";
-  } finally {
+    statusTekstEl.textContent = "Totale sweep starten is mislukt - probeer het nog eens.";
     sweepKnop.disabled = false;
   }
 });
+
+// Bij het laden van de pagina meteen checken of er al een sweep bezig is
+// (bv. gestart vanuit een ander tabblad, of vóór een pagina-herlaad) en dan
+// meteen verder pollen. Toont bewust niets als er geen sweep bezig is - het
+// resultaat van een oude sweep hoeft niet op elke pagina-herlaad terug te
+// komen, "Ververs nu" en de kansenlijst zelf zijn dan leidend.
+(async () => {
+  try {
+    const resp = await fetch("/sweep/status");
+    const data = await resp.json();
+    if (data.status === "bezig") pollSweepStatus();
+  } catch (err) {
+    // Best-effort - als dit mislukt, kan de gebruiker gewoon zelf op de knop klikken.
+  }
+})();
 
 laadKansen();

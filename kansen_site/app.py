@@ -9,11 +9,13 @@ Starten (productie): gunicorn 'kansen_site.app:create_app()'
 from __future__ import annotations
 
 import hmac
+import threading
+from dataclasses import asdict
 from functools import wraps
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import apify_scraper, pipeline, zoek_urls
+from rotterdam_scanner import apify_scraper, pipeline, sweep_status, zoek_urls
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.state import StateStore
 
@@ -145,14 +147,38 @@ def create_app(config: Config | None = None) -> Flask:
         # 2000) handmatig triggeren - kost meer dan "Ververs nu" (dat gebruikt de
         # kleine dagelijkse pull), vandaar de aparte knop met kostenwaarschuwing
         # in kaart.html/kaart.js i.p.v. dit ongemerkt aan "Ververs nu" toe te voegen.
+        #
+        # Draait in een achtergrondthread i.p.v. de aanvraag te laten wachten tot
+        # de hele scan klaar is (kan tientallen minuten duren): een mobiele
+        # browser onderbreekt een zo lang openstaande fetch() al snel zodra het
+        # tabblad naar de achtergrond gaat (bv. om de Apify-billing te checken),
+        # waarna de site "mislukt" toont terwijl de run bij Apify gewoon (en dus
+        # tegen betaling) doorloopt. sweep_status.py houdt de voortgang bij in
+        # een bestand, zodat kaart.js kan pollen ongeacht de verbinding die 'm
+        # gestart heeft.
         if not apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
             return jsonify({"fout": "Apify is niet ingesteld - een totale sweep is niet mogelijk."}), 400
-        result = pipeline.run_apify_volledig(config)
-        return jsonify({
-            "nieuw_actief": len(result.nieuw_actief),
-            "nieuw_afgevallen": len(result.nieuw_afgevallen),
-            "fouten": result.fouten,
-        })
+        if sweep_status.laad(config).status == "bezig":
+            return jsonify({"fout": "Er loopt al een totale sweep - wacht tot die klaar is."}), 409
+
+        sweep_status.zet_bezig(config)
+
+        def _draai_sweep() -> None:
+            try:
+                result = pipeline.run_apify_volledig(config)
+                sweep_status.zet_klaar(
+                    config, len(result.nieuw_actief), len(result.nieuw_afgevallen), result.fouten,
+                )
+            except Exception as exc:  # noqa: BLE001 - moet altijd in de status terechtkomen, nooit de thread stil laten sterven
+                sweep_status.zet_mislukt(config, f"Onverwachte fout tijdens de sweep: {exc}")
+
+        threading.Thread(target=_draai_sweep, daemon=True).start()
+        return jsonify({"gestart": True})
+
+    @app.route("/sweep/status")
+    @login_required
+    def sweep_status_route():
+        return jsonify(asdict(sweep_status.laad(config)))
 
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
     @login_required

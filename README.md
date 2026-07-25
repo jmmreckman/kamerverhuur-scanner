@@ -206,7 +206,13 @@ laten draaien in plaats van te wachten tot 09:00. Ernaast staat "Totale sweep": 
 handmatig de volledige wekelijkse Apify-scan (`pipeline.run_apify_volledig()`, zie
 hieronder) i.p.v. te wachten tot maandag - met een waarschuwing vooraf en een
 kosteninschatting (op basis van `APIFY_MAX_ITEMS_WEKELIJKS` x de actuele Apify-prijs per
-1000 resultaten), want dit is een dure aanroep die je niet per ongeluk wil triggeren.
+1000 resultaten), want dit is een dure aanroep die je niet per ongeluk wil triggeren. De
+sweep draait server-side in een achtergrondthread (status bijgehouden in
+`sweep_status.json`, zie `rotterdam_scanner/sweep_status.py`) i.p.v. te wachten tot de
+hele HTTP-aanvraag klaar is - een mobiele browser onderbreekt een minutenlang openstaande
+fetch al snel zodra je van tabblad wisselt, en de website pollt de status dus apart. Je
+kunt gerust wegnavigeren of het tabblad sluiten; bij terugkomst (of op een ander tabblad)
+zie je gewoon de actuele voortgang.
 Draait als eigen container (`kansen`)
 op dezelfde VPS als `fundazoeker`, gebouwd vanaf dezelfde branch/dezelfde `state.json`
 (gedeeld volume) — zie `deploy/docker-compose.yml` en `deploy/Caddyfile` in de

@@ -276,8 +276,21 @@ def test_sweep_zonder_apify_geeft_foutmelding(app_client):
     assert "niet ingesteld" in resp.get_json()["fout"].lower()
 
 
-def test_sweep_roept_run_apify_volledig_aan_en_geeft_samenvatting(tmp_path, monkeypatch):
+class _SyncThread:
+    """Vervangt threading.Thread in tests: voert de target meteen synchroon uit
+    i.p.v. echt in een aparte thread, zodat de achtergrondtaak van /sweep
+    deterministisch getest kan worden zonder te moeten wachten/pollen."""
+
+    def __init__(self, target=None, daemon=None):
+        self._target = target
+
+    def start(self):
+        self._target()
+
+
+def test_sweep_start_achtergrondtaak_en_geeft_meteen_antwoord(tmp_path, monkeypatch):
     import kansen_site.app as appmodule
+    from rotterdam_scanner import sweep_status
 
     config = _config(
         tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
@@ -289,6 +302,7 @@ def test_sweep_roept_run_apify_volledig_aan_en_geeft_samenvatting(tmp_path, monk
         return RunResult(nieuw_actief=[object()], nieuw_afgevallen=[object(), object()], fouten=["een waarschuwing"])
 
     monkeypatch.setattr(appmodule.pipeline, "run_apify_volledig", _fake_run_apify_volledig)
+    monkeypatch.setattr(appmodule.threading, "Thread", _SyncThread)
     app = appmodule.create_app(config)
     app.testing = True
     client = app.test_client()
@@ -296,11 +310,91 @@ def test_sweep_roept_run_apify_volledig_aan_en_geeft_samenvatting(tmp_path, monk
 
     resp = client.post("/sweep")
     assert resp.status_code == 200
-    data = resp.get_json()
-    assert data["nieuw_actief"] == 1
-    assert data["nieuw_afgevallen"] == 2
-    assert data["fouten"] == ["een waarschuwing"]
+    assert resp.get_json() == {"gestart": True}
     assert len(aangeroepen) == 1
+
+    status = sweep_status.laad(config)
+    assert status.status == "klaar"
+    assert status.nieuw_actief == 1
+    assert status.nieuw_afgevallen == 2
+    assert status.fouten == ["een waarschuwing"]
+
+
+def test_sweep_weigert_te_starten_als_er_al_een_sweep_bezig_is(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+    from rotterdam_scanner import sweep_status
+
+    config = _config(
+        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
+    )
+    sweep_status.zet_bezig(config)
+    aangeroepen = []
+    monkeypatch.setattr(
+        appmodule.pipeline, "run_apify_volledig",
+        lambda config: aangeroepen.append(config) or RunResult(),
+    )
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.post("/sweep")
+    assert resp.status_code == 409
+    assert aangeroepen == []
+
+
+def test_sweep_zet_status_op_mislukt_bij_onverwachte_fout(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+    from rotterdam_scanner import sweep_status
+
+    config = _config(
+        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
+    )
+
+    def _kapot(config):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(appmodule.pipeline, "run_apify_volledig", _kapot)
+    monkeypatch.setattr(appmodule.threading, "Thread", _SyncThread)
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    client.post("/sweep")
+    status = sweep_status.laad(config)
+    assert status.status == "mislukt"
+    assert "boom" in status.fouten[0]
+
+
+# --- /sweep/status ---
+
+
+def test_sweep_status_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/sweep/status")
+    assert resp.status_code == 302
+
+
+def test_sweep_status_geeft_idle_zonder_eerdere_sweep(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/sweep/status")
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "idle"
+
+
+def test_sweep_status_geeft_bezig_status(tmp_path):
+    import kansen_site.app as appmodule
+    from rotterdam_scanner import sweep_status
+
+    config = _config(tmp_path)
+    sweep_status.zet_bezig(config)
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.get("/sweep/status")
+    assert resp.get_json()["status"] == "bezig"
 
 
 def test_kaart_geeft_sweep_kosteninschatting_mee(tmp_path):
