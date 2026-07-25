@@ -144,3 +144,44 @@ def test_ververs_roept_pipeline_run_aan_en_geeft_samenvatting(app_client, monkey
     assert data["nieuw_afgevallen"] == 2
     assert data["fouten"] == ["een waarschuwing"]
     assert len(aangeroepen) == 1
+
+
+def test_ververs_slaat_apify_over_als_niet_ingesteld(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+
+    monkeypatch.setattr(appmodule.pipeline, "run", lambda config: RunResult())
+    apify_mock_aangeroepen = []
+    monkeypatch.setattr(
+        appmodule.pipeline, "run_apify",
+        lambda config: apify_mock_aangeroepen.append(config) or RunResult(),
+    )
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    app_client.post("/ververs")
+    assert apify_mock_aangeroepen == []
+
+
+def test_ververs_roept_ook_apify_aan_indien_ingesteld_en_telt_beide_resultaten_op(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+
+    config = _config(
+        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
+    )
+    monkeypatch.setattr(
+        appmodule.pipeline, "run",
+        lambda config: RunResult(nieuw_actief=[object()], fouten=["mail-waarschuwing"]),
+    )
+    monkeypatch.setattr(
+        appmodule.pipeline, "run_apify",
+        lambda config: RunResult(nieuw_actief=[object(), object()], nieuw_afgevallen=[object()], fouten=["apify-waarschuwing"]),
+    )
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.post("/ververs")
+    data = resp.get_json()
+    assert data["nieuw_actief"] == 3  # 1 (mail) + 2 (apify)
+    assert data["nieuw_afgevallen"] == 1
+    assert data["fouten"] == ["mail-waarschuwing", "apify-waarschuwing"]

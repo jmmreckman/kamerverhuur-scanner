@@ -71,3 +71,46 @@ def test_load_config_leest_kansen_app_secret_key(monkeypatch, tmp_path):
     monkeypatch.setenv("KANSEN_APP_SECRET_KEY", "test-secret")
     config = load_config(tmp_path / "geen-env-bestand")
     assert config.kansen_app_secret_key == "test-secret"
+
+
+def test_load_config_zonder_apify_instellingen_geeft_lege_defaults(monkeypatch, tmp_path):
+    _zet_verplichte_env(monkeypatch)
+    for naam in ["APIFY_API_TOKEN", "APIFY_ACTOR_ID", "APIFY_SEARCH_URLS"]:
+        monkeypatch.delenv(naam, raising=False)
+    config = load_config(tmp_path / "geen-env-bestand")
+    assert config.apify_api_token == ""
+    assert config.apify_actor_id == "easyapi/funda-nl-scraper"
+    assert config.apify_search_urls == []
+    assert config.apify_max_items_dagelijks == 150
+    assert config.apify_max_items_wekelijks == 2000
+
+
+def test_load_config_leest_apify_token_en_actor(monkeypatch, tmp_path):
+    _zet_verplichte_env(monkeypatch)
+    monkeypatch.setenv("APIFY_API_TOKEN", "apify-token-123")
+    monkeypatch.setenv("APIFY_ACTOR_ID", "memo23/funda-scraper")
+    config = load_config(tmp_path / "geen-env-bestand")
+    assert config.apify_api_token == "apify-token-123"
+    assert config.apify_actor_id == "memo23/funda-scraper"
+
+
+def test_load_config_leest_apify_search_urls_pipe_gescheiden(monkeypatch, tmp_path):
+    _zet_verplichte_env(monkeypatch)
+    monkeypatch.setenv(
+        "APIFY_SEARCH_URLS",
+        "https://www.funda.nl/koop/rotterdam/|https://www.funda.nl/koop/hoek-van-holland/",
+    )
+    config = load_config(tmp_path / "geen-env-bestand")
+    assert config.apify_search_urls == [
+        "https://www.funda.nl/koop/rotterdam/",
+        "https://www.funda.nl/koop/hoek-van-holland/",
+    ]
+
+
+def test_load_config_leest_apify_max_items(monkeypatch, tmp_path):
+    _zet_verplichte_env(monkeypatch)
+    monkeypatch.setenv("APIFY_MAX_ITEMS_DAGELIJKS", "80")
+    monkeypatch.setenv("APIFY_MAX_ITEMS_WEKELIJKS", "3000")
+    config = load_config(tmp_path / "geen-env-bestand")
+    assert config.apify_max_items_dagelijks == 80
+    assert config.apify_max_items_wekelijks == 3000

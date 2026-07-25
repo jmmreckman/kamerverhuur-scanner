@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+from . import apify_scraper
 from .bag import fetch_bag_gegevens
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
@@ -316,6 +317,95 @@ def run(config: Config, today: date | None = None) -> RunResult:
         te_verwijderen_ids = set()
 
     _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
+    return result
+
+
+def run_apify(config: Config, today: date | None = None, max_items: int | None = None) -> RunResult:
+    """Haalt het actuele Funda-aanbod op via Apify (zie apify_scraper.py) en
+    verwerkt het via dezelfde checks als run() - dekt ook woningen die niet
+    in de dagelijkse mail-alert voorkwamen (bv. omdat ze al te koop stonden
+    vóór de zoekopdracht werd ingesteld). max_items=None gebruikt
+    config.apify_max_items_dagelijks. Best-effort: is Apify niet ingesteld of
+    mislukt de aanroep, dan komt dat in result.fouten terecht (geen crash) -
+    de rest van de scanner (mail-gebaseerd) blijft gewoon werken."""
+    today = today or date.today()
+    max_items = max_items if max_items is not None else config.apify_max_items_dagelijks
+    state = StateStore(config.state_path)
+    result = RunResult()
+
+    try:
+        listings = apify_scraper.fetch_apify_listings(config, max_items)
+    except apify_scraper.ApifyError as exc:
+        result.fouten.append(f"Apify-scan mislukt: {exc}")
+        listings = []
+
+    try:
+        te_verwijderen_ids = fetch_verwijder_commandos(config)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon verwijder-commando's niet uitlezen: {exc}")
+        te_verwijderen_ids = set()
+
+    _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
+    return result
+
+
+def run_apify_volledig(config: Config, today: date | None = None) -> RunResult:
+    """Wekelijkse volledige Apify-scan (config.apify_max_items_wekelijks):
+    haalt het complete actieve aanbod op i.p.v. alleen de nieuwste woningen.
+    Dient twee doelen tegelijk:
+    - de inhaalslag voor woningen die de dagelijkse scans (mail + kleine
+      Apify-pull) gemist hebben;
+    - verkocht/introkken-detectie: een "actief" woning die 2 volledige scans
+      op rij (dus zeker een week, meestal twee) niet meer voorkomt wordt
+      automatisch op "afgevallen" gezet, i.p.v. te wachten op de
+      30-dagen-expiry. Bewust pas na 2x missen (niet meteen na 1x) om een
+      eenmalige Apify-hapering niet als "verkocht" te laten doorschieten.
+
+    Mislukt de Apify-aanroep zelf, dan wordt er GEEN verkocht-detectie
+    gedaan (een lege/mislukte pull zou anders alles als "gemist" tellen) -
+    alleen de fout wordt gerapporteerd."""
+    today = today or date.today()
+    state = StateStore(config.state_path)
+    result = RunResult()
+
+    try:
+        listings = apify_scraper.fetch_apify_listings(config, config.apify_max_items_wekelijks)
+    except apify_scraper.ApifyError as exc:
+        result.fouten.append(f"Volledige Apify-scan mislukt: {exc}")
+        return result
+
+    try:
+        te_verwijderen_ids = fetch_verwijder_commandos(config)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon verwijder-commando's niet uitlezen: {exc}")
+        te_verwijderen_ids = set()
+
+    _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
+
+    gevonden_ids = {listing.object_id for listing in listings}
+    for item in state.all():
+        if item.status != "actief":
+            continue
+        if item.object_id in gevonden_ids:
+            if item.weken_gemist_in_volledige_scan:
+                item.weken_gemist_in_volledige_scan = 0
+                state.upsert(item)
+            continue
+        item.weken_gemist_in_volledige_scan += 1
+        if item.weken_gemist_in_volledige_scan >= 2:
+            item.status = "afgevallen"
+            item.afvalreden = (
+                "Niet meer gevonden in de volledige Funda-doorloop (2x op rij) - "
+                "vermoedelijk verkocht of ingetrokken."
+            )
+            result.nieuw_afgevallen.append(item)
+        state.upsert(item)
+    state.save()
+
+    result.alle_actief = sorted(
+        (item for item in state.all() if item.status == "actief"),
+        key=_sorteersleutel,
+    )
     return result
 
 

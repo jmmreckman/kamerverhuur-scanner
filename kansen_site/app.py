@@ -13,7 +13,7 @@ from functools import wraps
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import pipeline
+from rotterdam_scanner import apify_scraper, pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.state import StateStore
 
@@ -109,11 +109,26 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/ververs", methods=["POST"])
     @login_required
     def ververs():
+        # Mail-gebaseerde scan (alleen nieuwe woningen sinds gisteren) plus,
+        # als ingesteld, de kleine dagelijkse Apify-pull (breder dan alleen
+        # de eigen zoekopdracht) - een handmatige "Ververs nu" mag zo veel
+        # mogelijk in één keer meepakken i.p.v. te wachten op de volgende
+        # geplande scan.
         result = pipeline.run(config)
+        nieuw_actief = len(result.nieuw_actief)
+        nieuw_afgevallen = len(result.nieuw_afgevallen)
+        fouten = list(result.fouten)
+
+        if apify_scraper.is_ingesteld(config):
+            apify_result = pipeline.run_apify(config)
+            nieuw_actief += len(apify_result.nieuw_actief)
+            nieuw_afgevallen += len(apify_result.nieuw_afgevallen)
+            fouten += apify_result.fouten
+
         return jsonify({
-            "nieuw_actief": len(result.nieuw_actief),
-            "nieuw_afgevallen": len(result.nieuw_afgevallen),
-            "fouten": result.fouten,
+            "nieuw_actief": nieuw_actief,
+            "nieuw_afgevallen": nieuw_afgevallen,
+            "fouten": fouten,
         })
 
     return app

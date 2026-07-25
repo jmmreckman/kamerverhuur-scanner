@@ -218,6 +218,61 @@ hoofdbranch.
 `steenhub.nl`) aangemaakt worden bij je domeinregistrar — dat kan dit systeem niet voor
 je doen. Daarna regelt Caddy automatisch gratis HTTPS, net als bij de andere subdomeinen.
 
+## Apify: het volledige actuele Funda-aanbod (optioneel, kost geld)
+
+De mail-alert (hierboven) meldt alleen NIEUWE woningen sinds gisteren — huizen die al
+te koop stonden vóórdat de zoekopdracht werd ingesteld, of die de mail om wat voor
+reden dan ook mist, komen er nooit in terecht. Apify (`apify.com`) lost dat op: een
+betaalde, kant-en-klare scraper die het complete actuele Funda-aanbod ophaalt voor je
+eigen zoek-URL's (Rotterdam + randgemeentes), zonder dat dit project zelf bot-detectie
+hoeft te omzeilen (proxies, CAPTCHA's, browser-fingerprinting) — dat onderhoud ligt bij
+Apify, waar je per opgehaald resultaat voor betaalt.
+
+**Twee snelheden, om de kosten laag te houden:**
+- **Dagelijks, klein** (`scripts/dagelijkse_apify_scan.py`, 08:00): alleen de nieuwste
+  woningen (`APIFY_MAX_ITEMS_DAGELIJKS`, standaard 150) — vangt nieuwe kansen breder en
+  sneller dan de mail-alert.
+- **Wekelijks, groot** (`scripts/wekelijkse_apify_scan.py`, maandag 07:00): het hele
+  actieve aanbod (`APIFY_MAX_ITEMS_WEKELIJKS`, standaard 2000) — dient als eenmalige
+  inhaalslag voor gemiste oudere woningen, én als **automatische verkocht-detectie**:
+  een woning die 2 volledige scans op rij (dus zeker een week, meestal twee) niet meer
+  in het Funda-aanbod voorkomt, wordt automatisch op "afgevallen" gezet
+  (`weken_gemist_in_volledige_scan` in `state.json`) i.p.v. te wachten op de
+  30-dagen-expiry. Mislukt de Apify-aanroep zelf een keer, dan wordt er die run bewust
+  GEEN verkocht-detectie gedaan (zie `pipeline.run_apify_volledig()`) — anders zou een
+  tijdelijke storing alles ten onrechte als verkocht laten doorschieten.
+
+Beide runs updaten alleen `state.json` (geen los mailrapport) — nieuwe/gewijzigde
+kansen zijn meteen zichtbaar op kansen.steenhub.nl, of meteen via de "Ververs
+nu"-knop daar (die roept, als Apify is ingesteld, ook meteen de kleine dagelijkse pull
+aan naast de mail-scan).
+
+**Kosten (juli 2026, `easyapi/funda-nl-scraper`-actor):** ~$4,99 per 1000 opgehaalde
+resultaten, geen vast maandbedrag. Bij de standaard-aantallen hierboven (150/dag +
+2000/week) kom je uit op ruwweg €35-55/maand, afhankelijk van hoeveel woningen je
+zoek-URL's daadwerkelijk opleveren — check dit soort bedragen af en toe tegen de
+actuele Apify-pricing, dat kan wijzigen.
+
+**Instellen** (in `fundazoeker.env`, zie `.env.example`):
+1. Account op apify.com aanmaken + betaalmethode koppelen (pay-as-you-go, geen
+   abonnement nodig).
+2. `APIFY_API_TOKEN` — je eigen token (Apify Console > Settings > Integrations).
+3. `APIFY_SEARCH_URLS` — zelf op funda.nl een zoekopdracht samenstellen (Koop, Huis,
+   de gewenste gemeentes) en de URL uit de adresbalk kopiëren, net als bij de
+   e-mail-zoekopdracht. Pipe-gescheiden (`|`) bij meerdere URL's.
+4. Optioneel `APIFY_ACTOR_ID`/`APIFY_MAX_ITEMS_DAGELIJKS`/`APIFY_MAX_ITEMS_WEKELIJKS`
+   aanpassen.
+
+Leeg gelaten (standaard), dan slaan beide scripts zichzelf netjes over (geen crash,
+geen kosten) — de rest van de scanner (mail-alert, kaart-website) blijft gewoon werken.
+
+**Let op — nog niet live geverifieerd:** de veldnamen die `apify_scraper.py` uit de
+Apify-respons haalt (adres, prijs, oppervlakte, publicatiedatum) zijn gebaseerd op de
+gedocumenteerde output-schema van de actor, maar nog niet getest tegen een echte
+API-aanroep (dat kon pas met een echt account/token). Check na het instellen van
+`APIFY_API_TOKEN` de eerste paar dagen de logs (`docker compose logs apify-dagelijks`,
+zie `deploy/docker-compose.yml` in de hoofdbranch) en/of `state.json` even extra goed.
+
 ## Het dagrapport lezen
 
 Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
