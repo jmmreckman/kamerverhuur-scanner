@@ -261,6 +261,74 @@ def test_zoekopdrachten_zonder_login_kan_niet_toevoegen(app_client):
     assert resp.status_code == 302
 
 
+# --- Totale sweep (handmatig getriggerde volledige Apify-scan) ---
+
+
+def test_sweep_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/sweep")
+    assert resp.status_code == 302
+
+
+def test_sweep_zonder_apify_geeft_foutmelding(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/sweep")
+    assert resp.status_code == 400
+    assert "niet ingesteld" in resp.get_json()["fout"].lower()
+
+
+def test_sweep_roept_run_apify_volledig_aan_en_geeft_samenvatting(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+
+    config = _config(
+        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
+    )
+    aangeroepen = []
+
+    def _fake_run_apify_volledig(config):
+        aangeroepen.append(config)
+        return RunResult(nieuw_actief=[object()], nieuw_afgevallen=[object(), object()], fouten=["een waarschuwing"])
+
+    monkeypatch.setattr(appmodule.pipeline, "run_apify_volledig", _fake_run_apify_volledig)
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.post("/sweep")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["nieuw_actief"] == 1
+    assert data["nieuw_afgevallen"] == 2
+    assert data["fouten"] == ["een waarschuwing"]
+    assert len(aangeroepen) == 1
+
+
+def test_kaart_geeft_sweep_kosteninschatting_mee(tmp_path):
+    import kansen_site.app as appmodule
+
+    config = _config(
+        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
+        apify_max_items_wekelijks=2000,
+    )
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.get("/")
+    tekst = resp.get_data(as_text=True)
+    assert "2000" in tekst
+    assert "9.98" in tekst
+
+
+def test_kaart_zonder_apify_toont_sweep_knop_uitgeschakeld(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/")
+    tekst = resp.get_data(as_text=True)
+    assert 'id="sweep-knop"' in tekst
+    assert "disabled" in tekst
+
+
 # --- Kansen handmatig verwijderen + terugplaatsen ---
 
 

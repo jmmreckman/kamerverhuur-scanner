@@ -13,6 +13,7 @@ const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
 const verversKnop = document.getElementById("ververs-knop");
+const sweepKnop = document.getElementById("sweep-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
 const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
@@ -183,6 +184,38 @@ verversKnop.addEventListener("click", async () => {
     statusTekstEl.textContent = "Verversen mislukt - probeer het nog eens.";
   } finally {
     verversKnop.disabled = false;
+  }
+});
+
+sweepKnop.addEventListener("click", async () => {
+  const maxItems = sweepKnop.dataset.maxItems;
+  const maxKosten = parseFloat(sweepKnop.dataset.maxKosten);
+  const maxKostenEuro = (maxKosten * 0.92).toFixed(2);
+  const bevestigd = window.confirm(
+    `Dit haalt een VOLLEDIGE Apify-scan op (tot max. ${maxItems} resultaten in totaal, over al je zoekopdrachten samen) - dit kan geld kosten.\n\n` +
+    `Bij het maximum ca. $${maxKosten.toFixed(2)} (~€${maxKostenEuro}), meestal minder omdat er vaak minder dan het maximum aan resultaten binnenkomt.\n\n` +
+    "Wil je doorgaan met de totale sweep?"
+  );
+  if (!bevestigd) return;
+
+  sweepKnop.disabled = true;
+  statusTekstEl.textContent = "Bezig met totale sweep (kan een paar minuten duren)...";
+  try {
+    const resp = await fetch("/sweep", { method: "POST" });
+    const data = await resp.json();
+    if (data.fout) {
+      statusTekstEl.textContent = data.fout;
+    } else {
+      statusTekstEl.textContent = `Sweep klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
+      if (data.fouten && data.fouten.length) {
+        statusTekstEl.textContent += ` (${data.fouten.length} waarschuwing(en), zie logs)`;
+      }
+      await laadKansen();
+    }
+  } catch (err) {
+    statusTekstEl.textContent = "Totale sweep mislukt - probeer het nog eens.";
+  } finally {
+    sweepKnop.disabled = false;
   }
 });
 

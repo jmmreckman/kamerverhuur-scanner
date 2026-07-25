@@ -64,6 +64,24 @@ body {
 
 .login-card button:hover, .topbar button:hover { opacity: 0.9; }
 
+.knop-gevaar {
+  background: #b3611e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.knop-gevaar:hover { opacity: 0.9; }
+
+.knop-gevaar:disabled {
+  background: var(--rand);
+  color: var(--tekst-zwak);
+  cursor: not-allowed;
+}
+
 .fout { color: #b3261e; font-size: 0.9em; margin: 0; }
 
 /* --- Kaartpagina --- */

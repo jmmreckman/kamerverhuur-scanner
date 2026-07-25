@@ -202,7 +202,12 @@ Naast het dagrapport is er een losse, interactieve kaart-website (`kansen_site/`
 dezelfde `state.json` uitleest en alle actieve kansen toont op een kaart (Leaflet +
 gratis OpenStreetMap-tiles) met een filterbare lijst ernaast (wijk, max. eigen inleg
 p.p., min. winst p.p./mnd, adres zoeken) en een "Ververs nu"-knop om de scan meteen te
-laten draaien in plaats van te wachten tot 09:00. Draait als eigen container (`kansen`)
+laten draaien in plaats van te wachten tot 09:00. Ernaast staat "Totale sweep": triggert
+handmatig de volledige wekelijkse Apify-scan (`pipeline.run_apify_volledig()`, zie
+hieronder) i.p.v. te wachten tot maandag - met een waarschuwing vooraf en een
+kosteninschatting (op basis van `APIFY_MAX_ITEMS_WEKELIJKS` x de actuele Apify-prijs per
+1000 resultaten), want dit is een dure aanroep die je niet per ongeluk wil triggeren.
+Draait als eigen container (`kansen`)
 op dezelfde VPS als `fundazoeker`, gebouwd vanaf dezelfde branch/dezelfde `state.json`
 (gedeeld volume) — zie `deploy/docker-compose.yml` en `deploy/Caddyfile` in de
 hoofdbranch.

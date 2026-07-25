@@ -99,7 +99,12 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/")
     @login_required
     def kaart():
-        return render_template("kaart.html", gebruiker=session["gebruiker"])
+        return render_template(
+            "kaart.html", gebruiker=session["gebruiker"],
+            apify_ingesteld=apify_scraper.is_ingesteld(config, zoek_urls.laad(config)),
+            sweep_max_items=config.apify_max_items_wekelijks,
+            sweep_max_kosten_dollar=round(config.apify_max_items_wekelijks / 1000 * 4.99, 2),
+        )
 
     @app.route("/api/kansen")
     @login_required
@@ -131,6 +136,22 @@ def create_app(config: Config | None = None) -> Flask:
             "nieuw_actief": nieuw_actief,
             "nieuw_afgevallen": nieuw_afgevallen,
             "fouten": fouten,
+        })
+
+    @app.route("/sweep", methods=["POST"])
+    @login_required
+    def sweep():
+        # De volledige wekelijkse Apify-scan (apify_max_items_wekelijks, standaard
+        # 2000) handmatig triggeren - kost meer dan "Ververs nu" (dat gebruikt de
+        # kleine dagelijkse pull), vandaar de aparte knop met kostenwaarschuwing
+        # in kaart.html/kaart.js i.p.v. dit ongemerkt aan "Ververs nu" toe te voegen.
+        if not apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
+            return jsonify({"fout": "Apify is niet ingesteld - een totale sweep is niet mogelijk."}), 400
+        result = pipeline.run_apify_volledig(config)
+        return jsonify({
+            "nieuw_actief": len(result.nieuw_actief),
+            "nieuw_afgevallen": len(result.nieuw_afgevallen),
+            "fouten": result.fouten,
         })
 
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
