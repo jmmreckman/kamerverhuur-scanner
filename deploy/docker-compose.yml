@@ -102,9 +102,40 @@ services:
       - ./fundazoeker.env
     volumes:
       - fundazoeker-data:/app/data
-    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2"]
+    # --timeout 180: de "Ververs nu"-knop roept zowel de mail-scan als (indien
+    # ingesteld) Apify aan, dat kan samen langer duren dan gunicorn's
+    # standaard 30 seconden.
+    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "180"]
     expose:
       - "8080"
+
+  # Optionele Apify-scans (het volledige actuele Funda-aanbod, i.p.v. alleen
+  # wat de mail-alert sinds gisteren meldt) - zie de "Apify"-sectie in
+  # fundazoeker's eigen README. Zelfde image/branch/volume als fundazoeker,
+  # alleen een ander opstartcommando. Zonder APIFY_API_TOKEN/
+  # APIFY_SEARCH_URLS in fundazoeker.env slaan beide zichzelf gewoon over
+  # (geen crash, geen kosten).
+  apify-dagelijks:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: apify-dagelijks
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["python3", "-m", "scripts.dagelijkse_apify_scan"]
+
+  apify-wekelijks:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: apify-wekelijks
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["python3", "-m", "scripts.wekelijkse_apify_scan"]
 
   caddy:
     image: caddy:2-alpine
