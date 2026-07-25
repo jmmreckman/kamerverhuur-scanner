@@ -229,6 +229,34 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
         state.upsert(item)
 
 
+def _backvul_coordinaten(state: StateStore) -> None:
+    """Woningen die al in state.json stonden vóórdat coördinaten (lat/lon)
+    werden opgeslagen missen die nog - zonder dit zouden ze nooit op de kaart
+    (kansen.steenhub.nl) verschijnen, ook al staan ze gewoon nog "actief". De
+    'bestaat al'-tak in _verwerk_listings hieronder geocodeert bewust niet
+    opnieuw (dat zou voor elke al bekende woning een extra PDOK-aanroep per
+    run betekenen) - dit haalt het eenmalig en gericht in, alleen voor
+    woningen waar het nog ontbreekt. Kost 1 PDOK-aanroep per ontbrekende
+    woning; best-effort, net als de rest van dit bestand: een storing hier
+    mag de rest van de run nooit laten mislukken.
+
+    Postcode staat niet los opgeslagen op ListingState - object_id is altijd
+    "POSTCODE-HUISNUMMER[TOEVOEGING]" (zie funda_mail._maak_object_id() en
+    apify_scraper._item_naar_listing()), dus die wordt er hier weer uit
+    gehaald i.p.v. een extra veld toe te voegen."""
+    for item in state.all():
+        if item.status != "actief" or item.lat is not None or not item.huisnummer:
+            continue
+        postcode = item.object_id.split("-", 1)[0]
+        try:
+            geo = geocode_by_postcode(postcode, item.huisnummer, "")
+        except GeocodeError:
+            continue
+        item.lat = geo.lat
+        item.lon = geo.lon
+        state.upsert(item)
+
+
 _HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
 
 
@@ -286,6 +314,7 @@ def _verwerk_listings(
             result.nieuw_onbekend_adres.append(processed)
 
     _backvul_investeringscijfers(state)
+    _backvul_coordinaten(state)
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 

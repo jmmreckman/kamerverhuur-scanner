@@ -105,6 +105,46 @@ body {
   padding: 0.8rem;
 }
 
+/* Alleen relevant/zichtbaar binnen de mobiele media query hieronder - op
+   bredere schermen is de zijbalk toch altijd al zichtbaar. */
+#zijbalk-knop, .zijbalk-sluiten { display: none; }
+
+/* Op smalle schermen (telefoon) verdringt de vaste 340px-zijbalk anders bijna
+   de hele kaart - daarom hier standaard verborgen, met een knop in de
+   topbar (#zijbalk-knop, zie kaart.js) om 'm als volledig scherm te openen/
+   sluiten. Op bredere schermen blijft de zijbalk gewoon altijd zichtbaar
+   naast de kaart, ongeacht de .zijbalk-open-class. */
+@media (max-width: 860px) {
+  .topbar-acties { flex-wrap: wrap; row-gap: 0.4rem; justify-content: flex-end; }
+
+  #zijbalk-knop { display: inline; }
+
+  .zijbalk-sluiten {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.6rem 0.3rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--rand);
+    font-size: 1em;
+  }
+
+  .zijbalk {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 500;
+    width: 100%;
+  }
+
+  .zijbalk.zijbalk-open {
+    display: block;
+  }
+}
+
 .filters {
   display: flex;
   flex-direction: column;

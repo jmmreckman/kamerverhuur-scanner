@@ -13,6 +13,9 @@ const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
 const verversKnop = document.getElementById("ververs-knop");
+const zijbalkEl = document.getElementById("zijbalk");
+const zijbalkKnop = document.getElementById("zijbalk-knop");
+const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
 
 let alleKansen = [];
 const markerPerId = new Map();
@@ -99,6 +102,7 @@ function renderLijst(kansen) {
       kaart.setView([kans.lat, kans.lon], 16);
       const marker = markerPerId.get(kans.object_id);
       if (marker) marker.openPopup();
+      sluitZijbalk();
     });
     lijstEl.appendChild(li);
   }
@@ -110,6 +114,19 @@ function renderAlles() {
   renderMarkers(kansen);
   renderLijst(kansen);
 }
+
+function sluitZijbalk() {
+  zijbalkEl.classList.remove("zijbalk-open");
+  zijbalkKnop.textContent = "Toon lijst";
+}
+
+function toggleZijbalk() {
+  const open = zijbalkEl.classList.toggle("zijbalk-open");
+  zijbalkKnop.textContent = open ? "Toon kaart" : "Toon lijst";
+}
+
+zijbalkKnop.addEventListener("click", toggleZijbalk);
+zijbalkSluitenKnop.addEventListener("click", sluitZijbalk);
 
 async function laadKansen() {
   const resp = await fetch("/api/kansen");

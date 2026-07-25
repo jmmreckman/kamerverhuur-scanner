@@ -524,6 +524,100 @@ def test_run_backvult_aantal_kamers_ook_zonder_bekende_prijs(tmp_path):
     assert bijgewerkt.eigen_inleg_pp is None
 
 
+def test_run_backvult_coordinaten_voor_bestaande_woningen_zonder_lat_lon(tmp_path):
+    # Simuleert een woning die al in state.json stond vóórdat coördinaten werden
+    # opgeslagen (lat/lon nog None) - moet alsnog gegeocodeerd worden, ook al
+    # verschijnt hij vandaag niet in de Funda-mail/Apify-pull, anders zou hij nooit
+    # op de kaart (kansen.steenhub.nl) verschijnen.
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3000AA-1", url="https://example.com/oude-woning", weergavenaam="Teststraat 1, Rotterdam",
+            eerst_gezien="2026-06-25", laatst_gezien="2026-06-30", status="actief", huisnummer="1",
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo()) as geocode_mock:
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    bijgewerkt = next(item for item in result.alle_actief if item.object_id == "3000AA-1")
+    assert bijgewerkt.lat == 51.9200
+    assert bijgewerkt.lon == 4.4800
+    geocode_mock.assert_called_once_with("3000AA", "1", "")
+
+
+def test_run_backvult_coordinaten_laat_woning_met_lat_met_rust(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3000AA-1", url="https://example.com/al-gegeocodeerd", weergavenaam="Teststraat 1, Rotterdam",
+            eerst_gezien="2026-06-25", laatst_gezien="2026-06-30", status="actief", huisnummer="1",
+            lat=52.0, lon=4.5,
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode") as geocode_mock:
+        pipeline.run(config, today=date(2026, 7, 1))
+
+    geocode_mock.assert_not_called()
+
+
+def test_run_backvult_coordinaten_negeert_afgevallen_woningen(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3000AA-1", url="https://example.com/afgevallen", weergavenaam="Teststraat 1, Rotterdam",
+            eerst_gezien="2026-06-25", laatst_gezien="2026-06-30", status="afgevallen", huisnummer="1",
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode") as geocode_mock:
+        pipeline.run(config, today=date(2026, 7, 1))
+
+    geocode_mock.assert_not_called()
+
+
+def test_run_backvult_coordinaten_geocode_fout_geeft_geen_crash(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3000AA-1", url="https://example.com/mislukt-geocoderen", weergavenaam="Teststraat 1, Rotterdam",
+            eerst_gezien="2026-06-25", laatst_gezien="2026-06-30", status="actief", huisnummer="1",
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", side_effect=GeocodeError("geen match")):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    bijgewerkt = next(item for item in result.alle_actief if item.object_id == "3000AA-1")
+    assert bijgewerkt.lat is None
+    assert bijgewerkt.lon is None
+
+
 def test_run_handmatig_verwerkt_lijst_zonder_funda_mail_of_verwijder_check(tmp_path):
     config = _config(tmp_path)
     p1, p2, p3, p4, p5 = _patch_geo_checks()
