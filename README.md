@@ -196,6 +196,28 @@ docker compose exec -e REPORT_TO_ADDRESS=jmmreckman@gmail.com fundazoeker python
 docker compose exec fundazoeker python3 herscan_afgevallen.py
 ```
 
+## Kaart-website: kansen.steenhub.nl
+
+Naast het dagrapport is er een losse, interactieve kaart-website (`kansen_site/`) die
+dezelfde `state.json` uitleest en alle actieve kansen toont op een kaart (Leaflet +
+gratis OpenStreetMap-tiles) met een filterbare lijst ernaast (wijk, max. eigen inleg
+p.p., min. winst p.p./mnd, adres zoeken) en een "Ververs nu"-knop om de scan meteen te
+laten draaien in plaats van te wachten tot 09:00. Draait als eigen container (`kansen`)
+op dezelfde VPS als `fundazoeker`, gebouwd vanaf dezelfde branch/dezelfde `state.json`
+(gedeeld volume) — zie `deploy/docker-compose.yml` en `deploy/Caddyfile` in de
+hoofdbranch.
+
+**Eenmalige instellingen** (in `fundazoeker.env` op de VPS, zie
+`.env.example`):
+- `KANSEN_APP_USERS` — wie mag inloggen, formaat `gebruiker:wachtwoord,gebruiker:wachtwoord`.
+  Verplicht; de website weigert te starten zonder minstens één gebruiker.
+- `KANSEN_APP_SECRET_KEY` — willekeurige geheime tekenreeks voor de inlogsessie
+  (`python3 -c "import secrets; print(secrets.token_hex(32))"`). Verplicht.
+
+**DNS:** `kansen.steenhub.nl` moet zelf nog als DNS-record (A of CNAME, zelfde IP als
+`steenhub.nl`) aangemaakt worden bij je domeinregistrar — dat kan dit systeem niet voor
+je doen. Daarna regelt Caddy automatisch gratis HTTPS, net als bij de andere subdomeinen.
+
 ## Het dagrapport lezen
 
 Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
