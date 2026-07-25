@@ -177,7 +177,7 @@ verversKnop.addEventListener("click", async () => {
     const data = await resp.json();
     statusTekstEl.textContent = `Klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
     if (data.fouten && data.fouten.length) {
-      statusTekstEl.textContent += ` (${data.fouten.length} waarschuwing(en), zie logs)`;
+      statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
     }
     await laadKansen();
   } catch (err) {
@@ -208,7 +208,7 @@ sweepKnop.addEventListener("click", async () => {
     } else {
       statusTekstEl.textContent = `Sweep klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
       if (data.fouten && data.fouten.length) {
-        statusTekstEl.textContent += ` (${data.fouten.length} waarschuwing(en), zie logs)`;
+        statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
       }
       await laadKansen();
     }

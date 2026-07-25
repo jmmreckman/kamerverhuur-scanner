@@ -97,7 +97,9 @@ body {
 
 .topbar h1 { font-size: 1.2em; margin: 0; }
 
-.topbar-acties { display: flex; align-items: center; gap: 0.8rem; }
+.topbar-acties { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+
+#status-tekst { max-width: 320px; }
 
 .link-knop {
   background: none;
