@@ -617,7 +617,7 @@ def test_run_apify_verwerkt_listings_via_dezelfde_checks(tmp_path):
         result = pipeline.run_apify(config, today=date(2026, 7, 1))
 
     assert len(result.alle_actief) == 1
-    fetch_mock.assert_called_once_with(config, config.apify_max_items_dagelijks)
+    fetch_mock.assert_called_once_with(config, [], config.apify_max_items_dagelijks)
 
 
 def test_run_apify_gebruikt_eigen_max_items_als_gegeven(tmp_path):
@@ -627,7 +627,22 @@ def test_run_apify_gebruikt_eigen_max_items_als_gegeven(tmp_path):
         "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
     ) as fetch_mock, p1, p2, p3, p4, p5:
         pipeline.run_apify(config, today=date(2026, 7, 1), max_items=42)
-    fetch_mock.assert_called_once_with(config, 42)
+    fetch_mock.assert_called_once_with(config, [], 42)
+
+
+def test_run_apify_gebruikt_zoek_urls_module_niet_alleen_config(tmp_path):
+    from rotterdam_scanner import zoek_urls
+
+    config = _config(tmp_path)
+    zoek_urls.voeg_toe(config, "https://www.funda.nl/koop/hoek-van-holland/")
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with patch(
+        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
+    ) as fetch_mock, p1, p2, p3, p4, p5:
+        pipeline.run_apify(config, today=date(2026, 7, 1))
+    fetch_mock.assert_called_once_with(
+        config, ["https://www.funda.nl/koop/hoek-van-holland/"], config.apify_max_items_dagelijks
+    )
 
 
 def test_run_apify_meldt_fout_zonder_te_crashen(tmp_path):
@@ -650,7 +665,7 @@ def test_run_apify_volledig_verwerkt_listings(tmp_path):
         result = pipeline.run_apify_volledig(config, today=date(2026, 7, 1))
 
     assert len(result.alle_actief) == 1
-    fetch_mock.assert_called_once_with(config, config.apify_max_items_wekelijks)
+    fetch_mock.assert_called_once_with(config, [], config.apify_max_items_wekelijks)
 
 
 def test_run_apify_volledig_bij_mislukte_aanroep_doet_geen_verkocht_detectie(tmp_path):

@@ -14,6 +14,7 @@
     <div class="topbar-acties">
       <span id="status-tekst" class="muted"></span>
       <button id="ververs-knop" type="button">Ververs nu</button>
+      <a href="{{ url_for('zoekopdrachten') }}" class="link-knop">Zoekopdrachten</a>
       <span class="muted">{{ gebruiker }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
     </div>

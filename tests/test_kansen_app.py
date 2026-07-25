@@ -185,3 +185,61 @@ def test_ververs_roept_ook_apify_aan_indien_ingesteld_en_telt_beide_resultaten_o
     assert data["nieuw_actief"] == 3  # 1 (mail) + 2 (apify)
     assert data["nieuw_afgevallen"] == 1
     assert data["fouten"] == ["mail-waarschuwing", "apify-waarschuwing"]
+
+
+# --- /zoekopdrachten (beheer van Apify-zoek-URL's) ---
+
+
+def test_zoekopdrachten_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/zoekopdrachten")
+    assert resp.status_code == 302
+
+
+def test_zoekopdrachten_toont_lege_lijst(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/zoekopdrachten")
+    assert resp.status_code == 200
+    assert "nog geen zoekopdrachten" in resp.get_data(as_text=True).lower()
+
+
+def test_zoekopdracht_toevoegen_slaat_op(app_client, tmp_path):
+    from rotterdam_scanner import zoek_urls
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post(
+        "/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "https://www.funda.nl/zoeken/koop?selected_area=rotterdam" in resp.get_data(as_text=True)
+    assert zoek_urls.laad(_config(tmp_path)) == ["https://www.funda.nl/zoeken/koop?selected_area=rotterdam"]
+
+
+def test_zoekopdracht_toevoegen_wijst_niet_funda_url_af(app_client, tmp_path):
+    from rotterdam_scanner import zoek_urls
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post(
+        "/zoekopdrachten/toevoegen", data={"url": "https://www.evilsite.com/rotterdam"}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "lijkt geen funda-zoek-url" in resp.get_data(as_text=True).lower()
+    assert zoek_urls.laad(_config(tmp_path)) == []
+
+
+def test_zoekopdracht_verwijderen(app_client, tmp_path):
+    from rotterdam_scanner import zoek_urls
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.post("/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/koop/rotterdam/"})
+
+    resp = app_client.post(
+        "/zoekopdrachten/verwijderen", data={"url": "https://www.funda.nl/koop/rotterdam/"}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "https://www.funda.nl/koop/rotterdam/" not in resp.get_data(as_text=True)
+    assert zoek_urls.laad(_config(tmp_path)) == []
+
+
+def test_zoekopdrachten_zonder_login_kan_niet_toevoegen(app_client):
+    resp = app_client.post("/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/koop/rotterdam/"})
+    assert resp.status_code == 302

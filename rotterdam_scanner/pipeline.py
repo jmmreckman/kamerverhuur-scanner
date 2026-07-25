@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import apify_scraper
+from . import apify_scraper, zoek_urls
 from .bag import fetch_bag_gegevens
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
@@ -334,7 +334,7 @@ def run_apify(config: Config, today: date | None = None, max_items: int | None =
     result = RunResult()
 
     try:
-        listings = apify_scraper.fetch_apify_listings(config, max_items)
+        listings = apify_scraper.fetch_apify_listings(config, zoek_urls.laad(config), max_items)
     except apify_scraper.ApifyError as exc:
         result.fouten.append(f"Apify-scan mislukt: {exc}")
         listings = []
@@ -369,7 +369,7 @@ def run_apify_volledig(config: Config, today: date | None = None) -> RunResult:
     result = RunResult()
 
     try:
-        listings = apify_scraper.fetch_apify_listings(config, config.apify_max_items_wekelijks)
+        listings = apify_scraper.fetch_apify_listings(config, zoek_urls.laad(config), config.apify_max_items_wekelijks)
     except apify_scraper.ApifyError as exc:
         result.fouten.append(f"Volledige Apify-scan mislukt: {exc}")
         return result

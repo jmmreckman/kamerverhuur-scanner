@@ -11,11 +11,13 @@ from __future__ import annotations
 import hmac
 from functools import wraps
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import apify_scraper, pipeline
+from rotterdam_scanner import apify_scraper, pipeline, zoek_urls
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.state import StateStore
+
+_FUNDA_URL_PREFIXES = ("https://www.funda.nl/", "https://funda.nl/")
 
 
 def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
@@ -119,7 +121,7 @@ def create_app(config: Config | None = None) -> Flask:
         nieuw_afgevallen = len(result.nieuw_afgevallen)
         fouten = list(result.fouten)
 
-        if apify_scraper.is_ingesteld(config):
+        if apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
             apify_result = pipeline.run_apify(config)
             nieuw_actief += len(apify_result.nieuw_actief)
             nieuw_afgevallen += len(apify_result.nieuw_afgevallen)
@@ -130,6 +132,32 @@ def create_app(config: Config | None = None) -> Flask:
             "nieuw_afgevallen": nieuw_afgevallen,
             "fouten": fouten,
         })
+
+    @app.route("/zoekopdrachten")
+    @login_required
+    def zoekopdrachten():
+        return render_template(
+            "zoekopdrachten.html", urls=zoek_urls.laad(config), apify_ingesteld=bool(config.apify_api_token),
+        )
+
+    @app.route("/zoekopdrachten/toevoegen", methods=["POST"])
+    @login_required
+    def zoekopdrachten_toevoegen():
+        url = request.form.get("url", "").strip()
+        if not url.startswith(_FUNDA_URL_PREFIXES):
+            flash("Dit lijkt geen Funda-zoek-URL - moet beginnen met https://www.funda.nl/")
+        else:
+            zoek_urls.voeg_toe(config, url)
+            flash("Zoekopdracht toegevoegd.")
+        return redirect(url_for("zoekopdrachten"))
+
+    @app.route("/zoekopdrachten/verwijderen", methods=["POST"])
+    @login_required
+    def zoekopdrachten_verwijderen():
+        url = request.form.get("url", "")
+        zoek_urls.verwijder(config, url)
+        flash("Zoekopdracht verwijderd.")
+        return redirect(url_for("zoekopdrachten"))
 
     return app
 

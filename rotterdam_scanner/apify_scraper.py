@@ -42,8 +42,8 @@ class ApifyError(RuntimeError):
     """Apify is niet (goed) ingesteld, of de aanroep is mislukt."""
 
 
-def is_ingesteld(config: Config) -> bool:
-    return bool(config.apify_api_token and config.apify_search_urls)
+def is_ingesteld(config: Config, search_urls: list[str]) -> bool:
+    return bool(config.apify_api_token and search_urls)
 
 
 def _split_huisnummer(ruw: str) -> tuple[str, str]:
@@ -98,16 +98,19 @@ def _item_naar_listing(item: dict) -> FundaListing | None:
     )
 
 
-def fetch_apify_listings(config: Config, max_items: int) -> list[FundaListing]:
-    """Draait de geconfigureerde Apify-actor synchroon en geeft de herkende
-    listings terug (dubbele object_id's, bv. hetzelfde huis via meerdere
-    zoek-URL's, worden samengevoegd)."""
-    if not is_ingesteld(config):
-        raise ApifyError("APIFY_API_TOKEN en/of APIFY_SEARCH_URLS zijn niet ingesteld.")
+def fetch_apify_listings(config: Config, search_urls: list[str], max_items: int) -> list[FundaListing]:
+    """Draait de geconfigureerde Apify-actor synchroon voor `search_urls` en
+    geeft de herkende listings terug (dubbele object_id's, bv. hetzelfde huis
+    via meerdere zoek-URL's, worden samengevoegd). `search_urls` komt normaal
+    van zoek_urls.laad() - hier expliciet als parameter i.p.v. rechtstreeks
+    uit config, zodat de beheerbare lijst (via de website) en de eenmalige
+    env-instelling (APIFY_SEARCH_URLS) niet door elkaar hoeven te lopen."""
+    if not is_ingesteld(config, search_urls):
+        raise ApifyError("APIFY_API_TOKEN en/of de zoek-URL's zijn niet ingesteld.")
 
     actor_pad = config.apify_actor_id.replace("/", "~")
     payload = {
-        "searchUrls": config.apify_search_urls,
+        "searchUrls": search_urls,
         "maxItems": max_items,
         "proxyConfiguration": {"useApifyProxy": True, "apifyProxyGroups": ["RESIDENTIAL"]},
     }

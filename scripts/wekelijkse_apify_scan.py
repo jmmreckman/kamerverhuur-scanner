@@ -7,8 +7,10 @@ en automatische verkocht/introkken-detectie (zie pipeline.py voor de
 2-weken-op-rij-regel).
 
 Update alleen state.json - stuurt zelf geen mailrapport. Sla je
-APIFY_API_TOKEN/APIFY_SEARCH_URLS nog niet in fundazoeker.env in, dan slaat
-dit script zichzelf netjes over (geen crash, geen restart-loop)."""
+APIFY_API_TOKEN nog niet in fundazoeker.env in, of staan er nog geen
+zoek-URL's (env APIFY_SEARCH_URLS, of toegevoegd via de
+"Zoekopdrachten"-pagina op kansen.steenhub.nl), dan slaat dit script
+zichzelf netjes over (geen crash, geen restart-loop)."""
 from __future__ import annotations
 
 import logging
@@ -16,7 +18,7 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from rotterdam_scanner import apify_scraper, pipeline
+from rotterdam_scanner import apify_scraper, pipeline, zoek_urls
 from rotterdam_scanner.config import load_config
 
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
@@ -43,9 +45,9 @@ def main() -> None:
         time.sleep(wachttijd)
 
         config = load_config()
-        if not apify_scraper.is_ingesteld(config):
+        if not apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
             logger.info(
-                "APIFY_API_TOKEN/APIFY_SEARCH_URLS nog niet ingesteld in fundazoeker.env - "
+                "APIFY_API_TOKEN en/of de zoek-URL's zijn nog niet ingesteld - "
                 "wekelijkse volledige Apify-scan overgeslagen."
             )
             continue

@@ -7,9 +7,10 @@ volledige pull in wekelijkse_apify_scan.py).
 Update alleen state.json - stuurt zelf GEEN mailrapport (dat blijft
 main.py/dagelijkse_scan.py, gebaseerd op de mail-alert). Nieuwe/gewijzigde
 kansen zijn meteen zichtbaar op kansen.steenhub.nl, of via de "Ververs
-nu"-knop daar. Sla je APIFY_API_TOKEN/APIFY_SEARCH_URLS nog niet in
-fundazoeker.env in, dan slaat dit script zichzelf netjes over (geen crash,
-geen restart-loop) tot je dat wel doet."""
+nu"-knop daar. Sla je APIFY_API_TOKEN nog niet in fundazoeker.env in, of
+staan er nog geen zoek-URL's (env APIFY_SEARCH_URLS, of toegevoegd via de
+"Zoekopdrachten"-pagina op kansen.steenhub.nl), dan slaat dit script
+zichzelf netjes over (geen crash, geen restart-loop) tot je dat wel doet."""
 from __future__ import annotations
 
 import logging
@@ -17,7 +18,7 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from rotterdam_scanner import apify_scraper, pipeline
+from rotterdam_scanner import apify_scraper, pipeline, zoek_urls
 from rotterdam_scanner.config import load_config
 
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
@@ -42,9 +43,9 @@ def main() -> None:
         time.sleep(wachttijd)
 
         config = load_config()
-        if not apify_scraper.is_ingesteld(config):
+        if not apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
             logger.info(
-                "APIFY_API_TOKEN/APIFY_SEARCH_URLS nog niet ingesteld in fundazoeker.env - "
+                "APIFY_API_TOKEN en/of de zoek-URL's zijn nog niet ingesteld - "
                 "dagelijkse Apify-scan overgeslagen."
             )
             continue

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zoekopdrachten - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Zoekopdrachten</h1>
+    <div class="topbar-acties">
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <main class="content">
+    {% with berichten = get_flashed_messages() %}
+      {% if berichten %}
+        {% for bericht in berichten %}<p class="flash-bericht">{{ bericht }}</p>{% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if not apify_ingesteld %}
+      <p class="muted">
+        Let op: er is nog geen APIFY_API_TOKEN ingesteld in fundazoeker.env op de VPS - de
+        zoekopdrachten hieronder worden pas gebruikt zodra dat wel is ingesteld.
+      </p>
+    {% endif %}
+
+    <h2>Actieve zoekopdrachten</h2>
+    <p class="muted">
+      Elke Apify-scan (dagelijks + wekelijks) doorzoekt al deze Funda-zoek-URL's samen.
+      Voeg zelf zoveel toe als je wilt (bv. per gemeente een aparte URL met eigen filters).
+    </p>
+
+    {% if urls %}
+    <ul class="url-lijst">
+      {% for url in urls %}
+      <li class="url-item">
+        <a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a>
+        <form method="post" action="{{ url_for('zoekopdrachten_verwijderen') }}">
+          <input type="hidden" name="url" value="{{ url }}">
+          <button type="submit" class="link-knop" onclick="return confirm('Deze zoekopdracht verwijderen?');">Verwijderen</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Nog geen zoekopdrachten toegevoegd.</p>
+    {% endif %}
+
+    <h2>Nieuwe zoekopdracht toevoegen</h2>
+    <p class="muted">
+      Stel op funda.nl zelf een zoekopdracht samen (locatie, prijs, type, oppervlakte, etc.)
+      en plak de URL uit je adresbalk hieronder.
+    </p>
+    <form method="post" action="{{ url_for('zoekopdrachten_toevoegen') }}" class="url-form">
+      <input type="url" name="url" placeholder="https://www.funda.nl/zoeken/koop?..." required>
+      <button type="submit">Toevoegen</button>
+    </form>
+  </main>
+</body>
+</html>

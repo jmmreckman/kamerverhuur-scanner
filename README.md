@@ -257,11 +257,18 @@ actuele Apify-pricing, dat kan wijzigen.
 1. Account op apify.com aanmaken + betaalmethode koppelen (pay-as-you-go, geen
    abonnement nodig).
 2. `APIFY_API_TOKEN` — je eigen token (Apify Console > Settings > Integrations).
-3. `APIFY_SEARCH_URLS` — zelf op funda.nl een zoekopdracht samenstellen (Koop, Huis,
-   de gewenste gemeentes) en de URL uit de adresbalk kopiëren, net als bij de
-   e-mail-zoekopdracht. Pipe-gescheiden (`|`) bij meerdere URL's.
+3. `APIFY_SEARCH_URLS` — optioneel, alleen de eenmalige eerste vulling (zie hieronder).
 4. Optioneel `APIFY_ACTOR_ID`/`APIFY_MAX_ITEMS_DAGELIJKS`/`APIFY_MAX_ITEMS_WEKELIJKS`
    aanpassen.
+
+**Zoek-URL's beheren zonder in de VPS te rommelen:** ga naar "Zoekopdrachten" op
+kansen.steenhub.nl (link in de kop van de kaartpagina) om zoek-URL's toe te voegen of
+te verwijderen - zelf op funda.nl een zoekopdracht samenstellen (Koop, Huis, de
+gewenste gemeentes) en de URL uit de adresbalk plakken. Wordt opgeslagen naast
+`state.json` (`apify_zoek_urls.json`, zie `rotterdam_scanner/zoek_urls.py`) - geen
+herstart nodig, de eerstvolgende scan gebruikt meteen de bijgewerkte lijst. Zodra dit
+bestand een keer via de website gewijzigd is (ook tot een lege lijst), is het leidend
+en wordt `APIFY_SEARCH_URLS` niet meer gebruikt.
 
 Leeg gelaten (standaard), dan slaan beide scripts zichzelf netjes over (geen crash,
 geen kosten) — de rest van de scanner (mail-alert, kaart-website) blijft gewoon werken.

@@ -42,19 +42,22 @@ def _config(**overrides):
     return Config(**defaults)
 
 
+_URLS = ["https://www.funda.nl/koop/rotterdam/"]
+
+
 # --- is_ingesteld ---
 
 
 def test_is_ingesteld_met_token_en_urls():
-    assert apify_scraper.is_ingesteld(_config()) is True
+    assert apify_scraper.is_ingesteld(_config(), _URLS) is True
 
 
 def test_niet_ingesteld_zonder_token():
-    assert apify_scraper.is_ingesteld(_config(apify_api_token="")) is False
+    assert apify_scraper.is_ingesteld(_config(apify_api_token=""), _URLS) is False
 
 
 def test_niet_ingesteld_zonder_search_urls():
-    assert apify_scraper.is_ingesteld(_config(apify_search_urls=[])) is False
+    assert apify_scraper.is_ingesteld(_config(), []) is False
 
 
 # --- _split_huisnummer ---
@@ -122,9 +125,14 @@ def test_item_met_toevoeging_in_huisnummer():
 # --- fetch_apify_listings ---
 
 
-def test_fetch_apify_listings_zonder_instellingen_geeft_apify_error():
+def test_fetch_apify_listings_zonder_token_geeft_apify_error():
     with pytest.raises(ApifyError):
-        apify_scraper.fetch_apify_listings(_config(apify_api_token=""), max_items=100)
+        apify_scraper.fetch_apify_listings(_config(apify_api_token=""), _URLS, max_items=100)
+
+
+def test_fetch_apify_listings_zonder_search_urls_geeft_apify_error():
+    with pytest.raises(ApifyError):
+        apify_scraper.fetch_apify_listings(_config(), [], max_items=100)
 
 
 def test_fetch_apify_listings_bouwt_juiste_aanroep():
@@ -133,7 +141,7 @@ def test_fetch_apify_listings_bouwt_juiste_aanroep():
     mock_resp.json.return_value = [_VOORBEELD_ITEM]
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp) as mock_post:
-        listings = apify_scraper.fetch_apify_listings(_config(), max_items=150)
+        listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
 
     assert len(listings) == 1
     assert listings[0].object_id == "5854PC-38"
@@ -146,13 +154,24 @@ def test_fetch_apify_listings_bouwt_juiste_aanroep():
     assert "acts/easyapi~funda-nl-scraper/run-sync-get-dataset-items" in mock_post.call_args.args[0]
 
 
+def test_fetch_apify_listings_gebruikt_meegegeven_search_urls_niet_config():
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = []
+
+    andere_urls = ["https://www.funda.nl/koop/hoek-van-holland/"]
+    with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp) as mock_post:
+        apify_scraper.fetch_apify_listings(_config(), andere_urls, max_items=150)
+    assert mock_post.call_args.kwargs["json"]["searchUrls"] == andere_urls
+
+
 def test_fetch_apify_listings_dedupt_op_object_id():
     mock_resp = MagicMock()
     mock_resp.raise_for_status.return_value = None
     mock_resp.json.return_value = [_VOORBEELD_ITEM, dict(_VOORBEELD_ITEM)]
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
-        listings = apify_scraper.fetch_apify_listings(_config(), max_items=150)
+        listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
     assert len(listings) == 1
 
 
@@ -162,7 +181,7 @@ def test_fetch_apify_listings_slaat_onherkende_items_over():
     mock_resp.json.return_value = [_VOORBEELD_ITEM, {"address": {}}]
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
-        listings = apify_scraper.fetch_apify_listings(_config(), max_items=150)
+        listings = apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
     assert len(listings) == 1
 
 
@@ -171,7 +190,7 @@ def test_fetch_apify_listings_netwerkfout_geeft_apify_error():
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", side_effect=requests_module.ConnectionError("boom")):
         with pytest.raises(ApifyError):
-            apify_scraper.fetch_apify_listings(_config(), max_items=150)
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
 
 
 def test_fetch_apify_listings_geen_lijst_geeft_apify_error():
@@ -181,4 +200,4 @@ def test_fetch_apify_listings_geen_lijst_geeft_apify_error():
 
     with patch("rotterdam_scanner.apify_scraper.requests.post", return_value=mock_resp):
         with pytest.raises(ApifyError):
-            apify_scraper.fetch_apify_listings(_config(), max_items=150)
+            apify_scraper.fetch_apify_listings(_config(), _URLS, max_items=150)
