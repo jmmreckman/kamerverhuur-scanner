@@ -1,9 +1,10 @@
 """Eenmalig diagnose-scriptje: zoekt in recente Funda-alertmails naar de
-"Bekijk alle X woningen"-link, haalt de volledige (niet-afgekapte) href eruit
-en probeert die vervolgens zelf direct op te halen - om te testen of dat
-(net als losse woning-links, zie funda_mail.py) een 403 geeft bij niet-
-browserverkeer, of dat de pagina wél gewoon bruikbaar is. Wijzigt niets,
-stuurt geen mail - alleen uitlezen, ophalen en printen.
+"Bekijk alle X woningen"-link, haalt de volledige (niet-afgekapte) href eruit,
+probeert die zelf direct op te halen (net als beschikbaarheid.py) en
+analyseert vervolgens de opgehaalde pagina: staat er een titel/inlogmuur, en
+zitten er daadwerkelijk woning-links (zelfde patroon als in de alertmail
+zelf) in? Wijzigt niets, stuurt geen mail - alleen uitlezen, ophalen en
+printen.
 
 Gebruik: docker compose exec fundazoeker python3 diagnose_bekijk_alle.py
 """
@@ -17,7 +18,7 @@ from datetime import datetime, timedelta
 import requests
 
 from rotterdam_scanner.config import load_config
-from rotterdam_scanner.funda_mail import _get_body
+from rotterdam_scanner.funda_mail import _LISTING_LINK_RE, _get_body
 
 # Zelfde vriendelijke, browser-achtige headers als beschikbaarheid.py.
 _USER_AGENT = (
@@ -32,9 +33,25 @@ _HREF_VOOR_BEKIJK_ALLE_RE = re.compile(
     r'<a\s+[^>]*?href="(?P<url>[^"]+)"[^>]*>(?:(?!</a>).)*?Bekijk alle',
     re.IGNORECASE | re.DOTALL,
 )
+_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+_LOGIN_SIGNALEN = ("inloggen", "log in", "wachtwoord", "welkom terug")
 
 
-def _test_fetch(url: str) -> str:
+def _analyseer(html: str) -> str:
+    titel_match = _TITLE_RE.search(html)
+    titel = titel_match.group(1).strip() if titel_match else "(geen <title> gevonden)"
+    laag = html.lower()
+    login_muur = any(signaal in laag for signaal in _LOGIN_SIGNALEN)
+    aantal_euro = laag.count("&#8364;") + laag.count("€")
+    aantal_woning_links = len(_LISTING_LINK_RE.findall(html))
+    return (
+        f"titel: {titel!r} | mogelijke inlogmuur: {login_muur} | "
+        f"'€'-tekens gevonden: {aantal_euro} | herkenbare woning-links: {aantal_woning_links}"
+    )
+
+
+def _test_fetch(url: str) -> tuple[str, str]:
+    """Geeft (statusregel, analyse-of-foutmelding) terug."""
     try:
         resp = requests.get(
             url,
@@ -43,11 +60,15 @@ def _test_fetch(url: str) -> str:
             allow_redirects=True,
         )
     except requests.RequestException as exc:
-        return f"FOUT bij ophalen: {exc}"
-    return (
+        return f"FOUT bij ophalen: {exc}", ""
+
+    statusregel = (
         f"status {resp.status_code}, uiteindelijke URL: {resp.url}, "
         f"lengte body: {len(resp.text)} tekens"
     )
+    if resp.status_code != 200:
+        return statusregel, ""
+    return statusregel, _analyseer(resp.text)
 
 
 def main() -> None:
@@ -84,7 +105,10 @@ def main() -> None:
                     print("(al eerder getest in dit run, overgeslagen)")
                     continue
                 geteste_urls.add(url)
-                print(f"Test-ophalen: {_test_fetch(url)}")
+                statusregel, analyse = _test_fetch(url)
+                print(f"Test-ophalen: {statusregel}")
+                if analyse:
+                    print(f"Analyse van de opgehaalde pagina: {analyse}")
                 print()
 
 
