@@ -79,8 +79,8 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
         badges.append(f'<span style="{_BADGE_CHECK_STYLE}">check WOZ-waarde</span>')
 
     opmerking_html = f'<br><span style="{_SMALL_STYLE}">{escape(item.opmerking)}</span>' if item.opmerking else ""
-    oppervlakte_tekst = f"{item.bag_oppervlakte} m²" if item.bag_oppervlakte else "onbekend"
-    oppervlakte_advertentie_tekst = f"{item.oppervlakte_advertentie} m²" if item.oppervlakte_advertentie else "-"
+    oppervlakte_tekst = f"{item.primaire_oppervlakte} m²" if item.primaire_oppervlakte else "onbekend"
+    bag_oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG, ter info)" if item.bag_oppervlakte else "-"
     aantal_kamers_tekst = str(item.aantal_kamers_mogelijk) if item.aantal_kamers_mogelijk is not None else "-"
     prijs_per_m2_tekst = _euro(item.prijs_per_m2) + "/m²" if item.prijs_per_m2 else "-"
     opslag_html = (
@@ -108,7 +108,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
       <td style="{_TD_STYLE}">{wijk_html}</td>
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
-      <td style="{_TD_STYLE}">{oppervlakte_advertentie_tekst}</td>
+      <td style="{_TD_STYLE}">{bag_oppervlakte_tekst}</td>
       <td style="{_TD_STYLE}">{aantal_kamers_tekst}</td>
       <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>
       <td style="{_TD_STYLE}">{winst_tekst}</td>
@@ -123,7 +123,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
 def _actief_tabel_header() -> str:
     koppen = [
-        "Adres", "Wijk", "Vraagprijs", "Oppervlakte (BAG)", "m² (advertentie)", "Kamers mogelijk", "€/m²",
+        "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "m² (BAG, ter info)", "Kamers mogelijk", "€/m²",
         "Winst p.p./mnd", "Eigen inleg p.p.", "Dagen bekend", "Nog te checken", "Mogelijke huurprijsopslag", "Acties",
     ]  # fmt: skip
     ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
@@ -255,9 +255,9 @@ def _item_regels(item: ListingState, today: date, scanner_email: str) -> list[st
     extra = []
     if item.woz_check_nodig:
         extra.append("check WOZ-waarde")
-    oppervlakte_tekst = f"{item.bag_oppervlakte} m² (BAG)" if item.bag_oppervlakte else "oppervlakte onbekend"
-    if item.oppervlakte_advertentie:
-        oppervlakte_tekst += f", {item.oppervlakte_advertentie} m² (advertentie)"
+    oppervlakte_tekst = f"{item.primaire_oppervlakte} m²" if item.primaire_oppervlakte else "oppervlakte onbekend"
+    if item.bag_oppervlakte and item.bag_oppervlakte != item.primaire_oppervlakte:
+        oppervlakte_tekst += f" ({item.bag_oppervlakte} m² BAG, ter info)"
     prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
     regels = [
         f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)",

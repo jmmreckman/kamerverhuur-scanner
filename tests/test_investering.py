@@ -10,14 +10,14 @@ def test_aantal_kamers_mogelijk_matcht_bereken():
 def test_aantal_kamers_mogelijk_werkt_zonder_koopsom_te_kennen():
     # Los bruikbaar zodat de rapporttabel het aantal kamers al kan tonen voordat de
     # vraagprijs bekend is (en dus vóórdat bereken() een resultaat kan geven).
-    assert aantal_kamers_mogelijk(115) == bereken(bag_m2=115, koopsom=403_000).aantal_kamers
+    assert aantal_kamers_mogelijk(115) == bereken(m2=115, koopsom=403_000).aantal_kamers
 
 
 def test_referentievoorbeeld_matcht_handmatig_doorgerekende_spreadsheet():
     # Koopsom €403.000, 115 m2 BAG (6 kamers), geen opslag - handmatig doorgerekend
     # en bevestigd door de gebruiker vóór dit is gebouwd. Regressietest: als deze ooit
     # faalt is er iets in de kernformule veranderd, niet een afrondingsverschil.
-    resultaat = bereken(bag_m2=115, koopsom=403_000)
+    resultaat = bereken(m2=115, koopsom=403_000)
     assert resultaat is not None
     assert resultaat.aantal_kamers == 6
     assert round(resultaat.taxatie_voor_vergunning, 2) == 352_625.00
@@ -32,23 +32,23 @@ def test_referentievoorbeeld_matcht_handmatig_doorgerekende_spreadsheet():
 
 def test_te_kleine_oppervlakte_geeft_geen_resultaat():
     # Minder dan 18 m2 -> geen enkele studentenkamer mogelijk, geen bruikbare kans.
-    assert bereken(bag_m2=15, koopsom=250_000) is None
+    assert bereken(m2=15, koopsom=250_000) is None
 
 
 def test_precies_op_kamer_grens_rondt_naar_beneden_af():
     # 18*5 = 90, dus exact 5 kamers; 90+17=107 zou nog steeds 5 kamers zijn (naar
     # beneden afgerond) totdat de 6e kamer pas bij 108 m2 vol is.
-    resultaat_90 = bereken(bag_m2=90, koopsom=300_000)
-    resultaat_107 = bereken(bag_m2=107, koopsom=300_000)
-    resultaat_108 = bereken(bag_m2=108, koopsom=300_000)
+    resultaat_90 = bereken(m2=90, koopsom=300_000)
+    resultaat_107 = bereken(m2=107, koopsom=300_000)
+    resultaat_108 = bereken(m2=108, koopsom=300_000)
     assert resultaat_90.aantal_kamers == 5
     assert resultaat_107.aantal_kamers == 5
     assert resultaat_108.aantal_kamers == 6
 
 
 def test_huurprijsopslag_verhoogt_kale_huur_en_dus_de_taxatie_na_vergunning():
-    zonder_opslag = bereken(bag_m2=115, koopsom=403_000, opslag_percentage=0.0)
-    met_opslag = bereken(bag_m2=115, koopsom=403_000, opslag_percentage=0.05)
+    zonder_opslag = bereken(m2=115, koopsom=403_000, opslag_percentage=0.0)
+    met_opslag = bereken(m2=115, koopsom=403_000, opslag_percentage=0.05)
     assert met_opslag.taxatie_na_vergunning > zonder_opslag.taxatie_na_vergunning
     # 5% hogere kale huur -> 5% hogere taxatie na vergunning (BAR-formule is lineair
     # in de huur).
@@ -60,7 +60,7 @@ def test_huurprijsopslag_verhoogt_kale_huur_en_dus_de_taxatie_na_vergunning():
 
 
 def test_winst_en_eigen_inleg_worden_door_twee_investeerders_gedeeld():
-    resultaat = bereken(bag_m2=115, koopsom=403_000)
+    resultaat = bereken(m2=115, koopsom=403_000)
     # Los nagerekend zonder de /2: winst zonder deling en eigen inleg zonder deling
     # moeten precies het dubbele zijn van de p.p.-waardes.
     kale_huur_pm = 6 * 550.0

@@ -69,7 +69,8 @@ function bouwPopup(kans) {
     <span class="adres">${kans.weergavenaam}</span>
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
-    ${kans.bag_oppervlakte ? kans.bag_oppervlakte + " m²<br>" : ""}
+    ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
+    ${kans.bag_oppervlakte && kans.bag_oppervlakte !== kans.primaire_oppervlakte ? kans.bag_oppervlakte + " m² (BAG, ter info)<br>" : ""}
     ${kans.aantal_kamers_mogelijk ? kans.aantal_kamers_mogelijk + " kamer(s) mogelijk<br>" : ""}
     ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
     ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}

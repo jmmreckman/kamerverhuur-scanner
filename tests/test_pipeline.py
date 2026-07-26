@@ -200,16 +200,19 @@ def test_bag_oppervlakte_en_prijs_worden_meegenomen_op_actieve_woning(tmp_path):
 
 
 def test_oppervlakte_advertentie_en_aantal_kamers_worden_meegenomen(tmp_path):
+    # BAG (115) en advertentie (140) geven bewust een ander aantal kamers (6 vs. 7)
+    # om te bevestigen dat de advertentie-m2 leidend is (die is betrouwbaarder -
+    # BAG geeft soms een te hoge waarde, zie ListingState.primaire_oppervlakte).
     p1, p2, p3, p4, p5 = _patch_geo_checks(wijk="Rotterdam Centrum", oppervlakte=115)
     with p1, p2, p3, p4, p5:
         result = pipeline._process_new_listing(
-            _listing(prijs=403_000, oppervlakte_advertentie=120), _config(tmp_path), date(2026, 7, 5)
+            _listing(prijs=403_000, oppervlakte_advertentie=140), _config(tmp_path), date(2026, 7, 5)
         )
     assert result.status == "actief"
-    assert result.oppervlakte_advertentie == 120
-    # aantal_kamers_mogelijk gaat uit van de officiële BAG-oppervlakte (115), niet de
-    # advertentietekst (120) - zelfde 6 kamers als het geverifieerde referentievoorbeeld.
-    assert result.aantal_kamers_mogelijk == 6
+    assert result.oppervlakte_advertentie == 140
+    assert result.bag_oppervlakte == 115
+    assert result.primaire_oppervlakte == 140
+    assert result.aantal_kamers_mogelijk == 7
 
 
 def test_aantal_kamers_mogelijk_ook_bekend_zonder_vraagprijs(tmp_path):
@@ -550,6 +553,42 @@ def test_run_backvult_aantal_kamers_ook_zonder_bekende_prijs(tmp_path):
     assert bijgewerkt.aantal_kamers_mogelijk == 6
     assert bijgewerkt.winst_pm_pp is None
     assert bijgewerkt.eigen_inleg_pp is None
+
+
+def test_run_herberekent_kamers_en_investering_op_basis_van_advertentie_m2(tmp_path):
+    # Woning die eerder (vóór deze aanpassing) verwerkt is op basis van BAG-m2 (115 ->
+    # 6 kamers), terwijl de advertentie-m2 (140 -> 7 kamers) al wel bekend was maar toen
+    # nog niet leidend was. Moet bij de eerstvolgende run automatisch gecorrigeerd
+    # worden naar de advertentie-m2, zonder dat de woning opnieuw in de mail hoeft te
+    # verschijnen.
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="oude-woning-verkeerde-kamers",
+            url="https://example.com/oude-woning-verkeerde-kamers",
+            weergavenaam="Oudstraat 3, Rotterdam",
+            eerst_gezien="2026-06-25",
+            laatst_gezien="2026-06-30",
+            status="actief",
+            bag_oppervlakte=115,
+            oppervlakte_advertentie=140,
+            prijs=403_000,
+            opslag_percentage=0.0,
+            aantal_kamers_mogelijk=6,
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    bijgewerkt = next(item for item in result.alle_actief if item.object_id == "oude-woning-verkeerde-kamers")
+    assert bijgewerkt.aantal_kamers_mogelijk == 7
 
 
 def test_run_backvult_coordinaten_voor_bestaande_woningen_zonder_lat_lon(tmp_path):

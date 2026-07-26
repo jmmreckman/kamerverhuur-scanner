@@ -47,10 +47,20 @@ class ListingState:
     handmatig_verwijderd: bool = False
 
     @property
+    def primaire_oppervlakte(self) -> int | None:
+        """De advertentie-m2 is betrouwbaarder dan de BAG-m2 (BAG geeft soms een
+        veel hoger getal, bv. bij een pand dat ooit is samengevoegd/gesplitst
+        zonder dat de BAG-registratie is bijgewerkt) en is daarom leidend voor
+        kamers/investeringsberekening/weergave. BAG-m2 is alleen nog fallback
+        als de advertentie geen oppervlakte vermeldde, en staat verder puur
+        ter info."""
+        return self.oppervlakte_advertentie or self.bag_oppervlakte
+
+    @property
     def prijs_per_m2(self) -> float | None:
-        if self.prijs is None or not self.bag_oppervlakte:
+        if self.prijs is None or not self.primaire_oppervlakte:
             return None
-        return self.prijs / self.bag_oppervlakte
+        return self.prijs / self.primaire_oppervlakte
 
 
 class StateStore:

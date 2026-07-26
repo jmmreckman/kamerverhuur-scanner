@@ -68,6 +68,27 @@ def test_prijs_per_m2_none_zonder_prijs_of_oppervlakte():
     assert item.prijs_per_m2 is None
 
 
+def test_primaire_oppervlakte_geeft_voorrang_aan_advertentie():
+    item = _listing()
+    item.bag_oppervlakte = 115
+    item.oppervlakte_advertentie = 140
+    assert item.primaire_oppervlakte == 140
+
+
+def test_primaire_oppervlakte_valt_terug_op_bag_zonder_advertentie():
+    item = _listing()
+    item.bag_oppervlakte = 115
+    assert item.primaire_oppervlakte == 115
+
+
+def test_prijs_per_m2_gebruikt_advertentie_m2_als_die_bekend_is():
+    item = _listing()
+    item.prijs = 300_000
+    item.bag_oppervlakte = 100
+    item.oppervlakte_advertentie = 150
+    assert item.prijs_per_m2 == 2000.0
+
+
 def test_prijs_per_m2_overleeft_json_persistentie(tmp_path):
     store = StateStore(tmp_path / "state.json")
     item = _listing()

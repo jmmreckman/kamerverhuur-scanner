@@ -42,21 +42,24 @@ class InvesteringsResultaat:
     eigen_inleg_na_ophoging_pp: float
 
 
-def aantal_kamers_mogelijk(bag_m2: float) -> int:
+def aantal_kamers_mogelijk(m2: float) -> int:
     """Losstaand herbruikbaar (o.a. voor de rapporttabel) zodat het aantal kamers ook
     getoond kan worden wanneer de volledige investeringsberekening niet kan draaien
-    (bv. vraagprijs nog onbekend)."""
-    return math.floor(bag_m2 / M2_PER_STUDENTENKAMER)
+    (bv. vraagprijs nog onbekend). `m2` is de leidende oppervlakte (advertentie-m2 als
+    die bekend is, anders BAG-m2 als fallback - zie ListingState.primaire_oppervlakte)."""
+    return math.floor(m2 / M2_PER_STUDENTENKAMER)
 
 
-def bereken(bag_m2: float, koopsom: float, opslag_percentage: float = 0.0) -> InvesteringsResultaat | None:
-    """`opslag_percentage` is de hoogste toepasselijke WWS-huurprijsopslag (bv. 0.05 voor
-    5% beschermd stadsgezicht, zie monumenten.hoogste_opslagpercentage) en werkt door in
-    zowel de kale huur als (via de taxatie na vergunning) de lening en rente.
+def bereken(m2: float, koopsom: float, opslag_percentage: float = 0.0) -> InvesteringsResultaat | None:
+    """`m2` is de leidende oppervlakte (advertentie-m2 als die bekend is, anders BAG-m2
+    als fallback - zie ListingState.primaire_oppervlakte). `opslag_percentage` is de
+    hoogste toepasselijke WWS-huurprijsopslag (bv. 0.05 voor 5% beschermd stadsgezicht,
+    zie monumenten.hoogste_opslagpercentage) en werkt door in zowel de kale huur als
+    (via de taxatie na vergunning) de lening en rente.
 
     Geeft None terug als er geen enkele studentenkamer mogelijk is (te kleine
     oppervlakte) - dan is dit sowieso geen bruikbare kans."""
-    aantal_kamers = aantal_kamers_mogelijk(bag_m2)
+    aantal_kamers = aantal_kamers_mogelijk(m2)
     if aantal_kamers < 1:
         return None
 

@@ -38,6 +38,7 @@ def _listing_naar_json(item) -> dict:
         "lon": item.lon,
         "prijs": item.prijs,
         "prijs_per_m2": item.prijs_per_m2,
+        "primaire_oppervlakte": item.primaire_oppervlakte,
         "bag_oppervlakte": item.bag_oppervlakte,
         "oppervlakte_advertentie": item.oppervlakte_advertentie,
         "aantal_kamers_mogelijk": item.aantal_kamers_mogelijk,

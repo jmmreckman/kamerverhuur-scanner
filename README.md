@@ -18,18 +18,24 @@ Elke ochtend om 09:00:
 3. Checkt automatisch:
    - **Nul-quotumgebied** — via de officiële GIS-kaartlaag van de gemeente Rotterdam.
    - **Binnen 50 meter van een bestaande kamerverhuurvergunning** — idem. Geldt **niet**
-     bij kleinschalige kamerverhuur (t/m 3 kamers, op basis van de BAG-oppervlakte) —
-     die uitzondering wordt automatisch toegepast en staat er als opmerking bij.
+     bij kleinschalige kamerverhuur (t/m 3 kamers, op basis van de leidende oppervlakte
+     hieronder) — die uitzondering wordt automatisch toegepast en staat er als
+     opmerking bij.
    - **Opkoopbescherming (wijk + WOZ-waarde)** — vergelijkt de buurt met de 16 wijken
      waar opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming) én haalt voor
      die huizen automatisch en **gratis** de WOZ-waarde op bij de officiële
      WOZ-waardeloket-API van het Kadaster (geen account, geen kosten). Dit is dus
      volledig automatisch, geen dagelijkse handmatige lijst.
-4. Haalt de **officiële oppervlakte** van het BAG (Basisregistratie Adressen en
-   Gebouwen) op — publieke landelijke data, vaak nauwkeuriger dan de advertentietekst.
-5. Sorteert de openstaande kansen op **vraagprijs per m²** (op basis van die
-   BAG-oppervlakte), niet op datum — hoe lang een huis al bekend is staat er sowieso
-   al apart bij.
+4. Haalt ook de **officiële oppervlakte** van het BAG (Basisregistratie Adressen en
+   Gebouwen) op, maar gebruikt die alleen als **fallback/ter info**: de m² uit de
+   advertentietekst zelf is leidend voor het aantal mogelijke kamers, de
+   investeringsberekening en de weergave, omdat de BAG-oppervlakte in de praktijk soms
+   flink hoger uitvalt dan de werkelijke, bewoonbare m² (bv. bij een pand dat ooit is
+   samengevoegd/gesplitst zonder dat de BAG-registratie is bijgewerkt) — de
+   BAG-oppervlakte wordt dan nog wel getoond, maar puur ter info.
+5. Sorteert de openstaande kansen op **vraagprijs per m²** (op basis van diezelfde
+   leidende oppervlakte), niet op datum — hoe lang een huis al bekend is staat er
+   sowieso al apart bij.
 6. Houdt een huis maximaal **30 dagen** (`LISTING_EXPIRY_DAYS`) op de lijst en haalt
    het er daarna automatisch af. Er wordt niet gecheckt of een huis inmiddels
    verkocht/onder bod is (zie kanttekening hieronder) — je ziet zelf aan de
@@ -252,13 +258,15 @@ Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen d
 woningen die dit systeem voor het eerst zag in de meest recente Funda-alertmail, zodat
 je in één oogopslag ziet wat er is bijgekomen zonder de hele lijst door te hoeven.
 Daaronder volgt de volledige lijst **"Openstaande kansen"**, gesorteerd op
-**vraagprijs per m² (laagste eerst)**, op basis van de officiële BAG-oppervlakte —
+**vraagprijs per m² (laagste eerst)**, op basis van de advertentie-oppervlakte —
 inclusief de woningen uit het "Nieuwe kansen"-blokje, herkenbaar aan de groene "nieuw
 vandaag"-badge. Elke rij toont:
 
-- **Adres, wijk, vraagprijs, oppervlakte** (`... m² (BAG)`, de officiële maat, niet de
-  advertentietekst) **en €/m²** — als de prijs een keer niet herkend kon worden uit de
-  alertmail, staat het huis onderaan (zie "Bekende beperkingen").
+- **Adres, wijk, vraagprijs, oppervlakte** (de m² uit de advertentietekst zelf — die is
+  betrouwbaarder gebleken dan de officiële BAG-maat, zie hierboven) **en €/m²** — de
+  BAG-oppervlakte staat er in een aparte kolom nog naast, puur ter info. Als de prijs
+  een keer niet herkend kon worden uit de alertmail, staat het huis onderaan (zie
+  "Bekende beperkingen").
 - **Dagen bekend** — dagen sinds dit systeem het huis voor het eerst zag via je
   Funda-alertmail. In de praktijk vrijwel altijd gelijk aan de echte
   "in verkoop sinds"-datum (funda's alert gaat elke nacht uit), maar geen harde
@@ -427,10 +435,13 @@ handmatig hebt verwijderd (via de verwijder-link) worden hierbij, net als bij
   `data/state.json` staan); geeft de opvraging een keer geen data (storing, of een
   niet-woonfunctie zonder openbare WOZ-waarde), dan valt dit terug op een handmatige
   melding in het rapport.
-- **Officiële oppervlakte**: de publieke PDOK BAG-WFS (`service.pdok.nl/lv/bag`) —
-  landelijke basisregistratie, geen API-key nodig, bevraagd op het BAG-verblijfsobject-ID
-  (uit de PDOK-geocode). Dit is de "echte" maat, die geregeld afwijkt van wat in een
-  advertentie staat.
+- **Officiële oppervlakte (ter info)**: de publieke PDOK BAG-WFS
+  (`service.pdok.nl/lv/bag`) — landelijke basisregistratie, geen API-key nodig,
+  bevraagd op het BAG-verblijfsobject-ID (uit de PDOK-geocode). In de praktijk bleek
+  deze maat geregeld flink hoger dan de werkelijke, bewoonbare m² (bv. bij een pand
+  dat ooit is samengevoegd/gesplitst zonder dat de BAG-registratie is bijgewerkt) —
+  daarom is de m² uit de advertentietekst leidend voor kamers/investering/weergave, en
+  staat de BAG-maat er alleen nog ter info naast (zie ook boven bij "Wat het doet").
 - **Adres/postcode/prijs/Funda-listings**: uit de zichtbare tekst van je eigen
   Funda-alertmail, geen scraping. Funda's links zelf zijn clicktracking-URL's
   (`links.funda.nl`, via Iterable) zonder herleidbare informatie — die gebruiken we

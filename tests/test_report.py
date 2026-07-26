@@ -121,7 +121,7 @@ def test_html_report_toont_winst_en_eigen_inleg_kolommen():
     assert "Eigen inleg p.p." in html
 
 
-def test_html_report_toont_advertentie_oppervlakte_en_aantal_kamers():
+def test_html_report_toont_advertentie_oppervlakte_als_primair_en_bag_ter_info():
     item = _listing(
         "NEW-1", "Nieuwstraat 1, Rotterdam", "2026-07-09",
         bag_oppervlakte=115, oppervlakte_advertentie=120, aantal_kamers_mogelijk=6,
@@ -130,9 +130,10 @@ def test_html_report_toont_advertentie_oppervlakte_en_aantal_kamers():
 
     html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
 
-    assert "115 m²" in html
+    # Advertentie-m2 (120) is de leidende/getoonde oppervlakte, BAG-m2 (115) staat
+    # er alleen nog ter info naast.
     assert "120 m²" in html
-    assert "m² (advertentie)" in html
+    assert "115 m² (BAG, ter info)" in html
     assert "Kamers mogelijk" in html
     # 6 als losse celwaarde, niet toevallig ergens anders in de pagina
     assert '<td style="' in html and ">6</td>" in html

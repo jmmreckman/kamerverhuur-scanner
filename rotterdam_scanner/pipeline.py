@@ -88,7 +88,11 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         opmerking = f"BAG-gegevens konden niet opgehaald worden ({exc})."
     bag_oppervlakte = bag.oppervlakte if bag else None
     bouwjaar = bag.bouwjaar if bag else None
-    aantal_kamers = bereken_aantal_kamers_mogelijk(bag_oppervlakte) if bag_oppervlakte else None
+    # Advertentie-m2 is betrouwbaarder dan BAG-m2 (die soms een veel hogere
+    # waarde geeft) en is daarom leidend; BAG-m2 is alleen fallback/ter info,
+    # zie ListingState.primaire_oppervlakte.
+    primaire_oppervlakte = listing.oppervlakte_advertentie or bag_oppervlakte
+    aantal_kamers = bereken_aantal_kamers_mogelijk(primaire_oppervlakte) if primaire_oppervlakte else None
 
     # Onbekend aantal kamers (bv. BAG-storing) telt NIET als vrijgesteld - dan blijft de
     # 50-meter-regel voor de zekerheid gewoon gelden.
@@ -162,8 +166,8 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
 
     winst_pm_pp = None
     eigen_inleg_pp = None
-    if bag_oppervlakte and listing.prijs:
-        investering = bereken_investering(bag_oppervlakte, listing.prijs, opslag_percentage)
+    if primaire_oppervlakte and listing.prijs:
+        investering = bereken_investering(primaire_oppervlakte, listing.prijs, opslag_percentage)
         if investering is not None:
             winst_pm_pp = investering.winst_pm_pp
             eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
@@ -208,25 +212,36 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
     aantal_kamers_mogelijk. Ze worden alleen bijgewerkt via de normale
     (nieuw-adres-)pipeline, dus zonder dit zouden ze die velden nooit met
     terugwerkende kracht krijgen. Kost geen nieuwe geocode-/BAG-/monumenten-
-    aanroepen: bag_oppervlakte, prijs en opslag_percentage staan al in de state.
-    (oppervlakte_advertentie kan niet met terugwerkende kracht ingevuld worden -
-    die staat alleen in de oorspronkelijke Funda-mail, niet in de state.)"""
+    aanroepen: bag_oppervlakte, oppervlakte_advertentie, prijs en
+    opslag_percentage staan al in de state.
+
+    Herberekent aantal_kamers_mogelijk/winst_pm_pp/eigen_inleg_pp ook opnieuw
+    (niet alleen als ze nog ontbreken) op basis van primaire_oppervlakte, zodat
+    woningen die eerder op de (soms te hoge) BAG-m2 berekend zijn automatisch
+    het juiste kameraantal/investeringscijfer krijgen zodra dit run draait -
+    zie ListingState.primaire_oppervlakte."""
     for item in state.all():
-        if item.status != "actief" or not item.bag_oppervlakte:
+        oppervlakte = item.primaire_oppervlakte
+        if item.status != "actief" or not oppervlakte:
             continue
 
-        if item.aantal_kamers_mogelijk is None:
-            item.aantal_kamers_mogelijk = bereken_aantal_kamers_mogelijk(item.bag_oppervlakte)
+        nieuw_aantal_kamers = bereken_aantal_kamers_mogelijk(oppervlakte)
+        if item.aantal_kamers_mogelijk != nieuw_aantal_kamers:
+            item.aantal_kamers_mogelijk = nieuw_aantal_kamers
             state.upsert(item)
 
-        if item.winst_pm_pp is not None or not item.prijs:
+        if not item.prijs:
             continue
-        investering = bereken_investering(item.bag_oppervlakte, item.prijs, item.opslag_percentage)
+        investering = bereken_investering(oppervlakte, item.prijs, item.opslag_percentage)
         if investering is None:
             continue
-        item.winst_pm_pp = investering.winst_pm_pp
-        item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
-        state.upsert(item)
+        if (
+            item.winst_pm_pp != investering.winst_pm_pp
+            or item.eigen_inleg_pp != investering.eigen_inleg_na_ophoging_pp
+        ):
+            item.winst_pm_pp = investering.winst_pm_pp
+            item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
+            state.upsert(item)
 
 
 def _backvul_coordinaten(state: StateStore) -> None:
