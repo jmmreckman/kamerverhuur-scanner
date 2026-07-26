@@ -78,6 +78,33 @@ def _zoek_pdok_adres(query: str, extra_filters: list[str]) -> dict:
     return docs[0]
 
 
+_KALE_HUISNUMMER_RE = re.compile(r"^\d+$")
+
+
+def heeft_meerdere_eenheden(postcode_kaal: str, huisnummer: str) -> bool:
+    """Zoekt (los van de rows=1-hoofdquery) alle adressen op dit huisnummer binnen de
+    postcode op, om te checken of er meerdere eenheden (toevoegingen) bestaan. Alleen
+    aangeroepen als er geen toevoeging is meegegeven -- zonder deze check pakt PDOK dan
+    stilzwijgend de eerste/standaard-eenheid (bv. "19A"), ook als de listing eigenlijk
+    over een andere eenheid gaat (bv. "19-B") -- precies wat er met Grondherendijk 19
+    misging (adrestekst zonder toevoeging in de mail, terwijl het pand uit meerdere
+    eenheden bestaat)."""
+    resp = requests.get(
+        PDOK_FREE_URL,
+        params={
+            "q": f"{postcode_kaal} {huisnummer}",
+            "rows": 20,
+            "fq": ["type:adres", f"postcode:{postcode_kaal}"],
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    docs = resp.json().get("response", {}).get("docs", [])
+    patroon = re.compile(rf"^{re.escape(huisnummer)}([A-Za-z].*)?$")
+    aantal_eenheden = sum(1 for d in docs if patroon.match(str(d.get("huis_nlt", ""))))
+    return aantal_eenheden > 1
+
+
 def geocode_by_postcode(postcode: str, huisnummer: str, toevoeging: str = "") -> GeocodeResult:
     """Zoekt een adres op via postcode + huisnummer(+toevoeging) -- dit is ondubbelzinnig
     (elke combinatie hoort bij precies één adres in Nederland) en dus betrouwbaarder dan
@@ -90,6 +117,20 @@ def geocode_by_postcode(postcode: str, huisnummer: str, toevoeging: str = "") ->
     huisnummer_volledig = f"{huisnummer}-{toevoeging}" if toevoeging else huisnummer
     query = f"{postcode_kaal} {huisnummer_volledig}"
     doc = _zoek_pdok_adres(query, [f"postcode:{postcode_kaal}"])
+
+    # Alleen relevant bij een kale cijferreeks zonder toevoeging (bv. "19") -- een
+    # huisnummer dat de toevoeging al bevat (bv. "47A", zoals ListingState.huisnummer
+    # opslaat) is al ondubbelzinnig en hoeft niet gecheckt te worden.
+    if not toevoeging and _KALE_HUISNUMMER_RE.match(huisnummer) and heeft_meerdere_eenheden(
+        postcode_kaal, huisnummer
+    ):
+        raise GeocodeError(
+            f"'{postcode_kaal} {huisnummer}' heeft meerdere eenheden op dit huisnummer "
+            "(bv. een toevoeging A/B/C), maar er is geen toevoeging meegegeven -- niet "
+            "automatisch te ontrafelen om welke eenheid het gaat, dus overgeslagen "
+            "i.p.v. te gokken naar de verkeerde eenheid."
+        )
+
     return _doc_naar_resultaat(doc, query)
 
 
