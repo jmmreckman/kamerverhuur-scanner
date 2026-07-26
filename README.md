@@ -220,10 +220,18 @@ mail-scan meteen te laten draaien in plaats van te wachten tot 09:00. Verder:
 - In het informatievenstertje bij elke woning op de kaart (klik op een marker): een
   kruisje om de woning direct te verwijderen (zelfde actie als in de lijst), en een
   invoerveld om het aantal kamers handmatig te corrigeren — de automatische 18m²-
-  vuistregel klopt niet altijd (bv. bij een ongunstige plattegrond). Winst p.p./mnd en
-  eigen inleg p.p. worden meteen herberekend met dat handmatige aantal; een "automatisch"-
-  knopje zet het weer terug naar de berekende waarde. Een handmatige correctie blijft
-  staan bij latere scans (wordt niet overschreven), ook als de vraagprijs nog wijzigt.
+  vuistregel klopt niet altijd (bv. bij een ongunstige plattegrond/raamindeling). Winst
+  p.p./mnd en eigen inleg p.p. worden meteen herberekend met dat handmatige aantal; een
+  "automatisch"-knopje zet het weer terug naar de berekende waarde. Een handmatige
+  correctie blijft staan bij latere scans (wordt niet overschreven), ook als de
+  vraagprijs nog wijzigt.
+  Levert het handmatige aantal minder kamers op dan de 18m²-regel voor die oppervlakte
+  zou geven, dan telt de kale huur die de "verloren" kamers zouden hebben opgeleverd
+  voor `KAMERVERLIES_COMPENSATIE` (standaard 50%) alsnog mee, verdeeld over de
+  overgebleven kamers — die zijn dan immers ruimer (en dus meer waard) dan een
+  standaard 18m²-studentenkamer. Voorbeeld: 126 m² (7 kamers volgens de vuistregel),
+  handmatig naar 3 kamers → 4 verloren kamers × €550 × 50% = €1.100 extra kale huur,
+  verdeeld over de 3 overgebleven kamers.
 
 Draait als eigen container (`kansen`) op dezelfde VPS als `fundazoeker`, gebouwd vanaf
 dezelfde branch/dezelfde `state.json` (gedeeld volume) — zie `deploy/docker-compose.yml`

@@ -167,7 +167,9 @@ def create_app(config: Config | None = None) -> Flask:
             item.aantal_kamers_handmatig = True
 
         if item.prijs and item.aantal_kamers_mogelijk:
-            investering = bereken_investering(item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage)
+            investering = bereken_investering(
+                item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage, m2=item.primaire_oppervlakte
+            )
             item.winst_pm_pp = investering.winst_pm_pp if investering else None
             item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp if investering else None
         else:

@@ -238,7 +238,7 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
         if not item.prijs or not item.aantal_kamers_mogelijk:
             continue
         investering = bereken_investering_met_aantal_kamers(
-            item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage
+            item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage, m2=oppervlakte
         )
         if investering is None:
             continue

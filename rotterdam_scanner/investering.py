@@ -27,6 +27,13 @@ TAXATIE_VERHOUDING_VOOR_VERHOGING = 0.875
 LTV = 0.8
 AANTAL_INVESTEERDERS = 2
 M2_PER_STUDENTENKAMER = 18
+# Als het handmatig ingevoerde aantal kamers lager is dan wat de 18m2-vuistregel op
+# basis van de oppervlakte zou geven (bv. omdat de plattegrond/raamindeling minder
+# kamers toelaat dan de m2 doet vermoeden), telt dit percentage van de kale huur die de
+# "verloren" kamers zouden hebben opgeleverd alsnog mee, verdeeld over de overgebleven
+# kamers - die zijn dan immers navenant ruimer (en dus meer waard) dan een standaard
+# 18m2-studentenkamer, dus puur op het aantal kamers rekenen onderschat de huurwaarde.
+KAMERVERLIES_COMPENSATIE = 0.5
 
 
 @dataclass(frozen=True)
@@ -59,20 +66,32 @@ def bereken(m2: float, koopsom: float, opslag_percentage: float = 0.0) -> Invest
 
     Geeft None terug als er geen enkele studentenkamer mogelijk is (te kleine
     oppervlakte) - dan is dit sowieso geen bruikbare kans."""
-    return bereken_met_aantal_kamers(aantal_kamers_mogelijk(m2), koopsom, opslag_percentage)
+    return bereken_met_aantal_kamers(aantal_kamers_mogelijk(m2), koopsom, opslag_percentage, m2=m2)
 
 
 def bereken_met_aantal_kamers(
-    aantal_kamers: int, koopsom: float, opslag_percentage: float = 0.0
+    aantal_kamers: int, koopsom: float, opslag_percentage: float = 0.0, m2: float | None = None
 ) -> InvesteringsResultaat | None:
     """Zelfde berekening als `bereken()`, maar met een al vaststaand aantal kamers i.p.v.
     dat af te leiden uit de oppervlakte - voor de handmatige "aantal kamers"-correctie op
     de kaart-website (de 18m2-vuistregel klopt in de praktijk niet altijd, bv. bij een
-    ongunstige plattegrond)."""
+    ongunstige plattegrond).
+
+    Geef ook `m2` mee als die bekend is: als `aantal_kamers` lager uitvalt dan wat de
+    18m2-vuistregel op basis van die m2 zou geven, wordt de kale huur verhoogd met
+    KAMERVERLIES_COMPENSATIE van de huurwaarde van de "verloren" kamers (zie hierboven) -
+    zonder `m2` wordt die correctie niet toegepast (bv. bij `bereken_met_aantal_kamers()`
+    zonder bekende oppervlakte)."""
     if aantal_kamers < 1:
         return None
 
     kale_huur_pm = aantal_kamers * KALE_HUUR_PER_KAMER * (1 + opslag_percentage)
+    if m2 is not None:
+        kamers_verloren = max(0, aantal_kamers_mogelijk(m2) - aantal_kamers)
+        kale_huur_pm += (
+            kamers_verloren * KALE_HUUR_PER_KAMER * (1 + opslag_percentage) * KAMERVERLIES_COMPENSATIE
+        )
+
     service_in_pm = aantal_kamers * SERVICEKOSTEN_PER_KAMER
     vast_uit_pm = aantal_kamers * VASTE_KOSTEN_PER_HUURDER
 
