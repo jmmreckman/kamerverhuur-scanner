@@ -767,6 +767,23 @@ def test_run_apify_gebruikt_zoek_urls_module_niet_alleen_config(tmp_path):
     )
 
 
+def test_run_apify_met_expliciete_search_urls_negeert_zoek_urls_module(tmp_path):
+    from rotterdam_scanner import zoek_urls
+
+    config = _config(tmp_path)
+    zoek_urls.voeg_toe(config, "https://www.funda.nl/koop/hoek-van-holland/")
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with patch(
+        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
+    ) as fetch_mock, p1, p2, p3, p4, p5:
+        pipeline.run_apify(
+            config, today=date(2026, 7, 1), search_urls=["https://www.funda.nl/koop/pernis/"],
+        )
+    fetch_mock.assert_called_once_with(
+        config, ["https://www.funda.nl/koop/pernis/"], config.apify_max_items_dagelijks
+    )
+
+
 def test_run_apify_meldt_fout_zonder_te_crashen(tmp_path):
     from rotterdam_scanner.apify_scraper import ApifyError
 

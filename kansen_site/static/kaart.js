@@ -202,8 +202,9 @@ async function pollSweepStatus() {
 
     if (data.status === "bezig") {
       sweepKnop.disabled = true;
-      statusTekstEl.textContent =
-        "Bezig met totale sweep (kan lang duren - dit tabblad mag gerust op de achtergrond staan of dicht, de voortgang wordt gewoon bijgehouden)...";
+      statusTekstEl.textContent = data.url
+        ? `Bezig met het testen van een losse zoekopdracht (${data.url}) - even geduld...`
+        : "Bezig met totale sweep (kan lang duren - dit tabblad mag gerust op de achtergrond staan of dicht, de voortgang wordt gewoon bijgehouden)...";
       setTimeout(pollSweepStatus, SWEEP_POLL_INTERVAL_MS);
       return;
     }

@@ -279,7 +279,13 @@ gewenste gemeentes) en de URL uit de adresbalk plakken. Wordt opgeslagen naast
 `state.json` (`apify_zoek_urls.json`, zie `rotterdam_scanner/zoek_urls.py`) - geen
 herstart nodig, de eerstvolgende scan gebruikt meteen de bijgewerkte lijst. Zodra dit
 bestand een keer via de website gewijzigd is (ook tot een lege lijst), is het leidend
-en wordt `APIFY_SEARCH_URLS` niet meer gebruikt.
+en wordt `APIFY_SEARCH_URLS` niet meer gebruikt. Elke zoekopdracht heeft een "Testen"-
+knop om alleen díe ene URL op te halen (klein aantal resultaten via
+`apify_max_items_dagelijks`, dus goedkoop) - handig om een nieuwe of gecorrigeerde URL
+te verifiëren zonder de kosten van een volledige "Totale sweep". Let op de URL-vorm die
+je van Funda plakt: de gewone lijstweergave (`/zoeken/koop?...`) werkt, de kaartweergave
+(`/zoeken/kaart/koop?...` met `zoom`/`centerLat`/`centerLng`) leverde in de praktijk 0
+resultaten op - de Apify-actor lijkt dat formaat niet te herkennen.
 
 Leeg gelaten (standaard), dan slaan beide scripts zichzelf netjes over (geen crash,
 geen kosten) — de rest van de scanner (mail-alert, kaart-website) blijft gewoon werken.

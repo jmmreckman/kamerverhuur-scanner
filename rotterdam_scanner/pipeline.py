@@ -352,21 +352,29 @@ def run(config: Config, today: date | None = None) -> RunResult:
     return result
 
 
-def run_apify(config: Config, today: date | None = None, max_items: int | None = None) -> RunResult:
+def run_apify(
+    config: Config, today: date | None = None, max_items: int | None = None,
+    search_urls: list[str] | None = None,
+) -> RunResult:
     """Haalt het actuele Funda-aanbod op via Apify (zie apify_scraper.py) en
     verwerkt het via dezelfde checks als run() - dekt ook woningen die niet
     in de dagelijkse mail-alert voorkwamen (bv. omdat ze al te koop stonden
     vóór de zoekopdracht werd ingesteld). max_items=None gebruikt
-    config.apify_max_items_dagelijks. Best-effort: is Apify niet ingesteld of
-    mislukt de aanroep, dan komt dat in result.fouten terecht (geen crash) -
-    de rest van de scanner (mail-gebaseerd) blijft gewoon werken."""
+    config.apify_max_items_dagelijks. search_urls=None gebruikt alle
+    ingestelde zoek-URL's (zoek_urls.laad(config)) - geef een lijst met één
+    URL mee om alleen die ene zoekopdracht te testen/aan te vullen zonder de
+    rest opnieuw op te halen (zie kansen_site.app.zoekopdrachten_testen).
+    Best-effort: is Apify niet ingesteld of mislukt de aanroep, dan komt dat
+    in result.fouten terecht (geen crash) - de rest van de scanner
+    (mail-gebaseerd) blijft gewoon werken."""
     today = today or date.today()
     max_items = max_items if max_items is not None else config.apify_max_items_dagelijks
+    search_urls = search_urls if search_urls is not None else zoek_urls.laad(config)
     state = StateStore(config.state_path)
     result = RunResult()
 
     try:
-        listings = apify_scraper.fetch_apify_listings(config, zoek_urls.laad(config), max_items)
+        listings = apify_scraper.fetch_apify_listings(config, search_urls, max_items)
     except apify_scraper.ApifyError as exc:
         result.fouten.append(f"Apify-scan mislukt: {exc}")
         listings = []

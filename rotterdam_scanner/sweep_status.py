@@ -1,9 +1,12 @@
-"""Bijhoudt de status van een handmatig gestarte "Totale sweep" (de volledige
-wekelijkse Apify-scan, handmatig getriggerd vanaf kansen.steenhub.nl) in een
-los bestand naast state.json.
+"""Bijhoudt de status van een handmatig gestarte Apify-taak (de volledige
+"Totale sweep", of het los testen van één specifieke zoekopdracht vanaf de
+Zoekopdrachten-pagina - zie kansen_site/app.py) in een los bestand naast
+state.json. Er kan maar één taak tegelijk lopen (zie is_bezig-check in
+app.py) - dat is bewust, om nooit twee betaalde Apify-aanroepen tegelijk te
+laten lopen.
 
 Waarom een bestand i.p.v. gewoon een Python-variabele in het geheugen van de
-Flask-app? De sweep draait in een achtergrondthread, losgekoppeld van de HTTP-
+Flask-app? De taak draait in een achtergrondthread, losgekoppeld van de HTTP-
 aanvraag die 'm gestart heeft - een lang openstaande fetch() wordt op mobiel
 al snel onderbroken zodra de gebruiker van tabblad wisselt (bv. om de Apify-
 billing te checken), waarna de browser "mislukt" toont terwijl de run bij
@@ -28,6 +31,11 @@ class SweepStatus:
     status: str = "idle"
     gestart_op: str | None = None
     klaar_op: str | None = None
+    # Alleen gezet bij het testen van één specifieke zoekopdracht (None bij
+    # een volledige "Totale sweep") - zodat kaart.html ook tijdens zo'n test
+    # een kloppende statustekst kan tonen i.p.v. altijd over "de sweep" te
+    # praten.
+    url: str | None = None
     nieuw_actief: int = 0
     nieuw_afgevallen: int = 0
     fouten: list[str] = field(default_factory=list)
@@ -57,14 +65,14 @@ def _sla_op(config: Config, status: SweepStatus) -> None:
     pad.write_text(json.dumps(asdict(status), indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def zet_bezig(config: Config) -> None:
-    _sla_op(config, SweepStatus(status="bezig", gestart_op=datetime.now().isoformat()))
+def zet_bezig(config: Config, url: str | None = None) -> None:
+    _sla_op(config, SweepStatus(status="bezig", gestart_op=datetime.now().isoformat(), url=url))
 
 
 def zet_klaar(config: Config, nieuw_actief: int, nieuw_afgevallen: int, fouten: list[str]) -> None:
     bestaand = laad(config)
     _sla_op(config, SweepStatus(
-        status="klaar", gestart_op=bestaand.gestart_op, klaar_op=datetime.now().isoformat(),
+        status="klaar", gestart_op=bestaand.gestart_op, klaar_op=datetime.now().isoformat(), url=bestaand.url,
         nieuw_actief=nieuw_actief, nieuw_afgevallen=nieuw_afgevallen, fouten=fouten,
     ))
 
@@ -72,6 +80,6 @@ def zet_klaar(config: Config, nieuw_actief: int, nieuw_afgevallen: int, fouten: 
 def zet_mislukt(config: Config, fout: str) -> None:
     bestaand = laad(config)
     _sla_op(config, SweepStatus(
-        status="mislukt", gestart_op=bestaand.gestart_op, klaar_op=datetime.now().isoformat(),
+        status="mislukt", gestart_op=bestaand.gestart_op, klaar_op=datetime.now().isoformat(), url=bestaand.url,
         fouten=[fout],
     ))

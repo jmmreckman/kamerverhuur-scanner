@@ -57,6 +57,33 @@ def test_laad_met_kapot_json_bestand_geeft_idle(tmp_path):
     assert sweep_status.laad(config).status == "idle"
 
 
+def test_zet_bezig_met_url_slaat_url_op(tmp_path):
+    config = _config(tmp_path)
+    sweep_status.zet_bezig(config, url="https://www.funda.nl/koop/pernis/")
+    status = sweep_status.laad(config)
+    assert status.url == "https://www.funda.nl/koop/pernis/"
+
+
+def test_zet_bezig_zonder_url_is_none(tmp_path):
+    config = _config(tmp_path)
+    sweep_status.zet_bezig(config)
+    assert sweep_status.laad(config).url is None
+
+
+def test_zet_klaar_behoudt_url(tmp_path):
+    config = _config(tmp_path)
+    sweep_status.zet_bezig(config, url="https://www.funda.nl/koop/pernis/")
+    sweep_status.zet_klaar(config, nieuw_actief=1, nieuw_afgevallen=0, fouten=[])
+    assert sweep_status.laad(config).url == "https://www.funda.nl/koop/pernis/"
+
+
+def test_zet_mislukt_behoudt_url(tmp_path):
+    config = _config(tmp_path)
+    sweep_status.zet_bezig(config, url="https://www.funda.nl/koop/pernis/")
+    sweep_status.zet_mislukt(config, "boom")
+    assert sweep_status.laad(config).url == "https://www.funda.nl/koop/pernis/"
+
+
 def test_laad_met_onbekende_status_geeft_idle(tmp_path):
     config = _config(tmp_path)
     sweep_status._pad(config).parent.mkdir(parents=True, exist_ok=True)

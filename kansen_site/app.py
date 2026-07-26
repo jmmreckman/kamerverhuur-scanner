@@ -180,6 +180,39 @@ def create_app(config: Config | None = None) -> Flask:
     def sweep_status_route():
         return jsonify(asdict(sweep_status.laad(config)))
 
+    @app.route("/zoekopdrachten/testen", methods=["POST"])
+    @login_required
+    def zoekopdrachten_testen():
+        # Eén specifieke zoekopdracht los ophalen (bv. net toegevoegd, of een
+        # gecorrigeerde URL verifiëren) zonder de kosten van een volledige
+        # "Totale sweep" over alle zoekopdrachten samen. Gebruikt bewust
+        # apify_max_items_dagelijks als grens (niet -wekelijks): dit is voor
+        # één (meestal kleine) zoekopdracht, geen volledige inhaalslag.
+        # Zelfde achtergrondthread + sweep_status-mechaniek als /sweep, om
+        # dezelfde reden: een mobiele browser onderbreekt een lang openstaande
+        # fetch() al snel zodra het tabblad naar de achtergrond gaat.
+        url = request.form.get("url", "").strip()
+        if not url:
+            return jsonify({"fout": "Onbekende zoekopdracht."}), 400
+        if not apify_scraper.is_ingesteld(config, [url]):
+            return jsonify({"fout": "Apify is niet ingesteld."}), 400
+        if sweep_status.laad(config).status == "bezig":
+            return jsonify({"fout": "Er loopt al een Apify-taak - wacht tot die klaar is."}), 409
+
+        sweep_status.zet_bezig(config, url=url)
+
+        def _draai_test() -> None:
+            try:
+                result = pipeline.run_apify(config, search_urls=[url], max_items=config.apify_max_items_dagelijks)
+                sweep_status.zet_klaar(
+                    config, len(result.nieuw_actief), len(result.nieuw_afgevallen), result.fouten,
+                )
+            except Exception as exc:  # noqa: BLE001 - moet altijd in de status terechtkomen, nooit de thread stil laten sterven
+                sweep_status.zet_mislukt(config, f"Onverwachte fout tijdens het testen: {exc}")
+
+        threading.Thread(target=_draai_test, daemon=True).start()
+        return jsonify({"gestart": True})
+
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
     @login_required
     def kans_verwijderen(object_id):
