@@ -102,41 +102,28 @@ services:
       - ./fundazoeker.env
     volumes:
       - fundazoeker-data:/app/data
-    # --timeout 1800: apify_scraper.py pollt de asynchrone Apify-run tot hij
-    # klaar is (budget 25 minuten, zie _MAX_WACHTTIJD_SECONDEN) - de
-    # gunicorn-timeout moet ruimer zijn dan dat interne budget, anders wordt
-    # de HTTP-request al eerder afgebroken dan onze eigen polling opgeeft.
-    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "1800"]
+    # --timeout 1200: "Handmatig toevoegen" verwerkt elk adres synchroon door
+    # alle checks (geocoding, BAG, gis, opkoop, WOZ) - bij een paar honderd
+    # adressen in één keer kan dat zo'n 15-20 minuten duren (zie README).
+    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "1200"]
     expose:
       - "8080"
 
-  # Optionele Apify-scans (het volledige actuele Funda-aanbod, i.p.v. alleen
-  # wat de mail-alert sinds gisteren meldt) - zie de "Apify"-sectie in
+  # Dagelijkse beschikbaarheid-check (gratis, geen betaalde scraper) - bezoekt
+  # voor elke actieve woning de eigen Funda-URL rechtstreeks en zet 'm op
+  # "afgevallen" zodra die "verkocht" blijkt. Zie "Beschikbaarheid-check" in
   # fundazoeker's eigen README. Zelfde image/branch/volume als fundazoeker,
-  # alleen een ander opstartcommando. Zonder APIFY_API_TOKEN/
-  # APIFY_SEARCH_URLS in fundazoeker.env slaan beide zichzelf gewoon over
-  # (geen crash, geen kosten).
-  apify-dagelijks:
+  # alleen een ander opstartcommando.
+  beschikbaarheid-check:
     build:
       context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
-    container_name: apify-dagelijks
+    container_name: beschikbaarheid-check
     restart: unless-stopped
     env_file:
       - ./fundazoeker.env
     volumes:
       - fundazoeker-data:/app/data
-    command: ["python3", "-m", "scripts.dagelijkse_apify_scan"]
-
-  apify-wekelijks:
-    build:
-      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
-    container_name: apify-wekelijks
-    restart: unless-stopped
-    env_file:
-      - ./fundazoeker.env
-    volumes:
-      - fundazoeker-data:/app/data
-    command: ["python3", "-m", "scripts.wekelijkse_apify_scan"]
+    command: ["python3", "-m", "scripts.dagelijkse_beschikbaarheid_check"]
 
   caddy:
     image: caddy:2-alpine
