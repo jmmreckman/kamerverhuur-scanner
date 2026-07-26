@@ -59,7 +59,16 @@ def bereken(m2: float, koopsom: float, opslag_percentage: float = 0.0) -> Invest
 
     Geeft None terug als er geen enkele studentenkamer mogelijk is (te kleine
     oppervlakte) - dan is dit sowieso geen bruikbare kans."""
-    aantal_kamers = aantal_kamers_mogelijk(m2)
+    return bereken_met_aantal_kamers(aantal_kamers_mogelijk(m2), koopsom, opslag_percentage)
+
+
+def bereken_met_aantal_kamers(
+    aantal_kamers: int, koopsom: float, opslag_percentage: float = 0.0
+) -> InvesteringsResultaat | None:
+    """Zelfde berekening als `bereken()`, maar met een al vaststaand aantal kamers i.p.v.
+    dat af te leiden uit de oppervlakte - voor de handmatige "aantal kamers"-correctie op
+    de kaart-website (de 18m2-vuistregel klopt in de praktijk niet altijd, bv. bij een
+    ongunstige plattegrond)."""
     if aantal_kamers < 1:
         return None
 

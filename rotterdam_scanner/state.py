@@ -45,6 +45,13 @@ class ListingState:
     # blijft hij nog gewoon in het Funda-aanbod staan. afvalreden bevat de
     # (evt. door de gebruiker zelf opgegeven) reden.
     handmatig_verwijderd: bool = False
+    # Gezet zodra de gebruiker het aantal kamers zelf heeft aangepast op de
+    # kaart-website (de 18m2-vuistregel klopt in de praktijk niet altijd, bv. bij
+    # een ongunstige plattegrond). Zolang dit aan staat, laat _backvul_investeringscijfers
+    # (pipeline.py) aantal_kamers_mogelijk met rust i.p.v. het te overschrijven met de
+    # automatisch berekende waarde - winst_pm_pp/eigen_inleg_pp blijven wel meerekenen
+    # met dit handmatige aantal.
+    aantal_kamers_handmatig: bool = False
 
     @property
     def primaire_oppervlakte(self) -> int | None:

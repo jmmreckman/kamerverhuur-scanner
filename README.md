@@ -217,6 +217,13 @@ mail-scan meteen te laten draaien in plaats van te wachten tot 09:00. Verder:
 - **Toevoegen** — plak een lijst adressen of een kopieer-plak van een Funda-
   resultatenpagina om achterstanden in te halen (zie "Achterstand inhalen" hieronder).
 - **Verwijderd** — overzicht van handmatig verwijderde woningen, met terugplaats-knop.
+- In het informatievenstertje bij elke woning op de kaart (klik op een marker): een
+  kruisje om de woning direct te verwijderen (zelfde actie als in de lijst), en een
+  invoerveld om het aantal kamers handmatig te corrigeren — de automatische 18m²-
+  vuistregel klopt niet altijd (bv. bij een ongunstige plattegrond). Winst p.p./mnd en
+  eigen inleg p.p. worden meteen herberekend met dat handmatige aantal; een "automatisch"-
+  knopje zet het weer terug naar de berekende waarde. Een handmatige correctie blijft
+  staan bij latere scans (wordt niet overschreven), ook als de vraagprijs nog wijzigt.
 
 Draait als eigen container (`kansen`) op dezelfde VPS als `fundazoeker`, gebouwd vanaf
 dezelfde branch/dezelfde `state.json` (gedeeld volume) — zie `deploy/docker-compose.yml`

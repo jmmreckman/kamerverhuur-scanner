@@ -16,6 +16,8 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, ses
 from rotterdam_scanner import pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
+from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
+from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
 from rotterdam_scanner.state import StateStore
 
 
@@ -42,6 +44,7 @@ def _listing_naar_json(item) -> dict:
         "bag_oppervlakte": item.bag_oppervlakte,
         "oppervlakte_advertentie": item.oppervlakte_advertentie,
         "aantal_kamers_mogelijk": item.aantal_kamers_mogelijk,
+        "aantal_kamers_handmatig": item.aantal_kamers_handmatig,
         "winst_pm_pp": item.winst_pm_pp,
         "eigen_inleg_pp": item.eigen_inleg_pp,
         "opslag_percentage": item.opslag_percentage,
@@ -135,6 +138,45 @@ def create_app(config: Config | None = None) -> Flask:
         state.upsert(item)
         state.save()
         return jsonify({"ok": True})
+
+    @app.route("/kansen/<object_id>/kamers", methods=["POST"])
+    @login_required
+    def kans_kamers_aanpassen(object_id):
+        # Laat de gebruiker het aantal kamers per woning handmatig corrigeren (de
+        # 18m2-vuistregel klopt in de praktijk niet altijd, bv. bij een ongunstige
+        # plattegrond) - winst/eigen inleg worden meteen met dat aantal herberekend.
+        # Leeg veld = terug naar de automatisch berekende waarde.
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+
+        ruwe_waarde = request.form.get("aantal_kamers", "").strip()
+        if ruwe_waarde == "":
+            item.aantal_kamers_handmatig = False
+            oppervlakte = item.primaire_oppervlakte
+            item.aantal_kamers_mogelijk = bereken_aantal_kamers_mogelijk(oppervlakte) if oppervlakte else None
+        else:
+            try:
+                aantal = int(ruwe_waarde)
+            except ValueError:
+                return jsonify({"fout": "Ongeldig aantal kamers."}), 400
+            if aantal < 0:
+                return jsonify({"fout": "Aantal kamers moet 0 of hoger zijn."}), 400
+            item.aantal_kamers_mogelijk = aantal
+            item.aantal_kamers_handmatig = True
+
+        if item.prijs and item.aantal_kamers_mogelijk:
+            investering = bereken_investering(item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage)
+            item.winst_pm_pp = investering.winst_pm_pp if investering else None
+            item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp if investering else None
+        else:
+            item.winst_pm_pp = None
+            item.eigen_inleg_pp = None
+
+        state.upsert(item)
+        state.save()
+        return jsonify(_listing_naar_json(item))
 
     @app.route("/kansen/<object_id>/terugplaatsen", methods=["POST"])
     @login_required

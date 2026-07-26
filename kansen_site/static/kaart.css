@@ -218,9 +218,33 @@ body {
 
 .lijst-item .cijfers .goed { color: var(--groen); font-weight: 600; }
 
-.popup-inhoud { font-size: 0.9em; }
+.popup-inhoud { position: relative; font-size: 0.9em; padding-right: 1.4rem; }
 .popup-inhoud .adres { font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .popup-inhoud a { color: var(--groen); }
+
+.popup-verwijder-knop { top: -0.2rem; right: -1.2rem; }
+
+.kamers-editor { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+.kamers-input {
+  width: 3.2em;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--rand);
+  border-radius: 4px;
+  font-size: 1em;
+}
+
+.kamers-reset-knop {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--rand);
+  border-radius: 4px;
+  background: none;
+  color: var(--tekst-zwak);
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.kamers-reset-knop:hover { background: var(--achtergrond); }
 
 /* --- Overige content-pagina's (Verwijderd, Handmatig toevoegen) --- */
 

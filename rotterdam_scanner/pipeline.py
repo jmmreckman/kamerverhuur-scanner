@@ -11,6 +11,7 @@ from .geocode import GeocodeError, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from .investering import bereken as bereken_investering
+from .investering import bereken_met_aantal_kamers as bereken_investering_met_aantal_kamers
 from .monumenten import bepaal_huurprijsopslag, hoogste_opslagpercentage
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
@@ -219,20 +220,26 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
     (niet alleen als ze nog ontbreken) op basis van primaire_oppervlakte, zodat
     woningen die eerder op de (soms te hoge) BAG-m2 berekend zijn automatisch
     het juiste kameraantal/investeringscijfer krijgen zodra dit run draait -
-    zie ListingState.primaire_oppervlakte."""
+    zie ListingState.primaire_oppervlakte. Woningen met een handmatig aangepast
+    aantal kamers (aantal_kamers_handmatig) worden met rust gelaten voor het
+    kameraantal zelf - de investeringscijfers blijven wel meerekenen op basis van
+    dat handmatige aantal (bv. als de vraagprijs nog wijzigt)."""
     for item in state.all():
         oppervlakte = item.primaire_oppervlakte
         if item.status != "actief" or not oppervlakte:
             continue
 
-        nieuw_aantal_kamers = bereken_aantal_kamers_mogelijk(oppervlakte)
-        if item.aantal_kamers_mogelijk != nieuw_aantal_kamers:
-            item.aantal_kamers_mogelijk = nieuw_aantal_kamers
-            state.upsert(item)
+        if not item.aantal_kamers_handmatig:
+            nieuw_aantal_kamers = bereken_aantal_kamers_mogelijk(oppervlakte)
+            if item.aantal_kamers_mogelijk != nieuw_aantal_kamers:
+                item.aantal_kamers_mogelijk = nieuw_aantal_kamers
+                state.upsert(item)
 
-        if not item.prijs:
+        if not item.prijs or not item.aantal_kamers_mogelijk:
             continue
-        investering = bereken_investering(oppervlakte, item.prijs, item.opslag_percentage)
+        investering = bereken_investering_met_aantal_kamers(
+            item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage
+        )
         if investering is None:
             continue
         if (

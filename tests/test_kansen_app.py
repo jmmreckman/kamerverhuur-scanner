@@ -195,6 +195,69 @@ def test_kans_verwijderd_valt_niet_meer_uit_api_kansen(app_client, tmp_path):
     assert resp.get_json() == []
 
 
+def test_kans_kamers_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/kansen/3000AA-1/kamers")
+    assert resp.status_code == 302
+
+
+def test_kans_kamers_onbekende_woning_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/kansen/onbekend/kamers", data={"aantal_kamers": "5"})
+    assert resp.status_code == 404
+
+
+def test_kans_kamers_aanpassen_herberekent_investering(app_client, tmp_path):
+    _zet_listing(tmp_path, prijs=403_000, opslag_percentage=0.0, aantal_kamers_mogelijk=6)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/kamers", data={"aantal_kamers": "4"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["aantal_kamers_mogelijk"] == 4
+    assert data["aantal_kamers_handmatig"] is True
+
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.aantal_kamers_mogelijk == 4
+    assert item.aantal_kamers_handmatig is True
+    # Winst/eigen inleg moeten meeveranderen met het handmatige aantal (minder kamers
+    # dan de automatisch berekende 6 -> minder huurinkomsten dan voorheen).
+    assert item.winst_pm_pp is not None
+
+
+def test_kans_kamers_leeg_veld_gaat_terug_naar_automatisch(app_client, tmp_path):
+    _zet_listing(
+        tmp_path, prijs=403_000, oppervlakte_advertentie=115,
+        aantal_kamers_mogelijk=4, aantal_kamers_handmatig=True,
+    )
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/kamers", data={"aantal_kamers": ""})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["aantal_kamers_handmatig"] is False
+    assert data["aantal_kamers_mogelijk"] == 6  # floor(115 / 18)
+
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.aantal_kamers_handmatig is False
+    assert item.aantal_kamers_mogelijk == 6
+
+
+def test_kans_kamers_negatief_geeft_fout(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/kamers", data={"aantal_kamers": "-1"})
+    assert resp.status_code == 400
+
+
+def test_kans_kamers_ongeldige_waarde_geeft_fout(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/kansen/3000AA-1/kamers", data={"aantal_kamers": "abc"})
+    assert resp.status_code == 400
+
+
 def test_kans_terugplaatsen_zonder_login_wordt_omgeleid(app_client):
     resp = app_client.post("/kansen/3000AA-1/terugplaatsen")
     assert resp.status_code == 302

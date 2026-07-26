@@ -65,13 +65,18 @@ function bouwPopup(kans) {
   const div = document.createElement("div");
   div.className = "popup-inhoud";
   const dagen = dagenOpFunda(kans.eerst_gezien);
+  const kamersWaarde = kans.aantal_kamers_mogelijk === null || kans.aantal_kamers_mogelijk === undefined ? "" : kans.aantal_kamers_mogelijk;
   div.innerHTML = `
+    <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
     <span class="adres">${kans.weergavenaam}</span>
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
     ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
     ${kans.bag_oppervlakte && kans.bag_oppervlakte !== kans.primaire_oppervlakte ? kans.bag_oppervlakte + " m² (BAG, ter info)<br>" : ""}
-    ${kans.aantal_kamers_mogelijk ? kans.aantal_kamers_mogelijk + " kamer(s) mogelijk<br>" : ""}
+    <span class="kamers-editor">
+      Kamers mogelijk: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
+      ${kans.aantal_kamers_handmatig ? '<button type="button" class="kamers-reset-knop" title="Terug naar automatisch berekend (18m²-regel)">automatisch</button>' : ""}
+    </span><br>
     ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
     ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}
     ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
@@ -80,7 +85,38 @@ function bouwPopup(kans) {
     ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
     <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
   `;
+
+  div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
+
+  const kamersInput = div.querySelector(".kamers-input");
+  kamersInput.addEventListener("change", () => kamersAanpassen(kans, kamersInput.value));
+
+  const resetKnop = div.querySelector(".kamers-reset-knop");
+  if (resetKnop) {
+    resetKnop.addEventListener("click", () => kamersAanpassen(kans, ""));
+  }
+
   return div;
+}
+
+async function kamersAanpassen(kans, waarde) {
+  try {
+    const body = new URLSearchParams();
+    body.set("aantal_kamers", waarde);
+    const resp = await fetch(`/kansen/${encodeURIComponent(kans.object_id)}/kamers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!resp.ok) throw new Error("aanpassen mislukt");
+    const bijgewerkt = await resp.json();
+    Object.assign(kans, bijgewerkt);
+    renderAlles();
+    const marker = markerPerId.get(kans.object_id);
+    if (marker) marker.openPopup();
+  } catch (err) {
+    alert("Aanpassen van het aantal kamers is mislukt - probeer het nog eens.");
+  }
 }
 
 function renderMarkers(kansen) {
