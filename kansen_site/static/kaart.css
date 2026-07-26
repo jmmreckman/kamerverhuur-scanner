@@ -218,11 +218,26 @@ body {
 
 .lijst-item .cijfers .goed { color: var(--groen); font-weight: 600; }
 
-.popup-inhoud { position: relative; font-size: 0.9em; padding-right: 1.4rem; }
+.popup-inhoud { position: relative; font-size: 0.9em; padding-bottom: 2.2rem; }
 .popup-inhoud .adres { font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .popup-inhoud a { color: var(--groen); }
 
-.popup-verwijder-knop { top: -0.2rem; right: -1.2rem; }
+/* Rechtsonder i.p.v. rechtsboven, en duidelijk groter/rood - zat anders vlak tegen
+   Leaflet's eigen (kleine, grijze) sluit-kruisje rechtsboven aan, waardoor de twee
+   makkelijk te verwarren waren. */
+.popup-verwijder-knop {
+  top: auto;
+  bottom: -0.3rem;
+  right: -0.3rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  line-height: 2.1rem;
+  font-size: 1.5em;
+  color: #ffffff;
+  background: #c62828;
+}
+
+.popup-verwijder-knop:hover { background: #a02020; color: #ffffff; }
 
 .kamers-editor { display: inline-flex; align-items: center; gap: 0.4rem; }
 
