@@ -272,6 +272,42 @@ def _backvul_coordinaten(state: StateStore) -> None:
         state.upsert(item)
 
 
+def _backvul_opkoopbescherming(state: StateStore, config: Config, today_iso: str, result: RunResult) -> None:
+    """Woningen die als "actief" bleven staan met woz_check_nodig=True (de automatische
+    WOZ-opvraging is bij de eerste verwerking mislukt, of gaf toen nog geen resultaat -
+    bv. omdat de WOZ-waarde voor dat peiljaar nog niet gepubliceerd was) krijgen hier een
+    herkansing: als de WOZ-waarde nu wel op te halen is, wordt de opkoopbescherming-check
+    alsnog afgemaakt, precies zoals die op dag 1 had moeten verlopen als de opvraging toen
+    al gelukt was. Zonder dit blijft zo'n woning voor altijd "actief" staan, ook als hij
+    eigenlijk in een beschermde wijk met een te lage WOZ-waarde ligt.
+
+    Kost 1 PDOK- + 1 WOZ-aanroep per woning die nog op handmatige controle staat;
+    best-effort, een storing hier mag de rest van de run nooit laten mislukken."""
+    for item in state.all():
+        if item.status != "actief" or not item.woz_check_nodig or not item.huisnummer:
+            continue
+        postcode = item.object_id.split("-", 1)[0]
+        try:
+            geo = geocode_by_postcode(postcode, item.huisnummer, "")
+            woz = meest_recente_woz_waarde(geo.nummeraanduiding_id)
+        except Exception:  # noqa: BLE001 - nooit crashen op een databron-storing
+            continue
+        if woz is None:
+            continue
+
+        opkoop = check_opkoopbescherming(
+            item.wijknaam or geo.rotterdam_wijk, config.opkoopbescherming_woz_grens, woz_waarde=woz.bedrag
+        )
+        item.woz_check_nodig = False
+        item.woz_check_url = None
+        if opkoop.valt_af:
+            item.status = "afgevallen"
+            item.afvalreden = opkoop.toelichting
+            item.laatst_gezien = today_iso
+            result.nieuw_afgevallen.append(item)
+        state.upsert(item)
+
+
 _HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
 
 
@@ -333,6 +369,7 @@ def _verwerk_listings(
 
     _backvul_investeringscijfers(state)
     _backvul_coordinaten(state)
+    _backvul_opkoopbescherming(state, config, today_iso, result)
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 

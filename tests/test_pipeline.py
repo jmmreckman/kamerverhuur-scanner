@@ -591,6 +591,91 @@ def test_run_herberekent_kamers_en_investering_op_basis_van_advertentie_m2(tmp_p
     assert bijgewerkt.aantal_kamers_mogelijk == 7
 
 
+def test_run_backvult_opkoopbescherming_zet_woning_af_bij_lage_woz(tmp_path):
+    # Woning in een beschermde wijk die "actief" bleef staan met woz_check_nodig=True
+    # (de automatische WOZ-opvraging is de eerste keer mislukt of gaf nog geen resultaat).
+    # Als de WOZ-waarde nu wel op te halen is én onder de grens ligt, moet de woning
+    # alsnog afvallen - precies zoals hij op dag 1 al had moeten doen.
+    from rotterdam_scanner.state import ListingState, StateStore
+    from rotterdam_scanner.woz import WozWaarde
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3082DD-19B",
+            url="https://example.com/grondherendijk-19b",
+            weergavenaam="Grondherendijk 19-B, Rotterdam",
+            eerst_gezien="2026-06-25",
+            laatst_gezien="2026-06-30",
+            status="actief",
+            straatnaam="Grondherendijk",
+            huisnummer="19B",
+            wijknaam="Oud Charlois",
+            lat=51.894,
+            lon=4.4655,
+            woz_check_nodig=True,
+            woz_check_url="https://www.wozwaardeloket.nl/",
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo(wijk="Oud Charlois")), patch(
+        "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
+        return_value=WozWaarde(peildatum="2025-01-01", bedrag=348_000),
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 1))
+
+    herladen = StateStore(config.state_path)
+    bijgewerkt = herladen.get("3082DD-19B")
+    assert bijgewerkt.status == "afgevallen"
+    assert bijgewerkt.woz_check_nodig is False
+    assert "opkoopbescherming" in bijgewerkt.afvalreden
+    assert any(item.object_id == "3082DD-19B" for item in result.nieuw_afgevallen)
+    assert not any(item.object_id == "3082DD-19B" for item in result.alle_actief)
+
+
+def test_run_backvult_opkoopbescherming_blijft_actief_bij_hoge_woz(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+    from rotterdam_scanner.woz import WozWaarde
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(
+        ListingState(
+            object_id="3082DD-19B",
+            url="https://example.com/grondherendijk-19b",
+            weergavenaam="Grondherendijk 19-B, Rotterdam",
+            eerst_gezien="2026-06-25",
+            laatst_gezien="2026-06-30",
+            status="actief",
+            straatnaam="Grondherendijk",
+            huisnummer="19B",
+            wijknaam="Oud Charlois",
+            lat=51.894,
+            lon=4.4655,
+            woz_check_nodig=True,
+            woz_check_url="https://www.wozwaardeloket.nl/",
+        )
+    )
+    state.save()
+
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[])
+    ), patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo(wijk="Oud Charlois")), patch(
+        "rotterdam_scanner.pipeline.meest_recente_woz_waarde",
+        return_value=WozWaarde(peildatum="2025-01-01", bedrag=600_000),
+    ):
+        pipeline.run(config, today=date(2026, 7, 1))
+
+    herladen = StateStore(config.state_path)
+    bijgewerkt = herladen.get("3082DD-19B")
+    assert bijgewerkt.status == "actief"
+    assert bijgewerkt.woz_check_nodig is False
+
+
 def test_run_backvult_coordinaten_voor_bestaande_woningen_zonder_lat_lon(tmp_path):
     # Simuleert een woning die al in state.json stond vóórdat coördinaten werden
     # opgeslagen (lat/lon nog None) - moet alsnog gegeocodeerd worden, ook al

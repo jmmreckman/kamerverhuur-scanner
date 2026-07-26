@@ -25,7 +25,12 @@ Elke ochtend om 09:00:
      waar opkoopbescherming geldt (bron: rotterdam.nl/opkoopbescherming) én haalt voor
      die huizen automatisch en **gratis** de WOZ-waarde op bij de officiële
      WOZ-waardeloket-API van het Kadaster (geen account, geen kosten). Dit is dus
-     volledig automatisch, geen dagelijkse handmatige lijst.
+     volledig automatisch, geen dagelijkse handmatige lijst. Lukt de WOZ-opvraging een
+     keer niet (tijdelijke storing, of nog geen gepubliceerde waarde), dan blijft het
+     huis "actief" staan met een rode "WOZ-waarde handmatig checken"-melding (zichtbaar
+     in de kaart-popup) — bij elke volgende run wordt dat automatisch opnieuw
+     geprobeerd, en valt het huis alsnog af zodra de WOZ-waarde bekend wordt en onder de
+     grens blijkt te liggen.
 4. Haalt ook de **officiële oppervlakte** van het BAG (Basisregistratie Adressen en
    Gebouwen) op, maar gebruikt die alleen als **fallback/ter info**: de m² uit de
    advertentietekst zelf is leidend voor het aantal mogelijke kamers, de
