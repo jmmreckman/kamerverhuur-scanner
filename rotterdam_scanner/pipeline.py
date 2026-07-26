@@ -300,6 +300,14 @@ def _backvul_opkoopbescherming(state: StateStore, config: Config, today_iso: str
         )
         item.woz_check_nodig = False
         item.woz_check_url = None
+        # De opmerking van dag 1 legde uit waarom de WOZ-check toen nog niet lukte - nu
+        # die alsnog gelukt is, klopt die tekst niet meer (alleen als het de enige
+        # opmerking was; een gecombineerde opmerking met bv. een BAG-storing laten we
+        # met rust, dat is nog steeds relevant).
+        if item.opmerking in (
+            "Geen publieke WOZ-waarde gevonden voor dit adres; handmatig checken.",
+        ) or (item.opmerking or "").startswith("WOZ-waarde kon niet automatisch opgehaald worden"):
+            item.opmerking = None
         if opkoop.valt_af:
             item.status = "afgevallen"
             item.afvalreden = opkoop.toelichting

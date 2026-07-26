@@ -658,6 +658,7 @@ def test_run_backvult_opkoopbescherming_blijft_actief_bij_hoge_woz(tmp_path):
             lon=4.4655,
             woz_check_nodig=True,
             woz_check_url="https://www.wozwaardeloket.nl/",
+            opmerking="Geen publieke WOZ-waarde gevonden voor dit adres; handmatig checken.",
         )
     )
     state.save()
@@ -674,6 +675,10 @@ def test_run_backvult_opkoopbescherming_blijft_actief_bij_hoge_woz(tmp_path):
     bijgewerkt = herladen.get("3082DD-19B")
     assert bijgewerkt.status == "actief"
     assert bijgewerkt.woz_check_nodig is False
+    # De inmiddels achterhaalde "kon niet gevonden worden"-opmerking van dag 1 moet
+    # weg zijn nu de WOZ-waarde alsnog is opgehaald - anders blijft de kaart-popup een
+    # verouderde, verwarrende melding tonen.
+    assert bijgewerkt.opmerking is None
 
 
 def test_run_backvult_coordinaten_voor_bestaande_woningen_zonder_lat_lon(tmp_path):
