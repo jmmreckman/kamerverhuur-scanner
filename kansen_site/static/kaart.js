@@ -1,4 +1,4 @@
-const kaart = L.map("kaart").setView([51.9225, 4.47917], 12);
+const kaart = L.map("kaart", { zoomControl: false }).setView([51.9225, 4.47917], 12);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "&copy; OpenStreetMap-medewerkers",
   maxZoom: 19,
