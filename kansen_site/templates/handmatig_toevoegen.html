@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Handmatig toevoegen - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Handmatig toevoegen</h1>
+    <div class="topbar-acties">
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <main class="content">
+    {% with berichten = get_flashed_messages() %}
+      {% if berichten %}
+        {% for bericht in berichten %}<p class="flash-bericht">{{ bericht }}</p>{% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <p class="muted">
+      Plak hieronder adressen om achterstanden in te halen of gebieden te dekken die de
+      dagelijkse mail-alert mist. Twee formaten worden automatisch herkend:
+    </p>
+    <ul class="muted" style="padding-left: 1.2em;">
+      <li>Eén adres per regel: <code>POSTCODE HUISNUMMER[TOEVOEGING] [funda-link]</code>,
+        bijv. <code>3073KJ 47A</code> of <code>3078CN 44 https://www.funda.nl/detail/koop/...</code></li>
+      <li>Een ruwe kopieer-plak van een hele Funda-resultatenpagina (selecteer de lijst in je
+        browser, kopieer, plak hier) - adres, postcode/plaats, prijs, "Sinds X weken" etc.
+        worden er automatisch uitgehaald.</li>
+    </ul>
+    <p class="muted">
+      Elk adres doorloopt dezelfde checks als de dagelijkse scan (geocoding, kamerverhuurregels,
+      opkoopbescherming, WOZ) en blijft daarna gewoon meelopen. Bij veel adressen tegelijk kan
+      dit een minuut of wat duren.
+    </p>
+
+    <form method="post" action="{{ url_for('handmatig_toevoegen') }}">
+      <textarea name="tekst" rows="12" style="width: 100%; font-family: monospace; padding: 0.6rem; border: 1px solid var(--rand); border-radius: 6px;" placeholder="3073KJ 47A&#10;3078CN 44 https://www.funda.nl/detail/koop/rotterdam/huis-vredehagen-44/12345678/" required></textarea>
+      <label class="muted" style="display: flex; align-items: center; gap: 0.4rem; margin-top: 0.6rem;">
+        <input type="checkbox" name="forceer_herprocessen">
+        Ook al bekende adressen opnieuw door alle checks laten lopen (bv. na een bugfix)
+      </label>
+      <button type="submit" style="margin-top: 0.8rem;">Verwerken</button>
+    </form>
+
+    {% if resultaat %}
+    <h2>Resultaat</h2>
+    <p>
+      {{ resultaat.aangeleverd }} adres(sen) aangeleverd: {{ resultaat.nieuw_actief }} nieuwe kans(en),
+      {{ resultaat.nieuw_afgevallen }} afgevallen, {{ resultaat.nieuw_onbekend_adres }} onbekend adres.
+    </p>
+    {% if resultaat.fouten %}
+    <p class="muted">Waarschuwingen:</p>
+    <ul class="muted">
+      {% for fout in resultaat.fouten %}<li>{{ fout }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

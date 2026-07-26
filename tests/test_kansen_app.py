@@ -118,6 +118,7 @@ def test_api_kansen_bevat_de_belangrijkste_velden(app_client, tmp_path):
     assert item["eigen_inleg_pp"] == 25_000.0
     assert item["lat"] == 51.92
     assert item["lon"] == 4.45
+    assert item["eerst_gezien"] == "2026-07-01"
 
 
 def test_ververs_zonder_login_wordt_omgeleid(app_client):
@@ -144,358 +145,6 @@ def test_ververs_roept_pipeline_run_aan_en_geeft_samenvatting(app_client, monkey
     assert data["nieuw_afgevallen"] == 2
     assert data["fouten"] == ["een waarschuwing"]
     assert len(aangeroepen) == 1
-
-
-def test_ververs_slaat_apify_over_als_niet_ingesteld(app_client, monkeypatch):
-    import kansen_site.app as appmodule
-
-    monkeypatch.setattr(appmodule.pipeline, "run", lambda config: RunResult())
-    apify_mock_aangeroepen = []
-    monkeypatch.setattr(
-        appmodule.pipeline, "run_apify",
-        lambda config: apify_mock_aangeroepen.append(config) or RunResult(),
-    )
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    app_client.post("/ververs")
-    assert apify_mock_aangeroepen == []
-
-
-def test_ververs_roept_ook_apify_aan_indien_ingesteld_en_telt_beide_resultaten_op(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-
-    config = _config(
-        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
-    )
-    monkeypatch.setattr(
-        appmodule.pipeline, "run",
-        lambda config: RunResult(nieuw_actief=[object()], fouten=["mail-waarschuwing"]),
-    )
-    monkeypatch.setattr(
-        appmodule.pipeline, "run_apify",
-        lambda config: RunResult(nieuw_actief=[object(), object()], nieuw_afgevallen=[object()], fouten=["apify-waarschuwing"]),
-    )
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.post("/ververs")
-    data = resp.get_json()
-    assert data["nieuw_actief"] == 3  # 1 (mail) + 2 (apify)
-    assert data["nieuw_afgevallen"] == 1
-    assert data["fouten"] == ["mail-waarschuwing", "apify-waarschuwing"]
-
-
-# --- /zoekopdrachten (beheer van Apify-zoek-URL's) ---
-
-
-def test_zoekopdrachten_zonder_login_wordt_omgeleid(app_client):
-    resp = app_client.get("/zoekopdrachten")
-    assert resp.status_code == 302
-
-
-def test_zoekopdrachten_toont_lege_lijst(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.get("/zoekopdrachten")
-    assert resp.status_code == 200
-    assert "nog geen zoekopdrachten" in resp.get_data(as_text=True).lower()
-
-
-def test_zoekopdracht_toevoegen_slaat_op(app_client, tmp_path):
-    from rotterdam_scanner import zoek_urls
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = app_client.post(
-        "/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam"},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    tekst = resp.get_data(as_text=True)
-    assert "https://www.funda.nl/zoeken/koop?selected_area=rotterdam" in tekst
-    assert "test-knop" in tekst
-    assert zoek_urls.laad(_config(tmp_path)) == ["https://www.funda.nl/zoeken/koop?selected_area=rotterdam"]
-
-
-def test_zoekopdracht_toevoegen_met_label_slaat_label_op(app_client, tmp_path):
-    from rotterdam_scanner import zoek_urls
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = app_client.post(
-        "/zoekopdrachten/toevoegen",
-        data={"url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam", "label": "RDAM 100 m2+ <400k"},
-        follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    assert "RDAM 100 m2+ &lt;400k" in resp.get_data(as_text=True)
-    assert zoek_urls.laad_met_labels(_config(tmp_path)) == [
-        {"label": "RDAM 100 m2+ <400k", "url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam"}
-    ]
-
-
-def test_zoekopdracht_toevoegen_wijst_niet_funda_url_af(app_client, tmp_path):
-    from rotterdam_scanner import zoek_urls
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = app_client.post(
-        "/zoekopdrachten/toevoegen", data={"url": "https://www.evilsite.com/rotterdam"}, follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    assert "lijkt geen funda-zoek-url" in resp.get_data(as_text=True).lower()
-    assert zoek_urls.laad(_config(tmp_path)) == []
-
-
-def test_zoekopdracht_verwijderen(app_client, tmp_path):
-    from rotterdam_scanner import zoek_urls
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    app_client.post("/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/koop/rotterdam/"})
-
-    resp = app_client.post(
-        "/zoekopdrachten/verwijderen", data={"url": "https://www.funda.nl/koop/rotterdam/"}, follow_redirects=True,
-    )
-    assert resp.status_code == 200
-    assert "https://www.funda.nl/koop/rotterdam/" not in resp.get_data(as_text=True)
-    assert zoek_urls.laad(_config(tmp_path)) == []
-
-
-def test_zoekopdrachten_zonder_login_kan_niet_toevoegen(app_client):
-    resp = app_client.post("/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/koop/rotterdam/"})
-    assert resp.status_code == 302
-
-
-# --- Totale sweep (handmatig getriggerde volledige Apify-scan) ---
-
-
-def test_sweep_zonder_login_wordt_omgeleid(app_client):
-    resp = app_client.post("/sweep")
-    assert resp.status_code == 302
-
-
-def test_sweep_zonder_apify_geeft_foutmelding(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.post("/sweep")
-    assert resp.status_code == 400
-    assert "niet ingesteld" in resp.get_json()["fout"].lower()
-
-
-class _SyncThread:
-    """Vervangt threading.Thread in tests: voert de target meteen synchroon uit
-    i.p.v. echt in een aparte thread, zodat de achtergrondtaak van /sweep
-    deterministisch getest kan worden zonder te moeten wachten/pollen."""
-
-    def __init__(self, target=None, daemon=None):
-        self._target = target
-
-    def start(self):
-        self._target()
-
-
-def test_sweep_start_achtergrondtaak_en_geeft_meteen_antwoord(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(
-        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
-    )
-    aangeroepen = []
-
-    def _fake_run_apify_volledig(config):
-        aangeroepen.append(config)
-        return RunResult(nieuw_actief=[object()], nieuw_afgevallen=[object(), object()], fouten=["een waarschuwing"])
-
-    monkeypatch.setattr(appmodule.pipeline, "run_apify_volledig", _fake_run_apify_volledig)
-    monkeypatch.setattr(appmodule.threading, "Thread", _SyncThread)
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.post("/sweep")
-    assert resp.status_code == 200
-    assert resp.get_json() == {"gestart": True}
-    assert len(aangeroepen) == 1
-
-    status = sweep_status.laad(config)
-    assert status.status == "klaar"
-    assert status.nieuw_actief == 1
-    assert status.nieuw_afgevallen == 2
-    assert status.fouten == ["een waarschuwing"]
-
-
-def test_sweep_weigert_te_starten_als_er_al_een_sweep_bezig_is(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(
-        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
-    )
-    sweep_status.zet_bezig(config)
-    aangeroepen = []
-    monkeypatch.setattr(
-        appmodule.pipeline, "run_apify_volledig",
-        lambda config: aangeroepen.append(config) or RunResult(),
-    )
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.post("/sweep")
-    assert resp.status_code == 409
-    assert aangeroepen == []
-
-
-def test_sweep_zet_status_op_mislukt_bij_onverwachte_fout(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(
-        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
-    )
-
-    def _kapot(config):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(appmodule.pipeline, "run_apify_volledig", _kapot)
-    monkeypatch.setattr(appmodule.threading, "Thread", _SyncThread)
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    client.post("/sweep")
-    status = sweep_status.laad(config)
-    assert status.status == "mislukt"
-    assert "boom" in status.fouten[0]
-
-
-# --- /sweep/status ---
-
-
-def test_sweep_status_zonder_login_wordt_omgeleid(app_client):
-    resp = app_client.get("/sweep/status")
-    assert resp.status_code == 302
-
-
-def test_sweep_status_geeft_idle_zonder_eerdere_sweep(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.get("/sweep/status")
-    assert resp.status_code == 200
-    assert resp.get_json()["status"] == "idle"
-
-
-def test_sweep_status_geeft_bezig_status(tmp_path):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(tmp_path)
-    sweep_status.zet_bezig(config)
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.get("/sweep/status")
-    assert resp.get_json()["status"] == "bezig"
-
-
-# --- /zoekopdrachten/testen (één losse zoekopdracht ophalen) ---
-
-
-def test_zoekopdrachten_testen_zonder_login_wordt_omgeleid(app_client):
-    resp = app_client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/koop/pernis/"})
-    assert resp.status_code == 302
-
-
-def test_zoekopdrachten_testen_zonder_url_geeft_foutmelding(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.post("/zoekopdrachten/testen", data={"url": ""})
-    assert resp.status_code == 400
-    assert "onbekende" in resp.get_json()["fout"].lower()
-
-
-def test_zoekopdrachten_testen_zonder_apify_geeft_foutmelding(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/koop/pernis/"})
-    assert resp.status_code == 400
-    assert "niet ingesteld" in resp.get_json()["fout"].lower()
-
-
-def test_zoekopdrachten_testen_roept_run_apify_met_alleen_die_url_aan(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(tmp_path, apify_api_token="apify-token")
-    aangeroepen = []
-
-    def _fake_run_apify(config, search_urls=None, max_items=None):
-        aangeroepen.append((search_urls, max_items))
-        return RunResult(nieuw_actief=[object()], fouten=["een waarschuwing"])
-
-    monkeypatch.setattr(appmodule.pipeline, "run_apify", _fake_run_apify)
-    monkeypatch.setattr(appmodule.threading, "Thread", _SyncThread)
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/koop/pernis/"})
-    assert resp.status_code == 200
-    assert resp.get_json() == {"gestart": True}
-    assert aangeroepen == [(["https://www.funda.nl/koop/pernis/"], config.apify_max_items_dagelijks)]
-
-    status = sweep_status.laad(config)
-    assert status.status == "klaar"
-    assert status.url == "https://www.funda.nl/koop/pernis/"
-    assert status.nieuw_actief == 1
-    assert status.fouten == ["een waarschuwing"]
-
-
-def test_zoekopdrachten_testen_weigert_als_er_al_een_taak_bezig_is(tmp_path, monkeypatch):
-    import kansen_site.app as appmodule
-    from rotterdam_scanner import sweep_status
-
-    config = _config(tmp_path, apify_api_token="apify-token")
-    sweep_status.zet_bezig(config)
-    aangeroepen = []
-    monkeypatch.setattr(
-        appmodule.pipeline, "run_apify",
-        lambda config, search_urls=None, max_items=None: aangeroepen.append(search_urls) or RunResult(),
-    )
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/koop/pernis/"})
-    assert resp.status_code == 409
-    assert aangeroepen == []
-
-
-def test_kaart_geeft_sweep_kosteninschatting_mee(tmp_path):
-    import kansen_site.app as appmodule
-
-    config = _config(
-        tmp_path, apify_api_token="apify-token", apify_search_urls=["https://www.funda.nl/koop/rotterdam/"],
-        apify_max_items_wekelijks=2000,
-    )
-    app = appmodule.create_app(config)
-    app.testing = True
-    client = app.test_client()
-    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-
-    resp = client.get("/")
-    tekst = resp.get_data(as_text=True)
-    assert "2000" in tekst
-    assert "9.98" in tekst
-
-
-def test_kaart_zonder_apify_toont_sweep_knop_uitgeschakeld(app_client):
-    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.get("/")
-    tekst = resp.get_data(as_text=True)
-    assert 'id="sweep-knop"' in tekst
-    assert "disabled" in tekst
 
 
 # --- Kansen handmatig verwijderen + terugplaatsen ---
@@ -596,3 +245,74 @@ def test_verwijderd_toont_alleen_handmatig_verwijderde_woningen(app_client, tmp_
     assert "Zelfbewoningsplicht" in tekst
     assert "Automatisch afgevallen straat 2" not in tekst
     assert "Nog actieve straat 3" not in tekst
+
+
+# --- /handmatig-toevoegen ---
+
+
+def test_handmatig_toevoegen_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/handmatig-toevoegen")
+    assert resp.status_code == 302
+
+
+def test_handmatig_toevoegen_toont_formulier(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/handmatig-toevoegen")
+    assert resp.status_code == 200
+    assert "Verwerken" in resp.get_data(as_text=True)
+
+
+def test_handmatig_toevoegen_zonder_leesbare_adressen_toont_foutmelding(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/handmatig-toevoegen", data={"tekst": "dit is geen adres"}, follow_redirects=True)
+    assert resp.status_code == 200
+    assert "geen enkel adres" in resp.get_data(as_text=True).lower()
+
+
+def test_handmatig_toevoegen_verwerkt_adresregel_en_toont_resultaat(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+
+    config = _config(tmp_path)
+    aangeroepen = []
+
+    def _fake_run_handmatig(config, listings, today=None, forceer_herprocessen=False):
+        aangeroepen.append((listings, forceer_herprocessen))
+        return RunResult(nieuw_actief=[object()], fouten=["een waarschuwing"])
+
+    monkeypatch.setattr(appmodule.pipeline, "run_handmatig", _fake_run_handmatig)
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A"})
+    assert resp.status_code == 200
+    tekst = resp.get_data(as_text=True)
+    assert "1 nieuwe kans" in tekst
+    assert "een waarschuwing" in tekst
+
+    assert len(aangeroepen) == 1
+    listings, forceer_herprocessen = aangeroepen[0]
+    assert len(listings) == 1
+    assert listings[0].object_id == "3073KJ-47A"
+    assert forceer_herprocessen is False
+
+
+def test_handmatig_toevoegen_forceer_herprocessen_vinkje(tmp_path, monkeypatch):
+    import kansen_site.app as appmodule
+
+    config = _config(tmp_path)
+    aangeroepen = []
+    monkeypatch.setattr(
+        appmodule.pipeline, "run_handmatig",
+        lambda config, listings, today=None, forceer_herprocessen=False: (
+            aangeroepen.append(forceer_herprocessen) or RunResult()
+        ),
+    )
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A", "forceer_herprocessen": "on"})
+    assert aangeroepen == [True]

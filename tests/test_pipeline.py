@@ -555,7 +555,7 @@ def test_run_backvult_aantal_kamers_ook_zonder_bekende_prijs(tmp_path):
 def test_run_backvult_coordinaten_voor_bestaande_woningen_zonder_lat_lon(tmp_path):
     # Simuleert een woning die al in state.json stond vóórdat coördinaten werden
     # opgeslagen (lat/lon nog None) - moet alsnog gegeocodeerd worden, ook al
-    # verschijnt hij vandaag niet in de Funda-mail/Apify-pull, anders zou hij nooit
+    # verschijnt hij vandaag niet opnieuw in de Funda-mail, anders zou hij nooit
     # op de kaart (kansen.steenhub.nl) verschijnen.
     from rotterdam_scanner.state import ListingState, StateStore
 
@@ -727,153 +727,109 @@ def test_run_handmatig_forceer_herprocessen_laat_handmatig_verwijderde_woning_me
     assert result.alle_actief == []
 
 
-# --- run_apify / run_apify_volledig ---
+
+# --- run_beschikbaarheidscheck ---
 
 
-def test_run_apify_verwerkt_listings_via_dezelfde_checks(tmp_path):
-    config = _config(tmp_path)
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[_listing()]
-    ) as fetch_mock, p1, p2, p3, p4, p5:
-        result = pipeline.run_apify(config, today=date(2026, 7, 1))
-
-    assert len(result.alle_actief) == 1
-    fetch_mock.assert_called_once_with(config, [], config.apify_max_items_dagelijks)
-
-
-def test_run_apify_gebruikt_eigen_max_items_als_gegeven(tmp_path):
-    config = _config(tmp_path)
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
-    ) as fetch_mock, p1, p2, p3, p4, p5:
-        pipeline.run_apify(config, today=date(2026, 7, 1), max_items=42)
-    fetch_mock.assert_called_once_with(config, [], 42)
-
-
-def test_run_apify_gebruikt_zoek_urls_module_niet_alleen_config(tmp_path):
-    from rotterdam_scanner import zoek_urls
+def test_run_beschikbaarheidscheck_verwijdert_niet_meer_beschikbare_woning(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
 
     config = _config(tmp_path)
-    zoek_urls.voeg_toe(config, "https://www.funda.nl/koop/hoek-van-holland/")
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
-    ) as fetch_mock, p1, p2, p3, p4, p5:
-        pipeline.run_apify(config, today=date(2026, 7, 1))
-    fetch_mock.assert_called_once_with(
-        config, ["https://www.funda.nl/koop/hoek-van-holland/"], config.apify_max_items_dagelijks
-    )
+    state = StateStore(config.state_path)
+    state.upsert(ListingState(
+        object_id="3000AA-1", url="https://www.funda.nl/detail/koop/rotterdam/huis-1/",
+        weergavenaam="Teststraat 1", eerst_gezien="2026-06-01", laatst_gezien="2026-06-30",
+        status="actief",
+    ))
+    state.save()
 
+    with patch("rotterdam_scanner.pipeline.controleer_beschikbaar", return_value=False):
+        result = pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
 
-def test_run_apify_met_expliciete_search_urls_negeert_zoek_urls_module(tmp_path):
-    from rotterdam_scanner import zoek_urls
-
-    config = _config(tmp_path)
-    zoek_urls.voeg_toe(config, "https://www.funda.nl/koop/hoek-van-holland/")
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]
-    ) as fetch_mock, p1, p2, p3, p4, p5:
-        pipeline.run_apify(
-            config, today=date(2026, 7, 1), search_urls=["https://www.funda.nl/koop/pernis/"],
-        )
-    fetch_mock.assert_called_once_with(
-        config, ["https://www.funda.nl/koop/pernis/"], config.apify_max_items_dagelijks
-    )
-
-
-def test_run_apify_meldt_fout_zonder_te_crashen(tmp_path):
-    from rotterdam_scanner.apify_scraper import ApifyError
-
-    config = _config(tmp_path)
-    with patch("rotterdam_scanner.apify_scraper.fetch_apify_listings", side_effect=ApifyError("geen token")):
-        result = pipeline.run_apify(config, today=date(2026, 7, 1))
-    assert result.fouten
-    assert "geen token" in result.fouten[0]
+    bijgewerkt = StateStore(config.state_path).get("3000AA-1")
+    assert bijgewerkt.status == "afgevallen"
+    assert "verkocht" in bijgewerkt.afvalreden.lower()
+    assert bijgewerkt.laatst_gezien == "2026-07-01"
+    assert len(result.nieuw_afgevallen) == 1
     assert result.alle_actief == []
 
 
-def test_run_apify_volledig_verwerkt_listings(tmp_path):
-    config = _config(tmp_path)
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[_listing()]
-    ) as fetch_mock, p1, p2, p3, p4, p5:
-        result = pipeline.run_apify_volledig(config, today=date(2026, 7, 1))
-
-    assert len(result.alle_actief) == 1
-    fetch_mock.assert_called_once_with(config, [], config.apify_max_items_wekelijks)
-
-
-def test_run_apify_volledig_bij_mislukte_aanroep_doet_geen_verkocht_detectie(tmp_path):
-    from rotterdam_scanner.apify_scraper import ApifyError
+def test_run_beschikbaarheidscheck_laat_beschikbare_woning_actief(tmp_path):
     from rotterdam_scanner.state import ListingState, StateStore
 
     config = _config(tmp_path)
     state = StateStore(config.state_path)
     state.upsert(ListingState(
-        object_id="bestaand", url="https://example.com/bestaand", weergavenaam="Bestaandstraat 1",
-        eerst_gezien="2026-06-01", laatst_gezien="2026-06-30", status="actief",
+        object_id="3000AA-1", url="https://www.funda.nl/detail/koop/rotterdam/huis-1/",
+        weergavenaam="Teststraat 1", eerst_gezien="2026-06-01", laatst_gezien="2026-06-30",
+        status="actief",
     ))
     state.save()
 
-    with patch("rotterdam_scanner.apify_scraper.fetch_apify_listings", side_effect=ApifyError("timeout")):
-        result = pipeline.run_apify_volledig(config, today=date(2026, 7, 1))
-
-    assert result.fouten
-    # de bestaande woning is NIET aangeraakt (geen enkele verkocht-detectie op basis
-    # van een mislukte/lege pull, dat zou anders alles ten onrechte laten afvallen)
-    bijgewerkt = StateStore(config.state_path).get("bestaand")
-    assert bijgewerkt.status == "actief"
-    assert bijgewerkt.weken_gemist_in_volledige_scan == 0
-
-
-def test_run_apify_volledig_markeert_pas_na_2x_missen_als_afgevallen(tmp_path):
-    from rotterdam_scanner.state import ListingState, StateStore
-
-    config = _config(tmp_path)
-    state = StateStore(config.state_path)
-    state.upsert(ListingState(
-        object_id="verdwenen-huis", url="https://example.com/verdwenen-huis", weergavenaam="Verdwenenstraat 1",
-        eerst_gezien="2026-06-01", laatst_gezien="2026-06-30", status="actief",
-    ))
-    state.save()
-
-    with patch("rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]):
-        eerste = pipeline.run_apify_volledig(config, today=date(2026, 7, 1))
-    tussentijds = StateStore(config.state_path).get("verdwenen-huis")
-    assert tussentijds.status == "actief"
-    assert tussentijds.weken_gemist_in_volledige_scan == 1
-    assert eerste.nieuw_afgevallen == []
-
-    with patch("rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[]):
-        tweede = pipeline.run_apify_volledig(config, today=date(2026, 7, 8))
-    definitief = StateStore(config.state_path).get("verdwenen-huis")
-    assert definitief.status == "afgevallen"
-    assert "vermoedelijk verkocht" in definitief.afvalreden.lower()
-    assert len(tweede.nieuw_afgevallen) == 1
-
-
-def test_run_apify_volledig_reset_teller_als_woning_weer_gevonden_wordt(tmp_path):
-    from rotterdam_scanner.state import ListingState, StateStore
-
-    config = _config(tmp_path)
-    state = StateStore(config.state_path)
-    state.upsert(ListingState(
-        object_id="3000AA-1", url="https://example.com/3000AA-1", weergavenaam="Teststraat 1",
-        eerst_gezien="2026-06-01", laatst_gezien="2026-06-30", status="actief",
-        weken_gemist_in_volledige_scan=1,
-    ))
-    state.save()
-    p1, p2, p3, p4, p5 = _patch_geo_checks()
-
-    with patch(
-        "rotterdam_scanner.apify_scraper.fetch_apify_listings", return_value=[_listing()]
-    ), p1, p2, p3, p4, p5:
-        pipeline.run_apify_volledig(config, today=date(2026, 7, 8))
+    with patch("rotterdam_scanner.pipeline.controleer_beschikbaar", return_value=True):
+        result = pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
 
     bijgewerkt = StateStore(config.state_path).get("3000AA-1")
-    assert bijgewerkt.weken_gemist_in_volledige_scan == 0
     assert bijgewerkt.status == "actief"
+    assert bijgewerkt.laatst_gezien == "2026-07-01"
+    assert result.nieuw_afgevallen == []
+    assert len(result.alle_actief) == 1
+
+
+def test_run_beschikbaarheidscheck_laat_onduidelijk_resultaat_met_rust(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(ListingState(
+        object_id="3000AA-1", url="https://www.funda.nl/detail/koop/rotterdam/huis-1/",
+        weergavenaam="Teststraat 1", eerst_gezien="2026-06-01", laatst_gezien="2026-06-30",
+        status="actief",
+    ))
+    state.save()
+
+    with patch("rotterdam_scanner.pipeline.controleer_beschikbaar", return_value=None):
+        result = pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
+
+    bijgewerkt = StateStore(config.state_path).get("3000AA-1")
+    assert bijgewerkt.status == "actief"
+    # niet aangeraakt - een onduidelijk resultaat (bv. blokkade) mag laatst_gezien
+    # niet ophogen, anders zou een woning die écht van Funda af is nooit via de
+    # normale 30-dagen-expiry verlopen.
+    assert bijgewerkt.laatst_gezien == "2026-06-30"
+    assert result.nieuw_afgevallen == []
+    assert len(result.alle_actief) == 1
+
+
+def test_run_beschikbaarheidscheck_negeert_al_afgevallen_woningen(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(ListingState(
+        object_id="3000AA-1", url="https://www.funda.nl/detail/koop/rotterdam/huis-1/",
+        weergavenaam="Teststraat 1", eerst_gezien="2026-06-01", laatst_gezien="2026-06-30",
+        status="afgevallen", afvalreden="Ligt in een nul-quotumgebied voor kamerverhuur.",
+    ))
+    state.save()
+
+    with patch("rotterdam_scanner.pipeline.controleer_beschikbaar") as mock_check:
+        pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
+    mock_check.assert_not_called()
+
+
+def test_run_beschikbaarheidscheck_roept_check_aan_met_de_opgeslagen_url(tmp_path):
+    from rotterdam_scanner.state import ListingState, StateStore
+
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    state.upsert(ListingState(
+        object_id="3000AA-1", url="https://www.funda.nl/detail/koop/rotterdam/huis-1/",
+        weergavenaam="Teststraat 1", eerst_gezien="2026-06-01", laatst_gezien="2026-06-30",
+        status="actief",
+    ))
+    state.save()
+
+    with patch("rotterdam_scanner.pipeline.controleer_beschikbaar", return_value=True) as mock_check:
+        pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
+    mock_check.assert_called_once_with("https://www.funda.nl/detail/koop/rotterdam/huis-1/")

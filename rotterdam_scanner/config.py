@@ -34,24 +34,6 @@ class Config:
     # open komt te staan.
     kansen_app_users: dict[str, str] = field(default_factory=dict)
     kansen_app_secret_key: str = ""
-    # Apify (https://apify.com) haalt het volledige actuele Funda-aanbod op voor
-    # de zoek-URL's hieronder - los van de mail-alert, die alleen NIEUWE
-    # woningen sinds gisteren meldt. Leeg = de Apify-scans slaan zichzelf over
-    # (zie apify_scraper.is_ingesteld()) zonder de rest van de scanner te
-    # breken - precies zoals RCLONE_REMOTE/KANSEN_APP_* bij de andere
-    # optionele stukken van dit systeem.
-    apify_api_token: str = ""
-    apify_actor_id: str = "easyapi/funda-nl-scraper"
-    # Eigen Funda-zoek-URL's (Koop, Huis, Rotterdam + randgemeentes) - zelf op
-    # funda.nl samengesteld en de URL uit de adresbalk gekopieerd, net als bij
-    # de bestaande e-mail-zoekopdracht. Pipe-gescheiden (|) omdat de URL's zelf
-    # komma's kunnen bevatten.
-    apify_search_urls: list[str] = field(default_factory=list)
-    # Klein/vaak (dagelijks, alleen de nieuwste woningen) vs. groot/zeldzaam
-    # (wekelijks, het hele aanbod - ook de basis voor de verkocht-detectie in
-    # pipeline.run_apify_volledig()). Zie README voor de kostenafweging.
-    apify_max_items_dagelijks: int = 150
-    apify_max_items_wekelijks: int = 2000
 
     @property
     def imap_host(self) -> str:
@@ -99,11 +81,6 @@ def load_config(env_path: Path | None = None) -> Config:
         smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
         kansen_app_users=_parse_kansen_app_users(os.environ.get("KANSEN_APP_USERS", "")),
         kansen_app_secret_key=os.environ.get("KANSEN_APP_SECRET_KEY", ""),
-        apify_api_token=os.environ.get("APIFY_API_TOKEN", "").strip(),
-        apify_actor_id=os.environ.get("APIFY_ACTOR_ID", "easyapi/funda-nl-scraper").strip(),
-        apify_search_urls=[url.strip() for url in os.environ.get("APIFY_SEARCH_URLS", "").split("|") if url.strip()],
-        apify_max_items_dagelijks=int(os.environ.get("APIFY_MAX_ITEMS_DAGELIJKS", "150")),
-        apify_max_items_wekelijks=int(os.environ.get("APIFY_MAX_ITEMS_WEKELIJKS", "2000")),
     )
 
 

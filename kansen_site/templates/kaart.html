@@ -14,13 +14,8 @@
     <div class="topbar-acties">
       <span id="status-tekst" class="muted"></span>
       <button id="ververs-knop" type="button">Ververs nu</button>
-      <button id="sweep-knop" type="button" class="knop-gevaar"
-              data-max-items="{{ sweep_max_items }}" data-max-kosten="{{ sweep_max_kosten_dollar }}"
-              {% if not apify_ingesteld %}disabled title="Apify is nog niet ingesteld (zie Zoekopdrachten)"{% endif %}>
-        Totale sweep
-      </button>
       <button id="zijbalk-knop" type="button" class="link-knop">Toon lijst</button>
-      <a href="{{ url_for('zoekopdrachten') }}" class="link-knop">Zoekopdrachten</a>
+      <a href="{{ url_for('handmatig_toevoegen') }}" class="link-knop">Toevoegen</a>
       <a href="{{ url_for('verwijderd') }}" class="link-knop">Verwijderd</a>
       <span class="muted">{{ gebruiker }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>

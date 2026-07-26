@@ -31,10 +31,11 @@ class ListingState:
     aantal_kamers_mogelijk: int | None = None
     winst_pm_pp: float | None = None
     eigen_inleg_pp: float | None = None
-    # Alleen bijgehouden door pipeline.run_apify_volledig() (de wekelijkse
-    # volledige Apify-scan): hoeveel keer op rij een "actief" woning daar niet
-    # meer in voorkwam - bij 2 wordt hij automatisch op "afgevallen" gezet
-    # (vermoedelijk verkocht), i.p.v. te wachten op de 30-dagen-expiry.
+    # Legacy: hoorde bij de inmiddels verwijderde Apify-integratie
+    # (pipeline.run_apify_volledig(), zie git-geschiedenis) - niet meer
+    # geschreven of gelezen. Blijft hier staan zodat bestaande state.json-
+    # bestanden met dit veld gewoon blijven laden (ListingState(**item) zou
+    # anders crashen op een onbekend veld).
     weken_gemist_in_volledige_scan: int = 0
     # Gezet zodra een gebruiker deze woning zelf verwijderd heeft (via de
     # "Verwijderen"-link in het dagrapport, of het kruisje op

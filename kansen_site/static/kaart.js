@@ -13,7 +13,6 @@ const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
 const verversKnop = document.getElementById("ververs-knop");
-const sweepKnop = document.getElementById("sweep-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
 const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
@@ -24,6 +23,14 @@ const markerPerId = new Map();
 function formatEuro(bedrag) {
   if (bedrag === null || bedrag === undefined) return "onbekend";
   return "€" + Math.round(bedrag).toLocaleString("nl-NL");
+}
+
+function dagenOpFunda(eerstGezien) {
+  if (!eerstGezien) return null;
+  const start = new Date(eerstGezien);
+  if (isNaN(start.getTime())) return null;
+  const dagen = Math.floor((Date.now() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return dagen >= 0 ? dagen : null;
 }
 
 function vulWijkFilter(kansen) {
@@ -57,6 +64,7 @@ function gefilterd() {
 function bouwPopup(kans) {
   const div = document.createElement("div");
   div.className = "popup-inhoud";
+  const dagen = dagenOpFunda(kans.eerst_gezien);
   div.innerHTML = `
     <span class="adres">${kans.weergavenaam}</span>
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
@@ -65,6 +73,7 @@ function bouwPopup(kans) {
     ${kans.aantal_kamers_mogelijk ? kans.aantal_kamers_mogelijk + " kamer(s) mogelijk<br>" : ""}
     ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
     ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}
+    ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
     ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
     <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
   `;
@@ -91,6 +100,7 @@ function renderLijst(kansen) {
   for (const kans of gesorteerd) {
     const li = document.createElement("li");
     li.className = "lijst-item";
+    const dagen = dagenOpFunda(kans.eerst_gezien);
     li.innerHTML = `
       <button type="button" class="verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
       <span class="adres">${kans.weergavenaam}</span>
@@ -98,6 +108,7 @@ function renderLijst(kansen) {
         <span>${formatEuro(kans.prijs)}</span>
         ${kans.winst_pm_pp !== null ? `<span class="goed">+${formatEuro(kans.winst_pm_pp)} p.p./mnd</span>` : ""}
         ${kans.eigen_inleg_pp !== null ? `<span>${formatEuro(kans.eigen_inleg_pp)} inleg p.p.</span>` : ""}
+        ${dagen !== null ? `<span>${dagen} dag(en) op Funda</span>` : ""}
       </div>
     `;
     li.addEventListener("click", () => {
@@ -186,90 +197,5 @@ verversKnop.addEventListener("click", async () => {
     verversKnop.disabled = false;
   }
 });
-
-const SWEEP_POLL_INTERVAL_MS = 15000;
-
-// De sweep draait server-side in een achtergrondthread, losgekoppeld van
-// deze fetch-verbindingen - een mobiele browser onderbreekt een lang
-// openstaande fetch() al snel zodra het tabblad naar de achtergrond gaat
-// (bv. om de Apify-billing te checken), dus we pollen periodiek i.p.v. op
-// één doorlopende aanvraag te wachten. Werkt daarom ook prima als je
-// tussentijds herlaadt of het tabblad sluit en later teruggaat.
-async function pollSweepStatus() {
-  try {
-    const resp = await fetch("/sweep/status");
-    const data = await resp.json();
-
-    if (data.status === "bezig") {
-      sweepKnop.disabled = true;
-      statusTekstEl.textContent = data.url
-        ? `Bezig met het testen van een losse zoekopdracht (${data.url}) - even geduld...`
-        : "Bezig met totale sweep (kan lang duren - dit tabblad mag gerust op de achtergrond staan of dicht, de voortgang wordt gewoon bijgehouden)...";
-      setTimeout(pollSweepStatus, SWEEP_POLL_INTERVAL_MS);
-      return;
-    }
-
-    sweepKnop.disabled = false;
-    if (data.status === "klaar") {
-      statusTekstEl.textContent = `Sweep klaar: ${data.nieuw_actief} nieuwe kans(en), ${data.nieuw_afgevallen} afgevallen.`;
-      if (data.fouten && data.fouten.length) {
-        statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
-      }
-      await laadKansen();
-    } else if (data.status === "mislukt") {
-      statusTekstEl.textContent = "Totale sweep mislukt.";
-      if (data.fouten && data.fouten.length) {
-        statusTekstEl.textContent += ` ${data.fouten.join(" | ")}`;
-      }
-    }
-  } catch (err) {
-    // Netwerkfout tijdens het pollen zelf - de sweep loopt intussen gewoon
-    // door op de server, dus straks nog eens proberen i.p.v. opgeven.
-    setTimeout(pollSweepStatus, SWEEP_POLL_INTERVAL_MS);
-  }
-}
-
-sweepKnop.addEventListener("click", async () => {
-  const maxItems = sweepKnop.dataset.maxItems;
-  const maxKosten = parseFloat(sweepKnop.dataset.maxKosten);
-  const maxKostenEuro = (maxKosten * 0.92).toFixed(2);
-  const bevestigd = window.confirm(
-    `Dit haalt een VOLLEDIGE Apify-scan op (tot max. ${maxItems} resultaten in totaal, over al je zoekopdrachten samen) - dit kan geld kosten.\n\n` +
-    `Bij het maximum ca. $${maxKosten.toFixed(2)} (~€${maxKostenEuro}), meestal minder omdat er vaak minder dan het maximum aan resultaten binnenkomt.\n\n` +
-    "Wil je doorgaan met de totale sweep?"
-  );
-  if (!bevestigd) return;
-
-  sweepKnop.disabled = true;
-  statusTekstEl.textContent = "Totale sweep starten...";
-  try {
-    const resp = await fetch("/sweep", { method: "POST" });
-    const data = await resp.json();
-    if (data.fout) {
-      statusTekstEl.textContent = data.fout;
-      sweepKnop.disabled = false;
-    } else {
-      pollSweepStatus();
-    }
-  } catch (err) {
-    statusTekstEl.textContent = "Totale sweep starten is mislukt - probeer het nog eens.";
-    sweepKnop.disabled = false;
-  }
-});
-
-// Bij het laden van de pagina meteen checken of er al een sweep bezig is
-// (bv. gestart vanuit een ander tabblad, of vóór een pagina-herlaad) en dan
-// meteen verder pollen. Toont bewust niets als er geen sweep bezig is - het
-// resultaat van een oude sweep hoeft niet op elke pagina-herlaad terug te
-// komen, "Ververs nu" en de kansenlijst zelf zijn dan leidend.
-(async () => {
-  try {
-    const resp = await fetch("/sweep/status");
-    const data = await resp.json();
-    if (data.status === "bezig") pollSweepStatus();
-  } catch (err) {
-    // Best-effort - als dit mislukt, kan de gebruiker gewoon zelf op de knop klikken.
-  }
-})();
 
 laadKansen();

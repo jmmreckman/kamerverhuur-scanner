@@ -201,22 +201,15 @@ docker compose exec fundazoeker python3 herscan_afgevallen.py
 Naast het dagrapport is er een losse, interactieve kaart-website (`kansen_site/`) die
 dezelfde `state.json` uitleest en alle actieve kansen toont op een kaart (Leaflet +
 gratis OpenStreetMap-tiles) met een filterbare lijst ernaast (wijk, max. eigen inleg
-p.p., min. winst p.p./mnd, adres zoeken) en een "Ververs nu"-knop om de scan meteen te
-laten draaien in plaats van te wachten tot 09:00. Ernaast staat "Totale sweep": triggert
-handmatig de volledige wekelijkse Apify-scan (`pipeline.run_apify_volledig()`, zie
-hieronder) i.p.v. te wachten tot maandag - met een waarschuwing vooraf en een
-kosteninschatting (op basis van `APIFY_MAX_ITEMS_WEKELIJKS` x de actuele Apify-prijs per
-1000 resultaten), want dit is een dure aanroep die je niet per ongeluk wil triggeren. De
-sweep draait server-side in een achtergrondthread (status bijgehouden in
-`sweep_status.json`, zie `rotterdam_scanner/sweep_status.py`) i.p.v. te wachten tot de
-hele HTTP-aanvraag klaar is - een mobiele browser onderbreekt een minutenlang openstaande
-fetch al snel zodra je van tabblad wisselt, en de website pollt de status dus apart. Je
-kunt gerust wegnavigeren of het tabblad sluiten; bij terugkomst (of op een ander tabblad)
-zie je gewoon de actuele voortgang.
-Draait als eigen container (`kansen`)
-op dezelfde VPS als `fundazoeker`, gebouwd vanaf dezelfde branch/dezelfde `state.json`
-(gedeeld volume) — zie `deploy/docker-compose.yml` en `deploy/Caddyfile` in de
-hoofdbranch.
+p.p., min. winst p.p./mnd, adres zoeken, dagen op Funda) en een "Ververs nu"-knop om de
+mail-scan meteen te laten draaien in plaats van te wachten tot 09:00. Verder:
+- **Toevoegen** — plak een lijst adressen of een kopieer-plak van een Funda-
+  resultatenpagina om achterstanden in te halen (zie "Achterstand inhalen" hieronder).
+- **Verwijderd** — overzicht van handmatig verwijderde woningen, met terugplaats-knop.
+
+Draait als eigen container (`kansen`) op dezelfde VPS als `fundazoeker`, gebouwd vanaf
+dezelfde branch/dezelfde `state.json` (gedeeld volume) — zie `deploy/docker-compose.yml`
+en `deploy/Caddyfile` in de hoofdbranch.
 
 **Eenmalige instellingen** (in `fundazoeker.env` op de VPS, zie
 `.env.example`):
@@ -229,73 +222,29 @@ hoofdbranch.
 `steenhub.nl`) aangemaakt worden bij je domeinregistrar — dat kan dit systeem niet voor
 je doen. Daarna regelt Caddy automatisch gratis HTTPS, net als bij de andere subdomeinen.
 
-## Apify: het volledige actuele Funda-aanbod (optioneel, kost geld)
+## Beschikbaarheid-check (gratis, geen betaalde scraper)
 
-De mail-alert (hierboven) meldt alleen NIEUWE woningen sinds gisteren — huizen die al
-te koop stonden vóórdat de zoekopdracht werd ingesteld, of die de mail om wat voor
-reden dan ook mist, komen er nooit in terecht. Apify (`apify.com`) lost dat op: een
-betaalde, kant-en-klare scraper die het complete actuele Funda-aanbod ophaalt voor je
-eigen zoek-URL's (Rotterdam + randgemeentes), zonder dat dit project zelf bot-detectie
-hoeft te omzeilen (proxies, CAPTCHA's, browser-fingerprinting) — dat onderhoud ligt bij
-Apify, waar je per opgehaald resultaat voor betaalt.
+Elke dag om 08:00 (`scripts/dagelijkse_beschikbaarheid_check.py`,
+`pipeline.run_beschikbaarheidscheck()`) bezoekt de scanner voor elke "actief" woning
+gewoon de eigen, al bekende Funda-advertentiepagina rechtstreeks en kijkt aan de
+paginatitel of hij nog "te koop" staat of inmiddels "verkocht" is (zie
+`rotterdam_scanner/beschikbaarheid.py`). Zodra "verkocht" duidelijk herkend wordt, gaat
+de woning meteen op "afgevallen" i.p.v. te wachten op de 30-dagen-expiry.
 
-**Twee snelheden, om de kosten laag te houden:**
-- **Dagelijks, klein** (`scripts/dagelijkse_apify_scan.py`, 08:00): alleen de nieuwste
-  woningen (`APIFY_MAX_ITEMS_DAGELIJKS`, standaard 150) — vangt nieuwe kansen breder en
-  sneller dan de mail-alert.
-- **Wekelijks, groot** (`scripts/wekelijkse_apify_scan.py`, maandag 07:00): het hele
-  actieve aanbod (`APIFY_MAX_ITEMS_WEKELIJKS`, standaard 2000) — dient als eenmalige
-  inhaalslag voor gemiste oudere woningen, én als **automatische verkocht-detectie**:
-  een woning die 2 volledige scans op rij (dus zeker een week, meestal twee) niet meer
-  in het Funda-aanbod voorkomt, wordt automatisch op "afgevallen" gezet
-  (`weken_gemist_in_volledige_scan` in `state.json`) i.p.v. te wachten op de
-  30-dagen-expiry. Mislukt de Apify-aanroep zelf een keer, dan wordt er die run bewust
-  GEEN verkocht-detectie gedaan (zie `pipeline.run_apify_volledig()`) — anders zou een
-  tijdelijke storing alles ten onrechte als verkocht laten doorschieten.
+Dit project gebruikte hiervoor eerder een betaalde Apify-scraper om het hele Funda-
+aanbod per zoekgebied op te halen — die bleek in de praktijk onbetrouwbaar (hele
+zoekgebieden die niets opleverden, en zelfs binnen een werkend gebied ontbrak een
+aanzienlijk deel van het echte aanbod). De huidige aanpak scrapet daarom bewust geen
+zoekresultaten meer, alleen losse, al bekende advertentiepagina's — dat is een veel
+lichtere en betrouwbaardere aanvraag, en kost niets.
 
-Beide runs updaten alleen `state.json` (geen los mailrapport) — nieuwe/gewijzigde
-kansen zijn meteen zichtbaar op kansen.steenhub.nl, of meteen via de "Ververs
-nu"-knop daar (die roept, als Apify is ingesteld, ook meteen de kleine dagelijkse pull
-aan naast de mail-scan).
-
-**Kosten (juli 2026, `easyapi/funda-nl-scraper`-actor):** ~$4,99 per 1000 opgehaalde
-resultaten, geen vast maandbedrag. Bij de standaard-aantallen hierboven (150/dag +
-2000/week) kom je uit op ruwweg €35-55/maand, afhankelijk van hoeveel woningen je
-zoek-URL's daadwerkelijk opleveren — check dit soort bedragen af en toe tegen de
-actuele Apify-pricing, dat kan wijzigen.
-
-**Instellen** (in `fundazoeker.env`, zie `.env.example`):
-1. Account op apify.com aanmaken + betaalmethode koppelen (pay-as-you-go, geen
-   abonnement nodig).
-2. `APIFY_API_TOKEN` — je eigen token (Apify Console > Settings > Integrations).
-3. `APIFY_SEARCH_URLS` — optioneel, alleen de eenmalige eerste vulling (zie hieronder).
-4. Optioneel `APIFY_ACTOR_ID`/`APIFY_MAX_ITEMS_DAGELIJKS`/`APIFY_MAX_ITEMS_WEKELIJKS`
-   aanpassen.
-
-**Zoek-URL's beheren zonder in de VPS te rommelen:** ga naar "Zoekopdrachten" op
-kansen.steenhub.nl (link in de kop van de kaartpagina) om zoek-URL's toe te voegen of
-te verwijderen - zelf op funda.nl een zoekopdracht samenstellen (Koop, Huis, de
-gewenste gemeentes) en de URL uit de adresbalk plakken. Wordt opgeslagen naast
-`state.json` (`apify_zoek_urls.json`, zie `rotterdam_scanner/zoek_urls.py`) - geen
-herstart nodig, de eerstvolgende scan gebruikt meteen de bijgewerkte lijst. Zodra dit
-bestand een keer via de website gewijzigd is (ook tot een lege lijst), is het leidend
-en wordt `APIFY_SEARCH_URLS` niet meer gebruikt. Elke zoekopdracht heeft een "Testen"-
-knop om alleen díe ene URL op te halen (klein aantal resultaten via
-`apify_max_items_dagelijks`, dus goedkoop) - handig om een nieuwe of gecorrigeerde URL
-te verifiëren zonder de kosten van een volledige "Totale sweep". Let op de URL-vorm die
-je van Funda plakt: de gewone lijstweergave (`/zoeken/koop?...`) werkt, de kaartweergave
-(`/zoeken/kaart/koop?...` met `zoom`/`centerLat`/`centerLng`) leverde in de praktijk 0
-resultaten op - de Apify-actor lijkt dat formaat niet te herkennen.
-
-Leeg gelaten (standaard), dan slaan beide scripts zichzelf netjes over (geen crash,
-geen kosten) — de rest van de scanner (mail-alert, kaart-website) blijft gewoon werken.
-
-**Let op — nog niet live geverifieerd:** de veldnamen die `apify_scraper.py` uit de
-Apify-respons haalt (adres, prijs, oppervlakte, publicatiedatum) zijn gebaseerd op de
-gedocumenteerde output-schema van de actor, maar nog niet getest tegen een echte
-API-aanroep (dat kon pas met een echt account/token). Check na het instellen van
-`APIFY_API_TOKEN` de eerste paar dagen de logs (`docker compose logs apify-dagelijks`,
-zie `deploy/docker-compose.yml` in de hoofdbranch) en/of `state.json` even extra goed.
+Bewust voorzichtig: alleen een ondubbelzinnig "verkocht"-signaal verwijdert een woning.
+Bij een netwerkfout, blokkade of onherkende pagina wordt de woning gewoon met rust
+gelaten (blijft "actief" tot de volgende check het opnieuw probeert, of tot de
+30-dagen-expiry als het echt nooit meer lukt) — nooit per ongeluk verwijderen op een
+twijfelachtig resultaat. Geen proxy of browser-emulatie ingebouwd; Funda kan dit op
+termijn alsnog gaan blokkeren, in welk geval de check gewoon steeds `None` (onduidelijk)
+teruggeeft en niets doet, zonder de rest van de scanner te breken.
 
 ## Het dagrapport lezen
 
@@ -364,18 +313,21 @@ opmerken.
 
 Een huis verdwijnt automatisch uit "Openstaande kansen" als het 30 dagen
 (`LISTING_EXPIRY_DAYS`) niet meer in een nieuwe alertmail is opgedoken, of eerder als
-jij het zelf met de verwijder-link weghaalt. Er is bewust geen automatische
-verkocht/onder-bod-detectie (zie hierboven) — dat is een bewuste keuze om geen
-handmatige klik per huis op funda.nl nodig te hebben.
+jij het zelf met de verwijder-link weghaalt of de dagelijkse beschikbaarheid-check
+"verkocht" herkent (zie hierboven).
 
 ## Achterstand inhalen / zelf gevonden huizen toevoegen
 
 De dagelijkse Funda-alert meldt alleen NIEUWE woningen vanaf het moment dat je de
 zoekopdracht instelt — huizen die al langer te koop stonden, of huizen die je zelf
-tegenkomt tijdens het bladeren op funda.nl, komen er niet vanzelf in. Daarvoor is er
-`handmatig_toevoegen.py`: je zet zelf (handmatig, gewoon browsend — geen scraping)
-adressen in een tekstbestand, en het script haalt ze door dezelfde checks als de
-dagelijkse run en stuurt er direct een rapport-mail van.
+tegenkomt tijdens het bladeren op funda.nl, komen er niet vanzelf in. Twee manieren om
+ze alsnog toe te voegen, met dezelfde parser en dezelfde checks:
+
+- **Via de website** — "Toevoegen" op kansen.steenhub.nl (link in de kop van de
+  kaartpagina): plak adressen of een kopieer-plak in het tekstvak, klaar. Handigst
+  vanaf je telefoon.
+- **Via het CLI-script** `handmatig_toevoegen.py` — hetzelfde, maar stuurt ook meteen
+  een rapport-mail (handig voor een eenmalige grote inhaalslag vanaf de VPS/je pc).
 
 ```powershell
 copy adressen.voorbeeld.txt adressen.txt
@@ -523,9 +475,9 @@ handmatig hebt verwijderd (via de verwijder-link) worden hierbij, net als bij
   als het detecteerbaar is. Voorkomen: zet liever een paar smallere zoekopdrachten op
   dan één hele brede, zodat je zelden meer dan een paar nieuwe woningen per opdracht
   per dag hebt.
-- **Geen automatische verkocht/onder-bod-detectie** (bewuste keuze, zie hierboven) —
-  een verkocht huis blijft tot max. 30 dagen op de lijst staan tenzij je het zelf met
-  de verwijder-link weghaalt.
+- **Verkocht-detectie is best-effort** (zie "Beschikbaarheid-check" hierboven) — bij een
+  netwerkfout/blokkade/onherkende pagina blijft een verkocht huis gewoon staan tot de
+  volgende check het wél herkent, of tot max. 30 dagen als dat nooit lukt.
 - De verwijder-link werkt met een simpel patroon (mail met "Verwijder <id>" in het
   onderwerp naar je eigen scanner-mailbox); er zit geen afzender-verificatie op, wat
   bij een privé-mailbox die alleen jij en dit systeem gebruiken een verwaarloosbaar

@@ -9,17 +9,14 @@ Starten (productie): gunicorn 'kansen_site.app:create_app()'
 from __future__ import annotations
 
 import hmac
-import threading
-from dataclasses import asdict
 from functools import wraps
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import apify_scraper, pipeline, sweep_status, zoek_urls
+from rotterdam_scanner import pipeline
 from rotterdam_scanner.config import Config, load_config
+from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.state import StateStore
-
-_FUNDA_URL_PREFIXES = ("https://www.funda.nl/", "https://funda.nl/")
 
 
 def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
@@ -101,12 +98,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/")
     @login_required
     def kaart():
-        return render_template(
-            "kaart.html", gebruiker=session["gebruiker"],
-            apify_ingesteld=apify_scraper.is_ingesteld(config, zoek_urls.laad(config)),
-            sweep_max_items=config.apify_max_items_wekelijks,
-            sweep_max_kosten_dollar=round(config.apify_max_items_wekelijks / 1000 * 4.99, 2),
-        )
+        return render_template("kaart.html", gebruiker=session["gebruiker"])
 
     @app.route("/api/kansen")
     @login_required
@@ -118,100 +110,15 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/ververs", methods=["POST"])
     @login_required
     def ververs():
-        # Mail-gebaseerde scan (alleen nieuwe woningen sinds gisteren) plus,
-        # als ingesteld, de kleine dagelijkse Apify-pull (breder dan alleen
-        # de eigen zoekopdracht) - een handmatige "Ververs nu" mag zo veel
-        # mogelijk in één keer meepakken i.p.v. te wachten op de volgende
-        # geplande scan.
+        # Mail-gebaseerde scan (alleen nieuwe woningen sinds gisteren) - een
+        # handmatige "Ververs nu" laat 'm meteen draaien i.p.v. te wachten op
+        # de volgende geplande scan.
         result = pipeline.run(config)
-        nieuw_actief = len(result.nieuw_actief)
-        nieuw_afgevallen = len(result.nieuw_afgevallen)
-        fouten = list(result.fouten)
-
-        if apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
-            apify_result = pipeline.run_apify(config)
-            nieuw_actief += len(apify_result.nieuw_actief)
-            nieuw_afgevallen += len(apify_result.nieuw_afgevallen)
-            fouten += apify_result.fouten
-
         return jsonify({
-            "nieuw_actief": nieuw_actief,
-            "nieuw_afgevallen": nieuw_afgevallen,
-            "fouten": fouten,
+            "nieuw_actief": len(result.nieuw_actief),
+            "nieuw_afgevallen": len(result.nieuw_afgevallen),
+            "fouten": result.fouten,
         })
-
-    @app.route("/sweep", methods=["POST"])
-    @login_required
-    def sweep():
-        # De volledige wekelijkse Apify-scan (apify_max_items_wekelijks, standaard
-        # 2000) handmatig triggeren - kost meer dan "Ververs nu" (dat gebruikt de
-        # kleine dagelijkse pull), vandaar de aparte knop met kostenwaarschuwing
-        # in kaart.html/kaart.js i.p.v. dit ongemerkt aan "Ververs nu" toe te voegen.
-        #
-        # Draait in een achtergrondthread i.p.v. de aanvraag te laten wachten tot
-        # de hele scan klaar is (kan tientallen minuten duren): een mobiele
-        # browser onderbreekt een zo lang openstaande fetch() al snel zodra het
-        # tabblad naar de achtergrond gaat (bv. om de Apify-billing te checken),
-        # waarna de site "mislukt" toont terwijl de run bij Apify gewoon (en dus
-        # tegen betaling) doorloopt. sweep_status.py houdt de voortgang bij in
-        # een bestand, zodat kaart.js kan pollen ongeacht de verbinding die 'm
-        # gestart heeft.
-        if not apify_scraper.is_ingesteld(config, zoek_urls.laad(config)):
-            return jsonify({"fout": "Apify is niet ingesteld - een totale sweep is niet mogelijk."}), 400
-        if sweep_status.laad(config).status == "bezig":
-            return jsonify({"fout": "Er loopt al een totale sweep - wacht tot die klaar is."}), 409
-
-        sweep_status.zet_bezig(config)
-
-        def _draai_sweep() -> None:
-            try:
-                result = pipeline.run_apify_volledig(config)
-                sweep_status.zet_klaar(
-                    config, len(result.nieuw_actief), len(result.nieuw_afgevallen), result.fouten,
-                )
-            except Exception as exc:  # noqa: BLE001 - moet altijd in de status terechtkomen, nooit de thread stil laten sterven
-                sweep_status.zet_mislukt(config, f"Onverwachte fout tijdens de sweep: {exc}")
-
-        threading.Thread(target=_draai_sweep, daemon=True).start()
-        return jsonify({"gestart": True})
-
-    @app.route("/sweep/status")
-    @login_required
-    def sweep_status_route():
-        return jsonify(asdict(sweep_status.laad(config)))
-
-    @app.route("/zoekopdrachten/testen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_testen():
-        # Eén specifieke zoekopdracht los ophalen (bv. net toegevoegd, of een
-        # gecorrigeerde URL verifiëren) zonder de kosten van een volledige
-        # "Totale sweep" over alle zoekopdrachten samen. Gebruikt bewust
-        # apify_max_items_dagelijks als grens (niet -wekelijks): dit is voor
-        # één (meestal kleine) zoekopdracht, geen volledige inhaalslag.
-        # Zelfde achtergrondthread + sweep_status-mechaniek als /sweep, om
-        # dezelfde reden: een mobiele browser onderbreekt een lang openstaande
-        # fetch() al snel zodra het tabblad naar de achtergrond gaat.
-        url = request.form.get("url", "").strip()
-        if not url:
-            return jsonify({"fout": "Onbekende zoekopdracht."}), 400
-        if not apify_scraper.is_ingesteld(config, [url]):
-            return jsonify({"fout": "Apify is niet ingesteld."}), 400
-        if sweep_status.laad(config).status == "bezig":
-            return jsonify({"fout": "Er loopt al een Apify-taak - wacht tot die klaar is."}), 409
-
-        sweep_status.zet_bezig(config, url=url)
-
-        def _draai_test() -> None:
-            try:
-                result = pipeline.run_apify(config, search_urls=[url], max_items=config.apify_max_items_dagelijks)
-                sweep_status.zet_klaar(
-                    config, len(result.nieuw_actief), len(result.nieuw_afgevallen), result.fouten,
-                )
-            except Exception as exc:  # noqa: BLE001 - moet altijd in de status terechtkomen, nooit de thread stil laten sterven
-                sweep_status.zet_mislukt(config, f"Onverwachte fout tijdens het testen: {exc}")
-
-        threading.Thread(target=_draai_test, daemon=True).start()
-        return jsonify({"gestart": True})
 
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
     @login_required
@@ -253,33 +160,36 @@ def create_app(config: Config | None = None) -> Flask:
         )
         return render_template("verwijderd.html", items=items, gebruiker=session["gebruiker"])
 
-    @app.route("/zoekopdrachten")
+    @app.route("/handmatig-toevoegen", methods=["GET", "POST"])
     @login_required
-    def zoekopdrachten():
+    def handmatig_toevoegen():
+        # Voor achterstanden/gebieden die de mail-alert niet dekt: plak een
+        # lijst adressen ("POSTCODE HUISNUMMER [funda-link]", één per regel)
+        # of een ruwe kopieer-plak van een Funda-resultatenpagina - zelfde
+        # parser (rotterdam_scanner/handmatig.py) en dezelfde checks als het
+        # bestaande CLI-script handmatig_toevoegen.py, nu ook vanaf de
+        # website bereikbaar.
+        resultaat = None
+        if request.method == "POST":
+            tekst = request.form.get("tekst", "")
+            forceer_herprocessen = request.form.get("forceer_herprocessen") == "on"
+            listings, parse_fouten = parse_bestand(tekst)
+            if not listings:
+                flash("Geen enkel adres kon uit de geplakte tekst gelezen worden.")
+            else:
+                run_result = pipeline.run_handmatig(
+                    config, listings, forceer_herprocessen=forceer_herprocessen,
+                )
+                resultaat = {
+                    "aangeleverd": len(listings),
+                    "nieuw_actief": len(run_result.nieuw_actief),
+                    "nieuw_afgevallen": len(run_result.nieuw_afgevallen),
+                    "nieuw_onbekend_adres": len(run_result.nieuw_onbekend_adres),
+                    "fouten": parse_fouten + run_result.fouten,
+                }
         return render_template(
-            "zoekopdrachten.html", opdrachten=zoek_urls.laad_met_labels(config),
-            apify_ingesteld=bool(config.apify_api_token), gebruiker=session["gebruiker"],
+            "handmatig_toevoegen.html", resultaat=resultaat, gebruiker=session["gebruiker"],
         )
-
-    @app.route("/zoekopdrachten/toevoegen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_toevoegen():
-        url = request.form.get("url", "").strip()
-        label = request.form.get("label", "").strip()
-        if not url.startswith(_FUNDA_URL_PREFIXES):
-            flash("Dit lijkt geen Funda-zoek-URL - moet beginnen met https://www.funda.nl/")
-        else:
-            zoek_urls.voeg_toe(config, url, label)
-            flash("Zoekopdracht toegevoegd.")
-        return redirect(url_for("zoekopdrachten"))
-
-    @app.route("/zoekopdrachten/verwijderen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_verwijderen():
-        url = request.form.get("url", "")
-        zoek_urls.verwijder(config, url)
-        flash("Zoekopdracht verwijderd.")
-        return redirect(url_for("zoekopdrachten"))
 
     return app
 

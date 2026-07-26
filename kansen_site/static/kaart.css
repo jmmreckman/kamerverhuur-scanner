@@ -64,24 +64,6 @@ body {
 
 .login-card button:hover, .topbar button:hover { opacity: 0.9; }
 
-.knop-gevaar {
-  background: #b3611e;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 0.6rem 1rem;
-  font-size: 1em;
-  cursor: pointer;
-}
-
-.knop-gevaar:hover { opacity: 0.9; }
-
-.knop-gevaar:disabled {
-  background: var(--rand);
-  color: var(--tekst-zwak);
-  cursor: not-allowed;
-}
-
 .fout { color: #b3261e; font-size: 0.9em; margin: 0; }
 
 /* --- Kaartpagina --- */
@@ -240,7 +222,7 @@ body {
 .popup-inhoud .adres { font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .popup-inhoud a { color: var(--groen); }
 
-/* --- Zoekopdrachten-beheerpagina --- */
+/* --- Overige content-pagina's (Verwijderd, Handmatig toevoegen) --- */
 
 .content {
   max-width: 640px;
@@ -278,31 +260,4 @@ body {
   color: inherit;
   word-break: break-all;
   font-size: 0.9em;
-}
-
-.url-label {
-  font-weight: 600;
-  font-size: 0.95em;
-}
-
-.url-acties {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  flex-shrink: 0;
-}
-
-.url-form {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.url-form input {
-  flex: 1;
-  min-width: 240px;
-  padding: 0.5rem;
-  border: 1px solid var(--rand);
-  border-radius: 6px;
-  font-size: 0.95em;
 }

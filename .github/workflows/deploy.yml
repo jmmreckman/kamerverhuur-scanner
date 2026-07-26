@@ -19,6 +19,6 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
             set -euo pipefail
             cd /opt/kamerverhuur-scanner/deploy
-            docker compose build --no-cache fundazoeker kansen apify-dagelijks apify-wekelijks
-            docker compose up -d fundazoeker kansen apify-dagelijks apify-wekelijks
+            docker compose build --no-cache fundazoeker kansen beschikbaarheid-check
+            docker compose up -d fundazoeker kansen beschikbaarheid-check
           '
