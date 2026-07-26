@@ -106,6 +106,12 @@ def parse_regels(regels: list[str]) -> tuple[list[FundaListing], list[str]]:
 _POSTCODE_PLAATS_RE = re.compile(r"^(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)$")
 _ADRESREGEL_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:-(?P<toevoeging>[A-Za-z0-9]+))?$")
 _DUMP_PRIJS_RE = re.compile(r"€\s?([\d]{1,3}(?:[.,]\d{3})*)")
+# Funda toont bij een huis twee losse "X m²"-regels op de kaart: eerst de woonoppervlakte,
+# daarna de perceeloppervlakte (bij een appartement meestal maar één regel: wonen, geen
+# eigen perceel). We pakken bewust alleen de EERSTE match in het blok - de tweede zou de
+# perceeloppervlakte als woonoppervlak laten doorgaan, wat de kamerberekening/investering
+# flink zou vertekenen (een groot perceel bij een klein huis geeft dan té veel kamers).
+_DUMP_OPPERVLAKTE_RE = re.compile(r"^(\d{1,4})\s*m²$")
 
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
@@ -180,6 +186,13 @@ def parse_funda_tekstdump(tekst: str, vandaag: date | None = None) -> tuple[list
                 prijs = int(re.sub(r"[.,]", "", prijs_match.group(1)))
                 break
 
+        oppervlakte_advertentie = None
+        for regel_in_blok in blok:
+            opp_match = _DUMP_OPPERVLAKTE_RE.match(regel_in_blok)
+            if opp_match:
+                oppervlakte_advertentie = int(opp_match.group(1))
+                break
+
         object_id = f"{postcode}-{huisnummer}{toevoeging}"
         straatnaam = adres_match.group("straat").strip()
         listings[object_id] = FundaListing(
@@ -193,6 +206,7 @@ def parse_funda_tekstdump(tekst: str, vandaag: date | None = None) -> tuple[list
             postcode=postcode,
             woonplaats=postcode_match.group("plaats").strip(),
             prijs=prijs,
+            oppervlakte_advertentie=oppervlakte_advertentie,
             eerst_gezien_override=_bepaal_eerst_gezien(blok, vandaag),
         )
 

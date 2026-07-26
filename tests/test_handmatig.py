@@ -89,7 +89,29 @@ def test_parse_funda_tekstdump_herkent_adres_postcode_en_prijs():
     assert by_id["3073KJ-47A"].toevoeging == "A"
     assert by_id["3073KJ-47A"].woonplaats == "Rotterdam"
     assert by_id["3073KJ-47A"].prijs == 260000
+    assert by_id["3073KJ-47A"].oppervlakte_advertentie == 97
     assert by_id["3075ED-378B"].prijs == 400000
+    assert by_id["3075ED-378B"].oppervlakte_advertentie == 124
+
+
+def test_parse_funda_tekstdump_pakt_woonoppervlakte_niet_perceeloppervlakte():
+    # Funda toont bij een huis twee "X m²"-regels: eerst wonen, dan perceel (bv.
+    # "88 m²" wonen, "137 m²" perceel) - de tweede (grotere) mag nooit als
+    # woonoppervlak gebruikt worden, dat zou de kamerberekening flink vertekenen.
+    tekst = (
+        "Murraystraat 18\n3195 VJ Pernis Rotterdam\n€ 350.000 k.k.\n88 m²\n137 m²\n3\nC\n"
+    )
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert len(listings) == 1
+    assert listings[0].oppervlakte_advertentie == 88
+
+
+def test_parse_funda_tekstdump_zonder_oppervlakteregel_geeft_none():
+    tekst = "Vredehagen 44\n3078 CN Rotterdam\n€ 635.000 k.k.\n4\nA\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert listings[0].oppervlakte_advertentie is None
 
 
 def test_parse_funda_tekstdump_werkt_zonder_lege_regel_tussen_woningen():
