@@ -347,6 +347,44 @@ def test_run_check_late_instap_na_17e_telt_toch_voor_instapmaand(monkeypatch, tm
     assert results[0].status == Status.BETAALD
 
 
+class FakeSheetClientVroegeInstapTrageBetaling(FakeSheetClientInstapper):
+    def get_tenants(self):
+        # Start op de 5e - vóór de 17e-grens - maar de betaling zelf komt
+        # pas veel later in de maand binnen (bv. een trage internationale
+        # overschrijving).
+        return [_tenant(verwacht_bedrag=Decimal("650.00"), contract_startdatum="05-07-2026", borg_bedrag=Decimal("500.00"))]
+
+
+class FakeBunqClientVroegeInstapTrageBetaling:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("1066.13"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date(2026, 7, 27)),
+        ]
+
+
+def test_run_check_vroege_instap_met_trage_betaling_na_17e_telt_ook(monkeypatch, tmp_path):
+    # De 17e-grens is niet alleen relevant als de startdatum zelf laat in de
+    # maand valt: ook een huurder die al vroeg (voor de 17e) instapt, maar
+    # wiens instapbetaling om wat voor reden dan ook pas later die maand
+    # binnenkomt (hier: internationale overschrijving), mag niet buiten de
+    # boot vallen - een betaling binnen iemands eigen instapmaand is per
+    # definitie nooit een vooruitbetaling voor de maand erna.
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientVroegeInstapTrageBetaling)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientVroegeInstapTrageBetaling)
+
+    _tenants, results, unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 27),
+    )
+
+    assert unmatched == []
+    assert results[0].ontvangen_bedrag == Decimal("1066.13")
+    assert results[0].status == Status.BETAALD
+
+
 def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(monkeypatch, tmp_path):
     # Diezelfde betaling mag de vólgende maand niet nóg een keer meetellen
     # (dat zou de instapmaand-betaling zowel in juli als in augustus als
