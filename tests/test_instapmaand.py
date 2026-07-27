@@ -481,10 +481,19 @@ def test_run_check_gevestigde_huurder_met_oude_instapmaand_verliest_betaling_nie
     assert results[0].status == Status.BETAALD
 
 
-def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(monkeypatch, tmp_path):
-    # Diezelfde betaling mag de vólgende maand niet nóg een keer meetellen
-    # (dat zou de instapmaand-betaling zowel in juli als in augustus als
-    # "ontvangen" laten meetellen - een dubbele telling).
+def test_run_check_late_instap_betaling_kan_bij_controle_zonder_tussenstap_ook_in_volgende_maand_meetellen(monkeypatch, tmp_path):
+    # Bewust geaccepteerde afweging (zie het commentaar bij
+    # _hoort_bij_deze_maand() in runner.py): de instap-uitzondering geldt
+    # alleen zolang de gecontroleerde maand ook echt de instapmaand (of de
+    # maand ervóór) is - dat voorkomt dat een allang gevestigde huurder een
+    # heel gewone latere betaling permanent aan zijn/haar allang afgehandelde
+    # instapmaand vastgeplakt krijgt (spoorloos verdwijnen). Keerzijde: als
+    # augustus wordt gecontroleerd zónder dat juli ooit is gecontroleerd
+    # (dus zonder dat de instapbetaling al ergens is vastgelegd), telt deze
+    # late instapbetaling ook gewoon weer mee voor augustus, volgens de
+    # normale 17e-regel - zichtbaar als "Te veel ontvangen" i.p.v. onzichtbaar
+    # verloren te gaan. In de praktijk (elk uur een controle) is juli dan al
+    # lang correct verwerkt vóórdat augustus ooit wordt gecontroleerd.
     monkeypatch.setattr(runner, "SheetClient", FakeSheetClientLateInstap)
     monkeypatch.setattr(runner, "BunqClient", FakeBunqClientLateInstap)
 
@@ -492,11 +501,8 @@ def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(m
         _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 8, 1),
     )
 
-    assert results[0].ontvangen_bedrag == Decimal("0")
-    assert results[0].status == Status.NIET_ONTVANGEN
-    # de betaling zelf is dus ook niet (opnieuw) "verdwenen" als niet-
-    # gekoppeld - die hoort simpelweg niet bij augustus, dus wordt voor
-    # augustus's controle niet eens opgehaald/meegenomen.
+    assert results[0].ontvangen_bedrag == Decimal("667.74")
+    assert results[0].status == Status.TE_VEEL
     assert unmatched == []
 
 

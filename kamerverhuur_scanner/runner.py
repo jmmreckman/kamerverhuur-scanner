@@ -283,31 +283,38 @@ def run_check(
     # zelfs naar keek - de betaling verdween dan spoorloos: niet toegekend,
     # maar ook niet zichtbaar bij "niet-gekoppeld".
     #
-    # De instap-uitzondering geldt alleen zolang het instapbedrag van de
-    # gematchte huurder nog niet elders (in een eerdere maand) volledig is
-    # ontvangen (zie _instapbetaling_al_ontvangen - dezelfde toets als
-    # hierboven voor tenants_voor_match). Zonder deze grens bleef de
-    # uitzondering voor altijd actief zodra 'Contract startdatum' nu eenmaal
-    # ergens in het verleden lag: een allang gevestigde huurder wiens instap
-    # toevallig in de vórige kalendermaand viel, kreeg dan elke normale,
-    # iets te late vooruitbetaling voor de huidige maand alsnog aan die
-    # allang afgehandelde instapmaand toegewezen - en die betaling verdween
-    # zo spoorloos (niet toegekend, niet zichtbaar bij "niet-gekoppeld").
-    # Zodra het instapbedrag al eerder volledig binnen is, valt gewoon de
-    # normale 17e-regel weer terug, zoals voor elke andere huurder.
+    # De instap-uitzondering geldt alleen als déze controlemaand ook
+    # daadwerkelijk de instapmaand (of de maand ervóór) van de gematchte
+    # huurder ís (zie instapmaand_kamers hierboven - dezelfde grens als voor
+    # de ruimere tolerantie). Een eerdere versie liet 'm gelden zodra er
+    # ooit een 'Contract startdatum' was ingevuld die toevallig in de
+    # kalendermaand van de betaling viel - dat bleef voor altijd actief, ook
+    # ver na de instap: een allang gevestigde huurder kreeg dan een heel
+    # gewone, iets te late vooruitbetaling voor de huidige maand alsnog aan
+    # die allang afgehandelde instapmaand vastgeplakt, en de betaling
+    # verdween zo spoorloos (niet toegekend, niet zichtbaar bij "niet-
+    # gekoppeld"). Een latere poging om dit via de geschiedenis
+    # (_instapbetaling_al_ontvangen) te herkennen bleek in de praktijk niet
+    # betrouwbaar - borg en (pro-rata) huur komen niet altijd in dezelfde
+    # kalendermaand binnen, waardoor geen los maandtotaal ooit het volledige
+    # instapbedrag laat zien, ook niet als de huurder allang gewoon
+    # maandelijks betaalt. Buiten het instap(-vorige)maandvenster geldt
+    # daarom gewoon weer de normale 17e-regel, zoals voor elke andere
+    # huurder - dit kan in theorie een heel late (ná de 17e) instapbetaling
+    # nog eens laten meetellen bij de eerstvolgende maand als die ook zonder
+    # tussentijdse controle wordt gecheckt, maar dat is zichtbaar (een
+    # onverwacht "Te veel ontvangen") en dus veel minder schadelijk dan een
+    # betaling die spoorloos verdwijnt.
     def _hoort_bij_deze_maand(betaling: Payment) -> bool:
         gematchte_huurder = (
             next((t for t in tenants_voor_match if _matches_sterk(t, betaling)), None)
             or next((t for t in tenants_voor_match if _matches_los(t, betaling)), None)
         )
-        instap_start = _tenant_startdatum(gematchte_huurder) if gematchte_huurder else None
-        if instap_start:
-            origineel = next(t for t in tenants if t.kamer == gematchte_huurder.kamer)
-            if _instapbetaling_al_ontvangen(
-                geschiedenis_per_kamer[origineel.kamer], huidige_maand_string,
-                _instapbedrag(origineel, instap_start), config.bedrag_tolerantie,
-            ):
-                instap_start = None
+        instap_start = (
+            _tenant_startdatum(gematchte_huurder)
+            if gematchte_huurder and gematchte_huurder.kamer in instapmaand_kamers
+            else None
+        )
         return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
 
     payments = [p for p in alle_payments if _hoort_bij_deze_maand(p)]
