@@ -8,6 +8,7 @@ Starten (productie): zie README (gunicorn + webapp.app:create_app()).
 from __future__ import annotations
 
 import dataclasses
+import logging
 import mimetypes
 import re
 import threading
@@ -46,6 +47,13 @@ from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
 from .reminders import bouw_herinnering, bouw_ingebrekestelling
 
 load_dotenv()
+
+# Zonder dit staat het root-logniveau standaard op WARNING, waardoor alle
+# logger.info()-regels in kamerverhuur_scanner (bv. run_check() tijdens "Nu
+# controleren") nooit in de gunicorn/docker-logs verschijnen - main.py en de
+# scripts/-CLI's zetten dit zelf al bij het opstarten, maar de webapp draait
+# via gunicorn "webapp.app:create_app()" en komt hier nooit langs.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
 def create_app(config: Config | None = None) -> Flask:
