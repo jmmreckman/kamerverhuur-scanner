@@ -16,6 +16,7 @@ from .config import Config
 from .mailer import MailError, verstuur_email
 from .matcher import (
     _INSTAPMAAND_TOLERANTIE_PERCENTAGE,
+    _matches,
     _verwerk_maand,
     match_tenants_to_payments,
     openstaand_tekort_uit_geschiedenis,
@@ -48,6 +49,33 @@ def _effectieve_maand(datum: date) -> tuple[int, int]:
     if datum.month == 12:
         return (datum.year + 1, 1)
     return (datum.year, datum.month + 1)
+
+
+def _effectieve_maand_voor_instap(datum: date, instap_start: date | None) -> tuple[int, int]:
+    """Zelfde 17e-grens als _effectieve_maand(), behalve voor een betaling die
+    in dezelfde kalendermaand valt als een instap-startdatum die zelf ook ná
+    de 17e ligt: die telt gewoon voor die kalendermaand zelf, ongeacht de dag
+    van de betaling. De 17e-grens is bedoeld voor een bestaande huurder die
+    vroeg vooruitbetaalt voor volgende maand - dat gaat niet op voor een
+    huurder die nou eenmaal pas ná de 17e instrekt (en dus logischerwijs ook
+    pas rond of na die datum de instapbetaling doet, ruim voordat er sprake
+    kan zijn van "vooruitbetalen voor de maand erna"). Zonder deze uitzondering
+    verdween zo'n instapbetaling structureel uit beeld: te laat voor de
+    instapmaand zelf, maar de volgende-maand-controle verwacht dan weer het
+    volle, niet-pro-rata bedrag (zie _verwacht_bedrag_voor_maand), dus geen
+    van beide maanden zou 'm ooit herkennen.
+
+    Bewust `is None`-vriendelijk aan de aanroepkant (zie run_check(): per
+    (huurder, betaling)-paar bepaald, niet globaal per betaling) - alleen zo
+    blijft dit ondubbelzinnig voor élke latere controle-maand hetzelfde
+    resultaat geven (dus nooit twee keer meegeteld, zie run_check())."""
+    if (
+        instap_start
+        and instap_start.day > _EFFECTIEVE_MAAND_GRENSDAG
+        and (datum.year, datum.month) == (instap_start.year, instap_start.month)
+    ):
+        return (datum.year, datum.month)
+    return _effectieve_maand(datum)
 
 
 def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
@@ -163,9 +191,9 @@ def _verwacht_bedrag_voor_maand(
 
 
 def run_check(
-    config: Config, pand: Pand, dry_run: bool = False
+    config: Config, pand: Pand, dry_run: bool = False, vandaag: date | None = None
 ) -> tuple[list[Tenant], list[TenantResult], list[Payment]]:
-    vandaag = date.today()
+    vandaag = vandaag or date.today()
     huidige_maand_sleutel = (vandaag.year, vandaag.month)
     zoek_vanaf = _zoek_vanaf_voor_maand(vandaag)
 
@@ -217,7 +245,19 @@ def run_check(
     # Betalingen die (per de 17e-grens) eigenlijk voor een andere maand
     # tellen (bv. al vroeg vooruitbetaald voor volgende maand) horen niet bij
     # déze controle - die komen vanzelf mee bij de controle van die maand.
-    payments = [p for p in alle_payments if _effectieve_maand(p.datum) == huidige_maand_sleutel]
+    # De 17e-grens geldt per (huurder, betaling)-paar i.p.v. globaal per
+    # betaling (zie _effectieve_maand_voor_instap): zo geldt de uitzondering
+    # voor een late instapdatum alleen voor de betaling(en) die ook echt bij
+    # díe huurder horen. Een betaling die bij geen enkele huurder past (dus
+    # sowieso als "niet-gekoppeld" getoond wordt) valt terug op de gewone,
+    # tenant-onafhankelijke 17e-regel - anders zou zo'n betaling stilzwijgend
+    # uit de "niet-gekoppeld"-lijst verdwijnen i.p.v. daar zichtbaar te blijven.
+    def _hoort_bij_deze_maand(betaling: Payment) -> bool:
+        gematchte_huurder = next((t for t in tenants_voor_match if _matches(t, betaling)), None)
+        instap_start = _tenant_startdatum(gematchte_huurder) if gematchte_huurder else None
+        return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
+
+    payments = [p for p in alle_payments if _hoort_bij_deze_maand(p)]
     logger.info("[%s] %d inkomende betalingen gevonden deze maand", pand.slug, len(payments))
 
     results, unmatched = match_tenants_to_payments(

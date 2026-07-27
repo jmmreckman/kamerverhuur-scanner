@@ -304,6 +304,119 @@ def test_run_check_vooruitbetaling_maand_voor_instap_is_niet_te_veel(monkeypatch
     assert results[0].status == Status.BETAALD
 
 
+# --- run_check(): late instap (ná de 17e) mag niet tussen wal en schip vallen ---
+
+
+class FakeSheetClientLateInstap(FakeSheetClientInstapper):
+    def get_tenants(self):
+        # Start op de 24e - ná de 17e-effectieve-maand-grens.
+        return [_tenant(verwacht_bedrag=Decimal("650.00"), contract_startdatum="24-07-2026", borg_bedrag=Decimal("500.00"))]
+
+
+class FakeBunqClientLateInstap:
+    """De instapbetaling komt logischerwijs pas rond/na de late startdatum
+    binnen - hier op de 27e, ruim ná de 17e-grens."""
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("667.74"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date(2026, 7, 27)),
+        ]
+
+
+def test_run_check_late_instap_na_17e_telt_toch_voor_instapmaand(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie: een huurder die pas ná de
+    # 17e instrekt (hier de 24e) en de instapbetaling logischerwijs ook pas
+    # rond die datum doet (hier de 27e). Zonder instap-bewuste uitzondering op
+    # de 17e-grens (zie _effectieve_maand_voor_instap) verdween deze betaling
+    # structureel uit beeld: te laat voor de instapmaand zelf, terwijl de
+    # vólgende maand alweer de volle (niet-pro-rata) huur verwacht - geen van
+    # beide maanden zou 'm ooit als "Betaald" herkennen.
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientLateInstap)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientLateInstap)
+
+    _tenants, results, unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 27),
+    )
+
+    assert unmatched == []
+    assert len(results) == 1
+    assert results[0].ontvangen_bedrag == Decimal("667.74")
+    assert results[0].status == Status.BETAALD
+
+
+def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(monkeypatch, tmp_path):
+    # Diezelfde betaling mag de vólgende maand niet nóg een keer meetellen
+    # (dat zou de instapmaand-betaling zowel in juli als in augustus als
+    # "ontvangen" laten meetellen - een dubbele telling).
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientLateInstap)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientLateInstap)
+
+    _tenants, results, unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 8, 1),
+    )
+
+    assert results[0].ontvangen_bedrag == Decimal("0")
+    assert results[0].status == Status.NIET_ONTVANGEN
+    # de betaling zelf is dus ook niet (opnieuw) "verdwenen" als niet-
+    # gekoppeld - die hoort simpelweg niet bij augustus, dus wordt voor
+    # augustus's controle niet eens opgehaald/meegenomen.
+    assert unmatched == []
+
+
+class FakeSheetClientLateInstapPlusAndereHuurder(FakeSheetClientInstapper):
+    def get_tenants(self):
+        return [
+            _tenant(
+                kamer="1", naam="Henri", verwacht_bedrag=Decimal("650.00"),
+                contract_startdatum="24-07-2026", borg_bedrag=Decimal("500.00"),
+            ),
+            # bestaande huurder, geen (late) instap deze maand - betaalt op de
+            # 20e gewoon vooruit voor augustus, zoals gebruikelijk.
+            _tenant(kamer="2", naam="Luisa", verwacht_bedrag=Decimal("650.00"), contract_startdatum=None),
+        ]
+
+
+class FakeBunqClientLateInstapPlusAndereHuurder:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("667.74"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date(2026, 7, 27)),
+            # Luisa's reguliere vooruitbetaling voor augustus - moet gewoon
+            # voor augustus blijven tellen, ook al valt-ie in dezelfde
+            # kalendermaand als Henri's late instap.
+            Payment(bedrag=Decimal("650.00"), valuta="EUR", tegenpartij_naam="Luisa", tegenpartij_iban=None,
+                    omschrijving="huur augustus", datum=date(2026, 7, 20)),
+        ]
+
+
+def test_run_check_late_instap_raakt_vooruitbetaling_andere_huurder_niet(monkeypatch, tmp_path):
+    # De instap-uitzondering geldt per (huurder, betaling)-paar, niet globaal
+    # voor de hele kalendermaand - Luisa's eigen, normale vooruitbetaling voor
+    # augustus mag niet per ongeluk als "juli" meetellen alleen omdat Henri
+    # toevallig deze maand laat instapt.
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientLateInstapPlusAndereHuurder)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientLateInstapPlusAndereHuurder)
+
+    _tenants, results_juli, _unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 27),
+    )
+    luisa_juli = next(r for r in results_juli if r.tenant.kamer == "2")
+    assert luisa_juli.status == Status.NIET_ONTVANGEN
+
+    _tenants, results_augustus, _unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 8, 1),
+    )
+    luisa_augustus = next(r for r in results_augustus if r.tenant.kamer == "2")
+    assert luisa_augustus.status == Status.BETAALD
+    assert luisa_augustus.ontvangen_bedrag == Decimal("650.00")
+
+
 # --- backfill_geschiedenis(): per-kamer terugzoeken vanaf de startdatum ---
 
 
