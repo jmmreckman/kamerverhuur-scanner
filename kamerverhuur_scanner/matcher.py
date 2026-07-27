@@ -91,19 +91,21 @@ def _matches(tenant: Tenant, payment: Payment) -> bool:
         # plaats van meteen "geen match" te zeggen - het IBAN op de sheet kan
         # verouderd zijn, of iemand anders betaalt namens de huurder.
 
-    zoekterm = (tenant.zoekwoord or tenant.naam).strip().lower()
-    if not zoekterm:
-        return False
     haystack = f"{payment.tegenpartij_naam} {payment.omschrijving}".lower()
-    if zoekterm in haystack:
+
+    zoekterm = (tenant.zoekwoord or tenant.naam).strip().lower()
+    if zoekterm and zoekterm in haystack:
         return True
-    if not tenant.zoekwoord:
-        # Val terug op losse naamdelen: de betaling komt soms van iemand anders
-        # (bv. een ouder) met alleen de voornaam of een deel van een
-        # koppelnaam in de omschrijving, of de bank toont een afgekorte naam.
-        for deel in _naam_delen(tenant.naam):
-            if deel in haystack:
-                return True
+
+    # Losse naamdelen (elk woord, en delen van koppelnamen) als laatste
+    # redmiddel - ook als er een zoekwoord is ingevuld: bij een
+    # (internationale) overschrijving door bv. een ouder staat de naam vaak
+    # in een andere volgorde (achternaam eerst) of zonder koppelteken tussen
+    # de delen, waardoor de hele zoekwoord-frase niet meer letterlijk
+    # voorkomt terwijl de losse delen dat wel doen.
+    for deel in _naam_delen(tenant.naam):
+        if deel in haystack:
+            return True
     return False
 
 

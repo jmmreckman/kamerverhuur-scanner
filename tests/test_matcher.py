@@ -113,6 +113,25 @@ def test_matcht_op_voornaam_als_ouder_betaalt():
     assert unmatched == []
 
 
+def test_zoekwoord_dat_niet_letterlijk_matcht_valt_terug_op_naamdelen():
+    # Regressietest: een ingevuld zoekwoord dat als hele frase niet letterlijk
+    # voorkomt (bv. omdat een internationale overschrijving de achternaam
+    # eerst toont, of zonder koppelteken tussen de delen van een koppelnaam)
+    # mag niet blokkeren dat er alsnog op losse naamdelen gematcht wordt -
+    # anders is een kamer met een ingevuld zoekwoord erger af dan zonder.
+    tenant = _tenant(naam="Miruna Poncea-Andronescu", zoekwoord="Miruna Poncea-Andronescu", bedrag="919.00")
+    payments = [_payment(
+        bedrag="919.00",
+        naam="PONCEA ANDRONESCU VALERICA FLORINA",
+        omschrijving="Poncea Miruna - security deposit +pro rated rent",
+    )]
+
+    results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
+
+    assert results[0].status == Status.BETAALD
+    assert unmatched == []
+
+
 def test_matcht_op_deel_van_koppelnaam():
     # Achternaam komt hier expres niet voor, alleen een deel van de koppelnaam.
     tenant = _tenant(naam="Stefania-Teodora Olteanu", bedrag="745.00")
