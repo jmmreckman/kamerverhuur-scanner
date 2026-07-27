@@ -259,8 +259,10 @@ def run_check(
     bunq = BunqClient(config)
     alle_payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
     logger.info("[%s] %d inkomende betalingen in totaal opgehaald via bunq sinds %s", pand.slug, len(alle_payments), zoek_vanaf)
+    # Op DEBUG (niet INFO) - handig bij het uitpluizen van een specifieke
+    # betaling, maar te veel ruis om standaard elke controle te loggen.
     for p in alle_payments:
-        logger.info(
+        logger.debug(
             "[%s]   bunq-betaling: %s | %s | %s | %.40s",
             pand.slug, p.datum, p.bedrag, p.tegenpartij_naam, p.omschrijving,
         )
