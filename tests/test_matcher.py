@@ -113,6 +113,21 @@ def test_matcht_op_voornaam_als_ouder_betaalt():
     assert unmatched == []
 
 
+def test_ingevuld_zoekwoord_voorkomt_matching_op_losse_delen_van_de_naam():
+    # Regressietest: een expliciet ingevuld zoekwoord (bv. "kamer3") is vaak
+    # juist gekozen om ambigue matching op de eigenlijke naam te voorkomen -
+    # de naamdelen-fallback mag dan niet alsnog op de (heel andere) naam
+    # terugvallen zodra het zoekwoord zelf niet matcht, want dan "steelt"
+    # deze huurder betalingen die voor iemand anders bedoeld zijn.
+    tenant = _tenant(naam="Jan de Vries", zoekwoord="kamer3", kamer="3")
+    payments = [_payment(bedrag="650.00", naam="Jan Peters", omschrijving="huur kamer 7")]
+
+    results, unmatched = match_tenants_to_payments([tenant], payments, TOL)
+
+    assert results[0].status == Status.NIET_ONTVANGEN
+    assert len(unmatched) == 1
+
+
 def test_zoekwoord_dat_niet_letterlijk_matcht_valt_terug_op_naamdelen():
     # Regressietest: een ingevuld zoekwoord dat als hele frase niet letterlijk
     # voorkomt (bv. omdat een internationale overschrijving de achternaam

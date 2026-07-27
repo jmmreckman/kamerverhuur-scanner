@@ -97,13 +97,17 @@ def _matches(tenant: Tenant, payment: Payment) -> bool:
     if zoekterm and zoekterm in haystack:
         return True
 
-    # Losse naamdelen (elk woord, en delen van koppelnamen) als laatste
-    # redmiddel - ook als er een zoekwoord is ingevuld: bij een
-    # (internationale) overschrijving door bv. een ouder staat de naam vaak
-    # in een andere volgorde (achternaam eerst) of zonder koppelteken tussen
-    # de delen, waardoor de hele zoekwoord-frase niet meer letterlijk
-    # voorkomt terwijl de losse delen dat wel doen.
-    for deel in _naam_delen(tenant.naam):
+    # Losse delen van dezelfde zoekterm (elk woord, en delen van
+    # koppelnamen) als laatste redmiddel: bij een (internationale)
+    # overschrijving door bv. een ouder staat een koppelnaam vaak in een
+    # andere volgorde (achternaam eerst) of zonder koppelteken tussen de
+    # delen, waardoor de hele frase niet meer letterlijk voorkomt terwijl de
+    # losse delen dat wel doen. Bewust dezelfde `zoekterm` als hierboven
+    # (dus het zoekwoord als dat is ingevuld, anders de naam) en niet altijd
+    # tenant.naam: een expliciet ingevuld zoekwoord (bv. "kamer3") is vaak
+    # juist gekozen om ambigue matching op de eigenlijke naam te voorkomen -
+    # dat mag deze fallback niet alsnog omzeilen.
+    for deel in _naam_delen(zoekterm):
         if deel in haystack:
             return True
     return False
