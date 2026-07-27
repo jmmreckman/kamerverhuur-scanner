@@ -47,12 +47,25 @@ def match_tenants_to_payments(
     overschot deze maand lost dat eerst af voordat de rest als 'te veel
     ontvangen' voor déze maand telt."""
     remaining = list(payments)
-    results: list[TenantResult] = []
+    toegekend: dict[int, list[Payment]] = {id(t): [] for t in tenants}
 
+    # Twee rondes: eerst alleen de sterke, ondubbelzinnige matches (IBAN of
+    # de volledige zoekwoord/naam-frase letterlijk), dan pas de losse-
+    # naamdelen-fallback voor wat daarna nog overblijft. Zonder deze
+    # volgorde kon een eerdere huurder in de sheet met alleen een zwakke
+    # naamdelen-match een betaling wegkapen die eigenlijk exact bij een
+    # latere huurder hoorde (IBAN of letterlijke zoekwoord-match) -
+    # sheetvolgorde mag nooit boven een exacte match gaan.
+    for matcher_functie in (_matches_sterk, _matches_los):
+        for tenant in tenants:
+            matched = [p for p in remaining if matcher_functie(tenant, p)]
+            for payment in matched:
+                remaining.remove(payment)
+            toegekend[id(tenant)].extend(matched)
+
+    results: list[TenantResult] = []
     for tenant in tenants:
-        matched = [p for p in remaining if _matches(tenant, p)]
-        for payment in matched:
-            remaining.remove(payment)
+        matched = toegekend[id(tenant)]
         ontvangen = sum((p.bedrag for p in matched), Decimal("0"))
         percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if tenant.kamer in (ruimere_tolerantie_kamers or set()) else Decimal("0")
         tekort = (openstaand_tekort or {}).get(tenant.kamer, Decimal("0"))
@@ -82,7 +95,9 @@ def openstaand_tekort_uit_geschiedenis(geschiedenis: list[HistorieRegel], voor_m
     return tekort
 
 
-def _matches(tenant: Tenant, payment: Payment) -> bool:
+def _matches_sterk(tenant: Tenant, payment: Payment) -> bool:
+    """Ondubbelzinnige match: exact IBAN, of de volledige zoekwoord/naam-frase
+    letterlijk in de betaling."""
     if tenant.iban:
         payment_iban = (payment.tegenpartij_iban or "").replace(" ", "").upper()
         if payment_iban == tenant.iban:
@@ -92,25 +107,34 @@ def _matches(tenant: Tenant, payment: Payment) -> bool:
         # verouderd zijn, of iemand anders betaalt namens de huurder.
 
     haystack = f"{payment.tegenpartij_naam} {payment.omschrijving}".lower()
-
     zoekterm = (tenant.zoekwoord or tenant.naam).strip().lower()
-    if zoekterm and zoekterm in haystack:
-        return True
+    return bool(zoekterm) and zoekterm in haystack
 
-    # Losse delen van dezelfde zoekterm (elk woord, en delen van
-    # koppelnamen) als laatste redmiddel: bij een (internationale)
-    # overschrijving door bv. een ouder staat een koppelnaam vaak in een
-    # andere volgorde (achternaam eerst) of zonder koppelteken tussen de
-    # delen, waardoor de hele frase niet meer letterlijk voorkomt terwijl de
-    # losse delen dat wel doen. Bewust dezelfde `zoekterm` als hierboven
-    # (dus het zoekwoord als dat is ingevuld, anders de naam) en niet altijd
-    # tenant.naam: een expliciet ingevuld zoekwoord (bv. "kamer3") is vaak
-    # juist gekozen om ambigue matching op de eigenlijke naam te voorkomen -
-    # dat mag deze fallback niet alsnog omzeilen.
-    for deel in _naam_delen(zoekterm):
-        if deel in haystack:
-            return True
-    return False
+
+def _matches_los(tenant: Tenant, payment: Payment) -> bool:
+    """Zwakke match: losse delen van dezelfde zoekterm (elk woord, en delen
+    van koppelnamen) als laatste redmiddel: bij een (internationale)
+    overschrijving door bv. een ouder staat een koppelnaam vaak in een
+    andere volgorde (achternaam eerst) of zonder koppelteken tussen de
+    delen, waardoor de hele frase niet meer letterlijk voorkomt terwijl de
+    losse delen dat wel doen. Bewust dezelfde `zoekterm` als in
+    _matches_sterk() (dus het zoekwoord als dat is ingevuld, anders de naam)
+    en niet altijd tenant.naam: een expliciet ingevuld zoekwoord (bv.
+    "kamer3") is vaak juist gekozen om ambigue matching op de eigenlijke
+    naam te voorkomen - dat mag deze fallback niet alsnog omzeilen.
+
+    Wordt in match_tenants_to_payments() bewust pas in een tweede ronde
+    toegepast, ná alle sterke matches - anders zou een eerdere huurder in de
+    sheet met alleen zo'n zwakke match een betaling kunnen wegkapen die
+    eigenlijk exact (IBAN of letterlijke zoekwoord-frase) bij een latere
+    huurder hoort."""
+    haystack = f"{payment.tegenpartij_naam} {payment.omschrijving}".lower()
+    zoekterm = (tenant.zoekwoord or tenant.naam).strip().lower()
+    return any(deel in haystack for deel in _naam_delen(zoekterm))
+
+
+def _matches(tenant: Tenant, payment: Payment) -> bool:
+    return _matches_sterk(tenant, payment) or _matches_los(tenant, payment)
 
 
 def _naam_delen(naam: str) -> list[str]:

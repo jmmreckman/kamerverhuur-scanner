@@ -188,6 +188,24 @@ def test_ruimere_tolerantie_accepteert_geen_afwijking_boven_10_procent():
     assert results[0].status == Status.TE_WEINIG
 
 
+def test_sterke_match_gaat_voor_zwakke_match_van_eerdere_huurder_in_sheet():
+    # Regressietest: een eerdere huurder in de sheet met alleen een zwakke
+    # (losse-naamdeel) match mag een betaling niet wegkapen die eigenlijk
+    # exact (hier: IBAN) bij een latere huurder hoort - twee rondes
+    # (eerst sterk, dan zwak) i.p.v. één ronde puur op sheetvolgorde.
+    vroege_huurder = _tenant(row=2, naam="Ewen Jayad", kamer="1", bedrag="785.00")
+    late_huurder = _tenant(row=5, naam="Iemand Anders", kamer="4", bedrag="700.00", iban="NL91ABNA0417164300")
+    payments = [_payment(
+        bedrag="700.00", naam="Morgane Dubois", iban="NL91ABNA0417164300", omschrijving="Huur Ewen appartement 4",
+    )]
+
+    results, unmatched = match_tenants_to_payments([vroege_huurder, late_huurder], payments, TOL)
+
+    assert results[0].status == Status.NIET_ONTVANGEN  # Ewen Jayad
+    assert results[1].status == Status.BETAALD  # Iemand Anders (op IBAN)
+    assert unmatched == []
+
+
 def test_betaling_wordt_niet_dubbel_toegekend():
     # "Vries" matcht ook op de betaling van "Jan de Vries" -> test dat de betaling
     # niet aan beide huurders tegelijk wordt toegekend.
