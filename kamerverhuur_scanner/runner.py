@@ -258,6 +258,12 @@ def run_check(
     logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
     bunq = BunqClient(config)
     alle_payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
+    logger.info("[%s] %d inkomende betalingen in totaal opgehaald via bunq sinds %s", pand.slug, len(alle_payments), zoek_vanaf)
+    for p in alle_payments:
+        logger.info(
+            "[%s]   bunq-betaling: %s | %s | %s | %.40s",
+            pand.slug, p.datum, p.bedrag, p.tegenpartij_naam, p.omschrijving,
+        )
     # Betalingen die (per de 17e-grens) eigenlijk voor een andere maand
     # tellen (bv. al vroeg vooruitbetaald voor volgende maand) horen niet bij
     # déze controle - die komen vanzelf mee bij de controle van die maand.
