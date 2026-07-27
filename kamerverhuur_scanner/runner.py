@@ -282,12 +282,32 @@ def run_check(
     # hier uit de maand-lijst filteren, vóórdat de eigenlijke matching er
     # zelfs naar keek - de betaling verdween dan spoorloos: niet toegekend,
     # maar ook niet zichtbaar bij "niet-gekoppeld".
+    #
+    # De instap-uitzondering geldt alleen zolang het instapbedrag van de
+    # gematchte huurder nog niet elders (in een eerdere maand) volledig is
+    # ontvangen (zie _instapbetaling_al_ontvangen - dezelfde toets als
+    # hierboven voor tenants_voor_match). Zonder deze grens bleef de
+    # uitzondering voor altijd actief zodra 'Contract startdatum' nu eenmaal
+    # ergens in het verleden lag: een allang gevestigde huurder wiens instap
+    # toevallig in de vórige kalendermaand viel, kreeg dan elke normale,
+    # iets te late vooruitbetaling voor de huidige maand alsnog aan die
+    # allang afgehandelde instapmaand toegewezen - en die betaling verdween
+    # zo spoorloos (niet toegekend, niet zichtbaar bij "niet-gekoppeld").
+    # Zodra het instapbedrag al eerder volledig binnen is, valt gewoon de
+    # normale 17e-regel weer terug, zoals voor elke andere huurder.
     def _hoort_bij_deze_maand(betaling: Payment) -> bool:
         gematchte_huurder = (
             next((t for t in tenants_voor_match if _matches_sterk(t, betaling)), None)
             or next((t for t in tenants_voor_match if _matches_los(t, betaling)), None)
         )
         instap_start = _tenant_startdatum(gematchte_huurder) if gematchte_huurder else None
+        if instap_start:
+            origineel = next(t for t in tenants if t.kamer == gematchte_huurder.kamer)
+            if _instapbetaling_al_ontvangen(
+                geschiedenis_per_kamer[origineel.kamer], huidige_maand_string,
+                _instapbedrag(origineel, instap_start), config.bedrag_tolerantie,
+            ):
+                instap_start = None
         return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
 
     payments = [p for p in alle_payments if _hoort_bij_deze_maand(p)]

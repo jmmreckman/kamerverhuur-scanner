@@ -428,6 +428,59 @@ def test_run_check_late_vooruitbetaling_in_maand_voor_instap_telt_voor_die_maand
     assert results[0].status == Status.BETAALD
 
 
+class FakeSheetClientGevestigdeHuurderOudeInstapmaand(FakeSheetClientInstapper):
+    def get_tenants(self):
+        # Al lang gevestigde huurder - "Contract startdatum" staat nog op de
+        # historische instapmaand (juni), maar dat is allang afgehandeld.
+        return [_tenant(naam="Stefania", verwacht_bedrag=Decimal("745.00"), contract_startdatum="01-06-2026")]
+
+    def get_geschiedenis(self, kamer):
+        # Juni (haar instapmaand) is al lang geleden volledig ontvangen.
+        return [
+            HistorieRegel(
+                maand="2026-06", kamer="1", huurder="Stefania", verwacht_bedrag=Decimal("745.00"),
+                ontvangen_bedrag=Decimal("745.00"), status=Status.BETAALD,
+            ),
+        ]
+
+
+class FakeBunqClientGevestigdeHuurderOudeInstapmaand:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        # Gewone (iets vroege) huur voor juli, betaald op 30 juni - dus ná de
+        # 17e-grens in juni, en toevallig in dezelfde kalendermaand als haar
+        # (allang afgehandelde) instapdatum.
+        return [
+            Payment(bedrag=Decimal("745.00"), valuta="EUR", tegenpartij_naam="Stefania", tegenpartij_iban=None,
+                    omschrijving="Rent July Stefania", datum=date(2026, 6, 30)),
+        ]
+
+
+def test_run_check_gevestigde_huurder_met_oude_instapmaand_verliest_betaling_niet(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie: een allang gevestigde
+    # huurder wiens 'Contract startdatum' nog altijd de historische
+    # instapmaand vermeldt (logisch, die verandert nooit) betaalt heel
+    # normaal een beetje vroeg (30 juni, voor de 17e-grens al ná de vorige
+    # maand) voor juli. Zonder de "instapbedrag al eerder ontvangen"-grens in
+    # _hoort_bij_deze_maand() werd die betaling, puur omdat juni toevallig
+    # ook haar instapmaand was, alsnog aan die allang afgehandelde
+    # instapmaand vastgeplakt in plaats van aan juli - de betaling verdween
+    # dan spoorloos: niet toegekend aan juli, maar ook niet zichtbaar bij
+    # "niet-gekoppeld" (want voor juni's controle wordt niet meer gekeken).
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientGevestigdeHuurderOudeInstapmaand)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientGevestigdeHuurderOudeInstapmaand)
+
+    _tenants, results, unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 27),
+    )
+
+    assert unmatched == []
+    assert results[0].ontvangen_bedrag == Decimal("745.00")
+    assert results[0].status == Status.BETAALD
+
+
 def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(monkeypatch, tmp_path):
     # Diezelfde betaling mag de vólgende maand niet nóg een keer meetellen
     # (dat zou de instapmaand-betaling zowel in juli als in augustus als
