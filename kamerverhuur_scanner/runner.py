@@ -16,7 +16,8 @@ from .config import Config
 from .mailer import MailError, verstuur_email
 from .matcher import (
     _INSTAPMAAND_TOLERANTIE_PERCENTAGE,
-    _matches,
+    _matches_los,
+    _matches_sterk,
     _verwerk_maand,
     match_tenants_to_payments,
     openstaand_tekort_uit_geschiedenis,
@@ -267,8 +268,19 @@ def run_check(
     # sowieso als "niet-gekoppeld" getoond wordt) valt terug op de gewone,
     # tenant-onafhankelijke 17e-regel - anders zou zo'n betaling stilzwijgend
     # uit de "niet-gekoppeld"-lijst verdwijnen i.p.v. daar zichtbaar te blijven.
+    #
+    # Zoekt eerst een sterke match (IBAN/letterlijk zoekwoord) en pas als die
+    # er geen oplevert een zwakke (losse naamdelen) - dezelfde volgorde als
+    # match_tenants_to_payments() zelf. Zonder die volgorde kon een zwakke,
+    # onterechte match op een héél andere (instap-)huurder een betaling al
+    # hier uit de maand-lijst filteren, vóórdat de eigenlijke matching er
+    # zelfs naar keek - de betaling verdween dan spoorloos: niet toegekend,
+    # maar ook niet zichtbaar bij "niet-gekoppeld".
     def _hoort_bij_deze_maand(betaling: Payment) -> bool:
-        gematchte_huurder = next((t for t in tenants_voor_match if _matches(t, betaling)), None)
+        gematchte_huurder = (
+            next((t for t in tenants_voor_match if _matches_sterk(t, betaling)), None)
+            or next((t for t in tenants_voor_match if _matches_los(t, betaling)), None)
+        )
         instap_start = _tenant_startdatum(gematchte_huurder) if gematchte_huurder else None
         return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
 
