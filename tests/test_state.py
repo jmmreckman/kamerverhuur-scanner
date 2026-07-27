@@ -1,10 +1,11 @@
 """Tests voor de 'laatste controle'-cache - moet in een instelbare map
 opgeslagen worden (STATE_DIR), anders is de cache na elke herbuild van de
 Docker-container weer leeg (niet-volume paden worden dan gewist)."""
+from datetime import date
 from decimal import Decimal
 
 from kamerverhuur_scanner import state
-from kamerverhuur_scanner.models import Status, Tenant, TenantResult
+from kamerverhuur_scanner.models import Payment, Status, Tenant, TenantResult
 
 
 def _result() -> TenantResult:
@@ -22,6 +23,34 @@ def test_save_en_load_gebruiken_state_dir(tmp_path):
     geladen = state.load("mahoniestraat", state_dir=str(tmp_path))
     assert geladen is not None
     assert geladen["resultaten"][0]["kamer"] == "1"
+
+
+def test_save_zonder_unmatched_payments_geeft_lege_lijst(tmp_path):
+    # Bestaand gedrag (bv. oudere aanroepen die alleen het aantal meegeven,
+    # niet de details zelf) moet niet crashen - gewoon een lege lijst.
+    state.save("mahoniestraat", [_result()], 2, state_dir=str(tmp_path))
+    geladen = state.load("mahoniestraat", state_dir=str(tmp_path))
+    assert geladen["niet_gekoppelde_betalingen"] == 2
+    assert geladen["niet_gekoppelde_betalingen_lijst"] == []
+
+
+def test_save_bewaart_details_van_niet_gekoppelde_betalingen(tmp_path):
+    # Zonder dit blijft de betalingenpagina bij een gewoon bezoek (buiten een
+    # verse "Nu controleren"-klik om) leeg, ook al meldt het dashboard wel
+    # "X betaling(en) niet gekoppeld" - de details werden voorheen nergens
+    # bewaard, alleen het aantal.
+    betaling = Payment(
+        bedrag=Decimal("650.00"), valuta="EUR", tegenpartij_naam="M Poncea Andronescu",
+        tegenpartij_iban="NL91ABNA0417164300", omschrijving="Huur juli", datum=date(2026, 7, 24),
+    )
+    state.save("mahoniestraat", [_result()], 1, state_dir=str(tmp_path), unmatched_payments=[betaling])
+
+    geladen = state.load("mahoniestraat", state_dir=str(tmp_path))
+    regel = geladen["niet_gekoppelde_betalingen_lijst"][0]
+    assert regel["datum"] == "24-07-2026"
+    assert regel["tegenpartij_naam"] == "M Poncea Andronescu"
+    assert regel["bedrag"] == "650.00"
+    assert regel["omschrijving"] == "Huur juli"
 
 
 def test_load_in_andere_state_dir_vindt_niets(tmp_path):

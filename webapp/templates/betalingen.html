@@ -90,6 +90,25 @@
     </tbody>
   </table>
   </div>
+
+  {% if cache["niet_gekoppelde_betalingen_lijst"] %}
+  <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
+    <tbody>
+    {% for p in cache["niet_gekoppelde_betalingen_lijst"] %}
+    <tr>
+      <td data-label="Datum">{{ p["datum"] }}</td>
+      <td data-label="Van">{{ p["tegenpartij_naam"] }}</td>
+      <td data-label="Bedrag">{{ p["bedrag"]|eur }}</td>
+      <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p["omschrijving"] }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 

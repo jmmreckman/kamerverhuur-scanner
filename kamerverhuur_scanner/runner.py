@@ -236,7 +236,7 @@ def run_check(
             # kamerpagina vult de lopende maand zo nodig zelf aan vanuit de
             # state-cache (zie webapp/reliability.py:voeg_actuele_maand_toe).
             logger.exception("[%s] Bijwerken van de Historie-sheet voor %s is mislukt.", pand.slug, maand)
-        state.save(pand.slug, results, len(unmatched), config.state_dir)
+        state.save(pand.slug, results, len(unmatched), config.state_dir, unmatched_payments=unmatched)
         logger.info("[%s] Sheet en geschiedenis bijgewerkt.", pand.slug)
         _meld_indien_alles_betaald(config, pand, results, maand)
 

@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
-from .models import TenantResult
+from .models import Payment, TenantResult
 
 
 def _bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
@@ -17,7 +17,21 @@ def _bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     return Path(state_dir) / f"laatste_resultaat_{veilige_slug}.json"
 
 
-def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen: int, state_dir: str = ".") -> None:
+def save(
+    pand_slug: str,
+    results: list[TenantResult],
+    niet_gekoppelde_betalingen: int,
+    state_dir: str = ".",
+    unmatched_payments: list[Payment] | None = None,
+) -> None:
+    """`unmatched_payments` is optioneel (de details van de niet-gekoppelde
+    betalingen zelf, i.p.v. alleen het aantal) - zonder dit blijft de
+    dashboard-melding werken (die gebruikt alleen het aantal), maar toont de
+    betalingenpagina bij het volgende bezoek (buiten een verse "Nu
+    controleren"-klik om) geen tabel met wie die betalingen deed. Bewaard als
+    kant-en-klare weergavetekst (net als de rest van dit bestand), niet als
+    losse datum-/bedragvelden - dit is puur voor tonen, niet voor verder
+    rekenen."""
     data = {
         "gecontroleerd_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
         "resultaten": [
@@ -31,6 +45,15 @@ def save(pand_slug: str, results: list[TenantResult], niet_gekoppelde_betalingen
             for r in results
         ],
         "niet_gekoppelde_betalingen": niet_gekoppelde_betalingen,
+        "niet_gekoppelde_betalingen_lijst": [
+            {
+                "datum": p.datum.strftime("%d-%m-%Y"),
+                "tegenpartij_naam": p.tegenpartij_naam,
+                "bedrag": str(p.bedrag),
+                "omschrijving": p.omschrijving,
+            }
+            for p in (unmatched_payments or [])
+        ],
     }
     _bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
 
