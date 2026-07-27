@@ -385,6 +385,49 @@ def test_run_check_vroege_instap_met_trage_betaling_na_17e_telt_ook(monkeypatch,
     assert results[0].status == Status.BETAALD
 
 
+class FakeSheetClientLateVooruitbetalingVoorInstap(FakeSheetClientInstapper):
+    def get_tenants(self):
+        # Trekt pas 1 augustus in, maar het betaalverzoek is al bij het
+        # tekenen verstuurd - de betaling zelf komt pas laat in juli binnen
+        # (na de 17e-grens).
+        return [_tenant(verwacht_bedrag=Decimal("650.00"), contract_startdatum="01-08-2026", borg_bedrag=Decimal("500.00"))]
+
+
+class FakeBunqClientLateVooruitbetalingVoorInstap:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            Payment(bedrag=Decimal("1150.00"), valuta="EUR", tegenpartij_naam="Henri", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date(2026, 7, 27)),
+        ]
+
+
+def test_run_check_late_vooruitbetaling_in_maand_voor_instap_telt_voor_die_maand(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie: een huurder trekt pas de
+    # 1e van vólgende maand in, maar het betaalverzoek (borg + volle eerste
+    # maandhuur) is al bij het tekenen verstuurd en komt pas ná de 17e-grens
+    # in de maand ervóór binnen. _verwacht_bedrag_voor_maand() verwacht dat
+    # bedrag onvoorwaardelijk al in die maand ervóór - zonder de bijpassende
+    # uitzondering in _effectieve_maand_voor_instap() schoof de gewone
+    # 17e-regel zo'n late betaling per ongeluk door naar de instapmaand zelf,
+    # waar niets meer op hem paste (want in de instapmaand zelf werd dan
+    # gewoon weer het volledige instapbedrag verwacht, ongeacht dat het al
+    # eerder betaald was) - de betaling verscheen dan structureel als
+    # "niet-gekoppeld" en de kamer bleef "Nog niet ontvangen" tonen.
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientLateVooruitbetalingVoorInstap)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientLateVooruitbetalingVoorInstap)
+
+    _tenants, results, unmatched = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 27),
+    )
+
+    assert unmatched == []
+    assert results[0].ontvangen_bedrag == Decimal("1150.00")
+    assert results[0].status == Status.BETAALD
+
+
 def test_run_check_late_instap_betaling_telt_niet_nogmaals_voor_volgende_maand(monkeypatch, tmp_path):
     # Diezelfde betaling mag de vólgende maand niet nóg een keer meetellen
     # (dat zou de instapmaand-betaling zowel in juli als in augustus als

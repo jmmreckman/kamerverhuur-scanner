@@ -51,36 +51,50 @@ def _effectieve_maand(datum: date) -> tuple[int, int]:
     return (datum.year, datum.month + 1)
 
 
+def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
+    return (jaar - 1, 12) if maand == 1 else (jaar, maand - 1)
+
+
 def _effectieve_maand_voor_instap(datum: date, instap_start: date | None) -> tuple[int, int]:
     """Zelfde 17e-grens als _effectieve_maand(), behalve voor een betaling die
-    in dezelfde kalendermaand valt als een instap-startdatum: die telt gewoon
-    voor die kalendermaand zelf, ongeacht de dag van zowel de betaling áls de
-    startdatum. De 17e-grens is bedoeld voor een bestaande huurder die vroeg
-    vooruitbetaalt voor volgende maand - dat gaat niet op binnen iemands eigen
-    instapmaand: een betaling die pas laat in die maand binnenkomt (bv. een
-    trage internationale overschrijving, of gewoon een paar dagen na de
-    daadwerkelijke intrekdatum) is per definitie nog steeds de instapbetaling
-    van díe maand, nooit een vooruitbetaling voor de maand erna - dat zou
-    betekenen dat iemand al vooruitbetaalt voor een maand voordat het
-    huurcontract voor de instapmaand zelf is voldaan, wat niet voorkomt.
-    Zonder deze uitzondering verdween zo'n (te) laat betaalde instapbetaling
-    structureel uit beeld: te laat voor de instapmaand zelf, maar de
-    volgende-maand-controle verwacht dan weer het volle, niet-pro-rata bedrag
-    (zie _verwacht_bedrag_voor_maand), dus geen van beide maanden zou 'm ooit
-    herkennen - dit trof ook een instap die zelf vóór de 17e begon, zolang de
-    betaling er zelf maar ná viel.
+    in dezelfde kalendermaand valt als een instap-startdatum (of de
+    kalendermaand daar vlak vóór): die telt gewoon voor díe kalendermaand
+    zelf, ongeacht de dag van zowel de betaling áls de startdatum. De
+    17e-grens is bedoeld voor een bestaande huurder die vroeg vooruitbetaalt
+    voor volgende maand - dat gaat niet op rond iemands eigen instap:
+    - Een betaling die pas laat in de instapmaand zelf binnenkomt (bv. een
+      trage internationale overschrijving, of gewoon een paar dagen na de
+      daadwerkelijke intrekdatum) is per definitie nog steeds de
+      instapbetaling van díe maand, nooit een vooruitbetaling voor de maand
+      erna.
+    - Een betaling die laat in de maand vlak vóór de instapmaand binnenkomt
+      (bv. het betaalverzoek dat al bij het tekenen is verstuurd, weken
+      voordat de huurder er daadwerkelijk intrekt) is - net zo min - een
+      vooruitbetaling voor de instapmaand zelf: _verwacht_bedrag_voor_maand()
+      verwacht het instapbedrag namelijk al onvoorwaardelijk in die maand
+      ervóór, ongeacht op welke dag het binnenkomt. Zonder deze uitzondering
+      zou de gewone 17e-regel zo'n late (maar wel al vóór instap verwachte)
+      betaling juist een maand te ver doorschuiven, naar de instapmaand zelf
+      - waar 'm dan niets meer te matchen valt, want het volledige
+      instapbedrag stond daar al (mogelijk) als 0 verwacht zodra het in de
+      maand ervóór is ontvangen.
+
+    Zonder deze uitzonderingen verdween zo'n (te) laat betaalde
+    instapbetaling structureel uit beeld: te laat voor de bedoelde maand,
+    maar de andere maand verwacht een heel ander bedrag (zie
+    _verwacht_bedrag_voor_maand), dus geen van beide maanden zou 'm ooit
+    herkennen.
 
     Bewust `is None`-vriendelijk aan de aanroepkant (zie run_check(): per
     (huurder, betaling)-paar bepaald, niet globaal per betaling) - alleen zo
     blijft dit ondubbelzinnig voor élke latere controle-maand hetzelfde
     resultaat geven (dus nooit twee keer meegeteld, zie run_check())."""
-    if instap_start and (datum.year, datum.month) == (instap_start.year, instap_start.month):
-        return (datum.year, datum.month)
+    if instap_start:
+        instap_maand = (instap_start.year, instap_start.month)
+        betaal_maand = (datum.year, datum.month)
+        if betaal_maand in (instap_maand, _vorige_maand(*instap_maand)):
+            return betaal_maand
     return _effectieve_maand(datum)
-
-
-def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
-    return (jaar - 1, 12) if maand == 1 else (jaar, maand - 1)
 
 
 def _maand_sleutel_naar_string(sleutel: tuple[int, int]) -> str:
