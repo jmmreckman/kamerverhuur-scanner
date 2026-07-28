@@ -12,6 +12,7 @@ const filterWijkEl = document.getElementById("filter-wijk");
 const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
+const filterDagenEl = document.getElementById("filter-dagen");
 const verversKnop = document.getElementById("ververs-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -51,12 +52,17 @@ function gefilterd() {
   const maxEigenInleg = parseFloat(filterEigenInlegEl.value);
   const minWinst = parseFloat(filterWinstEl.value);
   const zoek = filterZoekEl.value.trim().toLowerCase();
+  const maxDagen = parseFloat(filterDagenEl.value);
 
   return alleKansen.filter((k) => {
     if (wijk && k.wijknaam !== wijk) return false;
     if (!isNaN(maxEigenInleg) && (k.eigen_inleg_pp === null || k.eigen_inleg_pp > maxEigenInleg)) return false;
     if (!isNaN(minWinst) && (k.winst_pm_pp === null || k.winst_pm_pp < minWinst)) return false;
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
+    if (!isNaN(maxDagen)) {
+      const dagen = dagenOpFunda(k.eerst_gezien);
+      if (dagen === null || dagen > maxDagen) return false;
+    }
     return true;
   });
 }
@@ -215,7 +221,7 @@ async function laadKansen() {
   renderAlles();
 }
 
-for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl]) {
+for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl, filterDagenEl]) {
   el.addEventListener("input", renderAlles);
 }
 
