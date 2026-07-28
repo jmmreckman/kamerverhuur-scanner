@@ -272,6 +272,46 @@ twijfelachtig resultaat. Geen proxy of browser-emulatie ingebouwd; Funda kan dit
 termijn alsnog gaan blokkeren, in welk geval de check gewoon steeds `None` (onduidelijk)
 teruggeeft en niets doet, zonder de rest van de scanner te breken.
 
+## Browsergebaseerde zoekopdrachten (eigen Funda-zoek-URL's)
+
+De dagelijkse Funda-alertmail toont maar een beperkt aantal woningen individueel per
+zoekopdracht ("Bekijk alle N woningen" voor de rest, zie "Bekende beperkingen"
+hieronder) — en Funda staat maar 5 opgeslagen zoekopdrachten per account toe. Als
+aanvulling daarop kan de scan ook zelf, met een gewone (onaangepaste) Playwright/
+Chromium-browser, eigen Funda-zoek-URL's bezoeken: net zoals jij dat zelf zou doen in
+een browser, geen scraping-dienst, geen fingerprint-spoofing, proxy-rotatie of
+CAPTCHA-omzeiling. De browser voert gewoon JavaScript uit (en doorloopt zo ook een
+eventuele anti-bot-controle van funda zelf netjes, zoals elke browser dat doet).
+
+**Zoekopdrachten beheren**: via "Zoekopdrachten" op kansen.steenhub.nl (zelfde soort
+pagina als vroeger voor de Apify-zoek-URL's) - stel op funda.nl zelf een zoekopdracht
+samen (locatie, prijs, type, oppervlakte) en filter daarbij bewust op **"gepubliceerd
+sinds"** (bv. de laatste paar dagen i.p.v. "sinds gisteren", als buffer tegen een
+gemiste dag) zodat elke pagina klein en overzichtelijk blijft, ook als de onderliggende
+zoekopdracht breed is (bv. heel Rotterdam). Voorbeeld-URL:
+`https://www.funda.nl/zoeken/koop?selected_area=rotterdam&price=100000-800000&object_type=house,apartment&construction_type=resale&publication_date=3&availability=available&floor_area=75-`
+(`publication_date=3` = laatste 3 dagen). Met "Testen" haal je één zoekopdracht meteen
+los op (een paar seconden), zonder op de volgende dagelijkse scan te wachten.
+
+**Hoe het werkt**: de pagina wordt bezocht, de zichtbare paginatekst wordt overgenomen
+(zoals bij een handmatige kopieer/plak) en door dezelfde beproefde tekstdump-parser
+gehaald als "Handmatig toevoegen" (`rotterdam_scanner.handmatig.parse_funda_tekstdump`)
+- geen aparte, kwetsbaardere set CSS-selectors. Bewust rustig tempo tussen meerdere
+zoekopdrachten (een paar seconden pauze) - dit is bedoeld voor een handvol eigen
+zoekopdrachten, een paar keer per dag, niet voor grootschalig/parallel ophalen.
+
+**Resources**: Chromium (`playwright install --with-deps chromium` in de Dockerfile)
+maakt de image en het geheugengebruik van de `fundazoeker`/`kansen`/
+`beschikbaarheid-check`-services merkbaar groter - hou hier rekening mee bij het
+dimensioneren van de VPS.
+
+**Als funda dit blokkeert**: net als bij de beschikbaarheid-check hierboven, best-effort
+- een storing bij één zoekopdracht (bv. een anti-bot-controle die niet doorkomt) meldt
+zich als waarschuwing in het dagrapport en blokkeert nooit de rest van de scan. Er zit
+bewust geen enkele vorm van detectie-omzeiling in; als funda dit desondanks structureel
+blokkeert, is de conclusie dat dit specifieke pad niet werkt, niet dat er trucs bij
+moeten.
+
 ## Het dagrapport lezen
 
 Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
@@ -501,11 +541,11 @@ handmatig hebt verwijderd (via de verwijder-link) worden hierbij, net als bij
   `rotterdam_scanner/funda_mail.py` bij.
 - **Als funda op één dag meer nieuwe woningen vindt dan er individueel in de mail
   passen** (de mail toont blijkbaar niet altijd alles los, met een "Bekijk alle N
-  woningen"-knop voor de rest — dat leidt naar een zoekresultatenpagina die we niet
-  kunnen openen), mist het systeem die extra woningen. Het rapport waarschuwt hierover
-  als het detecteerbaar is. Voorkomen: zet liever een paar smallere zoekopdrachten op
-  dan één hele brede, zodat je zelden meer dan een paar nieuwe woningen per opdracht
-  per dag hebt.
+  woningen"-knop voor de rest — die link leidt naar een zoekresultatenpagina die de
+  mail-parser zelf niet kan openen), mist de mail-alertroute die extra woningen. Het
+  rapport waarschuwt hierover als het detecteerbaar is. Zie "Browsergebaseerde
+  zoekopdrachten" hierboven voor de aanvullende route die dit grotendeels ondervangt
+  (eigen zoek-URL's, gefilterd op recent gepubliceerd, met een gewone browser bezocht).
 - **Verkocht-detectie is best-effort** (zie "Beschikbaarheid-check" hierboven) — bij een
   netwerkfout/blokkade/onherkende pagina blijft een verkocht huis gewoon staan tot de
   volgende check het wél herkent, of tot max. 30 dagen als dat nooit lukt.

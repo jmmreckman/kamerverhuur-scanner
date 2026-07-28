@@ -332,6 +332,60 @@ def test_run_verwerkt_alleen_nieuwe_listings_en_update_laatst_gezien(tmp_path):
     assert result_dag2.alle_actief[0].laatst_gezien == "2026-07-05"
 
 
+def test_run_verwerkt_ook_listings_van_browser_zoekopdrachten(tmp_path):
+    config = _config(tmp_path)
+    browser_listing = _listing(
+        object_id="3073KJ-47A", straat="Hillevliet", huisnummer="47", postcode="3073KJ", toevoeging="A",
+    )
+
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[]),
+    ), patch(
+        "rotterdam_scanner.pipeline.laad_browser_zoekopdrachten",
+        return_value=["https://www.funda.nl/zoeken/koop?a=1"],
+    ), patch(
+        "rotterdam_scanner.pipeline.browser_haal_listings_op", return_value=([browser_listing], []),
+    ), patch("rotterdam_scanner.pipeline.time.sleep") as sleep_mock, p1, p2, p3, p4, p5:
+        result = pipeline.run(config, today=date(2026, 7, 5))
+
+    sleep_mock.assert_not_called()  # geen pauze nodig bij precies 1 zoekopdracht
+    assert len(result.nieuw_actief) == 1
+    assert result.nieuw_actief[0].object_id == "3073KJ-47A"
+
+
+def test_run_pauzeert_tussen_meerdere_browser_zoekopdrachten(tmp_path):
+    config = _config(tmp_path)
+
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[]),
+    ), patch(
+        "rotterdam_scanner.pipeline.laad_browser_zoekopdrachten",
+        return_value=["https://www.funda.nl/zoeken/koop?a=1", "https://www.funda.nl/zoeken/koop?a=2"],
+    ), patch(
+        "rotterdam_scanner.pipeline.browser_haal_listings_op", return_value=([], []),
+    ), patch("rotterdam_scanner.pipeline.time.sleep") as sleep_mock, p1, p2, p3, p4, p5:
+        pipeline.run(config, today=date(2026, 7, 5))
+
+    sleep_mock.assert_called_once()
+
+
+def test_run_geeft_browser_zoekopdracht_fout_door_zonder_te_crashen(tmp_path):
+    config = _config(tmp_path)
+    with patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan", return_value=FundaMailScan(listings=[]),
+    ), patch(
+        "rotterdam_scanner.pipeline.laad_browser_zoekopdrachten",
+        return_value=["https://www.funda.nl/zoeken/koop?a=1"],
+    ), patch(
+        "rotterdam_scanner.pipeline.browser_haal_listings_op", side_effect=RuntimeError("timeout"),
+    ):
+        result = pipeline.run(config, today=date(2026, 7, 5))
+
+    assert any("timeout" in fout for fout in result.fouten)
+
+
 def test_run_meldt_fout_bij_kapotte_mailbox_zonder_te_crashen(tmp_path):
     config = _config(tmp_path)
     with patch(

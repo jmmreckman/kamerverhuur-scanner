@@ -300,3 +300,30 @@ body {
   word-break: break-all;
   font-size: 0.9em;
 }
+
+.url-label {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.url-acties {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.url-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.url-form input {
+  flex: 1;
+  min-width: 240px;
+  padding: 0.5rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  font-size: 0.95em;
+}

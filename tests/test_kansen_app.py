@@ -379,3 +379,83 @@ def test_handmatig_toevoegen_forceer_herprocessen_vinkje(tmp_path, monkeypatch):
 
     client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A", "forceer_herprocessen": "on"})
     assert aangeroepen == [True]
+
+
+# --- Zoekopdrachten (browsergebaseerde search-URL's) ---
+
+
+def test_zoekopdrachten_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/zoekopdrachten")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_zoekopdrachten_toont_lege_lijst(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/zoekopdrachten")
+    assert resp.status_code == 200
+    assert "Nog geen zoekopdrachten toegevoegd." in resp.get_data(as_text=True)
+
+
+def test_zoekopdrachten_toevoegen_slaat_url_en_label_op(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post(
+        "/zoekopdrachten/toevoegen",
+        data={"url": "https://www.funda.nl/zoeken/koop?selected_area=rotterdam", "label": "Rotterdam t/m 8 ton"},
+        follow_redirects=True,
+    )
+    tekst = resp.get_data(as_text=True)
+    assert "Rotterdam t/m 8 ton" in tekst
+    assert "selected_area=rotterdam" in tekst
+
+
+def test_zoekopdrachten_toevoegen_weigert_niet_funda_url(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post(
+        "/zoekopdrachten/toevoegen", data={"url": "https://www.evil.example/", "label": ""},
+        follow_redirects=True,
+    )
+    assert "lijkt geen Funda-zoek-URL" in resp.get_data(as_text=True)
+
+
+def test_zoekopdrachten_verwijderen_haalt_url_weg(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.post(
+        "/zoekopdrachten/toevoegen", data={"url": "https://www.funda.nl/zoeken/koop?a=1", "label": ""},
+    )
+    resp = app_client.post(
+        "/zoekopdrachten/verwijderen", data={"url": "https://www.funda.nl/zoeken/koop?a=1"},
+        follow_redirects=True,
+    )
+    assert "Nog geen zoekopdrachten toegevoegd." in resp.get_data(as_text=True)
+
+
+def test_zoekopdrachten_testen_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/zoeken/koop?a=1"})
+    assert resp.status_code == 302
+
+
+def test_zoekopdrachten_testen_zonder_url_geeft_fout(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/zoekopdrachten/testen", data={"url": ""})
+    assert resp.status_code == 400
+    assert resp.get_json()["fout"] == "Onbekende zoekopdracht."
+
+
+def test_zoekopdrachten_testen_geeft_gevonden_adressen_terug(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+    from rotterdam_scanner.funda_mail import FundaListing
+
+    listing = FundaListing(
+        object_id="3073KJ-47A", url="https://www.funda.nl/detail/koop/rotterdam/x/1/",
+        straatnaam="Hillevliet", huisnummer="47", toevoeging="A", postcode="3073KJ", woonplaats="Rotterdam",
+    )
+    monkeypatch.setattr(appmodule, "browser_haal_listings_op", lambda url, vandaag=None: ([listing], []))
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = app_client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/zoeken/koop?a=1"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["aantal"] == 1
+    assert "Hillevliet 47A, 3073KJ Rotterdam" in data["adressen"]
+    assert data["fouten"] == []

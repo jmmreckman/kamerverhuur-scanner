@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 from datetime import date
 
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
+from .browser_scraper import haal_listings_op as browser_haal_listings_op
+from .browser_zoekopdrachten import laad as laad_browser_zoekopdrachten
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_by_postcode
@@ -16,6 +20,14 @@ from .monumenten import bepaal_huurprijsopslag, hoogste_opslagpercentage
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
 from .woz import meest_recente_woz_waarde
+
+logger = logging.getLogger(__name__)
+
+# Rustig tempo tussen meerdere browser-zoekopdrachten (zie
+# _haal_browser_zoekopdrachten_listings hieronder) - dit is bedoeld als een paar
+# eigen zoekopdrachten die net als een mens ná elkaar bezocht worden, niet als
+# zo snel/veel mogelijk parallel ophalen.
+_WACHTTIJD_TUSSEN_ZOEKOPDRACHTEN_SEC = 5.0
 
 
 @dataclass
@@ -402,6 +414,29 @@ def _verwerk_listings(
     )
 
 
+def _haal_browser_zoekopdrachten_listings(config: Config, today: date) -> tuple[list[FundaListing], list[str]]:
+    """Bezoekt elke opgeslagen browser-zoekopdracht (zie browser_zoekopdrachten.py) ná
+    elkaar, met een korte pauze ertussen - bedoeld voor een handvol eigen
+    zoekopdrachten (bv. per wijk/gemeente, gefilterd op recent gepubliceerd), niet voor
+    veel/parallel ophalen. Een storing bij één zoekopdracht (bv. een anti-bot-controle)
+    mag de andere zoekopdrachten of de rest van de dagelijkse scan nooit blokkeren."""
+    urls = laad_browser_zoekopdrachten(config)
+    listings: list[FundaListing] = []
+    fouten: list[str] = []
+    for i, url in enumerate(urls):
+        if i > 0:
+            time.sleep(_WACHTTIJD_TUSSEN_ZOEKOPDRACHTEN_SEC)
+        try:
+            url_listings, url_fouten = browser_haal_listings_op(url, today)
+        except Exception as exc:  # noqa: BLE001 - nooit de hele scan laten crashen op 1 zoekopdracht
+            logger.exception("Browser-zoekopdracht %s is mislukt", url)
+            fouten.append(f"Browser-zoekopdracht mislukt ({url}): {exc}")
+            continue
+        listings.extend(url_listings)
+        fouten.extend(url_fouten)
+    return listings, fouten
+
+
 def run(config: Config, today: date | None = None) -> RunResult:
     today = today or date.today()
     state = StateStore(config.state_path)
@@ -413,9 +448,13 @@ def run(config: Config, today: date | None = None) -> RunResult:
         result.fouten.append(f"Kon Funda-alertmail niet uitlezen: {exc}")
         scan = None
 
-    listings = scan.listings if scan else []
+    listings = list(scan.listings) if scan else []
     if scan:
         result.fouten.extend(scan.waarschuwingen)
+
+    browser_listings, browser_fouten = _haal_browser_zoekopdrachten_listings(config, today)
+    listings.extend(browser_listings)
+    result.fouten.extend(browser_fouten)
 
     try:
         te_verwijderen_ids = fetch_verwijder_commandos(config)
