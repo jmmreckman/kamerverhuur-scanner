@@ -112,3 +112,46 @@ def test_maak_debug_snapshot_geeft_nooit_een_fout_door(tmp_path):
     page.screenshot.side_effect = RuntimeError("schijf vol")
     config = _config(state_path=tmp_path / "state.json")
     browser_scraper._maak_debug_snapshot(page, config, "test")  # mag niet raisen
+
+
+def test_debug_bestanden_zonder_config_geeft_lege_lijst():
+    assert browser_scraper.debug_bestanden(None) == []
+
+
+def test_debug_bestanden_zonder_map_geeft_lege_lijst(tmp_path):
+    config = _config(state_path=tmp_path / "state.json")
+    assert browser_scraper.debug_bestanden(config) == []
+
+
+def test_debug_bestanden_geeft_gesorteerde_lijst(tmp_path):
+    config = _config(state_path=tmp_path / "state.json")
+    page = MagicMock()
+    page.content.return_value = "<html></html>"
+    browser_scraper._maak_debug_snapshot(page, config, "zoekresultaten")
+    browser_scraper._maak_debug_snapshot(page, config, "homepage")
+    assert browser_scraper.debug_bestanden(config) == ["homepage.html", "zoekresultaten.html"]
+
+
+def test_debug_bestand_pad_geeft_none_zonder_config():
+    assert browser_scraper.debug_bestand_pad(None, "homepage.png") is None
+
+
+def test_debug_bestand_pad_geeft_none_voor_onbekend_bestand(tmp_path):
+    config = _config(state_path=tmp_path / "state.json")
+    assert browser_scraper.debug_bestand_pad(config, "onbekend.png") is None
+
+
+def test_debug_bestand_pad_geeft_pad_voor_bestaand_bestand(tmp_path):
+    config = _config(state_path=tmp_path / "state.json")
+    page = MagicMock()
+    page.content.return_value = "<html>hallo</html>"
+    browser_scraper._maak_debug_snapshot(page, config, "homepage")
+    pad = browser_scraper.debug_bestand_pad(config, "homepage.html")
+    assert pad is not None
+    assert pad.read_text(encoding="utf-8") == "<html>hallo</html>"
+
+
+def test_debug_bestand_pad_blokkeert_padtraversal(tmp_path):
+    config = _config(state_path=tmp_path / "state.json")
+    (tmp_path / "geheim.txt").write_text("shh", encoding="utf-8")
+    assert browser_scraper.debug_bestand_pad(config, "../geheim.txt") is None

@@ -65,6 +65,22 @@
       <input type="url" name="url" placeholder="https://www.funda.nl/zoeken/koop?..." required>
       <button type="submit">Toevoegen</button>
     </form>
+
+    {% if debug_bestanden %}
+    <h2>Debug: wat de browser laatst zag</h2>
+    <p class="muted">
+      Screenshot + ruwe HTML van elke stap (homepage, inlogpagina, zoekresultaten) bij de
+      laatste keer dat "Testen" is gebruikt - handig om te zien wat funda daadwerkelijk
+      teruggaf zonder daar zelf live bij te kunnen kijken.
+    </p>
+    <ul class="url-lijst">
+      {% for bestand in debug_bestanden %}
+      <li class="url-item">
+        <a href="{{ url_for('zoekopdrachten_debug_bestand', bestand=bestand) }}" target="_blank" rel="noopener">{{ bestand }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </main>
 
   <script src="{{ url_for('static', filename='zoekopdrachten.js') }}"></script>

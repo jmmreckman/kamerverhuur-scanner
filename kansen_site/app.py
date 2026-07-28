@@ -11,9 +11,10 @@ from __future__ import annotations
 import hmac
 from functools import wraps
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from rotterdam_scanner import browser_zoekopdrachten, pipeline
+from rotterdam_scanner.browser_scraper import debug_bestand_pad, debug_bestanden
 from rotterdam_scanner.browser_scraper import haal_listings_op as browser_haal_listings_op
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
@@ -213,8 +214,22 @@ def create_app(config: Config | None = None) -> Flask:
     def zoekopdrachten():
         return render_template(
             "zoekopdrachten.html", opdrachten=browser_zoekopdrachten.laad_met_labels(config),
-            gebruiker=session["gebruiker"],
+            debug_bestanden=debug_bestanden(config), gebruiker=session["gebruiker"],
         )
+
+    @app.route("/zoekopdrachten/debug/<bestand>")
+    @login_required
+    def zoekopdrachten_debug_bestand(bestand):
+        # Toont een screenshot/HTML-snapshot van wat de browser tijdens een
+        # zoekopdracht daadwerkelijk te zien kreeg (zie browser_scraper.py:
+        # _maak_debug_snapshot) - de data-map zit op een los Docker-volume, dus
+        # niet zomaar als gewone map op de VPS te bekijken; dit maakt dat via de
+        # (al ingelogde) website alsnog mogelijk, zonder een aparte poort open te
+        # hoeven zetten.
+        pad = debug_bestand_pad(config, bestand)
+        if pad is None:
+            abort(404)
+        return send_file(pad)
 
     @app.route("/zoekopdrachten/toevoegen", methods=["POST"])
     @login_required

@@ -89,14 +89,37 @@ def _accepteer_cookies_indien_aanwezig(page) -> None:
 def _debug_map(config: "Config | None"):
     """Map voor debug-screenshots/HTML (zie _maak_debug_snapshot) - alleen
     beschikbaar als er een Config is (dus niet in de losse unit-tests). Zit in
-    dezelfde, al bestaande data-map als state.json, die op de VPS als bind-mount
-    (./data) rechtstreeks in te zien is - geen docker cp nodig."""
+    dezelfde data-map als state.json - die staat op een los Docker-volume, dus
+    niet zomaar als gewone map op de VPS te zien (vandaar de eigen
+    "Zoekopdrachten"-beheerpagina om deze bestanden te bekijken, i.p.v. er op
+    het bestandssysteem zelf naar te hoeven zoeken)."""
     if config is None:
         return None
     from pathlib import Path
 
     pad = Path(config.state_path).parent / "browser_debug"
     pad.mkdir(parents=True, exist_ok=True)
+    return pad
+
+
+def debug_bestanden(config: "Config | None") -> list[str]:
+    """Namen van de beschikbare debug-bestanden (voor de beheerpagina), gesorteerd."""
+    debug_map = _debug_map(config)
+    if debug_map is None or not debug_map.is_dir():
+        return []
+    return sorted(p.name for p in debug_map.iterdir() if p.is_file())
+
+
+def debug_bestand_pad(config: "Config | None", bestand: str):
+    """Geeft het volledige pad terug voor `bestand` binnen de debug-map, of None
+    als het niet (meer) bestaat of buiten die map zou vallen (padtraversal) -
+    gebruikt door de beheerpagina om een los debug-bestand te tonen/downloaden."""
+    debug_map = _debug_map(config)
+    if debug_map is None:
+        return None
+    pad = (debug_map / bestand).resolve()
+    if debug_map.resolve() not in pad.parents or not pad.is_file():
+        return None
     return pad
 
 

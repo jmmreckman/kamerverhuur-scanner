@@ -459,3 +459,39 @@ def test_zoekopdrachten_testen_geeft_gevonden_adressen_terug(app_client, monkeyp
     assert data["aantal"] == 1
     assert "Hillevliet 47A, 3073KJ Rotterdam" in data["adressen"]
     assert data["fouten"] == []
+
+
+def test_zoekopdrachten_toont_debug_bestanden(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+
+    monkeypatch.setattr(appmodule, "debug_bestanden", lambda config: ["homepage.png", "homepage.html"])
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/zoekopdrachten")
+    tekst = resp.get_data(as_text=True)
+    assert "homepage.png" in tekst
+    assert "homepage.html" in tekst
+
+
+def test_zoekopdrachten_debug_bestand_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/zoekopdrachten/debug/homepage.png")
+    assert resp.status_code == 302
+
+
+def test_zoekopdrachten_debug_bestand_onbekend_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/zoekopdrachten/debug/onbekend.png")
+    assert resp.status_code == 404
+
+
+def test_zoekopdrachten_debug_bestand_geeft_inhoud_terug(app_client, monkeypatch, tmp_path):
+    debug_map = tmp_path / "browser_debug"
+    debug_map.mkdir()
+    (debug_map / "homepage.html").write_text("<html>hallo</html>", encoding="utf-8")
+
+    import kansen_site.app as appmodule
+    monkeypatch.setattr(appmodule, "debug_bestand_pad", lambda config, bestand: debug_map / bestand if bestand == "homepage.html" else None)
+
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/zoekopdrachten/debug/homepage.html")
+    assert resp.status_code == 200
+    assert resp.get_data(as_text=True) == "<html>hallo</html>"
