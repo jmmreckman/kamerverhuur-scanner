@@ -247,7 +247,7 @@ def create_app(config: Config | None = None) -> Flask:
         if not url:
             return jsonify({"fout": "Onbekende zoekopdracht."}), 400
         try:
-            listings, fouten = browser_haal_listings_op(url)
+            listings, fouten = browser_haal_listings_op(url, None, config)
         except Exception as exc:  # noqa: BLE001
             return jsonify({"fout": f"Onverwachte fout tijdens het testen: {exc}"}), 500
         return jsonify({

@@ -34,6 +34,14 @@ class Config:
     # open komt te staan.
     kansen_app_users: dict[str, str] = field(default_factory=dict)
     kansen_app_secret_key: str = ""
+    # Optioneel: een echt funda-account waarmee de browsergebaseerde
+    # zoekopdrachten (zie browser_scraper.py) inloggen vóór het bezoeken van
+    # de zoekresultaten - leeg (standaard) = zonder ingelogde sessie, gewoon
+    # als anonieme bezoeker (met een "warme" sessie: eerst de homepage, dan
+    # pas zoeken). Puur bedoeld om precies te doen wat jijzelf ook zou doen
+    # als je op funda.nl zoekt, geen speciale/verborgen toegang.
+    funda_email: str = ""
+    funda_wachtwoord: str = ""
 
     @property
     def imap_host(self) -> str:
@@ -81,6 +89,8 @@ def load_config(env_path: Path | None = None) -> Config:
         smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
         kansen_app_users=_parse_kansen_app_users(os.environ.get("KANSEN_APP_USERS", "")),
         kansen_app_secret_key=os.environ.get("KANSEN_APP_SECRET_KEY", ""),
+        funda_email=os.environ.get("FUNDA_EMAIL", ""),
+        funda_wachtwoord=os.environ.get("FUNDA_WACHTWOORD", ""),
     )
 
 

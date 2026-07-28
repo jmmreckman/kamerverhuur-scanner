@@ -427,7 +427,7 @@ def _haal_browser_zoekopdrachten_listings(config: Config, today: date) -> tuple[
         if i > 0:
             time.sleep(_WACHTTIJD_TUSSEN_ZOEKOPDRACHTEN_SEC)
         try:
-            url_listings, url_fouten = browser_haal_listings_op(url, today)
+            url_listings, url_fouten = browser_haal_listings_op(url, today, config)
         except Exception as exc:  # noqa: BLE001 - nooit de hele scan laten crashen op 1 zoekopdracht
             logger.exception("Browser-zoekopdracht %s is mislukt", url)
             fouten.append(f"Browser-zoekopdracht mislukt ({url}): {exc}")

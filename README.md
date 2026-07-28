@@ -305,6 +305,15 @@ maakt de image en het geheugengebruik van de `fundazoeker`/`kansen`/
 `beschikbaarheid-check`-services merkbaar groter - hou hier rekening mee bij het
 dimensioneren van de VPS.
 
+**"Warme" sessie + optioneel inloggen**: in plaats van in koude toestand meteen naar
+de zoekpagina te springen, bezoekt de browser eerst de funda-homepage (en klikt een
+cookiebanner weg als die verschijnt) - net zoals een mens dat ook zou doen. Vul je
+`FUNDA_EMAIL`/`FUNDA_WACHTWOORD` in (.env), dan logt hij daarna ook in met dat echte
+account vóór het bezoeken van de zoekresultaten. De inlogpagina is niet vooraf te
+verifiëren (wordt zelf ook geblokkeerd voor geautomatiseerd verkeer), dus dit gebruikt
+generieke selectors en geeft het best-effort op (met een duidelijke waarschuwing) als
+inloggen een keer niet lukt - dat blokkeert nooit de rest van de scan.
+
 **Als funda dit blokkeert**: net als bij de beschikbaarheid-check hierboven, best-effort
 - een storing bij één zoekopdracht (bv. een anti-bot-controle die niet doorkomt) meldt
 zich als waarschuwing in het dagrapport en blokkeert nooit de rest van de scan. Er zit

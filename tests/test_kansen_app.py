@@ -450,7 +450,7 @@ def test_zoekopdrachten_testen_geeft_gevonden_adressen_terug(app_client, monkeyp
         object_id="3073KJ-47A", url="https://www.funda.nl/detail/koop/rotterdam/x/1/",
         straatnaam="Hillevliet", huisnummer="47", toevoeging="A", postcode="3073KJ", woonplaats="Rotterdam",
     )
-    monkeypatch.setattr(appmodule, "browser_haal_listings_op", lambda url, vandaag=None: ([listing], []))
+    monkeypatch.setattr(appmodule, "browser_haal_listings_op", lambda url, vandaag=None, config=None: ([listing], []))
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
     resp = app_client.post("/zoekopdrachten/testen", data={"url": "https://www.funda.nl/zoeken/koop?a=1"})
