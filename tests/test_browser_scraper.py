@@ -88,3 +88,27 @@ def test_accepteer_cookies_indien_aanwezig_geeft_nooit_een_fout_door():
     page = MagicMock()
     page.get_by_role.return_value.click.side_effect = Exception("nooit gevonden")
     browser_scraper._accepteer_cookies_indien_aanwezig(page)  # mag niet raisen
+
+
+def test_maak_debug_snapshot_doet_niets_zonder_config():
+    page = MagicMock()
+    browser_scraper._maak_debug_snapshot(page, None, "test")
+    page.screenshot.assert_not_called()
+
+
+def test_maak_debug_snapshot_schrijft_screenshot_en_html(tmp_path):
+    page = MagicMock()
+    page.content.return_value = "<html>hallo</html>"
+    config = _config(state_path=tmp_path / "state.json")
+    browser_scraper._maak_debug_snapshot(page, config, "test")
+
+    debug_map = tmp_path / "browser_debug"
+    assert (debug_map / "test.html").read_text(encoding="utf-8") == "<html>hallo</html>"
+    page.screenshot.assert_called_once_with(path=str(debug_map / "test.png"), full_page=True)
+
+
+def test_maak_debug_snapshot_geeft_nooit_een_fout_door(tmp_path):
+    page = MagicMock()
+    page.screenshot.side_effect = RuntimeError("schijf vol")
+    config = _config(state_path=tmp_path / "state.json")
+    browser_scraper._maak_debug_snapshot(page, config, "test")  # mag niet raisen

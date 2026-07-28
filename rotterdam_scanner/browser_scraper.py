@@ -86,6 +86,36 @@ def _accepteer_cookies_indien_aanwezig(page) -> None:
             continue
 
 
+def _debug_map(config: "Config | None"):
+    """Map voor debug-screenshots/HTML (zie _maak_debug_snapshot) - alleen
+    beschikbaar als er een Config is (dus niet in de losse unit-tests). Zit in
+    dezelfde, al bestaande data-map als state.json, die op de VPS als bind-mount
+    (./data) rechtstreeks in te zien is - geen docker cp nodig."""
+    if config is None:
+        return None
+    from pathlib import Path
+
+    pad = Path(config.state_path).parent / "browser_debug"
+    pad.mkdir(parents=True, exist_ok=True)
+    return pad
+
+
+def _maak_debug_snapshot(page, config: "Config | None", naam: str) -> None:
+    """Legt vast wat de browser op dit moment daadwerkelijk ziet (screenshot +
+    ruwe HTML, telkens overschreven onder dezelfde naam) - puur om te kunnen
+    zien wat een geautomatiseerde poging wel/niet te zien krijgt, zonder daar
+    zelf steeds live bij te kunnen kijken. Best-effort: mag nooit de rest laten
+    stranden als het wegschrijven zelf al misgaat."""
+    debug_map = _debug_map(config)
+    if debug_map is None:
+        return
+    try:
+        page.screenshot(path=str(debug_map / f"{naam}.png"), full_page=True)
+        (debug_map / f"{naam}.html").write_text(page.content(), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _inloggen_indien_geconfigureerd(page, config: "Config | None") -> None:
     """Best-effort: probeert in te loggen als FUNDA_EMAIL/FUNDA_WACHTWOORD zijn
     ingesteld. De inlogpagina is niet live te verifiëren (wordt zelf ook
@@ -98,12 +128,14 @@ def _inloggen_indien_geconfigureerd(page, config: "Config | None") -> None:
         page.goto(_FUNDA_INLOGPAGINA, timeout=_PAGINA_TIMEOUT_MS, wait_until="domcontentloaded")
         page.wait_for_timeout(1500)
         _accepteer_cookies_indien_aanwezig(page)
+        _maak_debug_snapshot(page, config, "inlogpagina")
         page.locator('input[type="email"], input[name*="email" i], input[type="text"]').first.fill(
             config.funda_email, timeout=5000
         )
         page.locator('input[type="password"]').first.fill(config.funda_wachtwoord, timeout=5000)
         page.locator('button[type="submit"], button:has-text("Inloggen")').first.click(timeout=5000)
         page.wait_for_timeout(_WACHTTIJD_NA_INLOGGEN_MS)
+        _maak_debug_snapshot(page, config, "na_inloggen")
     except Exception as exc:  # noqa: BLE001 - best-effort, nooit de scan hierop laten stranden
         logger.warning("Inloggen op funda is niet gelukt (%s) - ga door zonder ingelogde sessie.", exc)
 
@@ -123,11 +155,13 @@ def _haal_paginatekst_op(url: str, config: "Config | None" = None) -> str:
             page.goto(_FUNDA_HOMEPAGE, timeout=_PAGINA_TIMEOUT_MS, wait_until="domcontentloaded")
             page.wait_for_timeout(_WACHTTIJD_OP_HOMEPAGE_MS)
             _accepteer_cookies_indien_aanwezig(page)
+            _maak_debug_snapshot(page, config, "homepage")
 
             _inloggen_indien_geconfigureerd(page, config)
 
             page.goto(url, timeout=_PAGINA_TIMEOUT_MS, wait_until="domcontentloaded")
             page.wait_for_timeout(_WACHTTIJD_NA_LADEN_MS)
+            _maak_debug_snapshot(page, config, "zoekresultaten")
             return page.inner_text("body")
         finally:
             browser.close()
