@@ -230,6 +230,7 @@ def create_app(config: Config | None = None) -> Flask:
                     "nieuw_actief": len(run_result.nieuw_actief),
                     "nieuw_afgevallen": len(run_result.nieuw_afgevallen),
                     "nieuw_onbekend_adres": len(run_result.nieuw_onbekend_adres),
+                    "al_bekend": len(run_result.al_bekend),
                     "fouten": parse_fouten + run_result.fouten,
                 }
         return render_template(

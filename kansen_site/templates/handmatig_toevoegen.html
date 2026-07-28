@@ -52,7 +52,8 @@
     <h2>Resultaat</h2>
     <p>
       {{ resultaat.aangeleverd }} adres(sen) aangeleverd: {{ resultaat.nieuw_actief }} nieuwe kans(en),
-      {{ resultaat.nieuw_afgevallen }} afgevallen, {{ resultaat.nieuw_onbekend_adres }} onbekend adres.
+      {{ resultaat.nieuw_afgevallen }} afgevallen, {{ resultaat.nieuw_onbekend_adres }} onbekend adres,
+      {{ resultaat.al_bekend }} al bekend (alleen bijgewerkt, niet opnieuw gecheckt).
     </p>
     {% if resultaat.fouten %}
     <p class="muted">Waarschuwingen:</p>

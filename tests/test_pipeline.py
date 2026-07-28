@@ -818,6 +818,14 @@ def test_run_handmatig_slaat_bekend_adres_standaard_over_ook_na_gewijzigde_check
     with p1, p2, p3, p4, p5:
         result = pipeline.run_handmatig(config, [_listing()], today=date(2026, 7, 2))
     assert len(result.alle_actief) == 1
+    # Regressietest: een al bekend adres komt niet in nieuw_actief/afgevallen/
+    # onbekend_adres terecht (het wordt alleen bijgewerkt) - zonder al_bekend
+    # klopte de som van die drie categorieën niet meer met het aangeleverde
+    # aantal, wat op de "Handmatig toevoegen"-pagina verwarrend was.
+    assert len(result.al_bekend) == 1
+    assert len(result.nieuw_actief) == 0
+    assert len(result.nieuw_afgevallen) == 0
+    assert len(result.nieuw_onbekend_adres) == 0
 
 
 def test_run_handmatig_forceer_herprocessen_corrigeert_bestaand_adres(tmp_path):

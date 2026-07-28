@@ -24,6 +24,13 @@ class RunResult:
     nieuw_afgevallen: list[ListingState] = field(default_factory=list)
     nieuw_onbekend_adres: list[ListingState] = field(default_factory=list)
     handmatig_verwijderd: list[ListingState] = field(default_factory=list)
+    # Adressen die al in state.json stonden (dus geen nieuwe kans, afgevallen
+    # of onbekend adres díe run) en daarom alleen bijgewerkt (laatst_gezien/
+    # prijs/oppervlakte) i.p.v. opnieuw door alle checks gestuurd - zonder dit
+    # veld klopte de som van de andere drie categorieën niet met het totaal
+    # aangeleverde adressen, wat vooral bij "Handmatig toevoegen" verwarrend
+    # is (zie kansen_site/app.py: resultaat["aangeleverd"]).
+    al_bekend: list[ListingState] = field(default_factory=list)
     alle_actief: list[ListingState] = field(default_factory=list)
     fouten: list[str] = field(default_factory=list)
 
@@ -361,6 +368,7 @@ def _verwerk_listings(
             if listing.oppervlakte_advertentie is not None:
                 existing.oppervlakte_advertentie = listing.oppervlakte_advertentie
             state.upsert(existing)
+            result.al_bekend.append(existing)
             continue
 
         try:

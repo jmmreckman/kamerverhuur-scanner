@@ -103,7 +103,13 @@ def parse_regels(regels: list[str]) -> tuple[list[FundaListing], list[str]]:
 # ankeren op de postcode-regel (heel herkenbaar: 4 cijfers + 2 letters + plaatsnaam) en
 # pakken de regel erboven als adres; de rest van het blok (tot de eerstvolgende
 # postcode-regel) doorzoeken we op prijs en "sinds wanneer".
-_POSTCODE_PLAATS_RE = re.compile(r"^(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)$")
+_POSTCODE_PLAATS_RE = re.compile(
+    # Funda voegt bij sommige plaatsnamen die in meerdere provincies voorkomen (bv.
+    # "Rozenburg (ZH)") een provincie-afkorting tussen haakjes toe - optioneel
+    # meematchen (en niet in "plaats" opnemen) voorkomt dat zo'n regel helemaal niet
+    # herkend wordt.
+    r"^(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)(?:\s*\([A-Za-z]{2,3}\))?$"
+)
 _ADRESREGEL_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:-(?P<toevoeging>[A-Za-z0-9]+))?$")
 _DUMP_PRIJS_RE = re.compile(r"€\s?([\d]{1,3}(?:[.,]\d{3})*)")
 # Funda toont bij een huis twee losse "X m²"-regels op de kaart: eerst de woonoppervlakte,

@@ -114,6 +114,26 @@ def test_parse_funda_tekstdump_zonder_oppervlakteregel_geeft_none():
     assert listings[0].oppervlakte_advertentie is None
 
 
+def test_parse_funda_tekstdump_herkent_plaats_met_provincie_afkorting():
+    # Regressietest: funda voegt bij plaatsnamen die in meerdere provincies
+    # voorkomen (bv. Rozenburg) een provincie-afkorting tussen haakjes toe -
+    # "3181 WX Rozenburg (ZH)" i.p.v. gewoon "3181 WX Rozenburg". Zonder
+    # rekening te houden met die haakjes werd de postcode-regel he-le-maal
+    # niet herkend (geen match, geen fout) en kwam er 0 adressen uit een
+    # geplakte tekst die er duidelijk 1 bevatte. Ook de lege regel (spatie)
+    # tussen adres en postcode-regel, zoals mobiel kopiëren/plakken die vaak
+    # meebrengt, moet genegeerd worden - _bepaal_eerst_gezien e.d. testen dat
+    # elders al voor "gewone" lege regels.
+    tekst = "Tulpenstraat 3 \n \n3181 WX Rozenburg (ZH)\n€ 330.000 k.k.\n75 m²\n143 m²\n3\nD\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert len(listings) == 1
+    assert listings[0].object_id == "3181WX-3"
+    assert listings[0].woonplaats == "Rozenburg"
+    assert listings[0].prijs == 330000
+    assert listings[0].oppervlakte_advertentie == 75
+
+
 def test_parse_funda_tekstdump_werkt_zonder_lege_regel_tussen_woningen():
     tekst = (
         "Vredehagen 44  \n3078 CN Rotterdam\n€ 635.000 k.k.\n163 m²\n4\nA\n"

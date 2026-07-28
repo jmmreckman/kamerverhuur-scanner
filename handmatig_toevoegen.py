@@ -80,10 +80,11 @@ def main(bestandspad: str, forceer_herprocessen: bool = False) -> int:
         return 1
 
     logger.info(
-        "Klaar: %d nieuw actief, %d nieuw afgevallen, %d onbekend adres. Rapport verstuurd naar %s.",
+        "Klaar: %d nieuw actief, %d nieuw afgevallen, %d onbekend adres, %d al bekend. Rapport verstuurd naar %s.",
         len(result.nieuw_actief),
         len(result.nieuw_afgevallen),
         len(result.nieuw_onbekend_adres),
+        len(result.al_bekend),
         ", ".join(config.report_to),
     )
     return 0
