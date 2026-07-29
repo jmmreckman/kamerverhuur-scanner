@@ -170,6 +170,8 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     {len(result.nieuw_afgevallen)} vandaag afgevallen op de geo-checks.
   </p>
 
+  {fouten_html}
+
   <h2 style="{_H2_STYLE}">Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
   <table style="{_TABLE_STYLE}">
     {actief_header}
@@ -211,8 +213,6 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     {_eenvoudige_header("Link", "Reden")}
     {onbekend_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
   </table>
-
-  {fouten_html}
 
   <p style="{_SMALL_STYLE} margin-top: 32px;">
     Herinnering: de WOZ-waarde wordt normaal automatisch opgehaald (via de WOZ-API) en huizen
@@ -286,6 +286,12 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
     nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
     lines = [f"Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}", ""]
 
+    if result.fouten:
+        lines.append("Let op: fouten tijdens dit run:")
+        for fout in result.fouten:
+            lines.append(f"- {fout}")
+        lines.append("")
+
     lines.append(f"Nieuwe kansen vandaag ({len(nieuw_actief_ids)}):")
     nieuwe_kansen = [item for item in result.alle_actief if item.object_id in nieuw_actief_ids]
     for item in nieuwe_kansen:
@@ -319,11 +325,5 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
         lines.append(f"Kon niet automatisch verwerkt worden ({len(result.nieuw_onbekend_adres)}):")
         for item in result.nieuw_onbekend_adres:
             lines.append(f"- {item.url}: {item.afvalreden}")
-
-    if result.fouten:
-        lines.append("")
-        lines.append("Fouten tijdens dit run:")
-        for fout in result.fouten:
-            lines.append(f"- {fout}")
 
     return "\n".join(lines)
