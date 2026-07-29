@@ -20,7 +20,11 @@ _LISTING_LINK_RE = re.compile(
     r'<a\s+[^>]*href="(?P<url>https?://[^"]+)"[^>]*>\s*<span[^>]*>(?P<adres>[^<]+)</span>\s*</a>',
     re.IGNORECASE,
 )
-_ADRES_SPLITS_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)\s*(?P<toevoeging>[A-Za-z]?(?:-\d+)?)\s*$")
+# Rotterdamse appartementen gebruiken vaak een toevoeging van een letter + cijfers
+# (bv. "91 A03", "197 B02") zonder koppelteken - een toevoeging van enkel een letter
+# of "-cijfer" (het oude patroon) matcht dat niet, waardoor de hele regel (door de
+# eind-anker "$") helemaal niet herkend werd.
+_ADRES_SPLITS_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:[\s-](?P<toevoeging>[A-Za-z0-9]+))?\s*$")
 _POSTCODE_PLAATS_RE = re.compile(r"(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)")
 _PRIJS_RE = re.compile(r"€\s?([\d]{2,3}(?:[.,]\d{3})*)")
 # Zie _KAART_TEMPLATE in tests/test_funda_mail.py: geverifieerd tegen een echte
@@ -84,7 +88,7 @@ def _split_adres(adres_tekst: str) -> tuple[str | None, str | None, str]:
     return (
         match.group("straat").strip(),
         match.group("huisnummer"),
-        match.group("toevoeging").strip().upper(),
+        (match.group("toevoeging") or "").strip().upper(),
     )
 
 

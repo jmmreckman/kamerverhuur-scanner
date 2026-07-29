@@ -64,6 +64,20 @@ def test_scan_email_body_zonder_toevoeging():
     assert listing.object_id == "3078CN-44"
 
 
+def test_scan_email_body_herkent_letter_plus_cijfers_toevoeging():
+    # Veelvoorkomend format bij Rotterdamse appartementen (bv. "91 A03") - zonder
+    # koppelteken, in tegenstelling tot de simpele "47 A"-vorm hierboven.
+    scan = scan_email_body(
+        _kaart(adres="Rochussenstraat 197 B02", postcode="3024 EE", prijs="599.000")
+    )
+    assert not scan.waarschuwingen
+    listing = scan.listings[0]
+    assert listing.straatnaam == "Rochussenstraat"
+    assert listing.huisnummer == "197"
+    assert listing.toevoeging == "B02"
+    assert listing.object_id == "3024EE-197B02"
+
+
 def test_scan_email_body_meerdere_woningen_venster_loopt_niet_over():
     body = _kaart(
         url="https://links.funda.nl/s/c/token1/hash1/22",
