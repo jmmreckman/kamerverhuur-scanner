@@ -291,6 +291,41 @@ zoekopdracht daar op een drukke dag toch bovenuit, dan verschijnt daarover een
 waarschuwing bovenaan het dagrapport (zie hieronder) — dan is die band te breed en kun
 je 'm verder opsplitsen.
 
+## Den Haag (naast Rotterdam)
+
+De scanner verwerkt Rotterdam én Den Haag in één systeem. Elke woning wordt na de
+PDOK-geocoding op **woonplaats** gerouteerd: `'s-Gravenhage`/`Den Haag` gaat door de
+Den Haag-checks, al het andere door de bestaande Rotterdamse checks. Je hoeft dus
+niets aparts te draaien — laat de Den Haag-Funda-alertmails (bv. via
+`denhaag1@…`/`denhaag2@…`, zelfde multi-account-truc als hierboven) gewoon naar
+dezelfde inbox doorsturen.
+
+Den Haag heeft een **andere regelset** dan Rotterdam (bron: gemeente Den Haag,
+"Kamerbewoning" + Nota Woningvoorraad Den Haag 2025, RIS323747). Twee harde,
+automatisch gecontroleerde filters:
+
+- **Toegestane wijk** — een omzettingsvergunning voor kamerbewoning wordt alleen
+  afgegeven in wijken die in de 2 meest recente Leefbaarometer-metingen 'goed' tot
+  'uitstekend' scoren. De lijst met die wijken (`TOEGESTANE_WIJKEN` in
+  `rotterdam_scanner/den_haag.py`) is afgeleid van de Leefbaarometer-data (schaal Wijk,
+  gemeente GM0518, metingen 2022 + 2024) en komt exact overeen met de "groene" wijken
+  op de gemeentekaart. Leefbaarometer meet ~eens per 2 jaar; werk de lijst bij zodra er
+  een nieuwe meting is (dan opnieuw de 2 laatste metingen nalopen).
+- **Capaciteit** — max. aantal bewoners = gebruiksoppervlakte // 18 (wettelijke cap 8).
+  Een woning valt af onder `DEN_HAAG_MIN_BEWONERS` (standaard 6, dus m² ≥ 108).
+
+De overige punten uit de Haagse regels zijn **niet publiek te controleren** en
+verschijnen daarom als "aandachtspunten" die je zelf bij de gemeente natrekt (net als
+in vergelijkbare scanners): extra geluidsisolatie-eisen vanaf 5 bewoners,
+brandveiligheid + gebruiksmelding vanaf 5 kamers, het pand-quotum (max. 33,3% per
+gebouw/rij) en wijk-quotum (max. 10% van de woningen), en MSW-woonoverlast.
+**Opkoopbescherming/WOZ is voor omzettingsvergunningen geschrapt** en is in Den Haag
+dus geen belemmering (anders dan in Rotterdam).
+
+In het dagrapport en op de kaart staan Den Haag-woningen apart (eigen sectie /
+"Den Haag"-label + stad-filter), met max. bewoners en de aandachtspunten in plaats van
+de Rotterdamse winst-/inleg-berekening (die gaat uit van Rotterdamse aannames).
+
 ## Het dagrapport lezen
 
 Het rapport begint met een apart blokje **"Nieuwe kansen vandaag"** — alleen de
