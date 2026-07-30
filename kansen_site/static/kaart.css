@@ -218,6 +218,17 @@ body {
 
 .lijst-item .cijfers .goed { color: var(--groen); font-weight: 600; }
 
+.stad-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  background: #e7e0ff;
+  color: #4b2fa8;
+  vertical-align: middle;
+}
+
 .popup-inhoud { position: relative; font-size: 0.9em; padding-bottom: 2.2rem; }
 .popup-inhoud .adres { font-weight: 600; display: block; margin-bottom: 0.3rem; }
 .popup-inhoud a { color: var(--groen); }

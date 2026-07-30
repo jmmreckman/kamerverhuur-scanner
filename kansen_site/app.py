@@ -49,6 +49,8 @@ def _listing_naar_json(item) -> dict:
         "eigen_inleg_pp": item.eigen_inleg_pp,
         "opslag_percentage": item.opslag_percentage,
         "huurprijsopslag_signalen": item.huurprijsopslag_signalen,
+        "stad": item.stad,
+        "check_signalen": item.check_signalen,
         "woz_check_nodig": item.woz_check_nodig,
         "woz_check_url": item.woz_check_url,
         "opmerking": item.opmerking,

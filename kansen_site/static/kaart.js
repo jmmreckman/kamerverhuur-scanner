@@ -13,6 +13,7 @@ const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
+const filterStadEl = document.getElementById("filter-stad");
 const verversKnop = document.getElementById("ververs-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -53,8 +54,10 @@ function gefilterd() {
   const minWinst = parseFloat(filterWinstEl.value);
   const zoek = filterZoekEl.value.trim().toLowerCase();
   const maxDagen = parseFloat(filterDagenEl.value);
+  const stad = filterStadEl ? filterStadEl.value : "";
 
   return alleKansen.filter((k) => {
+    if (stad && (k.stad || "rotterdam") !== stad) return false;
     if (wijk && k.wijknaam !== wijk) return false;
     if (!isNaN(maxEigenInleg) && (k.eigen_inleg_pp === null || k.eigen_inleg_pp > maxEigenInleg)) return false;
     if (!isNaN(minWinst) && (k.winst_pm_pp === null || k.winst_pm_pp < minWinst)) return false;
@@ -71,6 +74,29 @@ function bouwPopup(kans) {
   const div = document.createElement("div");
   div.className = "popup-inhoud";
   const dagen = dagenOpFunda(kans.eerst_gezien);
+
+  if (kans.stad === "den_haag") {
+    // Den Haag heeft geen Rotterdamse kamer-/investeringslogica: toon max
+    // bewoners (m²/18, cap 8) + de aandachtspunten die je zelf moet natrekken.
+    const signalen = (kans.check_signalen || [])
+      .map((s) => `<span style="color:#5f6368;font-size:0.85em">&bull; ${s}</span>`)
+      .join("<br>");
+    div.innerHTML = `
+      <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
+      <span class="adres">${kans.weergavenaam}</span> <span class="stad-tag">Den Haag</span><br>
+      ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
+      Vraagprijs: ${formatEuro(kans.prijs)}<br>
+      ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
+      ${kans.aantal_kamers_mogelijk != null ? "Max bewoners: " + kans.aantal_kamers_mogelijk + "<br>" : ""}
+      ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
+      ${signalen ? signalen + "<br>" : ""}
+      ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
+      <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
+    `;
+    div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
+    return div;
+  }
+
   const kamersWaarde = kans.aantal_kamers_mogelijk === null || kans.aantal_kamers_mogelijk === undefined ? "" : kans.aantal_kamers_mogelijk;
   div.innerHTML = `
     <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
@@ -149,8 +175,10 @@ function renderLijst(kansen) {
     li.innerHTML = `
       <button type="button" class="verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
       <span class="adres">${kans.weergavenaam}</span>
+      ${kans.stad === "den_haag" ? '<span class="stad-tag">Den Haag</span>' : ""}
       <div class="cijfers">
         <span>${formatEuro(kans.prijs)}</span>
+        ${kans.stad === "den_haag" && kans.aantal_kamers_mogelijk != null ? `<span>max ${kans.aantal_kamers_mogelijk} bew.</span>` : ""}
         ${kans.winst_pm_pp !== null ? `<span class="goed">+${formatEuro(kans.winst_pm_pp)} p.p./mnd</span>` : ""}
         ${kans.eigen_inleg_pp !== null ? `<span>${formatEuro(kans.eigen_inleg_pp)} inleg p.p.</span>` : ""}
         ${dagen !== null ? `<span>${dagen} dag(en) op Funda</span>` : ""}
@@ -221,9 +249,10 @@ async function laadKansen() {
   renderAlles();
 }
 
-for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl, filterDagenEl]) {
-  el.addEventListener("input", renderAlles);
+for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl, filterDagenEl, filterStadEl]) {
+  if (el) el.addEventListener("input", renderAlles);
 }
+if (filterStadEl) filterStadEl.addEventListener("change", renderAlles);
 
 verversKnop.addEventListener("click", async () => {
   verversKnop.disabled = true;
