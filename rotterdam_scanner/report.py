@@ -54,11 +54,11 @@ def _verwijder_mailto(scanner_email: str, object_id: str) -> str:
     return f"mailto:{scanner_email}?subject={subject}&body={body}"
 
 
-def _maps_zoeklink(plaatsnaam: str) -> str:
+def _maps_zoeklink(plaatsnaam: str, stad: str = "Rotterdam") -> str:
     # Ook de wijknaam moet al in een eigen link staan: Gmail's adres-auto-linking laat
     # tekst die al in een <a> zit met rust, maar springt anders naar de eerstvolgende
     # ongelinkte tekst (precies wat er met de wijknaam-cel gebeurde, zie report.py-log).
-    return f"https://www.google.com/maps/search/{quote(f'{plaatsnaam}, Rotterdam')}"
+    return f"https://www.google.com/maps/search/{quote(f'{plaatsnaam}, {stad}')}"
 
 
 def _acties_html(item: ListingState, scanner_email: str) -> str:
@@ -130,6 +130,46 @@ def _actief_tabel_header() -> str:
     return f"<tr>{ths}</tr>"
 
 
+def _den_haag_header() -> str:
+    koppen = [
+        "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "€/m²", "Max bewoners",
+        "Dagen bekend", "Aandachtspunten (zelf natrekken)", "Acties",
+    ]  # fmt: skip
+    ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
+    return f"<tr>{ths}</tr>"
+
+
+def _den_haag_row(item: ListingState, today: date, scanner_email: str) -> str:
+    dagen = _dagen_bekend(item, today)
+    badges = f'<span style="{_BADGE_NIEUW_STYLE}">nieuw vandaag</span>' if dagen == 0 else ""
+    oppervlakte_tekst = f"{item.primaire_oppervlakte} m²" if item.primaire_oppervlakte else "onbekend"
+    prijs_per_m2_tekst = _euro(item.prijs_per_m2) + "/m²" if item.prijs_per_m2 else "-"
+    max_bewoners_tekst = str(item.aantal_kamers_mogelijk) if item.aantal_kamers_mogelijk is not None else "-"
+    signalen_html = (
+        "<br>".join(f'<span style="{_SMALL_STYLE}">{escape(s)}</span>' for s in item.check_signalen)
+        or f'<span style="{_SMALL_STYLE}">-</span>'
+    )
+    opmerking_html = f'<br><span style="{_SMALL_STYLE}">{escape(item.opmerking)}</span>' if item.opmerking else ""
+    wijk_html = (
+        f'wijk: <a href="{escape(_maps_zoeklink(item.wijknaam, "Den Haag"))}">{escape(item.wijknaam)}</a>'
+        if item.wijknaam
+        else "-"
+    )
+    return f"""
+    <tr>
+      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a>{opmerking_html}</td>
+      <td style="{_TD_STYLE}">{wijk_html}</td>
+      <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
+      <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
+      <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>
+      <td style="{_TD_STYLE}">{max_bewoners_tekst}{('<br>' + badges) if badges else ''}</td>
+      <td style="{_TD_STYLE}">{dagen} dag{'en' if dagen != 1 else ''}</td>
+      <td style="{_TD_OPSLAG_STYLE}">{signalen_html}</td>
+      <td style="{_TD_STYLE}">{_acties_html(item, scanner_email)}</td>
+    </tr>
+    """
+
+
 def _afvallen_row(item: ListingState) -> str:
     return f"""
     <tr>
@@ -146,11 +186,14 @@ def _eenvoudige_header(*koppen: str) -> str:
 
 def build_html_report(result: RunResult, today: date, scanner_email: str, expiry_days: int = 30) -> str:
     nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
+    rotterdam_actief = [item for item in result.alle_actief if item.stad != "den_haag"]
+    den_haag_actief = [item for item in result.alle_actief if item.stad == "den_haag"]
     actief_header = _actief_tabel_header()
     nieuwe_kansen_rows = "".join(
-        _row(item, today, scanner_email) for item in result.alle_actief if item.object_id in nieuw_actief_ids
+        _row(item, today, scanner_email) for item in rotterdam_actief if item.object_id in nieuw_actief_ids
     )
-    actieve_rows = "".join(_row(item, today, scanner_email) for item in result.alle_actief)
+    actieve_rows = "".join(_row(item, today, scanner_email) for item in rotterdam_actief)
+    den_haag_rows = "".join(_den_haag_row(item, today, scanner_email) for item in den_haag_actief)
     nieuw_afgevallen_rows = "".join(_afvallen_row(item) for item in result.nieuw_afgevallen)
     handmatig_verwijderd_rows = "".join(_afvallen_row(item) for item in result.handmatig_verwijderd)
     onbekend_rows = "".join(_afvallen_row(item) for item in result.nieuw_onbekend_adres)
@@ -164,21 +207,22 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
 <html lang="nl">
 <head><meta charset="utf-8"><meta name="format-detection" content="address=no, telephone=no, email=no"></head>
 <body style="{_BODY_STYLE}">
-  <h1 style="{_H1_STYLE}">Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}</h1>
+  <h1 style="{_H1_STYLE}">Kamerverhuur-scanner Rotterdam &amp; Den Haag — {today.strftime('%d-%m-%Y')}</h1>
   <p style="{_SMALL_STYLE}">
-    {len(nieuw_actief_ids)} nieuwe kandidaten vandaag, {len(result.alle_actief)} in totaal nog open,
-    {len(result.nieuw_afgevallen)} vandaag afgevallen op de geo-checks.
+    {len(nieuw_actief_ids)} nieuwe kandidaten vandaag, {len(result.alle_actief)} in totaal nog open
+    ({len(rotterdam_actief)} Rotterdam, {len(den_haag_actief)} Den Haag),
+    {len(result.nieuw_afgevallen)} vandaag afgevallen op de checks.
   </p>
 
   {fouten_html}
 
-  <h2 style="{_H2_STYLE}">Nieuwe kansen vandaag ({len(nieuw_actief_ids)})</h2>
+  <h2 style="{_H2_STYLE}">Rotterdam — nieuwe kansen vandaag ({sum(1 for i in rotterdam_actief if i.object_id in nieuw_actief_ids)})</h2>
   <table style="{_TABLE_STYLE}">
     {actief_header}
     {nieuwe_kansen_rows or f'<tr><td style="{_TD_STYLE}" colspan="13">Geen nieuwe kansen vandaag.</td></tr>'}
   </table>
 
-  <h2 style="{_H2_STYLE}">Openstaande kansen ({len(result.alle_actief)})</h2>
+  <h2 style="{_H2_STYLE}">Rotterdam — openstaande kansen ({len(rotterdam_actief)})</h2>
   <p style="{_SMALL_STYLE}">
     Deze huizen zijn NIET afgevallen op nul-quotumgebied, de 50-meter kamerverhuurvergunning-check of
     (waar van toepassing) de automatische WOZ-check voor opkoopbescherming. Gesorteerd op de laagste
@@ -195,13 +239,27 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     {actieve_rows or f'<tr><td style="{_TD_STYLE}" colspan="13">Geen openstaande kansen.</td></tr>'}
   </table>
 
+  <h2 style="{_H2_STYLE}">Den Haag — openstaande kansen ({len(den_haag_actief)})</h2>
+  <p style="{_SMALL_STYLE}">
+    Den Haag heeft een andere regelset dan Rotterdam: een omzettingsvergunning voor kamerbewoning
+    kan alleen in wijken die op de Leefbaarometer 'goed'-'uitstekend' scoren (2 laatste metingen), en
+    max. aantal bewoners = gebruiksoppervlakte / 18 (harde cap 8). Deze woningen komen door die twee
+    harde checks. De "Aandachtspunten" (geluidsisolatie, brandveiligheid, pand-/wijk-quotum, MSW) zijn
+    niet publiek te controleren — die moet je zelf bij de gemeente natrekken. Opkoopbescherming/WOZ is
+    voor omzetting geschrapt en dus geen belemmering.
+  </p>
+  <table style="{_TABLE_STYLE}">
+    {_den_haag_header()}
+    {den_haag_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen openstaande Den Haag-kansen.</td></tr>'}
+  </table>
+
   <h2 style="{_H2_STYLE}">Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
   <table style="{_TABLE_STYLE}">
     {_eenvoudige_header("Adres", "Reden")}
     {handmatig_verwijderd_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
   </table>
 
-  <h2 style="{_H2_STYLE}">Vandaag afgevallen op geo-checks ({len(result.nieuw_afgevallen)})</h2>
+  <h2 style="{_H2_STYLE}">Vandaag afgevallen op de checks ({len(result.nieuw_afgevallen)})</h2>
   <table style="{_TABLE_STYLE}">
     {_eenvoudige_header("Adres", "Reden")}
     {nieuw_afgevallen_rows or f'<tr><td style="{_TD_STYLE}" colspan="2">Geen.</td></tr>'}
@@ -282,9 +340,32 @@ def _item_regels(item: ListingState, today: date, scanner_email: str) -> list[st
     return regels
 
 
+def _den_haag_item_regels(item: ListingState, today: date, scanner_email: str) -> list[str]:
+    dagen = _dagen_bekend(item, today)
+    oppervlakte_tekst = f"{item.primaire_oppervlakte} m²" if item.primaire_oppervlakte else "oppervlakte onbekend"
+    prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
+    regels = [
+        f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)",
+        f"    bekijk: {item.url}",
+        f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}",
+        f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}",
+    ]
+    if item.aantal_kamers_mogelijk is not None:
+        regels.append(f"    max bewoners: {item.aantal_kamers_mogelijk}")
+    if item.check_signalen:
+        regels.append("    aandachtspunten (zelf natrekken):")
+        for signaal in item.check_signalen:
+            regels.append(f"      - {signaal}")
+    if item.opmerking:
+        regels.append(f"    let op: {item.opmerking}")
+    return regels
+
+
 def build_text_report(result: RunResult, today: date, scanner_email: str) -> str:
     nieuw_actief_ids = {item.object_id for item in result.nieuw_actief}
-    lines = [f"Kamerverhuur-scanner Rotterdam — {today.strftime('%d-%m-%Y')}", ""]
+    rotterdam_actief = [item for item in result.alle_actief if item.stad != "den_haag"]
+    den_haag_actief = [item for item in result.alle_actief if item.stad == "den_haag"]
+    lines = [f"Kamerverhuur-scanner Rotterdam & Den Haag — {today.strftime('%d-%m-%Y')}", ""]
 
     if result.fouten:
         lines.append("Let op: fouten tijdens dit run:")
@@ -292,18 +373,25 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
             lines.append(f"- {fout}")
         lines.append("")
 
-    lines.append(f"Nieuwe kansen vandaag ({len(nieuw_actief_ids)}):")
-    nieuwe_kansen = [item for item in result.alle_actief if item.object_id in nieuw_actief_ids]
-    for item in nieuwe_kansen:
+    rotterdam_nieuw = [item for item in rotterdam_actief if item.object_id in nieuw_actief_ids]
+    lines.append(f"Rotterdam - nieuwe kansen vandaag ({len(rotterdam_nieuw)}):")
+    for item in rotterdam_nieuw:
         lines.extend(_item_regels(item, today, scanner_email))
-    if not nieuwe_kansen:
+    if not rotterdam_nieuw:
         lines.append("  (geen)")
 
     lines.append("")
-    lines.append(f"Openstaande kansen ({len(result.alle_actief)}), gesorteerd op laagste eigen inleg p.p.:")
-    for item in result.alle_actief:
+    lines.append(f"Rotterdam - openstaande kansen ({len(rotterdam_actief)}), gesorteerd op laagste eigen inleg p.p.:")
+    for item in rotterdam_actief:
         lines.extend(_item_regels(item, today, scanner_email))
-    if not result.alle_actief:
+    if not rotterdam_actief:
+        lines.append("  (geen)")
+
+    lines.append("")
+    lines.append(f"Den Haag - openstaande kansen ({len(den_haag_actief)}):")
+    for item in den_haag_actief:
+        lines.extend(_den_haag_item_regels(item, today, scanner_email))
+    if not den_haag_actief:
         lines.append("  (geen)")
 
     lines.append("")
@@ -314,7 +402,7 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
         lines.append("  (geen)")
 
     lines.append("")
-    lines.append(f"Vandaag afgevallen op geo-checks ({len(result.nieuw_afgevallen)}):")
+    lines.append(f"Vandaag afgevallen op de checks ({len(result.nieuw_afgevallen)}):")
     for item in result.nieuw_afgevallen:
         lines.append(f"- {item.weergavenaam}: {item.afvalreden} ({item.url})")
     if not result.nieuw_afgevallen:

@@ -89,11 +89,11 @@ def test_html_report_toont_alleen_nieuwe_woningen_in_nieuwe_kansen_blok():
 
     html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
 
-    nieuwe_sectie = html.split("Nieuwe kansen vandaag")[1].split("Openstaande kansen")[0]
+    nieuwe_sectie = html.split("Rotterdam — nieuwe kansen vandaag")[1].split("Rotterdam — openstaande kansen")[0]
     assert "Nieuwstraat 1" in nieuwe_sectie
     assert "Oudstraat 2" not in nieuwe_sectie
 
-    openstaande_sectie = html.split("Openstaande kansen")[1]
+    openstaande_sectie = html.split("Rotterdam — openstaande kansen")[1]
     assert "Nieuwstraat 1" in openstaande_sectie
     assert "Oudstraat 2" in openstaande_sectie
 
@@ -104,8 +104,8 @@ def test_html_report_nieuwe_kansen_blok_toont_geen_woningen_bij_leeg():
 
     html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
 
-    assert "Nieuwe kansen vandaag (0)" in html
-    nieuwe_sectie = html.split("Nieuwe kansen vandaag")[1].split("Openstaande kansen")[0]
+    assert "nieuwe kansen vandaag (0)" in html
+    nieuwe_sectie = html.split("Rotterdam — nieuwe kansen vandaag")[1].split("Rotterdam — openstaande kansen")[0]
     assert "Geen nieuwe kansen vandaag." in nieuwe_sectie
 
 
@@ -178,11 +178,11 @@ def test_text_report_toont_alleen_nieuwe_woningen_in_nieuwe_kansen_blok():
 
     text = build_text_report(result, date(2026, 7, 9), "scanner@example.com")
 
-    nieuwe_sectie = text.split("Nieuwe kansen vandaag")[1].split("Openstaande kansen")[0]
+    nieuwe_sectie = text.split("nieuwe kansen vandaag")[1].split("openstaande kansen")[0]
     assert "Nieuwstraat 1" in nieuwe_sectie
     assert "Oudstraat 2" not in nieuwe_sectie
 
-    openstaande_sectie = text.split("Openstaande kansen")[1]
+    openstaande_sectie = text.split("Rotterdam - openstaande kansen")[1]
     assert "Nieuwstraat 1" in openstaande_sectie
     assert "Oudstraat 2" in openstaande_sectie
 
@@ -203,3 +203,51 @@ def test_text_report_zonder_extra_checks_laat_regel_weg():
     text = build_text_report(result, date(2026, 7, 9), "scanner@example.com")
 
     assert "nog te checken" not in text
+
+
+def _den_haag_listing(object_id="DH-1", weergavenaam="Wassenaarseweg 257, Den Haag", eerst_gezien="2026-07-30"):
+    return ListingState(
+        object_id=object_id,
+        url=f"https://example.com/{object_id}",
+        weergavenaam=weergavenaam,
+        eerst_gezien=eerst_gezien,
+        laatst_gezien="2026-07-30",
+        status="actief",
+        wijknaam="Benoordenhout",
+        prijs=595_000,
+        oppervlakte_advertentie=218,
+        aantal_kamers_mogelijk=8,
+        stad="den_haag",
+        check_signalen=[
+            "Vanaf 5 bewoners gelden extra geluidsisolatie-eisen (luchtgeluid ≥47 dB, contactgeluid ≤59 dB).",
+            "Wijk-quotum: per wijk max. 10% van de woningen als omzetting; check bij de gemeente.",
+        ],
+    )
+
+
+def test_html_report_toont_den_haag_in_eigen_sectie():
+    rotterdam = _listing("R-1", "Rotterstraat 1, Rotterdam", "2026-07-30")
+    den_haag = _den_haag_listing()
+    result = RunResult(alle_actief=[rotterdam, den_haag], nieuw_actief=[rotterdam, den_haag])
+
+    html = build_html_report(result, date(2026, 7, 30), "scanner@example.com")
+
+    assert "Den Haag — openstaande kansen (1)" in html
+    dh_sectie = html.split("Den Haag — openstaande kansen")[1]
+    assert "Wassenaarseweg 257" in dh_sectie
+    assert "Benoordenhout" in dh_sectie
+    assert "geluidsisolatie" in dh_sectie
+    # Den Haag-woning hoort niet in de Rotterdam-tabel te staan.
+    rotterdam_sectie = html.split("Rotterdam — openstaande kansen")[1].split("Den Haag — openstaande kansen")[0]
+    assert "Wassenaarseweg 257" not in rotterdam_sectie
+
+
+def test_text_report_toont_den_haag_sectie_met_max_bewoners():
+    den_haag = _den_haag_listing()
+    result = RunResult(alle_actief=[den_haag], nieuw_actief=[den_haag])
+
+    text = build_text_report(result, date(2026, 7, 30), "scanner@example.com")
+
+    assert "Den Haag - openstaande kansen (1)" in text
+    assert "max bewoners: 8" in text
+    assert "aandachtspunten" in text.lower()
