@@ -178,6 +178,33 @@ def _instapbetaling_al_ontvangen(
     )
 
 
+def _instap_al_gedekt_door_eerdere_betaling(
+    tenant: Tenant, betaling: Payment, alle_payments: list[Payment],
+    instap_start: date, tolerantie: Decimal,
+) -> bool:
+    """True als een eerdere betaling van deze huurder (in de instapmaand of de
+    maand daar vlak vóór) het instapbedrag al dekt. Dan is `betaling` zelf geen
+    (late) instapbetaling meer, maar een gewone vooruitbetaling voor de volgende
+    maand - die moet dus de normale 17e-regel volgen i.p.v. aan de instapmaand
+    vastgeplakt te worden. Dit voorkomt dat een huurder die vlak na zijn instap
+    alvast de volgende maand betaalt, in de instapmaand als "te veel ontvangen"
+    verschijnt terwijl die betaling gewoon voor de maand erna bedoeld is.
+
+    Optellend (niet één losse betaling die het hele bedrag dekt), zodat een in
+    delen betaalde instap (bv. borg en huur apart) ook meetelt."""
+    instapbedrag = _instapbedrag(tenant, instap_start)
+    instap_maand = (instap_start.year, instap_start.month)
+    venster = (instap_maand, _vorige_maand(*instap_maand))
+    eerder_totaal = sum(
+        (p.bedrag for p in alle_payments
+         if (p.datum.year, p.datum.month) in venster
+         and p.datum < betaling.datum
+         and (_matches_sterk(tenant, p) or _matches_los(tenant, p))),
+        Decimal("0"),
+    )
+    return eerder_totaal >= instapbedrag - tolerantie
+
+
 def _verwacht_bedrag_voor_maand(
     tenant: Tenant, maand_sleutel: tuple[int, int], instapbetaling_al_ontvangen: bool = False,
 ) -> Decimal:
@@ -307,6 +334,8 @@ def run_check(
     # tussentijdse controle wordt gecheckt, maar dat is zichtbaar (een
     # onverwacht "Te veel ontvangen") en dus veel minder schadelijk dan een
     # betaling die spoorloos verdwijnt.
+    origineel_per_kamer = {t.kamer: t for t in tenants}
+
     def _hoort_bij_deze_maand(betaling: Payment) -> bool:
         gematchte_huurder = (
             next((t for t in tenants_voor_match if _matches_sterk(t, betaling)), None)
@@ -317,6 +346,17 @@ def run_check(
             if gematchte_huurder and gematchte_huurder.kamer in instapmaand_kamers
             else None
         )
+        # De instap-uitzondering (die een betaling aan de instapmaand vastplakt)
+        # geldt alleen zolang het instapbedrag nog niet gedekt is. Is dat via
+        # een eerdere betaling al binnen, dan is déze betaling een gewone
+        # vooruitbetaling voor de volgende maand en volgt hij weer de normale
+        # 17e-regel - anders zou een vlak na de instap alvast betaalde volgende
+        # maand ten onrechte als "te veel ontvangen" in de instapmaand landen.
+        if instap_start and _instap_al_gedekt_door_eerdere_betaling(
+            origineel_per_kamer[gematchte_huurder.kamer], betaling, alle_payments,
+            instap_start, config.bedrag_tolerantie,
+        ):
+            instap_start = None
         return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
 
     payments = [p for p in alle_payments if _hoort_bij_deze_maand(p)]

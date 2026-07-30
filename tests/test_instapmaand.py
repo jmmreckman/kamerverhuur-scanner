@@ -557,6 +557,57 @@ def test_run_check_late_instap_raakt_vooruitbetaling_andere_huurder_niet(monkeyp
     assert luisa_augustus.ontvangen_bedrag == Decimal("650.00")
 
 
+class FakeSheetClientInstapperVooruitVolgendeMaand(FakeSheetClientInstapper):
+    def get_tenants(self):
+        # Bence stapt begin juli in (vóór de 17e) - juli is dus zijn instapmaand.
+        return [_tenant(naam="Bence", verwacht_bedrag=Decimal("650.00"),
+                        contract_startdatum="03-07-2026", borg_bedrag=Decimal("500.00"))]
+
+
+class FakeBunqClientInstapperVooruitVolgendeMaand:
+    def __init__(self, _config):
+        pass
+
+    def get_incoming_payments(self, pand, since):
+        return [
+            # De instapbetaling (pro-rata juli 650*29/31 = 608,06 + 500 borg) op de 3e.
+            Payment(bedrag=Decimal("1108.06"), valuta="EUR", tegenpartij_naam="Bence", tegenpartij_iban=None,
+                    omschrijving="borg + eerste huur", datum=date(2026, 7, 3)),
+            # En eind juli betaalt hij alvast keurig augustus vooruit.
+            Payment(bedrag=Decimal("650.00"), valuta="EUR", tegenpartij_naam="Bence", tegenpartij_iban=None,
+                    omschrijving="huur augustus", datum=date(2026, 7, 30)),
+        ]
+
+
+def test_run_check_vooruitbetaling_na_gedekte_instap_telt_niet_als_te_veel_in_instapmaand(monkeypatch, tmp_path):
+    # Regressietest voor een echt gemelde situatie (Bence): een huurder die net
+    # is ingestapt betaalt eind van de instapmaand alvast de volgende maand
+    # vooruit. De instap-uitzondering plakte élke betaling in de instapmaand aan
+    # die maand vast - ook deze vooruitbetaling - waardoor de instapmaand
+    # onterecht "Te veel ontvangen" toonde. Zodra het instapbedrag al door een
+    # eerdere betaling gedekt is, moet een volgende betaling gewoon de normale
+    # 17e-regel volgen (dus dóórschuiven naar de maand erna).
+    monkeypatch.setattr(runner, "SheetClient", FakeSheetClientInstapperVooruitVolgendeMaand)
+    monkeypatch.setattr(runner, "BunqClient", FakeBunqClientInstapperVooruitVolgendeMaand)
+
+    # Controle op 30 juli (de dag van de vooruitbetaling): juli mag geen "te
+    # veel" tonen - alleen de instapbetaling telt voor juli.
+    _tenants, results_juli, unmatched_juli = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 30),
+    )
+    assert unmatched_juli == []
+    assert results_juli[0].ontvangen_bedrag == Decimal("1108.06")
+    assert results_juli[0].status == Status.BETAALD
+
+    # En de vooruitbetaling landt netjes in augustus (volle maandhuur).
+    _tenants, results_aug, unmatched_aug = run_check(
+        _config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 8, 1),
+    )
+    assert unmatched_aug == []
+    assert results_aug[0].ontvangen_bedrag == Decimal("650.00")
+    assert results_aug[0].status == Status.BETAALD
+
+
 # --- backfill_geschiedenis(): per-kamer terugzoeken vanaf de startdatum ---
 
 
