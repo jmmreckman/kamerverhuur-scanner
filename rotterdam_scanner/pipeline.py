@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date
 
+from . import den_haag
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
@@ -38,6 +39,56 @@ class RunResult:
     fouten: list[str] = field(default_factory=list)
 
 
+def _verwerk_den_haag(
+    listing: FundaListing, geo, config: Config, today_iso: str, eerst_gezien_iso: str
+) -> ListingState:
+    """Den Haag-tak van _process_new_listing: past de Den Haag-checks toe
+    (toegestane wijk + capaciteit, zie den_haag.beoordeel) i.p.v. de Rotterdamse
+    nulquotum/50m/opkoopbescherming-checks. Geen investeringsberekening: die gaat
+    uit van Rotterdamse aannames (BAR/huur/opkoopbescherming) die hier niet gelden;
+    voor Den Haag tonen we het max. aantal bewoners + de informatieve punten."""
+    opmerking = None
+    try:
+        bag = fetch_bag_gegevens(geo.adresseerbaarobject_id)
+    except Exception as exc:  # noqa: BLE001 - nooit crashen op een databron-storing
+        bag = None
+        opmerking = f"BAG-gegevens konden niet opgehaald worden ({exc})."
+    bag_oppervlakte = bag.oppervlakte if bag else None
+    primaire_oppervlakte = listing.oppervlakte_advertentie or bag_oppervlakte
+
+    resultaat = den_haag.beoordeel(
+        geo.cbs_wijknaam, geo.rotterdam_wijk, primaire_oppervlakte, config.den_haag_min_bewoners
+    )
+    wijknaam = geo.cbs_wijknaam or geo.rotterdam_wijk
+
+    gemeenschappelijk = dict(
+        object_id=listing.object_id,
+        url=listing.url,
+        weergavenaam=geo.weergavenaam,
+        eerst_gezien=eerst_gezien_iso,
+        laatst_gezien=today_iso,
+        straatnaam=geo.straatnaam,
+        huisnummer=geo.huisnummer,
+        wijknaam=wijknaam,
+        lat=geo.lat,
+        lon=geo.lon,
+        stad="den_haag",
+    )
+    if resultaat.valt_af:
+        return ListingState(**gemeenschappelijk, status="afgevallen", afvalreden=resultaat.afvalreden)
+
+    return ListingState(
+        **gemeenschappelijk,
+        status="actief",
+        opmerking=opmerking,
+        prijs=listing.prijs,
+        bag_oppervlakte=bag_oppervlakte,
+        oppervlakte_advertentie=listing.oppervlakte_advertentie,
+        aantal_kamers_mogelijk=resultaat.max_bewoners,
+        check_signalen=resultaat.signalen,
+    )
+
+
 def _process_new_listing(listing: FundaListing, config: Config, today: date) -> ListingState:
     today_iso = today.isoformat()
     # Alleen de handmatige tekstdump-parser kan hier een echte "sinds wanneer"-datum
@@ -70,6 +121,12 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             status="onbekend_adres",
             afvalreden=f"Geocoding mislukt: {exc}",
         )
+
+    # Den Haag heeft een heel andere regelset (toegestane Leefbaarometer-wijk +
+    # capaciteit) dan Rotterdam (nulquotum/50m/opkoopbescherming) - routeer op de
+    # gemeente die uit de geocoding komt. Zie rotterdam_scanner/den_haag.py.
+    if den_haag.is_den_haag(geo.woonplaats):
+        return _verwerk_den_haag(listing, geo, config, today_iso, eerst_gezien_iso)
 
     if in_nulquotum_gebied(geo.rd_x, geo.rd_y):
         return ListingState(
@@ -235,6 +292,11 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
     kameraantal zelf - de investeringscijfers blijven wel meerekenen op basis van
     dat handmatige aantal (bv. als de vraagprijs nog wijzigt)."""
     for item in state.all():
+        # Den Haag-woningen gebruiken max_bewoners (m²//18, cap 8) i.p.v. het
+        # Rotterdamse kameraantal, en kennen geen investeringsberekening (andere
+        # aannames) - die met rust laten.
+        if item.stad == "den_haag":
+            continue
         oppervlakte = item.primaire_oppervlakte
         if item.status != "actief" or not oppervlakte:
             continue

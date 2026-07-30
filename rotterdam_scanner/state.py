@@ -52,6 +52,15 @@ class ListingState:
     # automatisch berekende waarde - winst_pm_pp/eigen_inleg_pp blijven wel meerekenen
     # met dit handmatige aantal.
     aantal_kamers_handmatig: bool = False
+    # Welke stad/gemeente en dus welke set checks op deze woning is toegepast:
+    # "rotterdam" (nulquotum/50m/opkoopbescherming) of "den_haag" (toegestane
+    # Leefbaarometer-wijk + capaciteit, zie rotterdam_scanner/den_haag.py).
+    # Default "rotterdam" zodat bestaande state.json-woningen ongewijzigd blijven.
+    stad: str = "rotterdam"
+    # Informatieve punten (niet automatisch hard te controleren) die bij de woning
+    # horen - voor Den Haag: geluidsisolatie, brandveiligheid, pand-/wijk-quotum,
+    # MSW, WOZ-geschrapt. Rotterdam laat dit leeg (gebruikt huurprijsopslag_signalen).
+    check_signalen: list[str] = field(default_factory=list)
 
     @property
     def primaire_oppervlakte(self) -> int | None:

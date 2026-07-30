@@ -970,3 +970,59 @@ def test_run_beschikbaarheidscheck_roept_check_aan_met_de_opgeslagen_url(tmp_pat
     with patch("rotterdam_scanner.pipeline.controleer_beschikbaar", return_value=True) as mock_check:
         pipeline.run_beschikbaarheidscheck(config, today=date(2026, 7, 1))
     mock_check.assert_called_once_with("https://www.funda.nl/detail/koop/rotterdam/huis-1/")
+
+
+# --- Den Haag-routing (andere checkset dan Rotterdam) ---
+
+
+def _geo_den_haag(wijk="Benoordenhout"):
+    return GeocodeResult(
+        weergavenaam="Wassenaarseweg 257, 2596 Cas-Gravenhage",
+        straatnaam="Wassenaarseweg",
+        huisnummer="257",
+        postcode="2596CA",
+        woonplaats="'s-Gravenhage",
+        rotterdam_wijk="een buurt",  # PDOK-buurtnaam (niet relevant voor DH-match)
+        cbs_wijknaam=wijk,  # PDOK-wijknaam = Den Haag-wijk
+        rd_x=81000.0,
+        rd_y=455000.0,
+        lon=4.30,
+        lat=52.10,
+        nummeraanduiding_id="0518200000000001",
+        adresseerbaarobject_id="0518010000000001",
+    )
+
+
+def test_den_haag_geschikte_woning_wordt_actief_met_signalen(tmp_path):
+    listing = _listing(object_id="2596CA-257", postcode="2596CA", prijs=595000, oppervlakte_advertentie=218)
+    with patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo_den_haag()), patch(
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=218, bouwjaar=None)
+    ):
+        result = pipeline._process_new_listing(listing, _config(tmp_path), date(2026, 7, 30))
+    assert result.status == "actief"
+    assert result.stad == "den_haag"
+    assert result.wijknaam == "Benoordenhout"
+    assert result.aantal_kamers_mogelijk == 8  # 218 // 18 -> gecapt op 8
+    assert result.winst_pm_pp is None  # geen Rotterdamse investeringsberekening
+    assert any("geluidsisolatie" in s for s in result.check_signalen)
+
+
+def test_den_haag_niet_toegestane_wijk_valt_af(tmp_path):
+    listing = _listing(object_id="x", oppervlakte_advertentie=218)
+    with patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo_den_haag(wijk="Moerwijk")), patch(
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=218, bouwjaar=None)
+    ):
+        result = pipeline._process_new_listing(listing, _config(tmp_path), date(2026, 7, 30))
+    assert result.status == "afgevallen"
+    assert result.stad == "den_haag"
+    assert "Leefbaarometer" in result.afvalreden
+
+
+def test_den_haag_te_kleine_woning_valt_af(tmp_path):
+    listing = _listing(object_id="x", oppervlakte_advertentie=90)  # 90 // 18 = 5 < 6
+    with patch("rotterdam_scanner.pipeline.geocode_by_postcode", return_value=_geo_den_haag()), patch(
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=90, bouwjaar=None)
+    ):
+        result = pipeline._process_new_listing(listing, _config(tmp_path), date(2026, 7, 30))
+    assert result.status == "afgevallen"
+    assert "capaciteit" in result.afvalreden.lower()

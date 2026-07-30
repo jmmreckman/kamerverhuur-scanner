@@ -17,6 +17,11 @@ class Config:
     funda_mail_folder: str
     listing_expiry_days: int
     opkoopbescherming_woz_grens: int
+    # Ondergrens capaciteit voor Den Haag: een woning telt alleen als "geschikt"
+    # als er minstens zoveel bewoners mogelijk zijn (max bewoners = m² // 18, cap
+    # 8). Standaard 6 (gelijk aan de scanner van Wout). Rotterdam gebruikt zijn
+    # eigen kamer-/oppervlaktelogica en raakt dit niet.
+    den_haag_min_bewoners: int = 6
     # Funda-alertmails worden altijd via het Gmail-scanner-account (hierboven) gelezen.
     # Het dagrapport versturen kan via diezelfde Gmail SMTP, of desgewenst via een eigen
     # domein/mailbox (bijv. via de hostingpartij van je eigen website) -- vandaar deze
@@ -73,6 +78,7 @@ def load_config(env_path: Path | None = None) -> Config:
         funda_mail_folder=os.environ.get("FUNDA_MAIL_FOLDER", "INBOX"),
         listing_expiry_days=int(os.environ.get("LISTING_EXPIRY_DAYS", "30")),
         opkoopbescherming_woz_grens=int(os.environ.get("OPKOOPBESCHERMING_WOZ_GRENS", "470000")),
+        den_haag_min_bewoners=int(os.environ.get("DEN_HAAG_MIN_BEWONERS", "6")),
         smtp_host=os.environ.get("SMTP_HOST", "smtp.gmail.com"),
         smtp_port=int(os.environ.get("SMTP_PORT", "465")),
         smtp_username=os.environ.get("SMTP_USERNAME", ""),
