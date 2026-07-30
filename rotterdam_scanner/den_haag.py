@@ -20,6 +20,7 @@ Bron regels: gemeente Den Haag, "Kamerbewoning" + Nota Woningvoorraad Den Haag
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 # Wijken waar Den Haag omzettingsvergunningen afgeeft: 'goed', 'zeer goed' of
@@ -62,12 +63,17 @@ TOEGESTANE_WIJKEN = {
     "Leidschenveen",
 }
 
-# PDOK/CBS levert de wijknaam soms met andere leestekens/spaties dan hierboven
-# (bv. "Bomen en Bloemenbuurt" i.p.v. "Bomen- en Bloemenbuurt"). Door bij het
-# vergelijken koppeltekens door spaties te vervangen en dubbele spaties op te
-# ruimen hoeven we PDOK's exacte schrijfwijze niet te volgen.
+# PDOK levert de Haagse wijknaam met een "Wijk NN "-prefix ("Wijk 04 Benoordenhout"
+# i.p.v. "Benoordenhout") en soms met andere leestekens/spaties ("Bomen en
+# Bloemenbuurt" i.p.v. "Bomen- en Bloemenbuurt"). Door die prefix weg te strippen,
+# koppeltekens door spaties te vervangen en dubbele spaties op te ruimen hoeven we
+# PDOK's exacte schrijfwijze niet te volgen.
+_WIJK_PREFIX_RE = re.compile(r"^wijk\s+\d+\s+")
+
+
 def _normaliseer(naam: str) -> str:
-    return " ".join(naam.strip().lower().replace("-", " ").split())
+    genormaliseerd = " ".join(naam.strip().lower().replace("-", " ").split())
+    return _WIJK_PREFIX_RE.sub("", genormaliseerd)
 
 
 _TOEGESTANE_WIJKEN_GENORMALISEERD = {_normaliseer(w) for w in TOEGESTANE_WIJKEN}

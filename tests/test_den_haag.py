@@ -26,6 +26,17 @@ def test_wijk_toegestaan_negeert_koppeltekens_en_spaties():
     assert den_haag.wijk_toegestaan("geuzen-  en   statenkwartier") is True
 
 
+def test_wijk_toegestaan_strip_pdok_wijk_prefix():
+    # PDOK geeft de Haagse wijknaam als "Wijk NN <naam>" terug; de buurtnaam is vaak
+    # een deelgebied dat niet op de lijst staat. Zonder het strippen van die prefix
+    # vielen die woningen onterecht af (echt gemeld: 68 van 92 "afgevallen").
+    assert den_haag.wijk_toegestaan("Wijk 04 Benoordenhout", "Uilennest") is True
+    assert den_haag.wijk_toegestaan("Wijk 12 Bomen- en Bloemenbuurt", "Bloemenbuurt-Oost") is True
+    assert den_haag.wijk_toegestaan("Wijk 40 Wateringse Veld", "Hoge Veld") is True
+    # Een zwakke wijk blijft ook mét prefix terecht afvallen.
+    assert den_haag.wijk_toegestaan("Wijk 36 Moerwijk", "Moerwijk-Oost") is False
+
+
 def test_wijk_toegestaan_matcht_op_wijk_of_buurt_niveau():
     assert den_haag.wijk_toegestaan("onbekende buurt", "Benoordenhout") is True
     assert den_haag.wijk_toegestaan("onbekende buurt", "andere buurt") is False
