@@ -274,3 +274,20 @@ def test_parse_adres_regel_negeert_postcode_regels():
 
     listings, _fouten = parse_adres_regels(["3073KJ 47A"])
     assert listings == []
+
+
+def test_parse_adres_regel_leest_optionele_m2_achter_pipe():
+    from rotterdam_scanner.handmatig import parse_adres_regel
+
+    listing = parse_adres_regel("Wassenaarseweg 257, Den Haag | 218")
+    assert listing.straatnaam == "Wassenaarseweg"
+    assert listing.huisnummer == "257"
+    assert listing.woonplaats == "Den Haag"
+    assert listing.oppervlakte_advertentie == 218
+
+
+def test_parse_adres_regel_zonder_m2_geeft_none():
+    from rotterdam_scanner.handmatig import parse_adres_regel
+
+    listing = parse_adres_regel("Wassenaarseweg 257, Den Haag")
+    assert listing.oppervlakte_advertentie is None

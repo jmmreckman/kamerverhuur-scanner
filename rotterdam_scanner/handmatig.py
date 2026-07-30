@@ -93,6 +93,19 @@ _ADRES_PLAATS_RE = re.compile(
 
 def parse_adres_regel(regel: str) -> FundaListing:
     schoon = regel.strip()
+    # Optioneel "| <m2>" achter het adres geeft de (Funda-)woonoppervlakte mee, bijv.
+    # "Wassenaarseweg 257, Den Haag | 218". Zonder dat valt de scanner terug op de
+    # BAG-oppervlakte, die bij grensgevallen soms iets lager uitvalt (en een woning
+    # dan net onder de capaciteitsgrens duwt). Met de m² erbij gedraagt de import zich
+    # hetzelfde als de dagelijkse mail-route (advertentie-m² is daar ook leidend).
+    oppervlakte_advertentie = None
+    if "|" in schoon:
+        schoon, _, opp_deel = schoon.partition("|")
+        schoon = schoon.strip()
+        opp_match = re.search(r"\d{1,4}", opp_deel)
+        if opp_match:
+            oppervlakte_advertentie = int(opp_match.group())
+
     match = _ADRES_PLAATS_RE.match(schoon)
     if not match:
         raise HandmatigeRegelError(
@@ -115,6 +128,7 @@ def parse_adres_regel(regel: str) -> FundaListing:
         toevoeging=toevoeging,
         postcode=None,
         woonplaats=plaats,
+        oppervlakte_advertentie=oppervlakte_advertentie,
     )
 
 
