@@ -9,7 +9,7 @@ from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
-from .geocode import GeocodeError, geocode_by_postcode
+from .geocode import GeocodeError, geocode_address, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from .investering import bereken as bereken_investering
@@ -40,7 +40,7 @@ class RunResult:
 
 
 def _verwerk_den_haag(
-    listing: FundaListing, geo, config: Config, today_iso: str, eerst_gezien_iso: str
+    listing: FundaListing, geo, config: Config, today_iso: str, eerst_gezien_iso: str, object_id: str
 ) -> ListingState:
     """Den Haag-tak van _process_new_listing: past de Den Haag-checks toe
     (toegestane wijk + capaciteit, zie den_haag.beoordeel) i.p.v. de Rotterdamse
@@ -74,7 +74,7 @@ def _verwerk_den_haag(
             eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
 
     gemeenschappelijk = dict(
-        object_id=listing.object_id,
+        object_id=object_id,
         url=listing.url,
         weergavenaam=geo.weergavenaam,
         eerst_gezien=eerst_gezien_iso,
@@ -124,7 +124,17 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         )
 
     try:
-        geo = geocode_by_postcode(listing.postcode, listing.huisnummer, listing.toevoeging)
+        if listing.postcode:
+            geo = geocode_by_postcode(listing.postcode, listing.huisnummer, listing.toevoeging)
+        else:
+            # Straat-adreslijst zonder postcode: geocode op straat + plaats. PDOK kent
+            # Den Haag als "'s-Gravenhage", dus daarop mappen voor het woonplaatsfilter.
+            woonplaats_query = (
+                "'s-Gravenhage" if den_haag.is_den_haag(listing.woonplaats or "") else (listing.woonplaats or "")
+            )
+            geo = geocode_address(
+                listing.straatnaam, f"{listing.huisnummer}{listing.toevoeging}", woonplaats_query
+            )
     except GeocodeError as exc:
         return ListingState(
             object_id=listing.object_id,
@@ -136,15 +146,22 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             afvalreden=f"Geocoding mislukt: {exc}",
         )
 
+    # Bij een straat-adreslijst is er nog geen postcode-gebaseerde object_id; die maken
+    # we nu alsnog uit de gevonden postcode, zodat dezelfde woning uit de mail-alert en
+    # uit een handmatige adreslijst op één (dezelfde) id samenvalt i.p.v. te dubbelen.
+    object_id = listing.object_id
+    if not listing.postcode:
+        object_id = f"{geo.postcode.replace(' ', '').upper()}-{listing.huisnummer}{listing.toevoeging}"
+
     # Den Haag heeft een heel andere regelset (toegestane Leefbaarometer-wijk +
     # capaciteit) dan Rotterdam (nulquotum/50m/opkoopbescherming) - routeer op de
     # gemeente die uit de geocoding komt. Zie rotterdam_scanner/den_haag.py.
     if den_haag.is_den_haag(geo.woonplaats):
-        return _verwerk_den_haag(listing, geo, config, today_iso, eerst_gezien_iso)
+        return _verwerk_den_haag(listing, geo, config, today_iso, eerst_gezien_iso, object_id)
 
     if in_nulquotum_gebied(geo.rd_x, geo.rd_y):
         return ListingState(
-            object_id=listing.object_id,
+            object_id=object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
             eerst_gezien=eerst_gezien_iso,
@@ -186,7 +203,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         )
     elif binnen_50m_van_kamerverhuurvergunning(geo.rd_x, geo.rd_y):
         return ListingState(
-            object_id=listing.object_id,
+            object_id=object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
             eerst_gezien=eerst_gezien_iso,
@@ -222,7 +239,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
 
     if opkoop.valt_af:
         return ListingState(
-            object_id=listing.object_id,
+            object_id=object_id,
             url=listing.url,
             weergavenaam=geo.weergavenaam,
             eerst_gezien=eerst_gezien_iso,
@@ -255,7 +272,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
             eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
 
     return ListingState(
-        object_id=listing.object_id,
+        object_id=object_id,
         url=listing.url,
         weergavenaam=geo.weergavenaam,
         eerst_gezien=eerst_gezien_iso,

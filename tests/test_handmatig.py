@@ -245,3 +245,32 @@ def test_listing_state_naar_funda_listing_zonder_toevoeging():
 
 def test_listing_state_naar_funda_listing_onherkende_id_geeft_none():
     assert listing_state_naar_funda_listing(_afgevallen_state(object_id="niet-een-postcode")) is None
+
+
+# --- Straat-adreslijst zonder postcode (bv. de lijst van Wout) ---
+
+
+def test_parse_bestand_herkent_straat_adres_zonder_postcode():
+    from rotterdam_scanner.handmatig import parse_bestand
+
+    tekst = "Wassenaarseweg 257, Den Haag\nWeimarstraat 70 A, Den Haag\nLoosduinseweg 673 B, Den Haag"
+    listings, fouten = parse_bestand(tekst)
+    assert fouten == []
+    assert len(listings) == 3
+    eerste = listings[0]
+    assert eerste.straatnaam == "Wassenaarseweg"
+    assert eerste.huisnummer == "257"
+    assert eerste.toevoeging == ""
+    assert eerste.woonplaats == "Den Haag"
+    assert eerste.postcode is None
+    assert eerste.adres_bekend is True
+    tweede = next(l for l in listings if l.huisnummer == "70")
+    assert tweede.toevoeging == "A"
+
+
+def test_parse_adres_regel_negeert_postcode_regels():
+    # Een "POSTCODE HUISNUMMER"-regel (geen komma+plaats) mag NIET als straat-adres matchen.
+    from rotterdam_scanner.handmatig import parse_adres_regels
+
+    listings, _fouten = parse_adres_regels(["3073KJ 47A"])
+    assert listings == []

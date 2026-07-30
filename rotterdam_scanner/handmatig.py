@@ -80,6 +80,60 @@ def parse_regel(regel: str) -> FundaListing:
     )
 
 
+# Straat-adresregel zonder postcode: "Straat Huisnummer[ Toevoeging], Plaats", bijv.
+# "Wassenaarseweg 257, Den Haag" of "Weimarstraat 70 A, Den Haag". Bedoeld voor lijsten
+# die alleen straat + plaats geven (geen postcode) - die geocoden we dan op adres
+# i.p.v. op postcode (zie pipeline._process_new_listing). Vereist een komma + plaats,
+# zodat een "POSTCODE HUISNUMMER"-regel hier nooit per ongeluk op matcht.
+_ADRES_PLAATS_RE = re.compile(
+    r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:\s+(?P<toevoeging>[A-Za-z][A-Za-z0-9]*))?"
+    r"\s*,\s*(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)$"
+)
+
+
+def parse_adres_regel(regel: str) -> FundaListing:
+    schoon = regel.strip()
+    match = _ADRES_PLAATS_RE.match(schoon)
+    if not match:
+        raise HandmatigeRegelError(
+            f"kon niet gelezen worden: '{schoon}'. Verwacht: 'STRAAT HUISNUMMER[TOEVOEGING], "
+            "PLAATS', bijv. 'Wassenaarseweg 257, Den Haag'."
+        )
+    straat = match.group("straat").strip()
+    huisnummer = match.group("huisnummer")
+    toevoeging = (match.group("toevoeging") or "").upper()
+    plaats = match.group("plaats").strip()
+    # Voorlopige object_id (adres-slug): de pipeline vervangt 'm na geocoding door de
+    # definitieve POSTCODE-HUISNUMMER-vorm, zodat een via adres toegevoegde woning
+    # samenvalt met dezelfde woning uit de mail-alert (geen dubbeling).
+    object_id = f"adres:{straat.lower()} {huisnummer}{toevoeging.lower()}, {plaats.lower()}"
+    return FundaListing(
+        object_id=object_id,
+        url=_fallback_zoeklink(straat, f"{huisnummer}{toevoeging}", plaats),
+        straatnaam=straat,
+        huisnummer=huisnummer,
+        toevoeging=toevoeging,
+        postcode=None,
+        woonplaats=plaats,
+    )
+
+
+def parse_adres_regels(regels: list[str]) -> tuple[list[FundaListing], list[str]]:
+    listings: dict[str, FundaListing] = {}
+    fouten: list[str] = []
+    for regelnummer, regel in enumerate(regels, start=1):
+        schoon = regel.strip()
+        if not schoon or schoon.startswith("#"):
+            continue
+        try:
+            listing = parse_adres_regel(schoon)
+        except HandmatigeRegelError as exc:
+            fouten.append(f"Regel {regelnummer} {exc}")
+            continue
+        listings[listing.object_id] = listing
+    return list(listings.values()), fouten
+
+
 def parse_regels(regels: list[str]) -> tuple[list[FundaListing], list[str]]:
     listings: dict[str, FundaListing] = {}
     fouten: list[str] = []
@@ -221,9 +275,13 @@ def parse_funda_tekstdump(tekst: str, vandaag: date | None = None) -> tuple[list
 
 def parse_bestand(tekst: str) -> tuple[list[FundaListing], list[str]]:
     """Herkent automatisch welk formaat het is: eerst geprobeerd als ruwe
-    funda-kopieer-plak-tekstdump; levert dat niets op, dan als het simpele
-    "POSTCODE HUISNUMMER [funda-link]"-per-regel-formaat."""
+    funda-kopieer-plak-tekstdump (met postcodes); levert dat niets op, dan als
+    straat-adreslijst "STRAAT HUISNUMMER, PLAATS" (zonder postcode, geocodet op
+    adres); en anders als het simpele "POSTCODE HUISNUMMER [funda-link]"-formaat."""
     listings, fouten = parse_funda_tekstdump(tekst)
+    if listings:
+        return listings, fouten
+    listings, fouten = parse_adres_regels(tekst.splitlines())
     if listings:
         return listings, fouten
     return parse_regels(tekst.splitlines())

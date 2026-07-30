@@ -1027,3 +1027,28 @@ def test_den_haag_te_kleine_woning_valt_af(tmp_path):
         result = pipeline._process_new_listing(listing, _config(tmp_path), date(2026, 7, 30))
     assert result.status == "afgevallen"
     assert "capaciteit" in result.afvalreden.lower()
+
+
+def test_straat_adres_zonder_postcode_geocodeert_op_adres_en_krijgt_postcode_id(tmp_path):
+    # Een handmatig aangeleverd adres zonder postcode (bv. de lijst van Wout) wordt op
+    # straat+plaats gegeocodeerd; de object_id wordt daarna de canonieke POSTCODE-vorm.
+    from rotterdam_scanner.funda_mail import FundaListing
+
+    listing = FundaListing(
+        object_id="adres:wassenaarseweg 257, den haag",
+        url="https://example.com/x",
+        straatnaam="Wassenaarseweg", huisnummer="257", toevoeging="",
+        postcode=None, woonplaats="Den Haag", oppervlakte_advertentie=218,
+    )
+    with patch("rotterdam_scanner.pipeline.geocode_address", return_value=_geo_den_haag()) as geo_mock, patch(
+        "rotterdam_scanner.pipeline.fetch_bag_gegevens", return_value=BagGegevens(oppervlakte=218, bouwjaar=None)
+    ):
+        result = pipeline._process_new_listing(listing, _config(tmp_path), date(2026, 7, 30))
+
+    # Op adres (niet op postcode) gegeocodeerd, met Den Haag -> 's-Gravenhage.
+    assert geo_mock.call_args[0][0] == "Wassenaarseweg"
+    assert geo_mock.call_args[0][2] == "'s-Gravenhage"
+    assert result.stad == "den_haag"
+    assert result.status == "actief"
+    # _geo_den_haag geeft postcode "2596CA" -> canonieke id.
+    assert result.object_id == "2596CA-257"

@@ -63,7 +63,12 @@ class FundaListing:
 
     @property
     def adres_bekend(self) -> bool:
-        return self.postcode is not None and self.huisnummer is not None
+        # Ondubbelzinnig genoeg om te geocoden: óf postcode + huisnummer (mail-alert),
+        # óf straatnaam + huisnummer + woonplaats (handmatige straat-adreslijst, bv. de
+        # lijst van Wout zonder postcodes - die geocoden we dan op adres i.p.v. postcode).
+        if self.huisnummer is None:
+            return False
+        return self.postcode is not None or (self.straatnaam is not None and self.woonplaats is not None)
 
     @property
     def weergavenaam(self) -> str:

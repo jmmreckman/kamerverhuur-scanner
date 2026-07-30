@@ -136,5 +136,7 @@ def geocode_by_postcode(postcode: str, huisnummer: str, toevoeging: str = "") ->
 
 def geocode_address(straat: str, huisnummer: str, woonplaats: str = "Rotterdam") -> GeocodeResult:
     query = f"{straat} {huisnummer}, {woonplaats}"
-    doc = _zoek_pdok_adres(query, [f"woonplaatsnaam:{woonplaats}"])
+    # Woonplaatsnaam tussen quotes: "'s-Gravenhage" (Den Haag) bevat een apostrof en
+    # koppelteken die het fq-filter anders verkeerd interpreteert.
+    doc = _zoek_pdok_adres(query, [f'woonplaatsnaam:"{woonplaats}"'])
     return _doc_naar_resultaat(doc, query)
