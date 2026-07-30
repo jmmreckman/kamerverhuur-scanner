@@ -44,9 +44,11 @@ def _verwerk_den_haag(
 ) -> ListingState:
     """Den Haag-tak van _process_new_listing: past de Den Haag-checks toe
     (toegestane wijk + capaciteit, zie den_haag.beoordeel) i.p.v. de Rotterdamse
-    nulquotum/50m/opkoopbescherming-checks. Geen investeringsberekening: die gaat
-    uit van Rotterdamse aannames (BAR/huur/opkoopbescherming) die hier niet gelden;
-    voor Den Haag tonen we het max. aantal bewoners + de informatieve punten."""
+    nulquotum/50m/opkoopbescherming-checks. De investeringsberekening (winst/eigen
+    inleg p.p.) wordt wél gewoon gedaan, met het Den Haag-max-bewoners als aantal
+    kamers en zonder monumentenopslag (opslag 0 - de opslag-check is deels
+    Rotterdam-specifiek, zie monumenten.py). De informatieve Den Haag-punten
+    (geluidsisolatie, quota, etc.) staan los in check_signalen."""
     opmerking = None
     try:
         bag = fetch_bag_gegevens(geo.adresseerbaarobject_id)
@@ -60,6 +62,16 @@ def _verwerk_den_haag(
         geo.cbs_wijknaam, geo.rotterdam_wijk, primaire_oppervlakte, config.den_haag_min_bewoners
     )
     wijknaam = geo.cbs_wijknaam or geo.rotterdam_wijk
+
+    winst_pm_pp = None
+    eigen_inleg_pp = None
+    if resultaat.max_bewoners and listing.prijs and primaire_oppervlakte:
+        investering = bereken_investering_met_aantal_kamers(
+            resultaat.max_bewoners, listing.prijs, 0.0, m2=primaire_oppervlakte
+        )
+        if investering is not None:
+            winst_pm_pp = investering.winst_pm_pp
+            eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
 
     gemeenschappelijk = dict(
         object_id=listing.object_id,
@@ -85,6 +97,8 @@ def _verwerk_den_haag(
         bag_oppervlakte=bag_oppervlakte,
         oppervlakte_advertentie=listing.oppervlakte_advertentie,
         aantal_kamers_mogelijk=resultaat.max_bewoners,
+        winst_pm_pp=winst_pm_pp,
+        eigen_inleg_pp=eigen_inleg_pp,
         check_signalen=resultaat.signalen,
     )
 
@@ -292,25 +306,33 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
     kameraantal zelf - de investeringscijfers blijven wel meerekenen op basis van
     dat handmatige aantal (bv. als de vraagprijs nog wijzigt)."""
     for item in state.all():
-        # Den Haag-woningen gebruiken max_bewoners (m²//18, cap 8) i.p.v. het
-        # Rotterdamse kameraantal, en kennen geen investeringsberekening (andere
-        # aannames) - die met rust laten.
-        if item.stad == "den_haag":
-            continue
         oppervlakte = item.primaire_oppervlakte
         if item.status != "actief" or not oppervlakte:
             continue
 
-        if not item.aantal_kamers_handmatig:
-            nieuw_aantal_kamers = bereken_aantal_kamers_mogelijk(oppervlakte)
-            if item.aantal_kamers_mogelijk != nieuw_aantal_kamers:
-                item.aantal_kamers_mogelijk = nieuw_aantal_kamers
-                state.upsert(item)
+        # Den Haag gebruikt max_bewoners (m²//18, cap 8) als kameraantal en géén
+        # monumentenopslag (die check is deels Rotterdam-specifiek) - het
+        # kameraantal komt uit den_haag, niet uit de Rotterdamse vuistregel, en
+        # de opslag is altijd 0. De investeringsberekening zelf loopt verder gelijk.
+        if item.stad == "den_haag":
+            if not item.aantal_kamers_handmatig:
+                nieuw = den_haag.bereken_max_bewoners(oppervlakte)
+                if item.aantal_kamers_mogelijk != nieuw:
+                    item.aantal_kamers_mogelijk = nieuw
+                    state.upsert(item)
+            opslag = 0.0
+        else:
+            if not item.aantal_kamers_handmatig:
+                nieuw_aantal_kamers = bereken_aantal_kamers_mogelijk(oppervlakte)
+                if item.aantal_kamers_mogelijk != nieuw_aantal_kamers:
+                    item.aantal_kamers_mogelijk = nieuw_aantal_kamers
+                    state.upsert(item)
+            opslag = item.opslag_percentage
 
         if not item.prijs or not item.aantal_kamers_mogelijk:
             continue
         investering = bereken_investering_met_aantal_kamers(
-            item.aantal_kamers_mogelijk, item.prijs, item.opslag_percentage, m2=oppervlakte
+            item.aantal_kamers_mogelijk, item.prijs, opslag, m2=oppervlakte
         )
         if investering is None:
             continue

@@ -217,6 +217,8 @@ def _den_haag_listing(object_id="DH-1", weergavenaam="Wassenaarseweg 257, Den Ha
         prijs=595_000,
         oppervlakte_advertentie=218,
         aantal_kamers_mogelijk=8,
+        winst_pm_pp=850.0,
+        eigen_inleg_pp=15_000.0,
         stad="den_haag",
         check_signalen=[
             "Vanaf 5 bewoners gelden extra geluidsisolatie-eisen (luchtgeluid ≥47 dB, contactgeluid ≤59 dB).",
@@ -237,6 +239,8 @@ def test_html_report_toont_den_haag_in_eigen_sectie():
     assert "Wassenaarseweg 257" in dh_sectie
     assert "Benoordenhout" in dh_sectie
     assert "geluidsisolatie" in dh_sectie
+    assert "€850/mnd" in dh_sectie  # winst/inleg ook voor Den Haag
+    assert "€15.000" in dh_sectie
     # Den Haag-woning hoort niet in de Rotterdam-tabel te staan.
     rotterdam_sectie = html.split("Rotterdam — openstaande kansen")[1].split("Den Haag — openstaande kansen")[0]
     assert "Wassenaarseweg 257" not in rotterdam_sectie

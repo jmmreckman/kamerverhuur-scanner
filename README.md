@@ -322,9 +322,11 @@ gebouw/rij) en wijk-quotum (max. 10% van de woningen), en MSW-woonoverlast.
 **Opkoopbescherming/WOZ is voor omzettingsvergunningen geschrapt** en is in Den Haag
 dus geen belemmering (anders dan in Rotterdam).
 
-In het dagrapport en op de kaart staan Den Haag-woningen apart (eigen sectie /
-"Den Haag"-label + stad-filter), met max. bewoners en de aandachtspunten in plaats van
-de Rotterdamse winst-/inleg-berekening (die gaat uit van Rotterdamse aannames).
+In het dagrapport en op de kaart staan Den Haag-woningen herkenbaar apart (eigen
+rapport-sectie / "Den Haag"-label + stad-filter). Ze krijgen dezelfde winst p.p./mnd-
+en eigen-inleg-p.p.-berekening als Rotterdam (met het max. aantal bewoners als
+kameraantal en zonder monumentenopslag), plus het max. aantal bewoners en de
+aandachtspunten die je zelf moet natrekken.
 
 ## Het dagrapport lezen
 

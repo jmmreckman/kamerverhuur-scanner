@@ -13,7 +13,7 @@ from functools import wraps
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import pipeline
+from rotterdam_scanner import den_haag, pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
@@ -157,7 +157,10 @@ def create_app(config: Config | None = None) -> Flask:
         if ruwe_waarde == "":
             item.aantal_kamers_handmatig = False
             oppervlakte = item.primaire_oppervlakte
-            item.aantal_kamers_mogelijk = bereken_aantal_kamers_mogelijk(oppervlakte) if oppervlakte else None
+            if item.stad == "den_haag":
+                item.aantal_kamers_mogelijk = den_haag.bereken_max_bewoners(oppervlakte) if oppervlakte else None
+            else:
+                item.aantal_kamers_mogelijk = bereken_aantal_kamers_mogelijk(oppervlakte) if oppervlakte else None
         else:
             try:
                 aantal = int(ruwe_waarde)

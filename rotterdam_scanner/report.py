@@ -133,7 +133,8 @@ def _actief_tabel_header() -> str:
 def _den_haag_header() -> str:
     koppen = [
         "Adres", "Wijk", "Vraagprijs", "Oppervlakte", "€/m²", "Max bewoners",
-        "Dagen bekend", "Aandachtspunten (zelf natrekken)", "Acties",
+        "Winst p.p./mnd", "Eigen inleg p.p.", "Dagen bekend",
+        "Aandachtspunten (zelf natrekken)", "Acties",
     ]  # fmt: skip
     ths = "".join(f'<th style="{_TH_STYLE}">{kop}</th>' for kop in koppen)
     return f"<tr>{ths}</tr>"
@@ -145,6 +146,8 @@ def _den_haag_row(item: ListingState, today: date, scanner_email: str) -> str:
     oppervlakte_tekst = f"{item.primaire_oppervlakte} m²" if item.primaire_oppervlakte else "onbekend"
     prijs_per_m2_tekst = _euro(item.prijs_per_m2) + "/m²" if item.prijs_per_m2 else "-"
     max_bewoners_tekst = str(item.aantal_kamers_mogelijk) if item.aantal_kamers_mogelijk is not None else "-"
+    winst_tekst = f"{_euro(item.winst_pm_pp)}/mnd" if item.winst_pm_pp is not None else "-"
+    eigen_inleg_tekst = _euro(item.eigen_inleg_pp) if item.eigen_inleg_pp is not None else "-"
     signalen_html = (
         "<br>".join(f'<span style="{_SMALL_STYLE}">{escape(s)}</span>' for s in item.check_signalen)
         or f'<span style="{_SMALL_STYLE}">-</span>'
@@ -163,6 +166,8 @@ def _den_haag_row(item: ListingState, today: date, scanner_email: str) -> str:
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
       <td style="{_TD_STYLE}">{prijs_per_m2_tekst}</td>
       <td style="{_TD_STYLE}">{max_bewoners_tekst}{('<br>' + badges) if badges else ''}</td>
+      <td style="{_TD_STYLE}">{winst_tekst}</td>
+      <td style="{_TD_STYLE}">{eigen_inleg_tekst}</td>
       <td style="{_TD_STYLE}">{dagen} dag{'en' if dagen != 1 else ''}</td>
       <td style="{_TD_OPSLAG_STYLE}">{signalen_html}</td>
       <td style="{_TD_STYLE}">{_acties_html(item, scanner_email)}</td>
@@ -244,13 +249,15 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     Den Haag heeft een andere regelset dan Rotterdam: een omzettingsvergunning voor kamerbewoning
     kan alleen in wijken die op de Leefbaarometer 'goed'-'uitstekend' scoren (2 laatste metingen), en
     max. aantal bewoners = gebruiksoppervlakte / 18 (harde cap 8). Deze woningen komen door die twee
-    harde checks. De "Aandachtspunten" (geluidsisolatie, brandveiligheid, pand-/wijk-quotum, MSW) zijn
-    niet publiek te controleren — die moet je zelf bij de gemeente natrekken. Opkoopbescherming/WOZ is
-    voor omzetting geschrapt en dus geen belemmering.
+    harde checks. Winst p.p./mnd en eigen inleg p.p. worden met hetzelfde model als Rotterdam berekend
+    (met het max. aantal bewoners als kameraantal, zonder monumentenopslag). De "Aandachtspunten"
+    (geluidsisolatie, brandveiligheid, pand-/wijk-quotum, MSW) zijn niet publiek te controleren — die
+    moet je zelf bij de gemeente natrekken. Opkoopbescherming/WOZ is voor omzetting geschrapt en dus
+    geen belemmering.
   </p>
   <table style="{_TABLE_STYLE}">
     {_den_haag_header()}
-    {den_haag_rows or f'<tr><td style="{_TD_STYLE}" colspan="9">Geen openstaande Den Haag-kansen.</td></tr>'}
+    {den_haag_rows or f'<tr><td style="{_TD_STYLE}" colspan="11">Geen openstaande Den Haag-kansen.</td></tr>'}
   </table>
 
   <h2 style="{_H2_STYLE}">Handmatig verwijderd ({len(result.handmatig_verwijderd)})</h2>
@@ -352,6 +359,10 @@ def _den_haag_item_regels(item: ListingState, today: date, scanner_email: str) -
     ]
     if item.aantal_kamers_mogelijk is not None:
         regels.append(f"    max bewoners: {item.aantal_kamers_mogelijk}")
+    if item.winst_pm_pp is not None and item.eigen_inleg_pp is not None:
+        regels.append(
+            f"    winst p.p./mnd: {_euro(item.winst_pm_pp)}, eigen inleg p.p.: {_euro(item.eigen_inleg_pp)}"
+        )
     if item.check_signalen:
         regels.append("    aandachtspunten (zelf natrekken):")
         for signaal in item.check_signalen:

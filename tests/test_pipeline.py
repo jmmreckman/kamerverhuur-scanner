@@ -1003,7 +1003,8 @@ def test_den_haag_geschikte_woning_wordt_actief_met_signalen(tmp_path):
     assert result.stad == "den_haag"
     assert result.wijknaam == "Benoordenhout"
     assert result.aantal_kamers_mogelijk == 8  # 218 // 18 -> gecapt op 8
-    assert result.winst_pm_pp is None  # geen Rotterdamse investeringsberekening
+    assert result.winst_pm_pp is not None  # investeringscijfers ook voor Den Haag
+    assert result.eigen_inleg_pp is not None
     assert any("geluidsisolatie" in s for s in result.check_signalen)
 
 

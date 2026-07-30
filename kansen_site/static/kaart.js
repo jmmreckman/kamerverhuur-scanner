@@ -74,46 +74,31 @@ function bouwPopup(kans) {
   const div = document.createElement("div");
   div.className = "popup-inhoud";
   const dagen = dagenOpFunda(kans.eerst_gezien);
-
-  if (kans.stad === "den_haag") {
-    // Den Haag heeft geen Rotterdamse kamer-/investeringslogica: toon max
-    // bewoners (m²/18, cap 8) + de aandachtspunten die je zelf moet natrekken.
-    const signalen = (kans.check_signalen || [])
-      .map((s) => `<span style="color:#5f6368;font-size:0.85em">&bull; ${s}</span>`)
-      .join("<br>");
-    div.innerHTML = `
-      <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
-      <span class="adres">${kans.weergavenaam}</span> <span class="stad-tag">Den Haag</span><br>
-      ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
-      Vraagprijs: ${formatEuro(kans.prijs)}<br>
-      ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
-      ${kans.aantal_kamers_mogelijk != null ? "Max bewoners: " + kans.aantal_kamers_mogelijk + "<br>" : ""}
-      ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
-      ${signalen ? signalen + "<br>" : ""}
-      ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
-      <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
-    `;
-    div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
-    return div;
-  }
+  const isDenHaag = kans.stad === "den_haag";
+  const kamersLabel = isDenHaag ? "Max bewoners" : "Kamers mogelijk";
+  const resetTitel = isDenHaag ? "Terug naar automatisch (m²/18, max 8)" : "Terug naar automatisch berekend (18m²-regel)";
+  const signalen = (kans.check_signalen || [])
+    .map((s) => `<span style="color:#5f6368;font-size:0.85em">&bull; ${s}</span>`)
+    .join("<br>");
 
   const kamersWaarde = kans.aantal_kamers_mogelijk === null || kans.aantal_kamers_mogelijk === undefined ? "" : kans.aantal_kamers_mogelijk;
   div.innerHTML = `
     <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
-    <span class="adres">${kans.weergavenaam}</span>
+    <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
     ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
     ${kans.bag_oppervlakte && kans.bag_oppervlakte !== kans.primaire_oppervlakte ? kans.bag_oppervlakte + " m² (BAG, ter info)<br>" : ""}
     <span class="kamers-editor">
-      Kamers mogelijk: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
-      ${kans.aantal_kamers_handmatig ? '<button type="button" class="kamers-reset-knop" title="Terug naar automatisch berekend (18m²-regel)">automatisch</button>' : ""}
+      ${kamersLabel}: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
+      ${kans.aantal_kamers_handmatig ? `<button type="button" class="kamers-reset-knop" title="${resetTitel}">automatisch</button>` : ""}
     </span><br>
     ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
     ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}
     ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
     ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
     ${kans.woz_check_nodig && kans.woz_check_url ? `<a href="${kans.woz_check_url}" target="_blank" rel="noopener">Zelf WOZ-waarde opzoeken &rarr;</a><br>` : ""}
+    ${signalen ? signalen + "<br>" : ""}
     ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
     <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
   `;
@@ -178,7 +163,6 @@ function renderLijst(kansen) {
       ${kans.stad === "den_haag" ? '<span class="stad-tag">Den Haag</span>' : ""}
       <div class="cijfers">
         <span>${formatEuro(kans.prijs)}</span>
-        ${kans.stad === "den_haag" && kans.aantal_kamers_mogelijk != null ? `<span>max ${kans.aantal_kamers_mogelijk} bew.</span>` : ""}
         ${kans.winst_pm_pp !== null ? `<span class="goed">+${formatEuro(kans.winst_pm_pp)} p.p./mnd</span>` : ""}
         ${kans.eigen_inleg_pp !== null ? `<span>${formatEuro(kans.eigen_inleg_pp)} inleg p.p.</span>` : ""}
         ${dagen !== null ? `<span>${dagen} dag(en) op Funda</span>` : ""}
