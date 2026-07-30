@@ -11,18 +11,14 @@ from __future__ import annotations
 import hmac
 from functools import wraps
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
 
-from rotterdam_scanner import browser_zoekopdrachten, pipeline
-from rotterdam_scanner.browser_scraper import debug_bestand_pad, debug_bestanden
-from rotterdam_scanner.browser_scraper import haal_listings_op as browser_haal_listings_op
+from rotterdam_scanner import pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
 from rotterdam_scanner.state import StateStore
-
-_FUNDA_URL_PREFIXES = ("https://www.funda.nl/", "https://funda.nl/")
 
 
 def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
@@ -208,68 +204,6 @@ def create_app(config: Config | None = None) -> Flask:
             key=lambda item: item.laatst_gezien, reverse=True,
         )
         return render_template("verwijderd.html", items=items, gebruiker=session["gebruiker"])
-
-    @app.route("/zoekopdrachten")
-    @login_required
-    def zoekopdrachten():
-        return render_template(
-            "zoekopdrachten.html", opdrachten=browser_zoekopdrachten.laad_met_labels(config),
-            debug_bestanden=debug_bestanden(config), gebruiker=session["gebruiker"],
-        )
-
-    @app.route("/zoekopdrachten/debug/<bestand>")
-    @login_required
-    def zoekopdrachten_debug_bestand(bestand):
-        # Toont een screenshot/HTML-snapshot van wat de browser tijdens een
-        # zoekopdracht daadwerkelijk te zien kreeg (zie browser_scraper.py:
-        # _maak_debug_snapshot) - de data-map zit op een los Docker-volume, dus
-        # niet zomaar als gewone map op de VPS te bekijken; dit maakt dat via de
-        # (al ingelogde) website alsnog mogelijk, zonder een aparte poort open te
-        # hoeven zetten.
-        pad = debug_bestand_pad(config, bestand)
-        if pad is None:
-            abort(404)
-        return send_file(pad)
-
-    @app.route("/zoekopdrachten/toevoegen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_toevoegen():
-        url = request.form.get("url", "").strip()
-        label = request.form.get("label", "").strip()
-        if not url.startswith(_FUNDA_URL_PREFIXES):
-            flash("Dit lijkt geen Funda-zoek-URL - moet beginnen met https://www.funda.nl/")
-        else:
-            browser_zoekopdrachten.voeg_toe(config, url, label)
-            flash("Zoekopdracht toegevoegd.")
-        return redirect(url_for("zoekopdrachten"))
-
-    @app.route("/zoekopdrachten/verwijderen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_verwijderen():
-        url = request.form.get("url", "")
-        browser_zoekopdrachten.verwijder(config, url)
-        flash("Zoekopdracht verwijderd.")
-        return redirect(url_for("zoekopdrachten"))
-
-    @app.route("/zoekopdrachten/testen", methods=["POST"])
-    @login_required
-    def zoekopdrachten_testen():
-        # Eén zoekopdracht los ophalen (bv. net toegevoegd, of een gecorrigeerde URL
-        # verifiëren) - i.p.v. te wachten op de volgende dagelijkse scan. Synchroon
-        # (geen achtergrondthread/statuspolling zoals de oude Apify-sweep nodig had):
-        # één pagina met Playwright ophalen duurt een paar seconden, geen minuten.
-        url = request.form.get("url", "").strip()
-        if not url:
-            return jsonify({"fout": "Onbekende zoekopdracht."}), 400
-        try:
-            listings, fouten = browser_haal_listings_op(url, None, config)
-        except Exception as exc:  # noqa: BLE001
-            return jsonify({"fout": f"Onverwachte fout tijdens het testen: {exc}"}), 500
-        return jsonify({
-            "aantal": len(listings),
-            "adressen": [l.weergavenaam for l in listings],
-            "fouten": fouten,
-        })
 
     @app.route("/handmatig-toevoegen", methods=["GET", "POST"])
     @login_required

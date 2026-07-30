@@ -272,54 +272,24 @@ twijfelachtig resultaat. Geen proxy of browser-emulatie ingebouwd; Funda kan dit
 termijn alsnog gaan blokkeren, in welk geval de check gewoon steeds `None` (onduidelijk)
 teruggeeft en niets doet, zonder de rest van de scanner te breken.
 
-## Browsergebaseerde zoekopdrachten (eigen Funda-zoek-URL's)
+## Meerdere zoekopdrachten dekken via extra Funda-accounts
 
 De dagelijkse Funda-alertmail toont maar een beperkt aantal woningen individueel per
 zoekopdracht ("Bekijk alle N woningen" voor de rest, zie "Bekende beperkingen"
-hieronder) — en Funda staat maar 5 opgeslagen zoekopdrachten per account toe. Als
-aanvulling daarop kan de scan ook zelf, met een gewone (onaangepaste) Playwright/
-Chromium-browser, eigen Funda-zoek-URL's bezoeken: net zoals jij dat zelf zou doen in
-een browser, geen scraping-dienst, geen fingerprint-spoofing, proxy-rotatie of
-CAPTCHA-omzeiling. De browser voert gewoon JavaScript uit (en doorloopt zo ook een
-eventuele anti-bot-controle van funda zelf netjes, zoals elke browser dat doet).
+hieronder) — en Funda staat maar 5 opgeslagen zoekopdrachten per account toe. Om toch
+een breed gebied volledig te dekken zonder scraping: maak meerdere Funda-accounts aan
+(bv. `rotterdam1@…`, `rotterdam2@…`) met elk max 5 opgeslagen zoekopdrachten, en laat
+al die alertmails doorsturen naar het adres dat de scanner uitleest (`GMAIL_ADDRESS`).
+De scanner filtert op afzender (`HEADER FROM "funda"`) en dedupliceert overlappende
+woningen automatisch, dus meerdere accounts naar één inbox werkt zonder codewijziging —
+mits het doorsturen een echte alias/redirect is die de `From`-header intact laat (niet
+een handmatige "Doorsturen"-actie die de mail opnieuw verpakt).
 
-**Zoekopdrachten beheren**: via "Zoekopdrachten" op kansen.steenhub.nl (zelfde soort
-pagina als vroeger voor de Apify-zoek-URL's) - stel op funda.nl zelf een zoekopdracht
-samen (locatie, prijs, type, oppervlakte) en filter daarbij bewust op **"gepubliceerd
-sinds"** (bv. de laatste paar dagen i.p.v. "sinds gisteren", als buffer tegen een
-gemiste dag) zodat elke pagina klein en overzichtelijk blijft, ook als de onderliggende
-zoekopdracht breed is (bv. heel Rotterdam). Voorbeeld-URL:
-`https://www.funda.nl/zoeken/koop?selected_area=rotterdam&price=100000-800000&object_type=house,apartment&construction_type=resale&publication_date=3&availability=available&floor_area=75-`
-(`publication_date=3` = laatste 3 dagen). Met "Testen" haal je één zoekopdracht meteen
-los op (een paar seconden), zonder op de volgende dagelijkse scan te wachten.
-
-**Hoe het werkt**: de pagina wordt bezocht, de zichtbare paginatekst wordt overgenomen
-(zoals bij een handmatige kopieer/plak) en door dezelfde beproefde tekstdump-parser
-gehaald als "Handmatig toevoegen" (`rotterdam_scanner.handmatig.parse_funda_tekstdump`)
-- geen aparte, kwetsbaardere set CSS-selectors. Bewust rustig tempo tussen meerdere
-zoekopdrachten (een paar seconden pauze) - dit is bedoeld voor een handvol eigen
-zoekopdrachten, een paar keer per dag, niet voor grootschalig/parallel ophalen.
-
-**Resources**: Chromium (`playwright install --with-deps chromium` in de Dockerfile)
-maakt de image en het geheugengebruik van de `fundazoeker`/`kansen`/
-`beschikbaarheid-check`-services merkbaar groter - hou hier rekening mee bij het
-dimensioneren van de VPS.
-
-**"Warme" sessie + optioneel inloggen**: in plaats van in koude toestand meteen naar
-de zoekpagina te springen, bezoekt de browser eerst de funda-homepage (en klikt een
-cookiebanner weg als die verschijnt) - net zoals een mens dat ook zou doen. Vul je
-`FUNDA_EMAIL`/`FUNDA_WACHTWOORD` in (.env), dan logt hij daarna ook in met dat echte
-account vóór het bezoeken van de zoekresultaten. De inlogpagina is niet vooraf te
-verifiëren (wordt zelf ook geblokkeerd voor geautomatiseerd verkeer), dus dit gebruikt
-generieke selectors en geeft het best-effort op (met een duidelijke waarschuwing) als
-inloggen een keer niet lukt - dat blokkeert nooit de rest van de scan.
-
-**Als funda dit blokkeert**: net als bij de beschikbaarheid-check hierboven, best-effort
-- een storing bij één zoekopdracht (bv. een anti-bot-controle die niet doorkomt) meldt
-zich als waarschuwing in het dagrapport en blokkeert nooit de rest van de scan. Er zit
-bewust geen enkele vorm van detectie-omzeiling in; als funda dit desondanks structureel
-blokkeert, is de conclusie dat dit specifieke pad niet werkt, niet dat er trucs bij
-moeten.
+Knip elke zoekopdracht bewust klein op (bv. per oppervlakteband of prijsklasse) zodat
+het aantal nieuwe woningen per dag onder Funda's "Bekijk alle N"-grens blijft. Komt een
+zoekopdracht daar op een drukke dag toch bovenuit, dan verschijnt daarover een
+waarschuwing bovenaan het dagrapport (zie hieronder) — dan is die band te breed en kun
+je 'm verder opsplitsen.
 
 ## Het dagrapport lezen
 
@@ -552,9 +522,9 @@ handmatig hebt verwijderd (via de verwijder-link) worden hierbij, net als bij
   passen** (de mail toont blijkbaar niet altijd alles los, met een "Bekijk alle N
   woningen"-knop voor de rest — die link leidt naar een zoekresultatenpagina die de
   mail-parser zelf niet kan openen), mist de mail-alertroute die extra woningen. Het
-  rapport waarschuwt hierover als het detecteerbaar is. Zie "Browsergebaseerde
-  zoekopdrachten" hierboven voor de aanvullende route die dit grotendeels ondervangt
-  (eigen zoek-URL's, gefilterd op recent gepubliceerd, met een gewone browser bezocht).
+  rapport waarschuwt hierover (bovenaan) als het detecteerbaar is. Zie "Meerdere
+  zoekopdrachten dekken via extra Funda-accounts" hierboven: knip de zoekopdracht dan
+  kleiner op zodat het dagvolume onder Funda's "Bekijk alle N"-grens blijft.
 - **Verkocht-detectie is best-effort** (zie "Beschikbaarheid-check" hierboven) — bij een
   netwerkfout/blokkade/onherkende pagina blijft een verkocht huis gewoon staan tot de
   volgende check het wél herkent, of tot max. 30 dagen als dat nooit lukt.
