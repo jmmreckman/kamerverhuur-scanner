@@ -291,3 +291,20 @@ def test_parse_adres_regel_zonder_m2_geeft_none():
 
     listing = parse_adres_regel("Wassenaarseweg 257, Den Haag")
     assert listing.oppervlakte_advertentie is None
+
+
+def test_parse_adres_regel_leest_m2_en_prijs():
+    from rotterdam_scanner.handmatig import parse_adres_regel
+
+    listing = parse_adres_regel("Wassenaarseweg 257, Den Haag | 218 | 595000")
+    assert listing.oppervlakte_advertentie == 218
+    assert listing.prijs == 595000
+
+
+def test_parse_adres_regel_prijs_met_opmaak_en_omgekeerde_volgorde():
+    from rotterdam_scanner.handmatig import parse_adres_regel
+
+    # € en duizendtalscheiding, en prijs vóór de m² (volgorde-onafhankelijk).
+    listing = parse_adres_regel("Weimarstraat 70 A, Den Haag | € 595.000 | 203 m²")
+    assert listing.prijs == 595000
+    assert listing.oppervlakte_advertentie == 203

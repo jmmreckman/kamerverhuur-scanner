@@ -93,18 +93,26 @@ _ADRES_PLAATS_RE = re.compile(
 
 def parse_adres_regel(regel: str) -> FundaListing:
     schoon = regel.strip()
-    # Optioneel "| <m2>" achter het adres geeft de (Funda-)woonoppervlakte mee, bijv.
-    # "Wassenaarseweg 257, Den Haag | 218". Zonder dat valt de scanner terug op de
-    # BAG-oppervlakte, die bij grensgevallen soms iets lager uitvalt (en een woning
-    # dan net onder de capaciteitsgrens duwt). Met de m² erbij gedraagt de import zich
-    # hetzelfde als de dagelijkse mail-route (advertentie-m² is daar ook leidend).
+    # Optioneel achter het adres, met "|" gescheiden: de (Funda-)woonoppervlakte en/of
+    # de vraagprijs, bijv. "Wassenaarseweg 257, Den Haag | 218 | 595000" (of met opmaak:
+    # "| 218 m² | € 595.000"). Volgorde-onafhankelijk: een getal >= 10.000 is de prijs,
+    # kleiner is de m². Zonder m² valt de scanner terug op de BAG-oppervlakte (die bij
+    # grensgevallen iets lager kan zijn); zonder prijs blijven winst/inleg leeg. Met
+    # beide erbij gedraagt de import zich hetzelfde als de dagelijkse mail-route.
     oppervlakte_advertentie = None
+    prijs = None
     if "|" in schoon:
-        schoon, _, opp_deel = schoon.partition("|")
-        schoon = schoon.strip()
-        opp_match = re.search(r"\d{1,4}", opp_deel)
-        if opp_match:
-            oppervlakte_advertentie = int(opp_match.group())
+        delen = schoon.split("|")
+        schoon = delen[0].strip()
+        for veld in delen[1:]:
+            cijfers = re.sub(r"[^\d]", "", veld)
+            if not cijfers:
+                continue
+            waarde = int(cijfers)
+            if waarde >= 10_000:
+                prijs = waarde
+            else:
+                oppervlakte_advertentie = waarde
 
     match = _ADRES_PLAATS_RE.match(schoon)
     if not match:
@@ -128,6 +136,7 @@ def parse_adres_regel(regel: str) -> FundaListing:
         toevoeging=toevoeging,
         postcode=None,
         woonplaats=plaats,
+        prijs=prijs,
         oppervlakte_advertentie=oppervlakte_advertentie,
     )
 
