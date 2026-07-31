@@ -22,7 +22,6 @@ KAMER_LEEG = Tenant(row_index=5, naam="", kamer="4", verwacht_bedrag=Decimal("65
 
 class FakeSheetClient:
     def __init__(self, _config, _pand):
-        self.communicatie = []
         self.oude_huurders = []
 
     def get_tenants(self):
@@ -33,11 +32,6 @@ class FakeSheetClient:
 
     def get_recent_vertrokken_huurders(self, dagen=31):
         return self.oude_huurders
-
-    def add_communicatie(self, kamer, huurder_naam, richting, onderwerp, tekst):
-        self.communicatie.append(
-            {"kamer": kamer, "huurder": huurder_naam, "richting": richting, "onderwerp": onderwerp, "tekst": tekst}
-        )
 
 
 _fake_sheet_singleton = {}
@@ -166,21 +160,6 @@ def test_leeg_onderwerp_of_tekst_wordt_geweigerd(app_client, verstuurde_mails):
     assert "verplicht" in resp.get_data(as_text=True).lower()
 
 
-def test_versturen_logt_de_mail_bij_elke_ontvanger_in_de_communicatielijst(app_client, verstuurde_mails):
-    app_client.post(
-        "/pand/mahoniestraat/huurders/mailen",
-        data={"onderwerp": "Taxateur langs", "tekst": "Beste bewoners, ...", "kamers": ["1", "2"]},
-    )
-    sheet = _fake_sheet_singleton["mahoniestraat"]
-    assert len(sheet.communicatie) == 2
-    kamers = {c["kamer"] for c in sheet.communicatie}
-    assert kamers == {"1", "2"}
-    for c in sheet.communicatie:
-        assert c["richting"] == "Uitgaand"
-        assert c["onderwerp"] == "Taxateur langs"
-        assert c["tekst"] == "Beste bewoners, ..."
-
-
 def test_mailerror_geeft_foutmelding_zonder_te_crashen(app_client, monkeypatch):
     import webapp.app as appmodule
 
@@ -305,13 +284,11 @@ def test_oude_huurder_kamernummer_botst_niet_met_huidige_huurder_op_dezelfde_kam
     assert verstuurde_mails[0]["aan"] == "fred@example.com"  # niet vlad@example.com
 
 
-def test_oude_huurders_worden_ook_gelogd_in_communicatielijst(app_client, verstuurde_mails):
+def test_oude_huurders_kunnen_ook_gemaild_worden(app_client, verstuurde_mails):
     _zet_oude_huurders(app_client, [OUDE_HUURDER])
     app_client.post(
         "/pand/mahoniestraat/huurders/mailen",
         data={"onderwerp": "Bezichtiging", "tekst": "Er komt iemand kijken.", "oude_huurders": [str(OUDE_HUURDER.row_index)]},
     )
-    communicatie = _fake_sheet_singleton["mahoniestraat"].communicatie
-    assert len(communicatie) == 1
-    assert communicatie[0]["kamer"] == "2"
-    assert communicatie[0]["huurder"] == "Fred (vertrokken)"
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == OUDE_HUURDER.email

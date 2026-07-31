@@ -56,11 +56,6 @@ class Tenant:
     advertentie_beschikbaar_per: str | None = None  # vrije tekst/datum
     advertentie_beschikbaar_tot: str | None = None  # vrije tekst/datum, leeg = onbepaalde tijd
     advertentie_borg: Decimal | None = None
-    # Kort, door de beheerder (evt. met AI-hulp) bijgehouden profiel van deze
-    # huurder - wat voor type communicatie hier nodig is, bekende issues,
-    # aanpak - wordt als context meegegeven aan het AI-sparpaneel bij
-    # "Communicatie" zodat je niet elke keer opnieuw hoeft uit te leggen.
-    communicatie_profiel: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,7 +126,6 @@ class Pand:
     bunq_rekening_iban: str
     aanmeldingen_worksheet: str = "Aanmeldingen"
     bezichtigingen_worksheet: str = "Bezichtigingen"
-    communicatie_worksheet: str = "Communicatie"
     vertrokken_worksheet: str = "Vertrokken"
     # Extra BCC-adressen die alleen voor dít pand meegaan bij herinnering/
     # ingebrekestelling-mails (bv. een mede-eigenaar van alleen dit pand) -

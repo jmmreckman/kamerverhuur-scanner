@@ -109,7 +109,6 @@ COL_ADVERTENTIE_OPPERVLAKTE = 27
 COL_ADVERTENTIE_BESCHIKBAAR_PER = 28
 COL_ADVERTENTIE_BESCHIKBAAR_TOT = 29
 COL_ADVERTENTIE_BORG = 30
-COL_COMMUNICATIE_PROFIEL = 31
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
@@ -177,8 +176,6 @@ _BEZICHTIGINGEN_HEADER = [
     "Manier", "Bel nummer", "Bevestigd op",
 ]
 
-_COMMUNICATIE_HEADER = ["Datum", "Kamer", "Huurder", "Richting", "Onderwerp", "Tekst"]
-
 _VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
 
 
@@ -221,7 +218,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_COMMUNICATIE_PROFIEL - len(row))
+            row = row + [""] * (COL_ADVERTENTIE_BORG - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -259,7 +256,6 @@ class SheetClient:
                     advertentie_borg=(
                         parse_bedrag(row[COL_ADVERTENTIE_BORG - 1]) if row[COL_ADVERTENTIE_BORG - 1].strip() else None
                     ),
-                    communicatie_profiel=_optioneel(row[COL_COMMUNICATIE_PROFIEL - 1]),
                 )
             )
         return kamers
@@ -353,13 +349,6 @@ class SheetClient:
             {"range": self._a1(row_index, COL_ADVERTENTIE_BORG), "values": [[self._bedrag_of_leeg(borg)]]},
         ]
         self._worksheet.batch_update(updates, value_input_option="USER_ENTERED")
-
-    def update_communicatie_profiel(self, row_index: int, profiel: str) -> None:
-        self._zorg_voor_voldoende_kolommen(COL_COMMUNICATIE_PROFIEL)
-        self._worksheet.batch_update(
-            [{"range": self._a1(row_index, COL_COMMUNICATIE_PROFIEL), "values": [[profiel]]}],
-            value_input_option="USER_ENTERED",
-        )
 
     def _zorg_voor_voldoende_kolommen(self, min_cols: int) -> None:
         """Breidt het grid van het hoofdtabblad uit als dat nog niet genoeg
@@ -642,33 +631,6 @@ class SheetClient:
                 title=self._pand.bezichtigingen_worksheet, rows=1000, cols=len(_BEZICHTIGINGEN_HEADER)
             )
             ws.append_row(_BEZICHTIGINGEN_HEADER, value_input_option="USER_ENTERED")
-            return ws
-
-    def add_communicatie(self, kamer: str, huurder_naam: str, richting: str, onderwerp: str, tekst: str) -> None:
-        ws = self._communicatie_worksheet()
-        ws.append_row(
-            [datetime.now().strftime("%d-%m-%Y %H:%M"), kamer, huurder_naam, richting, onderwerp, tekst],
-            value_input_option="USER_ENTERED",
-        )
-
-    def get_communicatie(self, kamer: str) -> list[list[str]]:
-        """Geeft de communicatiegeschiedenis voor deze kamer terug, oudste eerst."""
-        ws = self._communicatie_worksheet()
-        rows = ws.get_all_values()[1:]  # koprij overslaan
-        aantal_kolommen = len(_COMMUNICATIE_HEADER)
-        return [
-            row + [""] * (aantal_kolommen - len(row))
-            for row in rows if any(cel.strip() for cel in row) and row[1].strip() == kamer
-        ]
-
-    def _communicatie_worksheet(self):
-        try:
-            return self._spreadsheet.worksheet(self._pand.communicatie_worksheet)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = self._spreadsheet.add_worksheet(
-                title=self._pand.communicatie_worksheet, rows=1000, cols=len(_COMMUNICATIE_HEADER)
-            )
-            ws.append_row(_COMMUNICATIE_HEADER, value_input_option="USER_ENTERED")
             return ws
 
     def archiveer_vertrokken_huurder(self, kamer: Tenant) -> None:

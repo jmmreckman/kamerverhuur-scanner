@@ -26,9 +26,6 @@ class FakeSheetClient:
     def get_recent_vertrokken_huurders(self, dagen=31):
         return []
 
-    def add_communicatie(self, kamer, huurder_naam, richting, onderwerp, tekst):
-        pass
-
 
 @pytest.fixture
 def opzet(tmp_path, monkeypatch):
@@ -108,7 +105,7 @@ def test_opslaan_bewaart_email_en_voorkeuren(opzet):
     client, users_file = opzet
     resp = client.post(
         "/account/mail-voorkeuren",
-        data={"email": "beheerder@example.com", "voorkeur_communicatie": "on"},  # huishouden bewust niet aangevinkt
+        data={"email": "beheerder@example.com", "voorkeur_herinneringen": "on"},  # huishouden bewust niet aangevinkt
         follow_redirects=True,
     )
     assert resp.status_code == 200
@@ -117,7 +114,7 @@ def test_opslaan_bewaart_email_en_voorkeuren(opzet):
     opgeslagen = json.loads(users_file.read_text())
     assert opgeslagen["beheerder"]["email"] == "beheerder@example.com"
     assert opgeslagen["beheerder"]["mail_voorkeuren"]["huishouden"] is False
-    assert opgeslagen["beheerder"]["mail_voorkeuren"]["communicatie"] is True
+    assert opgeslagen["beheerder"]["mail_voorkeuren"]["herinneringen"] is True
 
 
 def test_ongeldig_emailadres_wordt_geweigerd(opzet):

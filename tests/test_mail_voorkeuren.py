@@ -16,7 +16,7 @@ def test_wil_ontvangen_standaard_true():
 def test_wil_ontvangen_expliciet_uitgevinkt():
     gebruiker = {"mail_voorkeuren": {"huishouden": False}}
     assert wil_ontvangen(gebruiker, "huishouden") is False
-    assert wil_ontvangen(gebruiker, "communicatie") is True  # andere types blijven aan
+    assert wil_ontvangen(gebruiker, "herinneringen") is True  # andere types blijven aan
 
 
 def test_heeft_toegang_alle_panden():

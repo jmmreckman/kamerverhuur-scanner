@@ -46,9 +46,6 @@
     {{ icon_foto() }} Kamer adverteren
     {% if kamer.beschikbaar %}<span class="pil status-betaald" style="margin-left:0.4rem">Te huur</span>{% endif %}
   </a>
-  {% if kamer.naam %}
-  <a class="btn btn-secondary" href="{{ url_for('communicatie_overzicht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Communicatie</a>
-  {% endif %}
 </div>
 
 <div class="card">

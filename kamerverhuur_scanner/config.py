@@ -65,8 +65,8 @@ class Config:
     # terug op email_bcc als deze niet gezet is.
     email_bcc_beheerder: list[str] = field(default_factory=list)
 
-    # Voor het AI-sparpaneel bij "Communicatie" op de huurderspagina (zie
-    # webapp/ai_sparren.py) - optioneel, alleen nodig als je die knop gebruikt.
+    # Voor het optionele AI-uitlezen van geuploade documenten (zie
+    # kamerverhuur_scanner/document_ai.py) - alleen nodig als je die functie gebruikt.
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
 

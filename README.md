@@ -171,31 +171,12 @@ nodig.
   "Aan"-regel (ze zien elkaars adres dus wel), met dezelfde BCC/Reply-To-
   instelling als de betaalherinneringen - de beheerder(s) krijgen daardoor
   ook maar één kopie, niet één per huurder. Huurders zonder bekend
-  e-mailadres kunnen niet aangevinkt worden. Bij elke verstuurde groepsmail
-  wordt de tekst automatisch ook toegevoegd aan de communicatielijst van elke
-  aangevinkte huurder afzonderlijk (zie hieronder). Is er tot 2 maanden
+  e-mailadres kunnen niet aangevinkt worden. Is er tot 2 maanden
   geleden een huurder vertrokken, dan verschijnt die apart onder "Oude
   huurders (recent vertrokken)" en is ook aan te vinken - handig als een
   nieuwe huurder al in de sheet staat terwijl de vorige huurder feitelijk nog
   de laatste weken van hun opzegtermijn in de kamer woont, en jij dus ècht
   die vertrekkende huurder moet bereiken in plaats van de nieuwe.
-- **Communicatie + AI-sparpaneel per huurder** - via de knop "Communicatie" op
-  de kamerpagina van een bewoonde kamer. Een tijdlijn houdt alle in-/uitgaande
-  communicatie met die huurder bij (in een eigen "Communicatie"-tabblad per
-  pand); alleen mails die je écht via de site verstuurt komen daar automatisch
-  in te staan, maar je kunt er ook zelf tekst in plakken/bewerken (bv. om
-  bestaande geschiedenis terug te vullen). Een kort **huurderprofiel** (vrije
-  tekst, bv. "reageert emotioneel, kort en zakelijk blijven") wordt bij elk
-  AI-gesprek automatisch als context meegegeven, samen met de recentste
-  communicatie - handig bij huurders waar je vaak lastig/emotioneel mailcontact
-  mee hebt en telkens opnieuw context moest typen. Plak de binnengekomen mail
-  in het sparpaneel, sparren met Claude tot je tevreden bent met de reactie, en
-  klik dan op "Laatste AI-antwoord gebruiken voor mail" - je krijgt een
-  bewerkbaar voorstel (aan/onderwerp/tekst) te zien vóór er iets verstuurd
-  wordt. Alle beheerders van dat pand staan in de BCC. Het gespar zelf wordt
-  nergens bewaard, alleen de uiteindelijk verstuurde mail komt in de
-  communicatielijst. Vereist een `ANTHROPIC_API_KEY` (zie Stap 2b) - zonder die
-  instelling werkt alleen het sparknopje niet, de rest van deze pagina gewoon.
 - **Voormalige huurders blijven nog even zichtbaar** - zodra een kamer een
   andere naam krijgt (via een nieuw huurcontract, of handmatig bij Huurders
   bewerken) wordt de vertrekkende huurder automatisch gearchiveerd in een
@@ -282,7 +263,7 @@ nodig.
   bedrag.
 - **Mailvoorkeuren** - knop rechtsboven in de navigatie (voor elke ingelogde
   beheerder zichtbaar), waar je zelf per mailsoort (huishouden-mails,
-  Communicatie, betaalherinneringen, contracten, bezichtigingen, nieuwe
+  betaalherinneringen, contracten, bezichtigingen, nieuwe
   aanmeldingen, "alles betaald"-melding) aan-/uit kunt vinken of je die als
   BCC of melding in je mailbox wilt. Standaard staat alles aan (opt-out) -
   er verandert dus niets totdat je zelf deze pagina bezoekt. Vereist wel dat
@@ -389,7 +370,7 @@ zijn.
      (zie Stap 2a) - een kopie naar de Drive-map van de kandidaat;
   2. met AI uitgelezen (naam, geboortedatum, geboorteplaats van het
      ID-document; studierichting/studentnummer van het inschrijvingsbewijs -
-     vereist `ANTHROPIC_API_KEY`, zie Stap 2b) en vergeleken met wat de
+     vereist `ANTHROPIC_API_KEY`, zie Stap 2c) en vergeleken met wat de
      kandidaat zelf in de aanmelding invulde - een eventuele afwijking wordt
      gewoon getoond, niet stilgehouden;
   3. gebruikt om automatisch een **concept-huurcontract** op te stellen
@@ -676,10 +657,9 @@ huuradministratie. Rij 1 = koppen, data vanaf rij 2, één rij per kamer:
   voor de aanzeg-waarschuwing op het dashboard. Leeg laten (of "onbepaalde
   tijd" erin zetten) als het contract geen einddatum heeft.
 - Kolom **Z t/m AD** (Advertentie prijs/oppervlakte/beschikbaar per/tot/borg)
-  en **AE** (Communicatie profiel) zijn nieuw en optioneel - horen bij de
-  aanbodpagina-advertentievelden respectievelijk het AI-sparpaneel bij
-  "Communicatie" (zie hierboven bij Features). Beide breiden het sheet-grid
-  vanzelf uit als dat nog niet tot kolom AE reikt.
+  zijn optioneel - ze horen bij de aanbodpagina-advertentievelden (zie hierboven
+  bij Features) en breiden het sheet-grid vanzelf uit als dat nog niet tot kolom
+  AD reikt.
 
 Er wordt automatisch een tweede tabblad (**Historie**, naam instelbaar per
 pand) aangemaakt met kolommen **Maand | Kamer | Huurder | Verwacht bedrag |
@@ -707,12 +687,10 @@ teruggezet naar het normale "jjjj-mm"-formaat.
 > | Huurder | Verwacht bedrag | Ontvangen bedrag | Status | Betaaldatum** (voeg
 > kolom G toe) - nieuwe tabbladen krijgen deze koprij automatisch.
 
-Ook worden automatisch een derde, vierde en vijfde tabblad (**Aanmeldingen**,
-**Bezichtigingen** en **Communicatie**, namen ook instelbaar per pand)
-aangemaakt: het eerste voor reacties op de publieke aanbodpagina, het tweede
-als log van elke bevestigde bezichtiging (zie "Aanbod & aanmeldingen"
-hierboven), het derde als tijdlijn van de communicatie per huurder (zie
-"Communicatie + AI-sparpaneel" bij Features).
+Ook worden automatisch een **Aanmeldingen**- en een **Bezichtigingen**-tabblad
+(namen ook instelbaar per pand) aangemaakt: het eerste voor reacties op de
+publieke aanbodpagina, het tweede als log van elke bevestigde bezichtiging (zie
+"Aanbod & aanmeldingen" hierboven).
 
 ## Vereisten
 
@@ -792,9 +770,11 @@ alléén mee bij mails van dat ene pand, naast de adressen uit `EMAIL_BCC`.
 > laat 'm bij een echt geschil het beste even meelezen door een jurist/
 > rechtsbijstandsverzekeraar.
 
-## Stap 2c: AI-sparpaneel instellen (optioneel, voor "Communicatie" op de huurderspagina)
+## Stap 2c: AI-uitlezen van documenten instellen (optioneel)
 
-Alleen nodig als je het sparknopje bij "Communicatie" wilt gebruiken (zie
+Alleen nodig als je geüploade documenten (ID/paspoort, bewijs van inkomen/
+garantsteller, bewijs van inschrijving) automatisch wilt laten uitlezen bij een
+documentverzoek, zodat het concept-huurcontract vast wordt aangevuld (zie
 Features hierboven). Maak een API-key aan op
 [console.anthropic.com](https://console.anthropic.com/settings/keys) en zet in
 `.env` (op de VPS in `deploy/app.env`):
@@ -805,11 +785,10 @@ ANTHROPIC_MODEL=claude-sonnet-5
 ```
 
 `ANTHROPIC_MODEL` is optioneel (staat standaard al op `claude-sonnet-5`). Elk
-gesprek in het sparpaneel kost API-verbruik (los van een eventueel Claude-
-abonnement) - reken op een paar cent per gesprek bij normaal gebruik. Zonder
-`ANTHROPIC_API_KEY` blijft de rest van "Communicatie" (tijdlijn, huurderprofiel,
-handmatig toevoegen, mail versturen) gewoon werken, alleen "Start sparren"
-geeft dan een nette foutmelding.
+uitlezen kost een klein beetje API-verbruik (los van een eventueel Claude-
+abonnement). Zonder `ANTHROPIC_API_KEY` blijft de rest van het documentverzoek
+(uploaden, opslaan, naar Drive syncen) gewoon werken; alleen het automatisch
+uitlezen wordt dan overgeslagen met een nette melding.
 
 ## Stap 3: bunq API key aanmaken (eenmalig, voor alle rekeningen samen)
 

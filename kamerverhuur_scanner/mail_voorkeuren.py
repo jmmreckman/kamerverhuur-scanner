@@ -20,10 +20,6 @@ NOTIFICATIE_TYPES: dict[str, tuple[str, str]] = {
         "Mail het hele huishouden",
         "Groepsmails naar (huidige of recent vertrokken) huurders van een pand, incl. \"Licht huurders in\".",
     ),
-    "communicatie": (
-        "Communicatie per huurder",
-        "Mails die je verstuurt via het AI-sparpaneel op de Communicatie-pagina van een huurder.",
-    ),
     "herinneringen": (
         "Betaalherinneringen & ingebrekestellingen",
         "Als er een herinnering of ingebrekestelling naar een huurder wordt gestuurd vanaf de Betalingen-pagina.",

@@ -4,8 +4,8 @@ webapp/documentverzoek.py) - haalt naam, geboortedatum, geboorteplaats,
 studierichting en studentnummer uit de documenten, zodat de rest van het
 concept-huurcontract automatisch aangevuld kan worden (zie webapp/app.py:
 _verwerk_documenten_met_ai()). Gebruikt Claude's vision-/documentmogelijk-
-heden (image/PDF content-blocks) via dezelfde Anthropic SDK als
-ai_client.py - optioneel, alleen actief als ANTHROPIC_API_KEY gezet is."""
+heden (image/PDF content-blocks) via de Anthropic SDK - optioneel, alleen
+actief als ANTHROPIC_API_KEY gezet is."""
 from __future__ import annotations
 
 import base64
