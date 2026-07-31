@@ -417,7 +417,10 @@ def bereken_winstoverzicht(
     uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
     genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
     lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
-    return winst.bereken_winst(inkomsten_specificatie, lasten, pand.onderhoud_reserve_per_maand)
+    return winst.bereken_winst(
+        inkomsten_specificatie, lasten, pand.onderhoud_reserve_per_maand,
+        energiekosten=pand.energiekosten_per_maand, belasting=pand.belasting_per_maand,
+    )
 
 
 def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantResult], maand: str) -> None:

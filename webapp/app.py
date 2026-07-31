@@ -379,6 +379,8 @@ def create_app(config: Config | None = None) -> Flask:
             "gemeente_meldpunt": form.get("gemeente_meldpunt", "").strip(),
             "heeft_bold_slot": form.get("heeft_bold_slot") == "on",
             "onderhoud_reserve_per_maand": form.get("onderhoud_reserve_per_maand", "").strip() or None,
+            "energiekosten_per_maand": form.get("energiekosten_per_maand", "").strip() or None,
+            "belasting_per_maand": form.get("belasting_per_maand", "").strip() or None,
             "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
         }
 

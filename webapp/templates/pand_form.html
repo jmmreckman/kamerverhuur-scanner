@@ -51,10 +51,21 @@
       <input type="text" name="extra_bcc" value="{{ pand.extra_bcc|join(', ') if pand else '' }}">
     </label>
     <label>Onderhoudsreserve per maand (optioneel - telt mee als kostenpost bij "Winstberekening" op
-      het dashboard van dit pand, naast de vaste €75/maand belasting en automatisch herkende vaste
+      het dashboard van dit pand, naast de belasting, energiekosten en automatisch herkende vaste
       lasten. Leeg = €0 onderhoudsreserve.)
       <input type="text" name="onderhoud_reserve_per_maand"
              value="{{ pand.onderhoud_reserve_per_maand|eur if pand and pand.onderhoud_reserve_per_maand is not none else '' }}">
+    </label>
+    <label>Energiekosten per maand (optioneel - handmatig in te vullen vaste energiepost die meetelt bij
+      "Winstberekening". Leeg = €0. Let op: vul je 'm in en herkent de bunq-scan óók een energie-last,
+      negeer die dan op de winstpagina om dubbeltellen te voorkomen.)
+      <input type="text" name="energiekosten_per_maand"
+             value="{{ pand.energiekosten_per_maand|eur if pand and pand.energiekosten_per_maand is not none else '' }}">
+    </label>
+    <label>Belasting per maand (optioneel - handmatig in te vullen vaste belastingpost die meetelt bij
+      "Winstberekening". Leeg = de standaard €75/maand.)
+      <input type="text" name="belasting_per_maand"
+             value="{{ pand.belasting_per_maand|eur if pand and pand.belasting_per_maand is not none else '' }}">
     </label>
     <label>Sleutels (één per regel, bv. "Lips 961 zolder straatkant") - getoond op het
       Sleuteloverzicht van dit pand.

@@ -126,6 +126,34 @@ def test_bereken_winst_zonder_onderhoud_reserve_telt_als_nul():
     assert overzicht.totaal_lasten == BELASTING_PER_MAAND
 
 
+def test_bereken_winst_energiekosten_tellen_mee_als_last():
+    overzicht = bereken_winst(
+        _inkomsten("1000.00"), lasten=[], onderhoud_reserve=None,
+        energiekosten=Decimal("120.00"),
+    )
+    assert overzicht.energiekosten == Decimal("120.00")
+    assert overzicht.totaal_lasten == BELASTING_PER_MAAND + Decimal("120.00")
+
+
+def test_bereken_winst_zonder_energiekosten_telt_als_nul():
+    overzicht = bereken_winst(_inkomsten("1000.00"), lasten=[], onderhoud_reserve=None)
+    assert overzicht.energiekosten == Decimal("0")
+
+
+def test_bereken_winst_belasting_override_vervangt_standaard():
+    overzicht = bereken_winst(
+        _inkomsten("1000.00"), lasten=[], onderhoud_reserve=None,
+        belasting=Decimal("110.00"),
+    )
+    assert overzicht.belasting == Decimal("110.00")
+    assert overzicht.totaal_lasten == Decimal("110.00")
+
+
+def test_bereken_winst_belasting_none_valt_terug_op_standaard():
+    overzicht = bereken_winst(_inkomsten("1000.00"), lasten=[], onderhoud_reserve=None)
+    assert overzicht.belasting == BELASTING_PER_MAAND
+
+
 def test_winstoverzicht_inkomsten_is_som_van_specificatie():
     overzicht = bereken_winst(
         [Inkomst(kamer="1", naam="Jan", verwacht_bedrag=Decimal("650.00")),

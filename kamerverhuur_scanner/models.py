@@ -150,6 +150,15 @@ class Pand:
     # in te vullen bedrag per pand (geen automatische aanname/percentage),
     # zelf in te stellen bij "Panden beheren".
     onderhoud_reserve_per_maand: Decimal | None = None
+    # Handmatig ingevulde vaste energiekosten per maand (kostenpost in de
+    # winstberekening). Leeg = €0. Bewust handmatig i.p.v. uit de automatisch
+    # herkende vaste lasten - vul 'm alleen in als je energie zelf wilt
+    # opgeven (en negeer dan eventueel de automatisch herkende energie-last op
+    # de winstpagina om dubbeltellen te voorkomen).
+    energiekosten_per_maand: Decimal | None = None
+    # Handmatige override van de vaste belastingpost per maand. Leeg = de
+    # standaard van winst.BELASTING_PER_MAAND (€75).
+    belasting_per_maand: Decimal | None = None
     # Vrije lijst met sleutelomschrijvingen van dit pand (bv. "Lips 961 zolder
     # straatkant") - puur informatief, getoond op de Sleuteloverzicht-pagina.
     sleutels: list[str] = field(default_factory=list)

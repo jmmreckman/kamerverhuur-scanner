@@ -248,10 +248,11 @@ nodig.
   te negeren (bv. een overboeking naar jezelf, of iets dat toch geen echte
   vaste last blijkt) - genegeerde tegenpartijen tellen daarna nooit meer mee,
   ongeacht het patroon, en zijn terug te zetten via "Negeerlijst beheren"
-  onderaan de winstpagina. Plus een
-  vaste €75/maand belastingpost, plus een instelbare onderhoudsreserve (zelf
-  in te vullen per pand bij "Panden beheren" - bewust geen automatische
-  aanname). Leegstand telt niet mee. Elk bezoek aan de pagina legt een nieuw
+  onderaan de winstpagina. Plus een belastingpost (standaard €75/maand, per
+  pand handmatig te overschrijven), optionele handmatige energiekosten (voor
+  wie energie liever zelf opgeeft dan uit de automatisch herkende lasten), en
+  een instelbare onderhoudsreserve - alle drie zelf in te vullen per pand bij
+  "Panden beheren" (bewust geen automatische aanname). Leegstand telt niet mee. Elk bezoek aan de pagina legt een nieuw
   winst-datapunt vast voor de grafiek ("Winst over tijd"), en dat gebeurt ook
   sowieso wekelijks automatisch (zie `scripts/winst_snapshot.py`). Op de
   pandkiezerpagina (bij meerdere panden) staat een "Totale winst alle

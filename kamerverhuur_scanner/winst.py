@@ -1,10 +1,13 @@
 """Winstberekening per pand: huurinkomsten (IN) min kosten (UIT) = winst.
 
-Kosten bestaan uit drie delen:
-- een vaste belastingpost van BELASTING_PER_MAAND per pand;
+Kosten bestaan uit:
+- een vaste belastingpost van BELASTING_PER_MAAND per pand, met een optionele
+  handmatige override per pand (Pand.belasting_per_maand);
 - de instelbare onderhoudsreserve (Pand.onderhoud_reserve_per_maand, zelf in
   te vullen bij "Panden beheren" - bewust geen automatische aanname/
   percentage, dat is een financiële keuze van de beheerder zelf);
+- optionele handmatig ingevulde energiekosten (Pand.energiekosten_per_maand),
+  voor wie energie liever zelf opgeeft dan uit de automatisch herkende lasten;
 - automatisch herkende terugkerende vaste lasten (energie, internet, VvE,
   hypotheek, etc.), gescand uit de uitgaande bunq-transacties van de
   rekening van dit pand (zie herken_terugkerende_lasten()).
@@ -73,6 +76,7 @@ class Winstoverzicht:
     lasten: list[Last] = field(default_factory=list)
     belasting: Decimal = BELASTING_PER_MAAND
     onderhoud_reserve: Decimal = Decimal("0")
+    energiekosten: Decimal = Decimal("0")
 
     @property
     def inkomsten(self) -> Decimal:
@@ -80,7 +84,10 @@ class Winstoverzicht:
 
     @property
     def totaal_lasten(self) -> Decimal:
-        return sum((last.bedrag for last in self.lasten), Decimal("0")) + self.belasting + self.onderhoud_reserve
+        return (
+            sum((last.bedrag for last in self.lasten), Decimal("0"))
+            + self.belasting + self.onderhoud_reserve + self.energiekosten
+        )
 
     @property
     def winst(self) -> Decimal:
@@ -132,11 +139,17 @@ def herken_terugkerende_lasten(
 
 
 def bereken_winst(
-    inkomsten_specificatie: list[Inkomst], lasten: list[Last], onderhoud_reserve: Decimal | None
+    inkomsten_specificatie: list[Inkomst], lasten: list[Last], onderhoud_reserve: Decimal | None,
+    energiekosten: Decimal | None = None, belasting: Decimal | None = None,
 ) -> Winstoverzicht:
+    """`belasting` is een optionele handmatige override van de vaste
+    belastingpost; None valt terug op BELASTING_PER_MAAND (€75). `energiekosten`
+    is een optionele handmatig ingevulde vaste energiepost; None = €0."""
     return Winstoverzicht(
         inkomsten_specificatie=inkomsten_specificatie, lasten=lasten,
         onderhoud_reserve=onderhoud_reserve or Decimal("0"),
+        energiekosten=energiekosten or Decimal("0"),
+        belasting=BELASTING_PER_MAAND if belasting is None else belasting,
     )
 
 

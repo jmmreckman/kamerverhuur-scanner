@@ -66,6 +66,29 @@ def test_onderhoud_reserve_ontbreekt_geeft_none(tmp_path):
     assert panden[0].onderhoud_reserve_per_maand is None
 
 
+def test_energiekosten_en_belasting_worden_geparsed_naar_decimal(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "energiekosten_per_maand": "€ 120,00", "belasting_per_maand": "€ 110,00",
+    })
+    panden = load_properties(str(path))
+    assert panden[0].energiekosten_per_maand == Decimal("120.00")
+    assert panden[0].belasting_per_maand == Decimal("110.00")
+
+
+def test_energiekosten_en_belasting_ontbreken_geven_none(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text("[]")
+    zet_pand(str(path), "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "x", "bunq_rekening_iban": "NL81BUNQ2163127125",
+    })
+    panden = load_properties(str(path))
+    assert panden[0].energiekosten_per_maand is None
+    assert panden[0].belasting_per_maand is None
+
+
 def test_extra_bcc_ontbreekt_geeft_lege_lijst(tmp_path):
     path = tmp_path / "properties.json"
     path.write_text(json.dumps([

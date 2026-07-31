@@ -11,7 +11,7 @@ from .models import Pand, Verhuurder
 from .utils import parse_bedrag
 
 
-def _parse_onderhoud_reserve(waarde) -> Decimal | None:
+def _parse_optioneel_bedrag(waarde) -> Decimal | None:
     if waarde in (None, ""):
         return None
     return parse_bedrag(str(waarde))
@@ -106,7 +106,9 @@ def load_properties(path: str) -> list[Pand]:
                     bijzondere_bepalingen=item.get("bijzondere_bepalingen", ""),
                     gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
                     heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
-                    onderhoud_reserve_per_maand=_parse_onderhoud_reserve(item.get("onderhoud_reserve_per_maand")),
+                    onderhoud_reserve_per_maand=_parse_optioneel_bedrag(item.get("onderhoud_reserve_per_maand")),
+                    energiekosten_per_maand=_parse_optioneel_bedrag(item.get("energiekosten_per_maand")),
+                    belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
                     sleutels=_parse_sleutels(item.get("sleutels")),
                 )
             )
