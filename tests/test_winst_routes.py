@@ -224,6 +224,13 @@ def test_totaal_overzicht_toont_komende_maand_uitsplitsing_per_pand(opzet, monke
 
     monkeypatch.setattr(appmodule, "run_check", _fake_run_check)
 
+    # Vóór verversen: de komende maand is nog niet opgehaald (snelle laadpagina)
+    resp = client.get("/winst-overzicht")
+    assert "Nog niet opgehaald" in resp.get_data(as_text=True)
+
+    # Ververs-knop haalt live op en cachet het resultaat
+    client.post("/winst-overzicht/ververs-komende-maand")
+
     resp = client.get("/winst-overzicht")
     body = resp.get_data(as_text=True)
     # 1 van 3 vooruitbetaald voor komende maand, uitgesplitst per pand

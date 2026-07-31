@@ -151,6 +151,33 @@ def laad_winst_geschiedenis(pand_slug: str, state_dir: str = ".") -> list[dict]:
     return json.loads(p.read_text())
 
 
+def _komende_maand_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"komende_maand_{veilige_slug}.json"
+
+
+def bewaar_komende_maand(pand_slug: str, maand: str, resultaten: list[dict], state_dir: str = ".") -> None:
+    """Bewaart de (langzame, live opgehaalde) vooruitbetaal-controle voor de
+    komende maand per pand, zodat de "Totaal overzicht"-pagina die meteen uit
+    cache kan tonen i.p.v. bij elk bezoek opnieuw bunq/Sheets te bevragen.
+    `maand` is de doelmaand als "YYYY-MM", zodat een cache van vorige maand
+    vanzelf verouderd (en dus genegeerd) raakt. `resultaten` is een lijst dicts
+    met verwacht_bedrag/ontvangen_bedrag/status (kant-en-klaar om op te tellen)."""
+    data = {
+        "berekend_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "maand": maand,
+        "resultaten": resultaten,
+    }
+    _komende_maand_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+
+
+def laad_komende_maand(pand_slug: str, state_dir: str = ".") -> dict | None:
+    p = _komende_maand_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return None
+    return json.loads(p.read_text())
+
+
 def _genegeerde_lasten_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
     return Path(state_dir) / f"genegeerde_lasten_{veilige_slug}.json"

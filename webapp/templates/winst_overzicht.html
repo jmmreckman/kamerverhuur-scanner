@@ -48,6 +48,7 @@
     </div>
     <div class="stat-card">
       <div>
+        {% if komend_berekend_op %}
         <div class="stat-value">{{ betalingen_komend.betaald }}/{{ betalingen_komend.totaal }}</div>
         <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
         <div class="muted" style="margin-top:0.3rem">{{ betalingen_komend.ontvangen|eur }} / {{ betalingen_komend.verwacht|eur }} ontvangen</div>
@@ -58,12 +59,19 @@
           {% endfor %}
         </ul>
         {% endif %}
+        {% else %}
+        <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">Nog niet opgehaald &mdash; klik op "Ververs" om te zien wie er al voor volgende maand vooruitbetaald heeft.</div>
+        {% endif %}
+        <div style="margin-top:0.6rem">
+          <form method="post" action="{{ url_for('winst_overzicht_ververs_komende') }}" style="display:inline">
+            <button type="submit" class="btn-secondary">Ververs</button>
+          </form>
+          {% if komend_berekend_op %}<span class="muted" style="margin-left:0.5rem; font-size:0.85rem">bijgewerkt {{ komend_berekend_op }}</span>{% endif %}
+        </div>
       </div>
     </div>
   </div>
-  {% if komend_fouten %}
-  <p class="muted" style="color:var(--bad)">{% for f in komend_fouten %}{{ f }}<br>{% endfor %}</p>
-  {% endif %}
 </div>
 
 <div class="card">
