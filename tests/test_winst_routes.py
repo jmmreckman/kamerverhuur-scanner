@@ -201,6 +201,40 @@ def test_totaal_overzicht_telt_betalingen_deze_maand_uit_cache(opzet):
     assert "1.950,00" in body  # totaal verwacht (3 x 650)
 
 
+def test_totaal_overzicht_toont_komende_maand_uitsplitsing_per_pand(opzet, monkeypatch):
+    from kamerverhuur_scanner.models import Status, TenantResult
+    import webapp.app as appmodule
+
+    client, _config = opzet
+
+    def _fake_run_check(config, pand, dry_run, vandaag):
+        if pand.slug == "mahoniestraat":
+            results = [
+                TenantResult(tenant=Tenant(row_index=2, naam="A", kamer="1", verwacht_bedrag=Decimal("650.00")),
+                             ontvangen_bedrag=Decimal("650.00"), status=Status.BETAALD),
+                TenantResult(tenant=Tenant(row_index=3, naam="B", kamer="2", verwacht_bedrag=Decimal("650.00")),
+                             ontvangen_bedrag=Decimal("0.00"), status=Status.NIET_ONTVANGEN),
+            ]
+        else:  # baumannlaan: niemand vooruitbetaald -> mag niet in de uitsplitsing komen
+            results = [
+                TenantResult(tenant=Tenant(row_index=2, naam="C", kamer="1", verwacht_bedrag=Decimal("650.00")),
+                             ontvangen_bedrag=Decimal("0.00"), status=Status.NIET_ONTVANGEN),
+            ]
+        return [], results, []
+
+    monkeypatch.setattr(appmodule, "run_check", _fake_run_check)
+
+    resp = client.get("/winst-overzicht")
+    body = resp.get_data(as_text=True)
+    # 1 van 3 vooruitbetaald voor komende maand, uitgesplitst per pand
+    assert "1/3" in body  # totaal vooruitbetaald komende maand
+    # de uitsplitsing per pand toont alleen panden die bijdragen (mahoniestraat 1/2)
+    uitsplitsing = body.split('<ul class="komend-per-pand">')[1].split("</ul>")[0]
+    assert "Mahoniestraat 15" in uitsplitsing
+    assert "1/2" in uitsplitsing
+    assert "Burgemeester Baumannlaan 70b" not in uitsplitsing  # draagt niets bij
+
+
 # --- Negeerlijst ---
 
 

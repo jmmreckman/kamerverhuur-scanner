@@ -2,6 +2,11 @@
 {% from "_grafiek.html" import winst_grafiek %}
 {% block title %}Totaal overzicht{% endblock %}
 {% block content %}
+<style>
+  .komend-per-pand { list-style:none; margin:0.6rem 0 0; padding:0.6rem 0 0; border-top:1px solid var(--border); }
+  .komend-per-pand li { display:flex; justify-content:space-between; gap:1rem; padding:0.15rem 0; font-size:0.9rem; }
+  .komend-per-pand li span:last-child { color:var(--muted); white-space:nowrap; }
+</style>
 <div class="page-header">
   <h1>Totaal overzicht</h1>
 </div>
@@ -46,12 +51,16 @@
         <div class="stat-value">{{ betalingen_komend.betaald }}/{{ betalingen_komend.totaal }}</div>
         <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
         <div class="muted" style="margin-top:0.3rem">{{ betalingen_komend.ontvangen|eur }} / {{ betalingen_komend.verwacht|eur }} ontvangen</div>
+        {% if komend_per_pand %}
+        <ul class="komend-per-pand">
+          {% for p in komend_per_pand %}
+          <li><span>{{ p.naam }}</span><span>{{ p.betaald }}/{{ p.totaal }} &middot; {{ p.ontvangen|eur }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </div>
     </div>
   </div>
-  <p class="muted" style="margin-top:0.75rem">"Betalingen binnen" telt de kamers die deze maand al betaald hebben
-     (of te veel), over alle panden waar je beheerder van bent. Deze maand komt uit de laatste controle per pand;
-     de komende maand wordt live opgehaald &mdash; zo zie je nu al wie er voor volgende maand vooruitbetaald heeft.</p>
   {% if komend_fouten %}
   <p class="muted" style="color:var(--bad)">{% for f in komend_fouten %}{{ f }}<br>{% endfor %}</p>
   {% endif %}
