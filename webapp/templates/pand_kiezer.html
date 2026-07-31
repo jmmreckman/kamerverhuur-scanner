@@ -17,10 +17,10 @@
 </div>
 
 <a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-top:1.5rem; max-width:320px">
-  <div class="stat-icon {{ 'ok' if winst_totaal >= 0 else 'bad' }}">{{ icon_euro() }}</div>
+  <div class="stat-icon">{{ icon_euro() }}</div>
   <div>
-    <div class="stat-value" style="color:{{ 'var(--ok)' if winst_totaal >= 0 else 'var(--bad)' }}">{{ winst_totaal|eur }}</div>
-    <div class="stat-label">totale winst alle panden</div>
+    <div class="stat-value">Totaal overzicht</div>
+    <div class="stat-label">winst &amp; betalingen alle panden</div>
   </div>
 </a>
 {% else %}

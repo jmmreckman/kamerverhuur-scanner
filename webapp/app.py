@@ -272,8 +272,7 @@ def create_app(config: Config | None = None) -> Flask:
         eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
-        winst_totaal = _totale_winst(_winst_specificatie_alle_panden(eigen_panden))
-        return render_template("pand_kiezer.html", panden=eigen_panden, winst_totaal=winst_totaal)
+        return render_template("pand_kiezer.html", panden=eigen_panden)
 
     # --- Gebruikersbeheer (alleen voor beheerders met toegang tot alle panden) ---
 
@@ -508,6 +507,60 @@ def create_app(config: Config | None = None) -> Flask:
     def _totale_winst(specificatie: list[dict]) -> Decimal:
         return sum((regel["verdeeld"] for regel in specificatie if regel["verdeeld"] is not None), Decimal("0"))
 
+    _BETAALD_STATUSSEN = {Status.BETAALD.value, Status.TE_VEEL.value}
+
+    def _aggregeer_betalingen(resultaten: list[dict]) -> dict:
+        """Telt betaal-resultaten (dicts met verwacht_bedrag/ontvangen_bedrag/status,
+        zowel uit de state-cache als uit een live run_check) op tot totalen over alle
+        panden: hoeveel kamers al betaald zijn (status Betaald of Te veel ontvangen),
+        het totaal aantal kamers, en het totaal ontvangen/verwacht bedrag."""
+        return {
+            "betaald": sum(1 for r in resultaten if r["status"] in _BETAALD_STATUSSEN),
+            "totaal": len(resultaten),
+            "ontvangen": sum((Decimal(r["ontvangen_bedrag"]) for r in resultaten), Decimal("0")),
+            "verwacht": sum((Decimal(r["verwacht_bedrag"]) for r in resultaten), Decimal("0")),
+        }
+
+    def _betalingen_huidige_maand(panden: list) -> dict:
+        """Betalingen deze maand over alle opgegeven panden, uit de state-cache (de
+        laatste 'Nu controleren'/dagelijkse controle) - dus snel, geen live
+        bunq-/sheet-aanroepen. Panden zonder cache tellen simpelweg niet mee."""
+        resultaten: list[dict] = []
+        for pand in panden:
+            cache = state.load(pand.slug, config.state_dir)
+            if cache:
+                resultaten.extend(cache["resultaten"])
+        return _aggregeer_betalingen(resultaten)
+
+    def _eerste_van_volgende_maand(vandaag: date) -> date:
+        return date(vandaag.year + 1, 1, 1) if vandaag.month == 12 else date(vandaag.year, vandaag.month + 1, 1)
+
+    def _betalingen_komende_maand(panden: list, vandaag: date) -> tuple[dict, list[str]]:
+        """Betalingen die (per de 17e-grens, zie runner._effectieve_maand) al voor
+        volgende maand binnen zijn - zodat je in de lopende maand alvast ziet wie
+        vooruitbetaald heeft. Dit staat niet in de cache (die gaat over deze maand),
+        dus dit haalt per pand live een dry-run-controle op voor de eerste van
+        volgende maand. Een pand dat faalt (bv. bunq/sheet-storing) mag de pagina niet
+        breken; die komt in de teruggegeven foutenlijst."""
+        volgende = _eerste_van_volgende_maand(vandaag)
+        resultaten: list[dict] = []
+        fouten: list[str] = []
+        for pand in panden:
+            try:
+                _tenants, results, _unmatched = run_check(config, pand, dry_run=True, vandaag=volgende)
+            except Exception as exc:  # noqa: BLE001 - één pand mag de hele pagina niet breken
+                fouten.append(f"{pand.naam}: kon komende maand niet ophalen ({exc})")
+                continue
+            resultaten.extend(
+                {
+                    "verwacht_bedrag": str(r.tenant.verwacht_bedrag),
+                    "ontvangen_bedrag": str(r.ontvangen_bedrag),
+                    "status": r.status.value,
+                }
+                for r in results
+            )
+        return _aggregeer_betalingen(resultaten), fouten
+
     @app.route("/pand/<pand_slug>/")
     @login_required
     def dashboard(pand_slug: str):
@@ -606,9 +659,18 @@ def create_app(config: Config | None = None) -> Flask:
         geschiedenis = winst.gecombineerde_winst_over_tijd(reeksen, aantal_beheerders)
         specificatie = _winst_specificatie_alle_panden(eigen_panden)
         totaal = _totale_winst(specificatie)
+
+        vandaag = date.today()
+        betalingen_nu = _betalingen_huidige_maand(eigen_panden)
+        betalingen_komend, komend_fouten = _betalingen_komende_maand(eigen_panden, vandaag)
+        volgende = _eerste_van_volgende_maand(vandaag)
         return render_template(
             "winst_overzicht.html", geschiedenis=geschiedenis, panden=eigen_panden,
             specificatie=specificatie, totaal=totaal,
+            huidige_maandnaam=f"{_MAAND_NAMEN[vandaag.month - 1]} {vandaag.year}",
+            komende_maandnaam=f"{_MAAND_NAMEN[volgende.month - 1]} {volgende.year}",
+            betalingen_nu=betalingen_nu, betalingen_komend=betalingen_komend,
+            komend_fouten=komend_fouten,
         )
 
     @app.route("/pand/<pand_slug>/dashboard/aanzegging-afhandelen", methods=["POST"])

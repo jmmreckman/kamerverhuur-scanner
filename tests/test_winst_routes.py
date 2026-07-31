@@ -145,28 +145,60 @@ def test_winst_overzicht_pand_zonder_snapshot_toont_streepje(opzet):
     assert "nog geen winst-datapunt" in body.lower()
 
 
-def test_pandkiezer_toont_totale_winst_alle_panden(opzet):
+def test_pandkiezer_toont_totaal_overzicht_knop(opzet):
+    client, _config = opzet
+    resp = client.get("/")
+    body = resp.get_data(as_text=True)
+    assert "Totaal overzicht" in body
+    assert "/winst-overzicht" in body
+
+
+def test_totaal_overzicht_toont_totale_winst_alle_panden(opzet):
     client, config = opzet
     # baumannlaan heeft in deze fixture maar 1 beheerder ("beheerder" zelf,
     # via alle_panden) - justin heeft alleen toegang tot mahoniestraat.
     state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), config.state_dir)
 
-    resp = client.get("/")
+    resp = client.get("/winst-overzicht")
     body = resp.get_data(as_text=True)
     assert "totale winst alle panden" in body.lower()
     assert "500,00" in body
 
 
-def test_pandkiezer_verdeelt_winst_bij_meerdere_beheerders(opzet):
+def test_totaal_overzicht_verdeelt_winst_bij_meerdere_beheerders(opzet):
     client, config = opzet
     state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), config.state_dir)
     # justin heeft ook toegang tot mahoniestraat, dus de winst van dat pand
     # moet hier door 2 gedeeld worden (500,00) - baumannlaan blijft onverdeeld.
     state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), config.state_dir)
 
-    resp = client.get("/")
+    resp = client.get("/winst-overzicht")
     body = resp.get_data(as_text=True)
     assert "1.000,00" in body  # 500 (mahoniestraat, verdeeld) + 500 (baumannlaan, onverdeeld)
+
+
+def test_totaal_overzicht_telt_betalingen_deze_maand_uit_cache(opzet):
+    from kamerverhuur_scanner.models import Status, TenantResult
+
+    client, config = opzet
+    # Twee panden met elk een gecachete controle: mahoniestraat 1 betaald van 2,
+    # baumannlaan 1 betaald van 1 -> samen 2/3 betaald, ontvangen 1200 van 1950.
+    state.save("mahoniestraat", [
+        TenantResult(tenant=Tenant(row_index=2, naam="A", kamer="1", verwacht_bedrag=Decimal("650.00")),
+                     ontvangen_bedrag=Decimal("650.00"), status=Status.BETAALD),
+        TenantResult(tenant=Tenant(row_index=3, naam="B", kamer="2", verwacht_bedrag=Decimal("650.00")),
+                     ontvangen_bedrag=Decimal("0.00"), status=Status.NIET_ONTVANGEN),
+    ], 0, config.state_dir)
+    state.save("baumannlaan", [
+        TenantResult(tenant=Tenant(row_index=2, naam="C", kamer="1", verwacht_bedrag=Decimal("650.00")),
+                     ontvangen_bedrag=Decimal("550.00"), status=Status.BETAALD),
+    ], 0, config.state_dir)
+
+    resp = client.get("/winst-overzicht")
+    body = resp.get_data(as_text=True)
+    assert "2/3" in body  # betalingen binnen deze maand
+    assert "1.200,00" in body  # totaal ontvangen (650 + 550)
+    assert "1.950,00" in body  # totaal verwacht (3 x 650)
 
 
 # --- Negeerlijst ---

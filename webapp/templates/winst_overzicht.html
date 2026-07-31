@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% from "_grafiek.html" import winst_grafiek %}
-{% block title %}Totale winst alle panden{% endblock %}
+{% block title %}Totaal overzicht{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Totale winst alle panden</h1>
-  <p class="muted">Som van de laatst berekende winst per pand (zie de winstberekeningspagina van elk pand),
-     gedeeld door het aantal beheerders bij panden met meerdere beheerders - jouw eigen deel dus, niet per se
-     de volledige winst van elk pand.</p>
+  <h1>Totaal overzicht</h1>
 </div>
 
 <div class="card">
-  <h2>Optelsom</h2>
+  <h2>Totale winst alle panden</h2>
+  <p class="muted">Som van de laatst berekende winst per pand (zie de winstberekeningspagina van elk pand),
+     gedeeld door het aantal beheerders bij panden met meerdere beheerders - jouw eigen deel dus, niet per se
+     de volledige winst van elk pand.</p>
   <div class="tabel-scroll">
   <table>
     <tr><th>Pand</th><th>Laatste winst</th><th>Beheerders</th><th>Jouw deel</th></tr>
@@ -28,6 +28,32 @@
   {% if specificatie|selectattr("laatste", "none")|list %}
   <p class="muted" style="margin-top:0.75rem">Panden met "-" hebben nog geen winst-datapunt - bezoek de
      winstberekeningspagina van dat pand eenmalig, of wacht op de wekelijkse automatische snapshot.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Betalingen alle panden</h2>
+  <div class="grid">
+    <div class="stat-card">
+      <div>
+        <div class="stat-value">{{ betalingen_nu.betaald }}/{{ betalingen_nu.totaal }}</div>
+        <div class="stat-label">betalingen binnen &mdash; deze maand ({{ huidige_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">{{ betalingen_nu.ontvangen|eur }} / {{ betalingen_nu.verwacht|eur }} ontvangen</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div>
+        <div class="stat-value">{{ betalingen_komend.betaald }}/{{ betalingen_komend.totaal }}</div>
+        <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">{{ betalingen_komend.ontvangen|eur }} / {{ betalingen_komend.verwacht|eur }} ontvangen</div>
+      </div>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:0.75rem">"Betalingen binnen" telt de kamers die deze maand al betaald hebben
+     (of te veel), over alle panden waar je beheerder van bent. Deze maand komt uit de laatste controle per pand;
+     de komende maand wordt live opgehaald &mdash; zo zie je nu al wie er voor volgende maand vooruitbetaald heeft.</p>
+  {% if komend_fouten %}
+  <p class="muted" style="color:var(--bad)">{% for f in komend_fouten %}{{ f }}<br>{% endfor %}</p>
   {% endif %}
 </div>
 
