@@ -232,6 +232,16 @@ mail-scan meteen te laten draaien in plaats van te wachten tot 09:00. Verder:
   standaard 18m²-studentenkamer. Voorbeeld: 126 m² (7 kamers volgens de vuistregel),
   handmatig naar 3 kamers → 4 verloren kamers × €550 × 50% = €1.100 extra kale huur,
   verdeeld over de 3 overgebleven kamers.
+- **Rekenen met deze woning** — link in het informatievenstertje naar een rekentool per
+  woning (`/woning/<id>/berekening`). Links vul je de uitgangspunten in (koopsom en aantal
+  kamers al voorgevuld uit de woning; verder overdrachtsbelasting, BAR, kale huur/service/
+  vaste kosten per kamer, kosten koper, verbouwkosten, rente, taxatieverhouding, LTV en
+  aantal investeerders), rechts rollen de sommen er meteen uit — hetzelfde tweetraps-
+  financieringsmodel als het dagrapport (`rotterdam_scanner/investering.py`), met alle
+  tussenstappen zichtbaar (taxatie vóór/ná vergunning, leenbaar, eigen inleg, winst p.p./
+  mnd en rendement). Alles wat je invult wordt automatisch bij die woning bewaard, zodat je
+  later verder kunt rekenen. Standaard staan de uitgangspunten op de scanner-aannames, dus
+  de beginuitkomst is gelijk aan wat de kaart voor die woning laat zien.
 
 Draait als eigen container (`kansen`) op dezelfde VPS als `fundazoeker`, gebouwd vanaf
 dezelfde branch/dezelfde `state.json` (gedeeld volume) — zie `deploy/docker-compose.yml`

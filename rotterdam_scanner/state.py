@@ -61,6 +61,12 @@ class ListingState:
     # horen - voor Den Haag: geluidsisolatie, brandveiligheid, pand-/wijk-quotum,
     # MSW, WOZ-geschrapt. Rotterdam laat dit leeg (gebruikt huurprijsopslag_signalen).
     check_signalen: list[str] = field(default_factory=list)
+    # Door de gebruiker (op de rekentool-pagina) aangepaste investeringsuitgangspunten
+    # voor déze woning - een dict met de velden van investering.RekenUitgangspunten
+    # (percentages als fractie, bv. 0.08). None = nog nooit iets aangepast, dan gelden
+    # de standaardaannames + voorgevulde koopsom/aantal kamers. Wordt automatisch
+    # opgeslagen zodra de gebruiker iets wijzigt (zie kansen_site/app.py).
+    berekening: dict | None = None
 
     @property
     def primaire_oppervlakte(self) -> int | None:

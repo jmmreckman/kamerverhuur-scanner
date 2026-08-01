@@ -100,6 +100,7 @@ function bouwPopup(kans) {
     ${kans.woz_check_nodig && kans.woz_check_url ? `<a href="${kans.woz_check_url}" target="_blank" rel="noopener">Zelf WOZ-waarde opzoeken &rarr;</a><br>` : ""}
     ${signalen ? signalen + "<br>" : ""}
     ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
+    <a href="/woning/${encodeURIComponent(kans.object_id)}/berekening" class="reken-link">Rekenen met deze woning &rarr;</a><br>
     <a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
   `;
 

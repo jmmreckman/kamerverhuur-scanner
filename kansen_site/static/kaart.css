@@ -311,3 +311,10 @@ body {
   word-break: break-all;
   font-size: 0.9em;
 }
+
+.popup-inhoud .reken-link {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-weight: 600;
+  color: var(--groen);
+}

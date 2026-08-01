@@ -130,3 +130,105 @@ def bereken_met_aantal_kamers(
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_na_ophoging_pp=eigen_inleg_na_ophoging_pp,
     )
+
+
+# --- Interactieve rekentool (kansen.steenhub.nl) -------------------------------
+# Zelfde tweetraps-financieringsmodel als hierboven, maar met álle uitgangspunten
+# als losse (per woning aanpasbare) parameters i.p.v. de module-constanten, en met
+# een volledig resultaat (alle tussenstappen) zodat de rekenpagina links de invoer
+# en rechts de doorgerekende sommen kan tonen. Geverifieerd tegen een handmatig
+# doorgerekend praktijkvoorbeeld (Azaleastraat 82B, koopsom €355.000, 6 kamers) -
+# zie tests/test_rekentool.py. Bewust géén kamerverlies-compensatie of
+# huurprijsopslag hier: op de handmatige rekenpagina vult de gebruiker elke
+# uitgangspunt zelf in, dus die verborgen correcties zouden alleen maar verwarren.
+
+
+@dataclass(frozen=True)
+class RekenUitgangspunten:
+    koopsom: float
+    aantal_kamers: int
+    aantal_investeerders: int = AANTAL_INVESTEERDERS
+    overdrachtsbelasting: float = OVERDRACHTSBELASTING
+    bar: float = BAR
+    kale_huur_per_kamer: float = KALE_HUUR_PER_KAMER
+    servicekosten_per_kamer: float = SERVICEKOSTEN_PER_KAMER
+    vaste_kosten_per_huurder: float = VASTE_KOSTEN_PER_HUURDER
+    kosten_koper_ex_ovb: float = KOSTEN_KOPER_EX_OVB
+    verbouwkosten: float = VERBOUWKOSTEN
+    rente: float = RENTE
+    taxatie_verhouding_voor_verhoging: float = TAXATIE_VERHOUDING_VOOR_VERHOGING
+    ltv: float = LTV
+
+
+@dataclass(frozen=True)
+class RekenResultaat:
+    # Berekende uitgangspunten (tussenstappen)
+    kale_huur_pm: float
+    service_in_pm: float
+    vast_uit_pm: float
+    overdrachtsbelasting_eur: float
+    taxatie_voor_vergunning: float
+    taxatie_na_vergunning: float
+    leenbaar_voor_verhoging: float
+    leenbaar_na_verhoging: float
+    zelf_in_te_leggen_bij_aankoop: float
+    rente_pm_na_verhoging: float
+    leegstand_3mnd: float
+    totale_zelf_in_te_leggen: float
+    verhoogbaar_met: float
+    # Belangrijke resultaten
+    winst_pm_pp: float
+    eigen_inleg_voor_ophoging_totaal: float
+    eigen_inleg_na_ophoging_pp: float
+    rendement: float | None  # winst/jaar p.p. gedeeld door eigen inleg na ophoging; None bij inleg 0
+
+
+def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
+    kale_huur_pm = u.aantal_kamers * u.kale_huur_per_kamer
+    service_in_pm = u.aantal_kamers * u.servicekosten_per_kamer
+    vast_uit_pm = u.aantal_kamers * u.vaste_kosten_per_huurder
+
+    overdrachtsbelasting_eur = u.koopsom * u.overdrachtsbelasting
+    taxatie_voor_vergunning = u.koopsom * u.taxatie_verhouding_voor_verhoging
+    taxatie_na_vergunning = (kale_huur_pm * 12) / u.bar if u.bar else 0.0
+
+    leenbaar_voor_verhoging = u.ltv * taxatie_voor_vergunning
+    leenbaar_na_verhoging = u.ltv * taxatie_na_vergunning
+    verhoogbaar_met = leenbaar_na_verhoging - leenbaar_voor_verhoging
+
+    zelf_in_te_leggen_bij_aankoop = u.koopsom - leenbaar_voor_verhoging
+    rente_pm_na_verhoging = leenbaar_na_verhoging * u.rente / 12
+    leegstand_3mnd = 3 * rente_pm_na_verhoging
+
+    totale_zelf_in_te_leggen = (
+        zelf_in_te_leggen_bij_aankoop
+        + overdrachtsbelasting_eur
+        + u.kosten_koper_ex_ovb
+        + u.verbouwkosten
+        + leegstand_3mnd
+    )
+
+    n = u.aantal_investeerders or 1
+    winst_pm_pp = (kale_huur_pm + service_in_pm - vast_uit_pm - rente_pm_na_verhoging) / n
+    eigen_inleg_na_ophoging_pp = (totale_zelf_in_te_leggen - verhoogbaar_met) / n
+    rendement = (winst_pm_pp * 12 / eigen_inleg_na_ophoging_pp) if eigen_inleg_na_ophoging_pp else None
+
+    return RekenResultaat(
+        kale_huur_pm=kale_huur_pm,
+        service_in_pm=service_in_pm,
+        vast_uit_pm=vast_uit_pm,
+        overdrachtsbelasting_eur=overdrachtsbelasting_eur,
+        taxatie_voor_vergunning=taxatie_voor_vergunning,
+        taxatie_na_vergunning=taxatie_na_vergunning,
+        leenbaar_voor_verhoging=leenbaar_voor_verhoging,
+        leenbaar_na_verhoging=leenbaar_na_verhoging,
+        zelf_in_te_leggen_bij_aankoop=zelf_in_te_leggen_bij_aankoop,
+        rente_pm_na_verhoging=rente_pm_na_verhoging,
+        leegstand_3mnd=leegstand_3mnd,
+        totale_zelf_in_te_leggen=totale_zelf_in_te_leggen,
+        verhoogbaar_met=verhoogbaar_met,
+        winst_pm_pp=winst_pm_pp,
+        eigen_inleg_voor_ophoging_totaal=totale_zelf_in_te_leggen,
+        eigen_inleg_na_ophoging_pp=eigen_inleg_na_ophoging_pp,
+        rendement=rendement,
+    )

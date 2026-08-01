@@ -9,16 +9,73 @@ Starten (productie): gunicorn 'kansen_site.app:create_app()'
 from __future__ import annotations
 
 import hmac
+from dataclasses import asdict
 from functools import wraps
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 from rotterdam_scanner import den_haag, pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
+from rotterdam_scanner.investering import RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
 from rotterdam_scanner.state import StateStore
+
+# Velden op de rekentool-pagina (kansen.steenhub.nl), in weergavevolgorde. `soort`
+# stuurt de opmaak/parsing: "euro" en "aantal" staan gelijk aan hun opgeslagen
+# waarde; "procent" wordt als heel getal getoond/ingevoerd (8, niet 0,08) en bij
+# opslaan door 100 gedeeld. De keys komen exact overeen met RekenUitgangspunten.
+REKENVELDEN = [
+    ("koopsom", "Koopsom", "euro"),
+    ("aantal_kamers", "Aantal kamers", "aantal"),
+    ("aantal_investeerders", "Aantal investeerders", "aantal"),
+    ("overdrachtsbelasting", "Overdrachtsbelasting", "procent"),
+    ("bar", "BAR", "procent"),
+    ("kale_huur_per_kamer", "Kale huur per kamer", "euro"),
+    ("servicekosten_per_kamer", "Servicekosten per kamer", "euro"),
+    ("vaste_kosten_per_huurder", "Vaste kosten per maand per huurder", "euro"),
+    ("kosten_koper_ex_ovb", "Kosten koper (excl. overdrachtsbelasting)", "euro"),
+    ("verbouwkosten", "Verbouwkosten", "euro"),
+    ("rente", "Rente", "procent"),
+    ("taxatie_verhouding_voor_verhoging", "Taxatieverhouding waarde vóór verhoging", "procent"),
+    ("ltv", "LTV (leenbaar t.o.v. taxatie)", "procent"),
+]
+
+
+_PROCENT_VELDEN = {key for key, _label, soort in REKENVELDEN if soort == "procent"}
+
+
+def _reken_uitgangspunten_dict(item) -> dict:
+    """Standaardaannames (RekenUitgangspunten) met de koopsom en het aantal kamers
+    voorgevuld uit de woning zelf. Percentages als fractie (0.08)."""
+    return asdict(RekenUitgangspunten(
+        koopsom=float(item.prijs or 0),
+        aantal_kamers=int(item.aantal_kamers_mogelijk or 0),
+    ))
+
+
+def _huidige_uitgangspunten(item) -> dict:
+    """De voor déze woning geldende uitgangspunten: standaard + voorvulling,
+    overschreven door wat de gebruiker eerder op de rekenpagina heeft aangepast."""
+    uitg = _reken_uitgangspunten_dict(item)
+    for key, waarde in (item.berekening or {}).items():
+        if key in uitg:
+            uitg[key] = waarde
+    return uitg
+
+
+def _velden_voor_weergave(uitg: dict) -> list[dict]:
+    velden = []
+    for key, label, soort in REKENVELDEN:
+        waarde = uitg[key]
+        if soort == "procent":
+            waarde = round(waarde * 100, 4)
+        # Hele getallen zonder ".0" tonen (bv. 550 i.p.v. 550.0) - schoner invulveld.
+        if isinstance(waarde, float) and waarde.is_integer():
+            waarde = int(waarde)
+        velden.append({"key": key, "label": label, "soort": soort, "waarde": waarde})
+    return velden
 
 
 def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
@@ -184,6 +241,56 @@ def create_app(config: Config | None = None) -> Flask:
         state.upsert(item)
         state.save()
         return jsonify(_listing_naar_json(item))
+
+    @app.route("/woning/<object_id>/berekening")
+    @login_required
+    def berekening(object_id):
+        # Rekentool per woning: koopsom (vraagprijs) en aantal kamers voorgevuld,
+        # alle uitgangspunten aanpasbaar; wat je invult wordt automatisch bij de
+        # woning bewaard (zie berekening_opslaan) en de sommen rechts rollen er
+        # meteen uit (zie static/berekening.js).
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            abort(404)
+        uitg = _huidige_uitgangspunten(item)
+        resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
+        return render_template(
+            "berekening.html", item=item, velden=_velden_voor_weergave(uitg),
+            resultaat=asdict(resultaat), gebruiker=session["gebruiker"],
+        )
+
+    @app.route("/woning/<object_id>/berekening", methods=["POST"])
+    @login_required
+    def berekening_opslaan(object_id):
+        # Auto-opslag vanaf de rekenpagina: neemt de ingevulde uitgangspunten over,
+        # bewaart ze bij de woning en geeft de doorgerekende sommen terug als JSON.
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+
+        data = request.get_json(silent=True) or {}
+        uitg = _huidige_uitgangspunten(item)
+        for key, _label, soort in REKENVELDEN:
+            if key not in data:
+                continue
+            ruw = str(data[key]).replace(",", ".").strip()
+            if ruw == "":
+                continue
+            try:
+                waarde = float(ruw)
+            except ValueError:
+                return jsonify({"fout": f"Ongeldige waarde voor {key}."}), 400
+            uitg[key] = waarde / 100 if soort == "procent" else waarde
+        uitg["aantal_kamers"] = int(round(uitg["aantal_kamers"]))
+        uitg["aantal_investeerders"] = int(round(uitg["aantal_investeerders"])) or 1
+
+        item.berekening = uitg
+        state.upsert(item)
+        state.save()
+        resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
+        return jsonify(asdict(resultaat))
 
     @app.route("/kansen/<object_id>/terugplaatsen", methods=["POST"])
     @login_required

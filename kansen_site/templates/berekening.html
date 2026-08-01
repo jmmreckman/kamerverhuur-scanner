@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rekentool - {{ item.weergavenaam }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='berekening.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Rekentool</h1>
+    <div class="topbar-acties">
+      <span id="opslag-status" class="muted"></span>
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="reken-kop">
+    <h2>{{ item.weergavenaam }}{% if item.stad == "den_haag" %} <span class="stad-tag">Den Haag</span>{% endif %}</h2>
+    <p class="muted">
+      {% if item.wijknaam %}{{ item.wijknaam }} &middot; {% endif %}
+      {% if item.primaire_oppervlakte %}{{ item.primaire_oppervlakte }} m² &middot; {% endif %}
+      <a href="{{ item.url }}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
+    </p>
+  </div>
+
+  <div class="reken-layout" data-object-id="{{ item.object_id }}">
+    <section class="reken-kolom">
+      <h3>Uitgangspunten</h3>
+      <p class="muted">Pas aan wat je wilt &mdash; alles wordt automatisch bij deze woning bewaard.</p>
+      <form id="reken-form" autocomplete="off">
+        {% for veld in velden %}
+        <label class="reken-veld">
+          <span>{{ veld.label }}</span>
+          <span class="reken-invoer">
+            {% if veld.soort == "euro" %}<span class="teken">€</span>{% endif %}
+            <input type="number" step="{{ '1' if veld.soort == 'aantal' else 'any' }}"
+                   {% if veld.soort == 'aantal' %}min="0"{% endif %}
+                   name="{{ veld.key }}" value="{{ veld.waarde }}" inputmode="decimal">
+            {% if veld.soort == "procent" %}<span class="teken">%</span>{% endif %}
+          </span>
+        </label>
+        {% endfor %}
+      </form>
+    </section>
+
+    <section class="reken-kolom">
+      <h3>Belangrijke resultaten</h3>
+      <table class="reken-uitkomst">
+        <tr class="groot"><td>Winst per maand p.p.</td><td data-veld="winst_pm_pp"></td></tr>
+        <tr><td>Eigen inleg vóór ophoging (totaal)</td><td data-veld="eigen_inleg_voor_ophoging_totaal"></td></tr>
+        <tr class="groot"><td>Eigen inleg ná ophoging (p.p.)</td><td data-veld="eigen_inleg_na_ophoging_pp"></td></tr>
+        <tr><td>Rendement op echte eigen inleg</td><td data-veld="rendement"></td></tr>
+      </table>
+
+      <h3>Berekende uitgangspunten</h3>
+      <table class="reken-uitkomst">
+        <tr><td>Taxatie vóór vergunning</td><td data-veld="taxatie_voor_vergunning"></td></tr>
+        <tr><td>Taxatie ná vergunning</td><td data-veld="taxatie_na_vergunning"></td></tr>
+        <tr><td>Kale huur per maand</td><td data-veld="kale_huur_pm"></td></tr>
+        <tr><td>Service IN per maand</td><td data-veld="service_in_pm"></td></tr>
+        <tr><td>Vast UIT per maand</td><td data-veld="vast_uit_pm"></td></tr>
+        <tr><td>Overdrachtsbelasting</td><td data-veld="overdrachtsbelasting_eur"></td></tr>
+        <tr><td>Leenbaar vóór verhoging</td><td data-veld="leenbaar_voor_verhoging"></td></tr>
+        <tr><td>Leenbaar ná verhoging</td><td data-veld="leenbaar_na_verhoging"></td></tr>
+        <tr><td>Zelf in te leggen bij aankoop</td><td data-veld="zelf_in_te_leggen_bij_aankoop"></td></tr>
+        <tr><td>Maandelijkse rente ná verhoging</td><td data-veld="rente_pm_na_verhoging"></td></tr>
+        <tr><td>3 maanden rente leegstand</td><td data-veld="leegstand_3mnd"></td></tr>
+        <tr><td>Totale zelf in te leggen kosten</td><td data-veld="totale_zelf_in_te_leggen"></td></tr>
+        <tr><td>Ná vergunning verhoogbaar met</td><td data-veld="verhoogbaar_met"></td></tr>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    window.__objectId = {{ item.object_id | tojson }};
+    window.__resultaat = {{ resultaat | tojson }};
+  </script>
+  <script src="{{ url_for('static', filename='berekening.js') }}"></script>
+</body>
+</html>

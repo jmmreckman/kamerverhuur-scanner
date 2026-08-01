@@ -379,3 +379,72 @@ def test_handmatig_toevoegen_forceer_herprocessen_vinkje(tmp_path, monkeypatch):
 
     client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A", "forceer_herprocessen": "on"})
     assert aangeroepen == [True]
+
+
+# --- Rekentool per woning ---------------------------------------------------
+
+def _ingelogd(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    return client
+
+
+def test_berekening_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/woning/a/berekening")
+    assert resp.status_code == 302
+
+
+def test_berekening_onbekende_woning_geeft_404(tmp_path):
+    client = _ingelogd(tmp_path)
+    assert client.get("/woning/bestaat-niet/berekening").status_code == 404
+
+
+def test_berekening_pagina_toont_voorgevulde_koopsom_en_kamers(tmp_path):
+    _zet_listing(tmp_path, object_id="a", prijs=355_000, aantal_kamers_mogelijk=6)
+    client = _ingelogd(tmp_path)
+    resp = client.get("/woning/a/berekening")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'name="koopsom" value="355000' in body
+    assert 'name="aantal_kamers" value="6"' in body
+
+
+def test_berekening_opslaan_bewaart_en_geeft_doorgerekende_sommen(tmp_path):
+    _zet_listing(tmp_path, object_id="a", prijs=355_000, aantal_kamers_mogelijk=6)
+    client = _ingelogd(tmp_path)
+    # De PDF-uitgangspunten insturen (procenten als heel getal).
+    resp = client.post("/woning/a/berekening", json={
+        "koopsom": "355000", "aantal_kamers": "6", "aantal_investeerders": "2",
+        "overdrachtsbelasting": "8", "bar": "7.6", "kale_huur_per_kamer": "560",
+        "servicekosten_per_kamer": "250", "vaste_kosten_per_huurder": "100",
+        "kosten_koper_ex_ovb": "6000", "verbouwkosten": "25000", "rente": "5.9",
+        "taxatie_verhouding_voor_verhoging": "87.5", "ltv": "80",
+    })
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert round(data["winst_pm_pp"], 2) == 1_086.63
+    assert round(data["eigen_inleg_na_ophoging_pp"], 2) == -1_880.42
+
+    # Opgeslagen bij de woning (procenten als fractie) en overleeft een herstart.
+    state = StateStore(tmp_path / "state.json")
+    bewaard = state.get("a").berekening
+    assert bewaard["kale_huur_per_kamer"] == 560
+    assert bewaard["overdrachtsbelasting"] == pytest.approx(0.08)
+    assert bewaard["rente"] == pytest.approx(0.059)
+
+
+def test_berekening_opgeslagen_waarden_worden_hergebruikt_bij_volgend_bezoek(tmp_path):
+    _zet_listing(tmp_path, object_id="a", prijs=355_000, aantal_kamers_mogelijk=6)
+    client = _ingelogd(tmp_path)
+    client.post("/woning/a/berekening", json={"kale_huur_per_kamer": "600"})
+    resp = client.get("/woning/a/berekening")
+    assert 'name="kale_huur_per_kamer" value="600' in resp.get_data(as_text=True)
+
+
+def test_berekening_opslaan_weigert_ongeldige_waarde(tmp_path):
+    _zet_listing(tmp_path, object_id="a", prijs=355_000, aantal_kamers_mogelijk=6)
+    client = _ingelogd(tmp_path)
+    resp = client.post("/woning/a/berekening", json={"rente": "abc"})
+    assert resp.status_code == 400

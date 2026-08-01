@@ -1,0 +1,95 @@
+/* Rekentool-pagina (kansen.steenhub.nl) - hergebruikt de kleuren/topbar uit
+   kaart.css (die eerst geladen wordt). */
+
+.reken-kop {
+  padding: 1rem 1.2rem 0;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.reken-kop h2 { margin: 0 0 0.2rem; font-size: 1.25em; }
+.reken-kop p { margin: 0; }
+
+.stad-tag {
+  display: inline-block;
+  background: var(--groen);
+  color: white;
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7em;
+  vertical-align: middle;
+}
+
+.reken-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  padding: 1rem 1.2rem 3rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .reken-layout { grid-template-columns: 1fr; }
+}
+
+.reken-kolom {
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 12px;
+  padding: 1.1rem 1.2rem;
+}
+.reken-kolom h3 { margin: 0 0 0.6rem; font-size: 1.05em; }
+.reken-kolom h3:not(:first-child) { margin-top: 1.4rem; }
+
+.reken-veld {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.32rem 0;
+  font-size: 0.92em;
+}
+.reken-veld > span:first-child { color: #303840; }
+
+.reken-invoer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+.reken-invoer .teken { color: var(--tekst-zwak); font-size: 0.9em; }
+
+.reken-invoer input {
+  width: 120px;
+  text-align: right;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  font-size: 1em;
+}
+.reken-invoer input:focus {
+  outline: none;
+  border-color: var(--groen);
+  box-shadow: 0 0 0 2px rgba(27, 122, 67, 0.15);
+}
+
+.reken-uitkomst {
+  width: 100%;
+  border-collapse: collapse;
+}
+.reken-uitkomst td {
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--achtergrond);
+  font-size: 0.92em;
+}
+.reken-uitkomst td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 1rem;
+}
+.reken-uitkomst tr.groot td {
+  font-weight: 700;
+  font-size: 1.02em;
+}
+.reken-uitkomst tr.groot td:last-child { color: var(--groen); }
