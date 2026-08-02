@@ -249,8 +249,14 @@ en `deploy/Caddyfile` in de hoofdbranch.
 
 **Eenmalige instellingen** (in `fundazoeker.env` op de VPS, zie
 `.env.example`):
-- `KANSEN_APP_USERS` — wie mag inloggen, formaat `gebruiker:wachtwoord,gebruiker:wachtwoord`.
-  Verplicht; de website weigert te starten zonder minstens één gebruiker.
+- `KANSEN_APP_USERS` — eigen inlogaccounts, formaat `gebruiker:wachtwoord,gebruiker:wachtwoord`.
+  Mag leeg blijven als je in plaats daarvan (of daarnaast) inlogt met je Steenhub-accounts
+  (zie hieronder) — er moet minstens één inlogbron zijn, anders weigert de website te starten.
+- `STEENHUB_USERS_FILE` — laat inloggen op de kaart met dezelfde accounts als steenhub.nl.
+  De `users.json` van de steenhub-app wordt read-only in de kansen-container gekoppeld
+  (staat al goed in `deploy/docker-compose.yml`); de login checkt tegen de werkzeug-
+  wachtwoordhashes daarin, dus dezelfde gebruikersnaam + wachtwoord werken op beide sites.
+  Een nieuwe steenhub-gebruiker werkt meteen, zonder de kansen-container te herstarten.
 - `KANSEN_APP_SECRET_KEY` — willekeurige geheime tekenreeks voor de inlogsessie
   (`python3 -c "import secrets; print(secrets.token_hex(32))"`). Verplicht.
 
