@@ -94,7 +94,7 @@ def test_stuurt_melding_als_alle_kamers_betaald(monkeypatch, tmp_path, verstuurd
     monkeypatch.setattr(runner, "SheetClient", FakeSheetClient)
     monkeypatch.setattr(runner, "BunqClient", FakeBunqClient)
 
-    run_check(_config(tmp_path), _pand(), dry_run=False)
+    run_check(_config(tmp_path), _pand(), dry_run=False, vandaag=date(2026, 7, 20))
 
     assert len(verstuurde_mails) == 1
     assert verstuurde_mails[0]["aan"] == "eigenaar@example.com"
@@ -138,8 +138,8 @@ def test_melding_wordt_maar_eenmaal_per_maand_verstuurd(monkeypatch, tmp_path, v
     config = _config(tmp_path)
     pand = _pand()
 
-    run_check(config, pand, dry_run=False)
-    run_check(config, pand, dry_run=False)  # bv. nogmaals op "Nu controleren" geklikt
+    run_check(config, pand, dry_run=False, vandaag=date(2026, 7, 20))
+    run_check(config, pand, dry_run=False, vandaag=date(2026, 7, 20))  # bv. nogmaals op "Nu controleren" geklikt
 
     assert len(verstuurde_mails) == 1
 
@@ -157,7 +157,7 @@ def test_melding_gebruikt_ook_pand_specifieke_extra_bcc(monkeypatch, tmp_path, v
     monkeypatch.setattr(runner, "SheetClient", FakeSheetClient)
     monkeypatch.setattr(runner, "BunqClient", FakeBunqClient)
 
-    run_check(_config(tmp_path), _pand(extra_bcc=["justin@example.com"]), dry_run=False)
+    run_check(_config(tmp_path), _pand(extra_bcc=["justin@example.com"]), dry_run=False, vandaag=date(2026, 7, 20))
 
     assert verstuurde_mails[0]["aan"] == "eigenaar@example.com, justin@example.com"
 

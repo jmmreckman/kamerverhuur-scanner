@@ -218,7 +218,7 @@ def test_run_check_instapmaand_exacte_pro_rata_plus_borg_is_betaald(monkeypatch,
     monkeypatch.setattr(runner, "SheetClient", FakeSheetClientInstapperExact)
     monkeypatch.setattr(runner, "BunqClient", FakeBunqClientInstapperExact)
 
-    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True)
+    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 20))
 
     assert results[0].status == Status.BETAALD
     assert results[0].ontvangen_bedrag == Decimal("1600.00")
@@ -255,7 +255,7 @@ def test_run_check_instapmaand_twee_betalingen_binnen_10_procent_is_betaald(monk
     monkeypatch.setattr(runner, "SheetClient", FakeSheetClientInstapperAfronding)
     monkeypatch.setattr(runner, "BunqClient", FakeBunqClientInstapperTweeBetalingen)
 
-    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True)
+    _tenants, results, _unmatched = run_check(_config(tmp_path), _pand(), dry_run=True, vandaag=date(2026, 7, 20))
 
     assert results[0].ontvangen_bedrag == Decimal("1447.00")
     assert results[0].status == Status.BETAALD
