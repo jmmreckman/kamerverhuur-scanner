@@ -516,8 +516,14 @@ def create_app(config: Config | None = None) -> Flask:
         return Decimal(geschiedenis[-1]["winst"]) if geschiedenis else None
 
     def _aantal_beheerders(pand_slug: str) -> int:
+        # Testaccounts tellen bewust niet mee: die zijn er om mee rond te kijken,
+        # niet om de winst over te verdelen (anders zou de winst per beheerder
+        # dalen zodra je een testaccount toegang tot een pand geeft).
         users = load_users(config.users_file)
-        aantal = sum(1 for gebruiker in users.values() if mail_voorkeuren.heeft_toegang(gebruiker, pand_slug))
+        aantal = sum(
+            1 for gebruiker in users.values()
+            if mail_voorkeuren.heeft_toegang(gebruiker, pand_slug) and not gebruiker.get("test_account")
+        )
         return aantal or 1
 
     def _winst_specificatie_alle_panden(panden: list) -> list[dict]:

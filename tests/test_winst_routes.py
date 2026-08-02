@@ -177,6 +177,28 @@ def test_totaal_overzicht_verdeelt_winst_bij_meerdere_beheerders(opzet):
     assert "1.000,00" in body  # 500 (mahoniestraat, verdeeld) + 500 (baumannlaan, onverdeeld)
 
 
+def test_testaccount_telt_niet_mee_als_beheerder_in_winstverdeling(opzet):
+    from werkzeug.security import generate_password_hash
+
+    client, config = opzet
+    # Een testaccount met toegang tot alle panden toevoegen mag de winstverdeling
+    # niet veranderen: mahoniestraat blijft door 2 (beheerder + justin), niet 3.
+    users = json.loads(open(config.users_file).read())
+    users["kijker"] = {
+        "wachtwoord_hash": generate_password_hash("geheim123"),
+        "alle_panden": True, "panden": [], "test_account": True,
+    }
+    open(config.users_file, "w").write(json.dumps(users))
+
+    state.voeg_winst_snapshot_toe("mahoniestraat", Decimal("1000.00"), config.state_dir)
+    state.voeg_winst_snapshot_toe("baumannlaan", Decimal("500.00"), config.state_dir)
+
+    resp = client.get("/winst-overzicht")
+    body = resp.get_data(as_text=True)
+    assert "1.000,00" in body  # 500 (mahoniestraat / 2 beheerders) + 500 (baumannlaan)
+    assert "333,33" not in body  # niet door 3 gedeeld
+
+
 def test_totaal_overzicht_telt_betalingen_deze_maand_uit_cache(opzet):
     from kamerverhuur_scanner.models import Status, TenantResult
 
