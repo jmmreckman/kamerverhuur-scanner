@@ -18,7 +18,7 @@ from functools import wraps
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Flask, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 from flask_login import LoginManager, current_user, login_required, login_user, logout_user
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -129,6 +129,36 @@ def create_app(config: Config | None = None) -> Flask:
         if not current_user.heeft_toegang(pand_slug):
             return render_template("geen_toegang.html", pand=pand), 403
         return None
+
+    # Endpoints die een testaccount wél zelf mag uitvoeren (alles wat geen echte,
+    # onomkeerbare of naar-buiten-tredende actie is): uitloggen en de eigen
+    # mailvoorkeuren instellen (zodat een testaccount met een e-mailadres gewoon
+    # meldingen kan aanzetten). Al het overige POST'en wordt geblokkeerd.
+    _TESTACCOUNT_TOEGESTANE_ACTIES = {"logout", "mail_voorkeuren_overzicht"}
+
+    @app.before_request
+    def _blokkeer_echte_acties_voor_testaccount():
+        """Een testaccount mag alles zien en elke pagina/flow doorlopen, maar op
+        het moment dat een stap 'echt' wordt (mail versturen, iets opslaan/
+        wijzigen/verwijderen, een gebruiker/pand beheren) grijpen we in met een
+        waarschuwing i.p.v. de actie uit te voeren. Bewust default-deny op alle
+        schrijf-methodes met een kleine witte lijst, zodat een nieuwe 'echte'
+        knop nooit per ongeluk tóch voor een testaccount werkt."""
+        if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+            return None
+        if not current_user.is_authenticated or not current_user.is_test_account():
+            return None
+        if request.endpoint in _TESTACCOUNT_TOEGESTANE_ACTIES:
+            return None
+        boodschap = (
+            "Dit is een testaccount - deze stap wordt niet echt uitgevoerd. "
+            "Je kunt alles bekijken en doorlopen, maar mails, wijzigingen en "
+            "verwijderingen worden bewust geblokkeerd."
+        )
+        if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
+            return jsonify({"fout": boodschap, "testaccount": True}), 403
+        flash(boodschap)
+        return redirect(request.referrer or url_for("start"))
 
     # Endpoints met alléén pand_slug als dynamisch urldeel worden 1-op-1
     # hergebruikt bij het wisselen van pand (zie _pand_wissel_url()). Voor
@@ -303,7 +333,8 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Gebruik een wachtwoord van minimaal 8 tekens.")
             else:
                 alle_panden, panden = _panden_uit_form(request.form)
-                zet_gebruiker(users, username, wachtwoord, alle_panden, panden)
+                test_account = request.form.get("test_account") == "on"
+                zet_gebruiker(users, username, wachtwoord, alle_panden, panden, test_account)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' aangemaakt.")
                 return redirect(url_for("gebruikers_overzicht"))
@@ -320,12 +351,13 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             wachtwoord = request.form.get("wachtwoord", "")
             alle_panden, panden = _panden_uit_form(request.form)
+            test_account = request.form.get("test_account") == "on"
             if wachtwoord and len(wachtwoord) < 8:
                 flash("Gebruik een wachtwoord van minimaal 8 tekens.")
             elif username == current_user.id and not alle_panden:
                 flash("Je kunt jezelf niet de toegang tot alle panden ontnemen.")
             else:
-                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden)
+                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden, test_account)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' bijgewerkt.")
                 return redirect(url_for("gebruikers_overzicht"))

@@ -25,18 +25,27 @@ class User(UserMixin):
     def __init__(
         self, username: str, alle_panden: bool = False, panden: list[str] | None = None,
         email: str | None = None, mail_voorkeuren: dict | None = None,
+        test_account: bool = False,
     ):
         self.id = username
         self.alle_panden = alle_panden
         self.panden = panden or []
         self.email = email
         self.mail_voorkeuren = mail_voorkeuren or {}
+        self.test_account = test_account
 
     def heeft_toegang(self, pand_slug: str) -> bool:
         return self.alle_panden or pand_slug in self.panden
 
     def mag_gebruikers_beheren(self) -> bool:
+        # Een testaccount mag rondkijken in het gebruikersbeheer, maar de echte
+        # wijzig-acties (aanmaken/bewerken/verwijderen) worden geblokkeerd door
+        # de testaccount-check in webapp/app.py - niet hier, zodat de pagina's
+        # gewoon zichtbaar blijven.
         return self.alle_panden
+
+    def is_test_account(self) -> bool:
+        return self.test_account
 
 
 def load_users(path: str) -> dict:
@@ -50,14 +59,25 @@ def save_users(path: str, users: dict) -> None:
     Path(path).write_text(json.dumps(users, indent=2))
 
 
-def zet_gebruiker(users: dict, username: str, wachtwoord: str | None, alle_panden: bool, panden: list[str]) -> dict:
+def zet_gebruiker(
+    users: dict, username: str, wachtwoord: str | None, alle_panden: bool, panden: list[str],
+    test_account: bool = False,
+) -> dict:
     """Voegt een gebruiker toe of werkt 'm bij. Zonder wachtwoord blijft het
-    bestaande wachtwoord staan (voor het bewerken van alleen de toegang)."""
+    bestaande wachtwoord staan (voor het bewerken van alleen de toegang).
+    Bestaande velden die deze functie niet zelf zet (e-mail, mailvoorkeuren)
+    blijven behouden - alleen wachtwoord, pand-toegang en de testaccount-vlag
+    worden overschreven."""
     bestaand = users.get(username, {})
     wachtwoord_hash = generate_password_hash(wachtwoord) if wachtwoord else bestaand.get("wachtwoord_hash")
     if not wachtwoord_hash:
         raise ValueError("Nieuwe gebruikers hebben een wachtwoord nodig.")
-    users[username] = {"wachtwoord_hash": wachtwoord_hash, "alle_panden": alle_panden, "panden": panden}
+    gebruiker = dict(bestaand)
+    gebruiker["wachtwoord_hash"] = wachtwoord_hash
+    gebruiker["alle_panden"] = alle_panden
+    gebruiker["panden"] = panden
+    gebruiker["test_account"] = test_account
+    users[username] = gebruiker
     return users
 
 
@@ -70,6 +90,7 @@ def user_uit_gegevens(username: str, gebruiker: dict) -> User:
     return User(
         username, gebruiker.get("alle_panden", False), gebruiker.get("panden", []),
         gebruiker.get("email"), gebruiker.get("mail_voorkeuren"),
+        gebruiker.get("test_account", False),
     )
 
 

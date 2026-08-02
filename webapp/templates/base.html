@@ -59,6 +59,10 @@
   {% endif %}
 
   <main class="container">
+    {% if current_user.is_authenticated and current_user.is_test_account() %}
+    <div class="testaccount-banner">🧪 Je bent ingelogd als <strong>testaccount</strong> — je kunt alles bekijken en
+       doorlopen, maar echte acties (mails versturen, opslaan, wijzigen, verwijderen) worden niet uitgevoerd.</div>
+    {% endif %}
     {% with messages = get_flashed_messages() %}
       {% if messages %}
         <div class="flash">

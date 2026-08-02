@@ -462,6 +462,28 @@ td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, t
   font-size: 0.9rem;
 }
 
+.testaccount-banner {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.badge-test {
+  display: inline-block;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
 /* ---------- Formulieren ---------- */
 
 form label { display: block; margin-bottom: 1rem; font-weight: 600; font-size: 0.9rem; }

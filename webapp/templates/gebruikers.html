@@ -17,7 +17,7 @@
     <tr><th>Gebruikersnaam</th><th>Toegang</th><th></th></tr>
     {% for username, gebruiker in users.items() %}
     <tr>
-      <td>{{ username }}{% if username == current_user.id %} <span class="muted">(jij)</span>{% endif %}</td>
+      <td>{{ username }}{% if username == current_user.id %} <span class="muted">(jij)</span>{% endif %}{% if gebruiker.test_account %} <span class="badge-test">test</span>{% endif %}</td>
       <td>
         {% if gebruiker.alle_panden %}
           <span class="pil pil-neutral">Alle panden</span>
