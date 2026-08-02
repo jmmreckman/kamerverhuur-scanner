@@ -1,7 +1,18 @@
 """Kleine gedeelde hulpfuncties."""
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
+
+_AMSTERDAM = ZoneInfo("Europe/Amsterdam")
+
+
+def nu_amsterdam() -> datetime:
+    """Huidige tijd in de Nederlandse tijdzone (Europe/Amsterdam, dus mét
+    zomer-/wintertijd). De server/container draait op UTC; zonder dit lopen alle
+    getoonde tijdstippen 1-2 uur achter. Vereist tzdata (staat in requirements)."""
+    return datetime.now(_AMSTERDAM)
 
 
 def parse_bedrag(raw: str | None) -> Decimal:

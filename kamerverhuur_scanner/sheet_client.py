@@ -72,7 +72,7 @@ import gspread
 
 from .config import Config
 from .models import Aanmelding, HistorieRegel, Pand, Payment, Status, Tenant, TenantResult, VertrokkenHuurder
-from .utils import parse_bedrag
+from .utils import nu_amsterdam, parse_bedrag
 
 # Hoelang een vertrokken huurder na hun contracteinddatum nog gearchiveerd
 # blijft getoond op de Huurders-pagina - een grove "1 maand" (geen precieze
@@ -361,7 +361,7 @@ class SheetClient:
             self._worksheet.resize(cols=min_cols)
 
     def write_results(self, results: list[TenantResult]) -> None:
-        now = datetime.now().strftime("%d-%m-%Y %H:%M")
+        now = nu_amsterdam().strftime("%d-%m-%Y %H:%M")
         updates = []
         for result in results:
             row = result.tenant.row_index
@@ -531,7 +531,7 @@ class SheetClient:
     def add_aanmelding(self, kamer: str, aanmelding: Aanmelding) -> None:
         ws = self._aanmeldingen_worksheet()
         row = [
-            datetime.now().strftime("%d-%m-%Y %H:%M"),
+            nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
             kamer,
             aanmelding.naam,
             aanmelding.email,
@@ -588,7 +588,7 @@ class SheetClient:
             [
                 datum_iso, afspraak["tijd_start"], afspraak["tijd_eind"], afspraak["kamer"],
                 afspraak["naam"], afspraak["email"], afspraak["telefoon"], afspraak["bezichtiging"],
-                afspraak["bel_nummer"], datetime.now().strftime("%d-%m-%Y %H:%M"),
+                afspraak["bel_nummer"], nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
             ],
             value_input_option="RAW",
         )

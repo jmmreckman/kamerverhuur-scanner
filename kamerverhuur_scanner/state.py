@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .models import Payment, TenantResult
+from .utils import nu_amsterdam
 
 
 def _bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
@@ -33,7 +34,7 @@ def save(
     losse datum-/bedragvelden - dit is puur voor tonen, niet voor verder
     rekenen."""
     data = {
-        "gecontroleerd_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "gecontroleerd_op": nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
         "resultaten": [
             {
                 "kamer": r.tenant.kamer,
@@ -86,7 +87,7 @@ def markeer_email_verzonden(pand_slug: str, kamer: str, soort: str, maand: str, 
     zodra er een nieuwe maand is (andere `maand`-sleutel)."""
     p = _verzonden_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else {}
-    data[f"{kamer}|{soort}|{maand}"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    data[f"{kamer}|{soort}|{maand}"] = nu_amsterdam().strftime("%d-%m-%Y %H:%M")
     p.write_text(json.dumps(data, indent=2))
 
 
@@ -110,7 +111,7 @@ def markeer_aanzegging_afgehandeld(pand_slug: str, kamer: str, einddatum: str, s
     (nieuwe) waarschuwing geeft."""
     p = _aanzeggingen_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else {}
-    data[f"{kamer}|{einddatum}"] = datetime.now().strftime("%d-%m-%Y %H:%M")
+    data[f"{kamer}|{einddatum}"] = nu_amsterdam().strftime("%d-%m-%Y %H:%M")
     p.write_text(json.dumps(data, indent=2))
 
 
@@ -137,7 +138,7 @@ def voeg_winst_snapshot_toe(pand_slug: str, winst: Decimal, state_dir: str = "."
     trend over tijd)."""
     p = _winst_geschiedenis_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else []
-    vandaag = datetime.now().strftime("%Y-%m-%d")
+    vandaag = nu_amsterdam().strftime("%Y-%m-%d")
     data = [punt for punt in data if punt["datum"] != vandaag]
     data.append({"datum": vandaag, "winst": str(winst)})
     data.sort(key=lambda punt: punt["datum"])
@@ -167,7 +168,7 @@ def log_testaccount_login(gebruiker: str, ip: str | None, state_dir: str = ".") 
     p = _testaccount_logboek_bestandsnaam(state_dir)
     data = json.loads(p.read_text()) if p.exists() else []
     data.append({
-        "tijd": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "tijd": nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
         "gebruiker": gebruiker,
         "ip": ip or "",
     })
@@ -195,7 +196,7 @@ def bewaar_komende_maand(pand_slug: str, maand: str, resultaten: list[dict], sta
     vanzelf verouderd (en dus genegeerd) raakt. `resultaten` is een lijst dicts
     met verwacht_bedrag/ontvangen_bedrag/status (kant-en-klaar om op te tellen)."""
     data = {
-        "berekend_op": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "berekend_op": nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
         "maand": maand,
         "resultaten": resultaten,
     }
