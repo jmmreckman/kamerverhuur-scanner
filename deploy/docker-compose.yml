@@ -100,8 +100,17 @@ services:
     restart: unless-stopped
     env_file:
       - ./fundazoeker.env
+    # STEENHUB_USERS_FILE laat de kansen-site inloggen accepteren met dezelfde
+    # accounts als steenhub.nl (de 'app'-service): de users.json van die app
+    # wordt hier read-only ingekoppeld en de login checkt tegen de werkzeug-
+    # wachtwoordhashes daarin (zie kansen_site/app.py). Het bestand moet dus al
+    # bestaan op de host (./data/users.json van de app-service) - dat is zo
+    # zodra steenhub.nl minstens één gebruiker heeft.
+    environment:
+      - STEENHUB_USERS_FILE=/app/steenhub-users.json
     volumes:
       - fundazoeker-data:/app/data
+      - ./data/users.json:/app/steenhub-users.json:ro
     # --timeout 1200: "Handmatig toevoegen" verwerkt elk adres synchroon door
     # alle checks (geocoding, BAG, gis, opkoop, WOZ) - bij een paar honderd
     # adressen in één keer kan dat zo'n 15-20 minuten duren (zie README).

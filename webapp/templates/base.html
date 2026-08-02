@@ -46,6 +46,7 @@
         </select>
         {% endif %}
         <a class="nav-link" href="{{ url_for('aanbod_overzicht') }}" target="aanbod-voorbeeld" rel="noopener">{{ icon_megafoon() }} Bekijk aanbod</a>
+        <a class="nav-link" href="https://kansen.steenhub.nl" target="_blank" rel="noopener">{{ icon_baksteen() }} Kansen</a>
         {% if current_user.mag_gebruikers_beheren() %}
         <a class="nav-link {{ 'actief' if ep.startswith('pand_') or ep.startswith('panden_') }}" href="{{ url_for('panden_overzicht') }}">{{ icon_panden() }} Panden</a>
         <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
