@@ -28,5 +28,29 @@
     "tijd": "02-08-2026 21:54",
     "gebruiker": "kijker",
     "ip": "127.0.0.1"
+  },
+  {
+    "tijd": "02-08-2026 23:37",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/beheer/gebruikers"
+  },
+  {
+    "tijd": "02-08-2026 23:37",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/"
+  },
+  {
+    "tijd": "02-08-2026 23:37",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/pand/mahoniestraat/"
+  },
+  {
+    "tijd": "02-08-2026 23:37",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/account/mail-voorkeuren"
   }
 ]

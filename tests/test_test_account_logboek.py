@@ -1,6 +1,6 @@
-"""Tests voor het login-logboek van testaccounts: bij het inloggen van een
-testaccount wordt een regel weggeschreven, en alleen de hoofdgebruiker
-(jmmreckman) ziet de knop + pagina met dat logboek onder Totaal overzicht."""
+"""Tests voor het activiteits-logboek van testaccounts: elke pagina die een
+testaccount opent wordt geteld, en alleen de hoofdgebruiker (jmmreckman) ziet de
+knop + pagina met dat logboek onder Totaal overzicht."""
 import json
 from decimal import Decimal
 
@@ -54,18 +54,24 @@ def _login(client, username):
     return client.post("/login", data={"username": username, "password": "geheim123"}, follow_redirects=False)
 
 
-def test_login_van_testaccount_wordt_gelogd(opzet):
+def test_paginaweergave_van_testaccount_wordt_gelogd(opzet):
     client, config = opzet
     _login(client, "kijker")
+    client.get("/winst-overzicht")
+    client.get("/pand/mahoniestraat/")
     regels = state.laad_testaccount_logboek(config.state_dir)
-    assert len(regels) == 1
-    assert regels[0]["gebruiker"] == "kijker"
-    assert "tijd" in regels[0]
+    assert len(regels) >= 2
+    assert all(r["gebruiker"] == "kijker" for r in regels)
+    paden = {r["pad"] for r in regels}
+    assert "/winst-overzicht" in paden
+    assert "/pand/mahoniestraat/" in paden
 
 
-def test_login_van_gewone_gebruiker_wordt_niet_gelogd(opzet):
+def test_activiteit_van_gewone_gebruiker_wordt_niet_gelogd(opzet):
     client, config = opzet
     _login(client, "justin")
+    client.get("/winst-overzicht")
+    client.get("/pand/mahoniestraat/")
     assert state.laad_testaccount_logboek(config.state_dir) == []
 
 
@@ -87,14 +93,15 @@ def test_logboekpagina_is_verboden_voor_niet_hoofdgebruiker(opzet):
     assert client.get("/winst-overzicht/test-logboek").status_code == 403
 
 
-def test_hoofdgebruiker_ziet_logins_van_testaccount(opzet):
+def test_hoofdgebruiker_ziet_activiteit_van_testaccount(opzet):
     client, _config = opzet
-    _login(client, "kijker")   # genereert een logregel
-    client.get("/logout")
-    _login(client, "kijker")   # en nog een
+    _login(client, "kijker")
+    client.get("/winst-overzicht")
+    client.get("/pand/mahoniestraat/")
     client.get("/logout")
     _login(client, "jmmreckman")
 
     body = client.get("/winst-overzicht/test-logboek").get_data(as_text=True)
     assert "kijker" in body
-    assert "2" in body  # twee keer ingelogd
+    assert "/pand/mahoniestraat/" in body  # laat zien wélke pagina's zijn bekeken
+    assert "Actieve tijd" in body

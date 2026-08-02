@@ -12,7 +12,7 @@ import logging
 import mimetypes
 import re
 import threading
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
@@ -164,6 +164,20 @@ def create_app(config: Config | None = None) -> Flask:
         flash(boodschap)
         return redirect(request.referrer or url_for("start"))
 
+    @app.before_request
+    def _log_testaccount_activiteit():
+        """Legt elke paginaweergave van een ingelogd testaccount vast, zodat de
+        hoofdgebruiker (zie test_account_logboek()) niet alleen het ene
+        inlogmoment ziet maar echt hoe vaak/lang/waar een tester rondkijkt.
+        Alleen GET-pagina's (geen static, geen schrijf-acties) en alleen
+        testaccounts - voor gewone gebruikers gebeurt hier niets."""
+        if request.method != "GET" or request.endpoint in (None, "static"):
+            return None
+        if not current_user.is_authenticated or not current_user.is_test_account():
+            return None
+        state.log_testaccount_activiteit(current_user.id, request.remote_addr, request.path, config.state_dir)
+        return None
+
     # Endpoints met alléén pand_slug als dynamisch urldeel worden 1-op-1
     # hergebruikt bij het wisselen van pand (zie _pand_wissel_url()). Voor
     # detailpagina's (kamer/contract/document/etc., die een extra urldeel
@@ -252,10 +266,7 @@ def create_app(config: Config | None = None) -> Flask:
             password = request.form.get("password", "")
             users = load_users(config.users_file)
             if verify_login(users, username, password):
-                gebruiker = users[username]
-                if gebruiker.get("test_account"):
-                    state.log_testaccount_login(username, request.remote_addr, config.state_dir)
-                login_user(user_uit_gegevens(username, gebruiker))
+                login_user(user_uit_gegevens(username, users[username]))
                 return redirect(url_for("start"))
             flash("Onjuiste gebruikersnaam of wachtwoord.")
         return render_template("login.html")
@@ -756,18 +767,58 @@ def create_app(config: Config | None = None) -> Flask:
             toon_test_logboek=current_user.id == HOOFDGEBRUIKER,
         )
 
+    # Twee paginaweergaven van hetzelfde testaccount die verder dan dit uit elkaar
+    # liggen tellen als aparte "sessies" (aparte kijkbeurten).
+    _TESTACCOUNT_SESSIE_GAT = timedelta(minutes=30)
+
+    def _testaccount_samenvatting(regels: list[dict]) -> list[dict]:
+        """Vat de losse activiteitsregels per testaccount samen: hoe vaak (aantal
+        paginaweergaven + aparte sessies), hoe lang (geschatte actieve tijd, som
+        van de sessieduren) en waar (meest bekeken pagina's)."""
+        per_gebruiker: dict[str, list[dict]] = {}
+        for regel in regels:
+            per_gebruiker.setdefault(regel["gebruiker"], []).append(regel)
+
+        samenvatting = []
+        for gebruiker, eigen in per_gebruiker.items():
+            tijden = sorted(datetime.strptime(r["tijd"], "%d-%m-%Y %H:%M") for r in eigen)
+            sessies = [[tijden[0], tijden[0]]]
+            for t in tijden[1:]:
+                if t - sessies[-1][1] > _TESTACCOUNT_SESSIE_GAT:
+                    sessies.append([t, t])
+                else:
+                    sessies[-1][1] = t
+            actieve_minuten = sum(int((einde - start).total_seconds() // 60) for start, einde in sessies)
+
+            paden: dict[str, int] = {}
+            for r in eigen:
+                paden[r.get("pad", "")] = paden.get(r.get("pad", ""), 0) + 1
+            top_paden = sorted(paden.items(), key=lambda kv: kv[1], reverse=True)[:12]
+
+            samenvatting.append({
+                "gebruiker": gebruiker,
+                "weergaven": len(eigen),
+                "sessies": len(sessies),
+                "eerste": tijden[0].strftime("%d-%m-%Y %H:%M"),
+                "laatste": tijden[-1].strftime("%d-%m-%Y %H:%M"),
+                "actieve_minuten": actieve_minuten,
+                "top_paden": top_paden,
+            })
+        samenvatting.sort(key=lambda s: s["laatste"], reverse=True)
+        return samenvatting
+
     @app.route("/winst-overzicht/test-logboek")
     @login_required
     def test_account_logboek():
-        # Alleen de hoofdgebruiker mag zien wanneer/hoe vaak testaccounts hebben
-        # ingelogd (zie login()).
+        # Alleen de hoofdgebruiker mag zien hoe vaak/lang/waar testaccounts kijken.
         if current_user.id != HOOFDGEBRUIKER:
             abort(403)
-        regels = list(reversed(state.laad_testaccount_logboek(config.state_dir)))
-        aantallen: dict[str, int] = {}
-        for regel in regels:
-            aantallen[regel["gebruiker"]] = aantallen.get(regel["gebruiker"], 0) + 1
-        return render_template("test_account_logboek.html", regels=regels, aantallen=aantallen)
+        alle = state.laad_testaccount_logboek(config.state_dir)
+        return render_template(
+            "test_account_logboek.html",
+            samenvatting=_testaccount_samenvatting(alle),
+            recent=list(reversed(alle))[:200],
+        )
 
     @app.route("/winst-overzicht/ververs-komende-maand", methods=["POST"])
     @login_required

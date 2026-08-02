@@ -156,27 +156,29 @@ def _testaccount_logboek_bestandsnaam(state_dir: str = ".") -> Path:
     return Path(state_dir) / "testaccount_logboek.json"
 
 
-# Hoeveel login-regels we maximaal bewaren (nieuwste onderaan) - genoeg om een
-# tijd terug te kijken, maar voorkomt dat het bestand oneindig groeit.
-_TESTACCOUNT_LOGBOEK_MAX = 1000
+# Hoeveel activiteitsregels we maximaal bewaren (nieuwste onderaan) - genoeg om
+# een tijd terug te kijken, maar voorkomt dat het bestand oneindig groeit.
+_TESTACCOUNT_LOGBOEK_MAX = 5000
 
 
-def log_testaccount_login(gebruiker: str, ip: str | None, state_dir: str = ".") -> None:
-    """Legt vast dat een testaccount is ingelogd (tijdstip + gebruikersnaam +
-    IP-adres), zodat de hoofdgebruiker kan zien óf en hoe vaak een tester
-    daadwerkelijk inlogt (zie webapp/app.py: test_account_logboek())."""
+def log_testaccount_activiteit(gebruiker: str, ip: str | None, pad: str, state_dir: str = ".") -> None:
+    """Legt elke paginaweergave van een testaccount vast (tijdstip +
+    gebruikersnaam + IP-adres + pad), zodat de hoofdgebruiker kan zien hoe vaak,
+    hoe lang en waar een tester rondkijkt - niet alleen het ene inlogmoment (zie
+    webapp/app.py: _log_testaccount_activiteit() en test_account_logboek())."""
     p = _testaccount_logboek_bestandsnaam(state_dir)
     data = json.loads(p.read_text()) if p.exists() else []
     data.append({
         "tijd": nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
         "gebruiker": gebruiker,
         "ip": ip or "",
+        "pad": pad,
     })
     p.write_text(json.dumps(data[-_TESTACCOUNT_LOGBOEK_MAX:], indent=2))
 
 
 def laad_testaccount_logboek(state_dir: str = ".") -> list[dict]:
-    """Alle login-regels van testaccounts (oudste eerst, zoals opgeslagen)."""
+    """Alle activiteitsregels van testaccounts (oudste eerst, zoals opgeslagen)."""
     p = _testaccount_logboek_bestandsnaam(state_dir)
     if not p.exists():
         return []
