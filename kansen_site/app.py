@@ -9,10 +9,12 @@ Starten (productie): gunicorn 'kansen_site.app:create_app()'
 from __future__ import annotations
 
 import hmac
+import json
 from dataclasses import asdict
 from functools import wraps
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash
 
 from rotterdam_scanner import den_haag, pipeline
 from rotterdam_scanner.config import Config, load_config
@@ -78,13 +80,41 @@ def _velden_voor_weergave(uitg: dict) -> list[dict]:
     return velden
 
 
-def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
-    verwacht = config.kansen_app_users.get(gebruiker)
-    if verwacht is None:
+def _laad_steenhub_users(pad: str) -> dict:
+    """Leest de users.json van de steenhub.nl-app (read-only ingekoppeld, zie
+    deploy/docker-compose.yml). Elke gebruiker heeft daar een 'wachtwoord_hash'
+    (werkzeug). Ontbreekt/onleesbaar het bestand, dan gewoon geen steenhub-logins."""
+    try:
+        with open(pad, encoding="utf-8") as bestand:
+            data = json.load(bestand)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _steenhub_login_beschikbaar(config: Config) -> bool:
+    if not config.steenhub_users_file:
         return False
-    # Tijdsveilig vergelijken (hmac.compare_digest) i.p.v. == , zodat de
-    # responstijd niets verraadt over hoeveel tekens van het wachtwoord kloppen.
-    return hmac.compare_digest(verwacht, wachtwoord)
+    users = _laad_steenhub_users(config.steenhub_users_file)
+    return any(isinstance(a, dict) and a.get("wachtwoord_hash") for a in users.values())
+
+
+def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
+    # 1) Eigen KANSEN_APP_USERS (los wachtwoord per gebruiker uit de env).
+    verwacht = config.kansen_app_users.get(gebruiker)
+    if verwacht is not None and hmac.compare_digest(verwacht, wachtwoord):
+        # Tijdsveilig vergelijken (hmac.compare_digest) i.p.v. == , zodat de
+        # responstijd niets verraadt over hoeveel tekens van het wachtwoord kloppen.
+        return True
+    # 2) Zelfde accounts als steenhub.nl (users.json met werkzeug-hashes), zodat je
+    # met je steenhub-login ook op de kaart-website kunt. Elke poging leest het
+    # bestand opnieuw, zodat een nieuwe steenhub-gebruiker meteen werkt zonder de
+    # kansen-container te herstarten.
+    if config.steenhub_users_file:
+        account = _laad_steenhub_users(config.steenhub_users_file).get(gebruiker)
+        if isinstance(account, dict) and account.get("wachtwoord_hash"):
+            return check_password_hash(account["wachtwoord_hash"], wachtwoord)
+    return False
 
 
 def _listing_naar_json(item) -> dict:
@@ -122,10 +152,12 @@ def create_app(config: Config | None = None) -> Flask:
     if config is None:
         config = load_config()
 
-    if not config.kansen_app_users:
+    if not config.kansen_app_users and not _steenhub_login_beschikbaar(config):
         raise SystemExit(
-            "KANSEN_APP_USERS ontbreekt of is leeg - vul minstens 1 gebruiker:wachtwoord-paar in "
-            "(zie .env.example), anders zou de kaart zonder wachtwoord open staan."
+            "Geen inlogbron: KANSEN_APP_USERS is leeg én er is geen bruikbaar STEENHUB_USERS_FILE "
+            "(users.json van steenhub.nl). Vul minstens 1 gebruiker:wachtwoord-paar in KANSEN_APP_USERS "
+            "in (zie .env.example) of koppel de steenhub-users.json in, anders zou de kaart zonder "
+            "wachtwoord open staan."
         )
     if not config.kansen_app_secret_key:
         raise SystemExit("KANSEN_APP_SECRET_KEY ontbreekt - vul een willekeurige, geheime waarde in.")

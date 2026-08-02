@@ -39,6 +39,12 @@ class Config:
     # open komt te staan.
     kansen_app_users: dict[str, str] = field(default_factory=dict)
     kansen_app_secret_key: str = ""
+    # Pad naar de users.json van de steenhub.nl-app (kamerverhuur-webapp), read-only
+    # ingekoppeld in de kansen-container (zie deploy/docker-compose.yml). Als dit
+    # gezet is, kan er op de kaart-website ook worden ingelogd met de accounts van
+    # steenhub.nl - dezelfde gebruikersnaam + wachtwoord (geverifieerd tegen de
+    # werkzeug-wachtwoordhashes in dat bestand). Leeg = alleen KANSEN_APP_USERS.
+    steenhub_users_file: str = ""
 
     @property
     def imap_host(self) -> str:
@@ -87,6 +93,7 @@ def load_config(env_path: Path | None = None) -> Config:
         smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
         kansen_app_users=_parse_kansen_app_users(os.environ.get("KANSEN_APP_USERS", "")),
         kansen_app_secret_key=os.environ.get("KANSEN_APP_SECRET_KEY", ""),
+        steenhub_users_file=os.environ.get("STEENHUB_USERS_FILE", ""),
     )
 
 

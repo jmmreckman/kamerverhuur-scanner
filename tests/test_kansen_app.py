@@ -1,7 +1,10 @@
 """Tests voor kansen_site/app.py: login, de kaart-pagina, de JSON-lijst van
 actieve kansen en de "ververs nu"-knop. pipeline.run() wordt hier nooit echt
 aangeroepen (geen IMAP/PDOK/etc.), alleen gemockt."""
+import json
+
 import pytest
+from werkzeug.security import generate_password_hash
 
 from kansen_site.app import create_app
 from rotterdam_scanner.config import Config
@@ -448,3 +451,53 @@ def test_berekening_opslaan_weigert_ongeldige_waarde(tmp_path):
     client = _ingelogd(tmp_path)
     resp = client.post("/woning/a/berekening", json={"rente": "abc"})
     assert resp.status_code == 400
+
+
+# --- Inloggen met de Steenhub-accounts (gedeelde users.json) ----------------
+
+def _steenhub_users_file(tmp_path, gebruiker="marit", wachtwoord="steenhub-geheim"):
+    pad = tmp_path / "users.json"
+    pad.write_text(json.dumps({
+        gebruiker: {"wachtwoord_hash": generate_password_hash(wachtwoord), "alle_panden": True, "panden": []},
+    }))
+    return str(pad)
+
+
+def _client_met_steenhub(tmp_path, **overrides):
+    app = create_app(_config(tmp_path, steenhub_users_file=_steenhub_users_file(tmp_path), **overrides))
+    app.testing = True
+    return app.test_client()
+
+
+def test_login_met_steenhub_account_werkt(tmp_path):
+    client = _client_met_steenhub(tmp_path)
+    resp = client.post(
+        "/login", data={"gebruiker": "marit", "wachtwoord": "steenhub-geheim"}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "Kansen" in resp.get_data(as_text=True)
+
+
+def test_login_met_steenhub_account_verkeerd_wachtwoord_faalt(tmp_path):
+    client = _client_met_steenhub(tmp_path)
+    resp = client.post("/login", data={"gebruiker": "marit", "wachtwoord": "fout"})
+    assert resp.status_code == 200
+    assert "onjuist" in resp.get_data(as_text=True).lower()
+
+
+def test_eigen_kansen_users_blijven_werken_naast_steenhub(tmp_path):
+    client = _client_met_steenhub(tmp_path)
+    resp = client.post(
+        "/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"}, follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+
+def test_start_zonder_kansen_users_maar_met_steenhub_file_mag(tmp_path):
+    # Geen KANSEN_APP_USERS, wel een bruikbaar steenhub-bestand -> mag starten.
+    create_app(_config(tmp_path, kansen_app_users={}, steenhub_users_file=_steenhub_users_file(tmp_path)))
+
+
+def test_start_zonder_enige_inlogbron_weigert(tmp_path):
+    with pytest.raises(SystemExit):
+        create_app(_config(tmp_path, kansen_app_users={}, steenhub_users_file=""))
