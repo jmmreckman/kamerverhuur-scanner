@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Logboek test accounts{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Logboek test accounts</h1>
+  <p class="muted">Wanneer en hoe vaak testaccounts hebben ingelogd.</p>
+</div>
+
+{% if aantallen %}
+<div class="card">
+  <h2>Per testaccount</h2>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Testaccount</th><th>Aantal keer ingelogd</th></tr>
+    {% for gebruiker, aantal in aantallen.items() %}
+    <tr><td>{{ gebruiker }}</td><td>{{ aantal }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Alle logins</h2>
+  {% if regels %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Tijdstip</th><th>Testaccount</th><th>IP-adres</th></tr>
+    {% for regel in regels %}
+    <tr>
+      <td>{{ regel.tijd }}</td>
+      <td>{{ regel.gebruiker }}</td>
+      <td class="muted">{{ regel.ip or "-" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen enkele login door een testaccount geregistreerd.</p>
+  {% endif %}
+</div>
+
+<p style="margin-top:1rem">
+  <a href="{{ url_for('winst_overzicht') }}">&larr; Terug naar Totaal overzicht</a>
+</p>
+{% endblock %}

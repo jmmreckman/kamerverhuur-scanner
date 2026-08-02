@@ -47,6 +47,10 @@ from .reminders import bouw_herinnering, bouw_ingebrekestelling
 
 load_dotenv()
 
+# De "hoofdgebruiker": alleen dit account ziet de knop + pagina met het
+# login-logboek van testaccounts (zie test_account_logboek()).
+HOOFDGEBRUIKER = "jmmreckman"
+
 # Zonder dit staat het root-logniveau standaard op WARNING, waardoor alle
 # logger.info()-regels in kamerverhuur_scanner (bv. run_check() tijdens "Nu
 # controleren") nooit in de gunicorn/docker-logs verschijnen - main.py en de
@@ -248,7 +252,10 @@ def create_app(config: Config | None = None) -> Flask:
             password = request.form.get("password", "")
             users = load_users(config.users_file)
             if verify_login(users, username, password):
-                login_user(user_uit_gegevens(username, users[username]))
+                gebruiker = users[username]
+                if gebruiker.get("test_account"):
+                    state.log_testaccount_login(username, request.remote_addr, config.state_dir)
+                login_user(user_uit_gegevens(username, gebruiker))
                 return redirect(url_for("start"))
             flash("Onjuiste gebruikersnaam of wachtwoord.")
         return render_template("login.html")
@@ -746,7 +753,21 @@ def create_app(config: Config | None = None) -> Flask:
             komende_maandnaam=f"{_MAAND_NAMEN[volgende.month - 1]} {volgende.year}",
             betalingen_nu=betalingen_nu, betalingen_komend=betalingen_komend,
             komend_per_pand=komend_per_pand, komend_berekend_op=komend_berekend_op,
+            toon_test_logboek=current_user.id == HOOFDGEBRUIKER,
         )
+
+    @app.route("/winst-overzicht/test-logboek")
+    @login_required
+    def test_account_logboek():
+        # Alleen de hoofdgebruiker mag zien wanneer/hoe vaak testaccounts hebben
+        # ingelogd (zie login()).
+        if current_user.id != HOOFDGEBRUIKER:
+            abort(403)
+        regels = list(reversed(state.laad_testaccount_logboek(config.state_dir)))
+        aantallen: dict[str, int] = {}
+        for regel in regels:
+            aantallen[regel["gebruiker"]] = aantallen.get(regel["gebruiker"], 0) + 1
+        return render_template("test_account_logboek.html", regels=regels, aantallen=aantallen)
 
     @app.route("/winst-overzicht/ververs-komende-maand", methods=["POST"])
     @login_required

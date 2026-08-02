@@ -151,6 +151,37 @@ def laad_winst_geschiedenis(pand_slug: str, state_dir: str = ".") -> list[dict]:
     return json.loads(p.read_text())
 
 
+def _testaccount_logboek_bestandsnaam(state_dir: str = ".") -> Path:
+    return Path(state_dir) / "testaccount_logboek.json"
+
+
+# Hoeveel login-regels we maximaal bewaren (nieuwste onderaan) - genoeg om een
+# tijd terug te kijken, maar voorkomt dat het bestand oneindig groeit.
+_TESTACCOUNT_LOGBOEK_MAX = 1000
+
+
+def log_testaccount_login(gebruiker: str, ip: str | None, state_dir: str = ".") -> None:
+    """Legt vast dat een testaccount is ingelogd (tijdstip + gebruikersnaam +
+    IP-adres), zodat de hoofdgebruiker kan zien óf en hoe vaak een tester
+    daadwerkelijk inlogt (zie webapp/app.py: test_account_logboek())."""
+    p = _testaccount_logboek_bestandsnaam(state_dir)
+    data = json.loads(p.read_text()) if p.exists() else []
+    data.append({
+        "tijd": datetime.now().strftime("%d-%m-%Y %H:%M"),
+        "gebruiker": gebruiker,
+        "ip": ip or "",
+    })
+    p.write_text(json.dumps(data[-_TESTACCOUNT_LOGBOEK_MAX:], indent=2))
+
+
+def laad_testaccount_logboek(state_dir: str = ".") -> list[dict]:
+    """Alle login-regels van testaccounts (oudste eerst, zoals opgeslagen)."""
+    p = _testaccount_logboek_bestandsnaam(state_dir)
+    if not p.exists():
+        return []
+    return json.loads(p.read_text())
+
+
 def _komende_maand_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
     return Path(state_dir) / f"komende_maand_{veilige_slug}.json"

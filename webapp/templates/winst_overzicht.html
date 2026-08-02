@@ -78,4 +78,10 @@
   <h2>Winst over tijd</h2>
   {{ winst_grafiek(geschiedenis) }}
 </div>
+
+{% if toon_test_logboek %}
+<div class="card">
+  <a class="btn btn-secondary" href="{{ url_for('test_account_logboek') }}">Logboek test accounts</a>
+</div>
+{% endif %}
 {% endblock %}
