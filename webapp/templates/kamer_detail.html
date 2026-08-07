@@ -60,6 +60,9 @@
     <p class="muted">Nog geen contract gegenereerd voor deze kamer.</p>
   {% endif %}
   <a class="btn btn-secondary" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuw huurcontract</a>
+  <a class="btn btn-secondary" href="{{ url_for('directe_aanvraag', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ icon_plus() }} Nieuwe huurder rechtstreeks</a>
+  <p class="muted" style="margin-top:0.5rem">Voor een huurder die je via-via gevonden hebt, zonder bezichtiging:
+     stuurt haar één link waar ze haar gegevens invult én documenten uploadt, waarna automatisch een concept-huurcontract volgt.</p>
 </div>
 
 <div class="card">

@@ -513,3 +513,74 @@ def test_concept_contract_toont_mismatch_met_aanmelding(app_client, fake_ai):
     assert "mogelijk afwijkende gegevens" in body.lower()
     assert "999999" in body
     assert "Physics" in body
+
+
+# --- Directe aanvraag (huurder rechtstreeks, geen bezichtiging) -------------
+
+def _maak_directe_aanvraag(app_client, kamer="1", naam="Nadia", email="nadia@example.com"):
+    voorbeeld = app_client.post(
+        f"/pand/mahoniestraat/kamers/{kamer}/directe-aanvraag",
+        data={"naam": naam, "email": email, "telefoon": "+31600000000"},
+    )
+    body = voorbeeld.get_data(as_text=True)
+    token = re.search(r'/documenten/([\w-]+)', body).group(1)
+    sleutel = re.search(r'/documentverzoek/([a-z0-9-]+)/versturen', body).group(1)
+    return token, sleutel
+
+
+def test_directe_aanvraag_knop_staat_op_kamerpagina(app_client):
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/directe-aanvraag")
+    assert resp.status_code == 200
+    assert "rechtstreeks" in resp.get_data(as_text=True).lower()
+
+
+def test_directe_aanvraag_vereist_naam_en_email(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/directe-aanvraag", data={"naam": "", "email": ""}
+    )
+    assert "verplicht" in resp.get_data(as_text=True).lower()
+
+
+def test_directe_aanvraag_maakt_direct_verzoek(app_client):
+    from webapp import documentverzoek
+    _token, sleutel = _maak_directe_aanvraag(app_client)
+    verzoek = documentverzoek.lees_verzoek("mahoniestraat", sleutel, app_client.test_config.state_dir)
+    assert verzoek["direct"] is True
+    assert verzoek["naam"] == "Nadia"
+
+
+def test_publieke_pagina_directe_aanvraag_toont_vragenlijst(app_client):
+    token, _sleutel = _maak_directe_aanvraag(app_client)
+    body = app_client.get(f"/documenten/{token}").get_data(as_text=True)
+    assert "Your details" in body
+    assert "Your current address" in body
+    assert "inschrijving_bestanden" in body
+
+
+def test_publieke_pagina_gewoon_verzoek_toont_geen_vragenlijst(app_client):
+    token = _maak_verzoek_en_haal_token(app_client)  # via bezichtiging = niet direct
+    body = app_client.get(f"/documenten/{token}").get_data(as_text=True)
+    assert "Your details" not in body
+
+
+def test_directe_aanvraag_slaat_vragenlijst_op_bij_upload(app_client, verstuurde_mails):
+    from webapp import documentverzoek
+    token, sleutel = _maak_directe_aanvraag(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={
+            "huidig_adres": "Teststraat 1, Rotterdam",
+            "studie": "Bouwkunde",
+            "gewenste_ingangsdatum": "01-09-2026",
+            "borgsteller_naam": "Ouder van Nadia",
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    verzoek = documentverzoek.lees_verzoek("mahoniestraat", sleutel, app_client.test_config.state_dir)
+    gegevens = verzoek["aanvraag_gegevens"]
+    assert gegevens["huidig_adres"] == "Teststraat 1, Rotterdam"
+    assert gegevens["studie"] == "Bouwkunde"
+    assert gegevens["gewenste_ingangsdatum"] == "01-09-2026"
+    assert gegevens["borgsteller_naam"] == "Ouder van Nadia"

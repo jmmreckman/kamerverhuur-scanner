@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Nieuwe huurder rechtstreeks - kamer {{ kamer }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Nieuwe huurder rechtstreeks</h1>
+  <p class="muted">Kamer {{ kamer }} &middot; {{ huidig_pand.naam }}</p>
+</div>
+
+<div class="card">
+  <p>Voor een huurder die je rechtstreeks (via-via) gevonden hebt, zonder bezichtigingsronde. Vul haar naam en
+     e-mailadres in; ze krijgt dan één link waarop ze in één keer haar gegevens invult én haar documenten uploadt.
+     Daarna wordt automatisch het concept-huurcontract opgesteld, net als bij de gewone route.</p>
+  <form method="post">
+    <label>Naam van de nieuwe huurder
+      <input type="text" name="naam" value="{{ naam }}" required autofocus>
+    </label>
+    <label>E-mailadres
+      <input type="email" name="email" value="{{ email }}" required>
+    </label>
+    <label>Telefoonnummer (optioneel)
+      <input type="text" name="telefoon" value="{{ telefoon }}">
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Link aanmaken</button>
+      <a class="btn btn-secondary" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

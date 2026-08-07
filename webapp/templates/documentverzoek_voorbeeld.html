@@ -19,7 +19,7 @@
     </label>
     <div style="margin-top:1rem; display:flex; gap:0.6rem">
       <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
-      <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+      <a class="btn btn-secondary" href="{{ annuleren_url if annuleren_url is defined and annuleren_url else url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
     </div>
   </form>
 </div>

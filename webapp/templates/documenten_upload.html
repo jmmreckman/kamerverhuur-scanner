@@ -7,7 +7,8 @@
 </div>
 
 <div class="card">
-  <p>To draw up the draft rental agreement, please upload the documents below. You can select
+  <p>To draw up the draft rental agreement, please
+     {% if verzoek.direct %}fill in your details and {% endif %}upload the documents below. You can select
      multiple files per field if needed (e.g. front and back of your ID card).</p>
 </div>
 
@@ -18,13 +19,29 @@
 <div class="card">
   <form method="post" enctype="multipart/form-data"
         onsubmit="this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = 'Uploading...';">
+    {% if verzoek.direct and aanvraag_velden %}
+    <h2>Your details</h2>
+    {% for key, label in aanvraag_velden %}
+    <label>{{ label }}
+      <input type="text" name="{{ key }}"
+             value="{{ (verzoek.aanvraag_gegevens or {}).get(key, '') }}"
+             {% if key == 'gewenste_ingangsdatum' %}placeholder="e.g. 01-09-2026"{% endif %}>
+    </label>
+    {% endfor %}
+    <h2 style="margin-top:1.5rem">Your documents</h2>
+    {% endif %}
     <label>Copy of your ID card or passport
       <input type="file" name="id_bestanden" accept="image/*,.pdf" multiple>
     </label>
     <label>Proof of income (payslip/employment contract) or guarantor's proof of income
       <input type="file" name="inkomen_bestanden" accept="image/*,.pdf" multiple>
     </label>
-    <button class="btn" type="submit">Upload</button>
+    {% if verzoek.direct %}
+    <label>Proof of enrolment (if you are a student)
+      <input type="file" name="inschrijving_bestanden" accept="image/*,.pdf" multiple>
+    </label>
+    {% endif %}
+    <button class="btn" type="submit">{% if verzoek.direct %}Submit{% else %}Upload{% endif %}</button>
   </form>
 </div>
 {% endblock %}

@@ -1322,27 +1322,36 @@ def create_app(config: Config | None = None) -> Flask:
         def _geld(bedrag):
             return f"€{format_bedrag_nl(bedrag)}" if bedrag is not None else ""
 
+        # Bij een directe aanvraag (geen bezichtiging/aanmelding) komen de
+        # contractvelden uit de vragenlijst die de huurder zelf op de publieke
+        # pagina heeft ingevuld (zie documentverzoek.AANVRAAG_VELDEN); anders uit
+        # de aanmelding-rij.
+        gegevens = verzoek.get("aanvraag_gegevens") or {}
+
+        def _uit_aanmelding(index: int) -> str:
+            return aanmelding_rij[index] if aanmelding_rij else ""
+
         form_data = {
             "kamer": verzoek["kamer"],
             "kamer_omschrijving": "",
             # De naam op het ID-document is leidend voor het contract (dat is
             # de wettelijke naam) - valt terug op de aanmelding/het
             # documentverzoek zelf als de AI geen naam kon uitlezen.
-            "huurder_naam": ai_resultaat.get("volledige_naam") or (aanmelding_rij[2] if aanmelding_rij else "") or verzoek["naam"],
+            "huurder_naam": ai_resultaat.get("volledige_naam") or _uit_aanmelding(2) or verzoek["naam"],
             "geboortedatum": ai_resultaat.get("geboortedatum") or "",
             "geboorteplaats": ai_resultaat.get("geboorteplaats") or "",
-            "studentnummer": ai_resultaat.get("studentnummer") or (aanmelding_rij[7] if aanmelding_rij else ""),
-            "studierichting": ai_resultaat.get("studierichting") or (aanmelding_rij[6] if aanmelding_rij else ""),
+            "studentnummer": ai_resultaat.get("studentnummer") or _uit_aanmelding(7) or gegevens.get("studentnummer", ""),
+            "studierichting": ai_resultaat.get("studierichting") or _uit_aanmelding(6) or gegevens.get("studie", ""),
             "email": verzoek["email"],
-            "borgsteller_naam": aanmelding_rij[16] if aanmelding_rij else "",
-            "borgsteller_relatie": aanmelding_rij[17] if aanmelding_rij else "",
-            "borgsteller_email": aanmelding_rij[18] if aanmelding_rij else "",
+            "borgsteller_naam": _uit_aanmelding(16) or gegevens.get("borgsteller_naam", ""),
+            "borgsteller_relatie": _uit_aanmelding(17) or gegevens.get("borgsteller_relatie", ""),
+            "borgsteller_email": _uit_aanmelding(18) or gegevens.get("borgsteller_email", ""),
             "kale_huurprijs": _geld(kamer_tenant.kale_huurprijs) if kamer_tenant else "",
             "servicekosten": _geld(kamer_tenant.servicekosten) if kamer_tenant else "",
             "huurprijs": _geld(kamer_tenant.verwacht_bedrag) if kamer_tenant else "",
             "borg": "",
             "aantal_bewoners": str(aantal_bewoners),
-            "ingangsdatum": (aanmelding_rij[8] if aanmelding_rij else "") or date.today().isoformat(),
+            "ingangsdatum": _uit_aanmelding(8) or gegevens.get("gewenste_ingangsdatum") or date.today().isoformat(),
             "einddatum": "",
             "bijzonderheden": "",
         }
@@ -1451,6 +1460,34 @@ def create_app(config: Config | None = None) -> Flask:
         flash(f"Documentverzoek verstuurd naar {verzoek['naam'] or verzoek['email']}.")
         return redirect(url_for("documentverzoek_status", pand_slug=pand_slug, sleutel=sleutel))
 
+    @app.route("/pand/<pand_slug>/kamers/<kamer_naam>/directe-aanvraag", methods=["GET", "POST"])
+    @login_required
+    def directe_aanvraag(pand_slug: str, kamer_naam: str):
+        """Nieuwe huurder die rechtstreeks (via-via) gevonden is, zonder
+        bezichtiging: je vult haar naam + e-mail in en krijgt één link waarop ze
+        zowel haar gegevens invult als haar documenten uploadt (stap 1 + 2
+        gecombineerd), zodat het concept-huurcontract opgesteld kan worden zonder
+        dat ze eerst als aanmelding in het systeem hoeft te staan."""
+        if request.method == "POST":
+            naam = request.form.get("naam", "").strip()
+            email = request.form.get("email", "").strip()
+            telefoon = request.form.get("telefoon", "").strip()
+            if not naam or not email:
+                flash("Naam en e-mailadres van de nieuwe huurder zijn verplicht.")
+                return render_template(
+                    "directe_aanvraag.html", kamer=kamer_naam, naam=naam, email=email, telefoon=telefoon
+                )
+            verzoek = documentverzoek.start_documentverzoek(
+                pand_slug, kamer_naam, naam, email, telefoon, config.state_dir, direct=True
+            )
+            mail = documentverzoek.bouw_directe_aanvraag_mail(g.pand, kamer_naam, naam, _upload_url(verzoek["token"]))
+            return render_template(
+                "documentverzoek_voorbeeld.html", sleutel=verzoek["sleutel"], kandidaat_naam=naam,
+                onderwerp=mail["onderwerp"], tekst=mail["tekst"],
+                annuleren_url=url_for("kamer_detail", pand_slug=pand_slug, kamer_naam=kamer_naam),
+            )
+        return render_template("directe_aanvraag.html", kamer=kamer_naam, naam="", email="", telefoon="")
+
     @app.route("/pand/<pand_slug>/documentverzoeken")
     @login_required
     def documentverzoeken_overzicht(pand_slug: str):
@@ -1489,9 +1526,17 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
 
         if request.method == "POST":
+            # Bij een directe aanvraag vult de huurder hier ook de vragenlijst in
+            # (er is geen aanmelding in het systeem) - meteen bewaren, ook als de
+            # bestand-upload daarna eventueel misgaat.
+            if verzoek.get("direct"):
+                gegevens = {key: request.form.get(key, "").strip() for key, _label in documentverzoek.AANVRAAG_VELDEN}
+                verzoek = documentverzoek.zet_aanvraag_gegevens(pand_slug, verzoek["sleutel"], gegevens, config.state_dir)
+
             categorieen = {
                 "id_bestanden": "Copy of ID or passport",
                 "inkomen_bestanden": "Proof of income or guarantor",
+                "inschrijving_bestanden": "Proof of enrolment",
             }
             geuploade_documenten = []
             try:
@@ -1513,11 +1558,13 @@ def create_app(config: Config | None = None) -> Flask:
                 app.logger.exception("Uploaden van documenten is mislukt (pand %s, sleutel %s).", pand_slug, verzoek["sleutel"])
                 return render_template(
                     "documenten_upload.html", pand=pand, verzoek=verzoek,
+                    aanvraag_velden=documentverzoek.AANVRAAG_VELDEN,
                     fout="Sorry, uploading your documents failed. Please try again with smaller files, or contact us directly.",
                 ), 500
             if not geuploade_documenten:
                 return render_template(
                     "documenten_upload.html", pand=pand, verzoek=verzoek,
+                    aanvraag_velden=documentverzoek.AANVRAAG_VELDEN,
                     fout="Please select at least one file to upload.",
                 ), 400
             verzoek = documentverzoek.voeg_documenten_toe(
@@ -1568,7 +1615,10 @@ def create_app(config: Config | None = None) -> Flask:
                 threading.Thread(target=_verwerk_op_achtergrond, daemon=True).start()
             return render_template("documenten_upload_bedankt.html", pand=pand, verzoek=verzoek)
 
-        return render_template("documenten_upload.html", pand=pand, verzoek=verzoek, fout=None)
+        return render_template(
+            "documenten_upload.html", pand=pand, verzoek=verzoek, fout=None,
+            aanvraag_velden=documentverzoek.AANVRAAG_VELDEN,
+        )
 
     def _licht_huurders_in_redirect(pand_slug: str, datum_iso: str, afspraken_op_datum: list[dict]):
         datum = date.fromisoformat(datum_iso)

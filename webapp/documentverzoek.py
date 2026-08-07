@@ -26,6 +26,26 @@ from kamerverhuur_scanner.models import Pand
 from .reminders import AFZENDER_NAAM
 
 
+# Vragen op de publieke pagina bij een directe aanvraag (huurder rechtstreeks
+# gevonden, geen bezichtiging - dus geen aanmelding in het systeem). Alleen de
+# contract-relevante velden uit het gewone aanmeldformulier; de bezichtiging-
+# vragen (videobellen, voorkeursmomenten) slaan hier nergens op. Engelstalig,
+# net als de rest van de publieke uploadpagina. `key` komt overeen met wat er in
+# verzoek["aanvraag_gegevens"] bewaard wordt.
+AANVRAAG_VELDEN = [
+    ("huidig_adres", "Your current address"),
+    ("studie", "Study / field of study"),
+    ("studentnummer", "Student number"),
+    ("gewenste_ingangsdatum", "Preferred start date"),
+    ("gewenste_huurduur", "Desired rental duration"),
+    ("inkomstenbron", "Source of income (job, study finance, parents, ...)"),
+    ("inkomsten_bedrag", "Approximate monthly income"),
+    ("borgsteller_naam", "Guarantor name (if applicable)"),
+    ("borgsteller_relatie", "Guarantor relation to you (if applicable)"),
+    ("borgsteller_email", "Guarantor email (if applicable)"),
+]
+
+
 def _slugify(tekst: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", tekst.lower()).strip("-") or "onbekend"
 
@@ -93,6 +113,7 @@ def _schrijf_verzoek(pand_slug: str, sleutel: str, state_dir: str, verzoek: dict
 
 def start_documentverzoek(
     pand_slug: str, kamer: str, naam: str, email: str, telefoon: str, state_dir: str = ".",
+    direct: bool = False,
 ) -> dict:
     """Zet een nieuw documentverzoek op voor deze kandidaat, of geeft het
     bestaande terug als er al eerder een verzoek voor dezelfde kamer+naam+
@@ -100,7 +121,11 @@ def start_documentverzoek(
     voorbeeldscherm altijd de echte, al aangemaakte upload-link toont en een
     dubbele klik geen nieuw token genereert. Verstuurt zelf geen mail (dat
     gebeurt pas na bevestiging op het voorbeeldscherm, zie markeer_verzonden()
-    hieronder)."""
+    hieronder).
+
+    `direct=True` markeert een rechtstreekse aanvraag (huurder via-via gevonden,
+    geen bezichtiging): de publieke pagina toont dan óók de vragenlijst (zie
+    AANVRAAG_VELDEN), zodat er geen aparte aanmelding nodig is."""
     sleutel = maak_sleutel(kamer, naam, email)
     bestaand = lees_verzoek(pand_slug, sleutel, state_dir)
     if bestaand is not None:
@@ -112,6 +137,7 @@ def start_documentverzoek(
         "aangemaakt_op": datetime.now().isoformat(timespec="seconds"),
         "verzonden_op": None, "documenten": [], "ontvangen_op": None,
         "ai_resultaat": None, "mismatches": [], "concept_contract_bestandsnaam": None,
+        "direct": direct, "aanvraag_gegevens": None,
     }
     _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
 
@@ -155,6 +181,18 @@ def voeg_documenten_toe(pand_slug: str, sleutel: str, documenten: list[dict], st
     return verzoek
 
 
+def zet_aanvraag_gegevens(pand_slug: str, sleutel: str, gegevens: dict, state_dir: str = ".") -> dict:
+    """Bewaart de door de huurder ingevulde vragenlijst (bij een directe
+    aanvraag) op het verzoek, zodat het concept-huurcontract die kan gebruiken
+    (er is immers geen aanmelding in het systeem)."""
+    verzoek = lees_verzoek(pand_slug, sleutel, state_dir)
+    if verzoek is None:
+        raise ValueError(f"Geen documentverzoek gevonden voor '{sleutel}'.")
+    verzoek["aanvraag_gegevens"] = gegevens
+    _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
+    return verzoek
+
+
 def zet_ai_resultaat(
     pand_slug: str, sleutel: str, ai_resultaat: dict | None, mismatches: list[str],
     concept_contract_bestandsnaam: str | None, state_dir: str = ".",
@@ -189,6 +227,28 @@ def bouw_documentverzoek_mail(pand: Pand, kamer: str, naam: str, upload_url: str
         f"   - A copy of your ID card or passport\n"
         f"   - Proof of income (payslip/employment contract) or, if applicable, your guarantor's "
         f"proof of income\n\n"
+        f"{upload_url}\n\n"
+        f"Once we have received everything, we will prepare the draft rental agreement for you.\n\n"
+        f"Kind regards,\n{AFZENDER_NAAM}"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
+def bouw_directe_aanvraag_mail(pand: Pand, kamer: str, naam: str, upload_url: str) -> dict[str, str]:
+    """Mail voor een rechtstreeks (via-via) gevonden huurder, zonder bezichtiging:
+    op één pagina vult ze haar gegevens in én uploadt ze haar documenten, zodat
+    het concept-huurcontract opgesteld kan worden. Aanpasbaar op het
+    voorbeeldscherm, net als de andere mails."""
+    naam_of_daar = naam or "there"
+    onderwerp = f"Your details for room {kamer}, {pand.naam}".strip()
+    tekst = (
+        f"Dear {naam_of_daar},\n\n"
+        f"Welcome as the new tenant for room {kamer} at {pand.naam}!\n\n"
+        f"To draw up the draft rental agreement, could you please fill in your details and upload a "
+        f"few documents via the secure link below? It takes just a couple of minutes:\n\n"
+        f"   - Your details (address, study, start date, income, guarantor if any)\n"
+        f"   - A copy of your ID card or passport\n"
+        f"   - Proof of income (or your guarantor's), and proof of enrolment if you are a student\n\n"
         f"{upload_url}\n\n"
         f"Once we have received everything, we will prepare the draft rental agreement for you.\n\n"
         f"Kind regards,\n{AFZENDER_NAAM}"
