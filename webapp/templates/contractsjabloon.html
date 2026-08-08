@@ -37,8 +37,14 @@
       <button type="button" class="btn btn-secondary" data-cmd="italic" title="Cursief"><em>I</em></button>
       <button type="button" class="btn btn-secondary" data-cmd="insertUnorderedList" title="Opsomming">Lijst</button>
       <button type="button" class="btn btn-secondary" data-cmd="undo" title="Ongedaan maken">Ongedaan maken</button>
+      <button type="button" class="btn btn-secondary" id="bron-knop" style="margin-left:auto"
+              title="Toon/bewerk de onderliggende HTML - handig als een titel of stuk tekst hardnekkig te groot blijft">HTML-bron</button>
     </div>
     <div id="artikelen-editor" class="editor-oppervlak" contenteditable="true">{{ sjabloon|safe }}</div>
+    <textarea id="bron-textarea" style="display:none; width:100%; min-height:22rem; font-family:monospace; font-size:0.85rem"></textarea>
+    <p id="bron-uitleg" class="muted" style="display:none; margin-top:0.4rem">Dit is de onderliggende HTML. Titels horen
+       <code>&lt;h2&gt;...&lt;/h2&gt;</code> te zijn; is er ergens een <code>&lt;h1&gt;</code> of een stuk met
+       <code>style="font-size:..."</code>, dan kun je dat hier weghalen. Bij opslaan wordt zulke opmaak sowieso opgeschoond.</p>
     <textarea name="sjabloon" id="artikelen-textarea" style="display:none"></textarea>
     <div style="margin-top:1rem; display:flex; gap:0.6rem">
       <button class="btn" type="submit">Opslaan</button>
@@ -50,9 +56,13 @@
 <script>
   (function () {
     var editor = document.getElementById("artikelen-editor");
+    var bron = document.getElementById("bron-textarea");
+    var bronUitleg = document.getElementById("bron-uitleg");
+    var bronKnop = document.getElementById("bron-knop");
     var textarea = document.getElementById("artikelen-textarea");
     var form = document.getElementById("sjabloon-form");
     var toolbar = document.querySelector(".editor-toolbar");
+    var bronActief = false;
 
     toolbar.addEventListener("click", function (event) {
       var knop = event.target.closest("button[data-cmd]");
@@ -62,15 +72,38 @@
       document.execCommand(knop.dataset.cmd, false, knop.dataset.arg || null);
     });
 
-    // Houd de (verborgen) textarea doorlopend gelijk aan de editor, zodat het
-    // formulier altijd verstuurd wordt - een verborgen 'required'-veld dat pas
-    // bij submit gevuld wordt, blokkeerde de opslag stil (browservalidatie loopt
-    // vóór het submit-event).
+    // Houd de (verborgen) textarea doorlopend gelijk aan de actieve weergave,
+    // zodat het formulier altijd verstuurd wordt - een verborgen 'required'-veld
+    // dat pas bij submit gevuld wordt, blokkeerde de opslag stil (browser-
+    // validatie loopt vóór het submit-event).
     function synchroniseer() {
-      textarea.value = editor.innerHTML;
+      textarea.value = bronActief ? bron.value : editor.innerHTML;
     }
     synchroniseer();
     editor.addEventListener("input", synchroniseer);
+    bron.addEventListener("input", synchroniseer);
+
+    // Wisselen tussen de visuele editor en de onderliggende HTML - de escape-hatch
+    // als een titel/stuk tekst hardnekkig te groot blijft: in de HTML zie en fix je
+    // het rechtstreeks. De inhoud wordt bij elke wissel overgezet, zodat je niets
+    // kwijtraakt.
+    bronKnop.addEventListener("click", function () {
+      bronActief = !bronActief;
+      if (bronActief) {
+        bron.value = editor.innerHTML;
+        editor.style.display = "none";
+        bron.style.display = "";
+        bronUitleg.style.display = "";
+        bronKnop.textContent = "Visuele editor";
+      } else {
+        editor.innerHTML = bron.value;
+        editor.style.display = "";
+        bron.style.display = "none";
+        bronUitleg.style.display = "none";
+        bronKnop.textContent = "HTML-bron";
+      }
+      synchroniseer();
+    });
 
     // Meegeplakte opmaak (lettertype/-grootte/kleur uit Word/Docs) er meteen
     // uithalen, zodat alles in het contractlettertype blijft - koppen (die je
@@ -96,7 +129,8 @@
 
     form.addEventListener("submit", function (event) {
       synchroniseer();
-      if (!editor.textContent.trim()) {
+      var tekst = bronActief ? bron.value.replace(/<[^>]*>/g, "") : editor.textContent;
+      if (!tekst.trim()) {
         event.preventDefault();
         alert("De artikelen mogen niet leeg zijn.");
       }
