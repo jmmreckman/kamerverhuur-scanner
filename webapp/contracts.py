@@ -138,18 +138,39 @@ _PLAK_KOP_OPEN_RE = re.compile(r"<h[1-6]\b[^>]*>", re.IGNORECASE)
 _PLAK_KOP_DICHT_RE = re.compile(r"</h[1-6]\s*>", re.IGNORECASE)
 
 
+def _ontnest_koppen(artikelen_html: str) -> str:
+    """Herstelt een kop die een hele alinea (of heel artikel) heeft 'opgeslokt' -
+    bv. na plakken vanuit Word/Claude, waar de titel én de body-tekst allemaal
+    binnen één <h2>...</h2> terechtkomen (dan rendert álles kopgroot). Als een
+    <h2> begint met een <p>, wordt die eerste alinea de titel en komt de rest
+    (de body-alinea's) er als gewone alinea's ná - de kop omvat dan weer alleen
+    de titelregel."""
+    def _fix(match: "re.Match[str]") -> str:
+        inner = match.group(1)
+        eerste_alinea = re.match(r"\s*<p\b[^>]*>(.*?)</p>(.*)$", inner, re.IGNORECASE | re.DOTALL)
+        if not eerste_alinea:
+            return match.group(0)  # gewone kop (titel staat niet in een <p>) - ongemoeid laten
+        titel = eerste_alinea.group(1).strip()
+        rest = eerste_alinea.group(2)
+        return f"<h2>{titel}</h2>{rest}"
+
+    return re.sub(r"<h2>(.*?)</h2>", _fix, artikelen_html, flags=re.IGNORECASE | re.DOTALL)
+
+
 def schoon_artikelen(artikelen_html: str) -> str:
     """Verwijdert meegeplakte opmaak (inline lettertype/-grootte/kleur en
-    <span>/<font>-verpakkingen) en trekt alle koppen naar één niveau (<h2>),
-    zodat alle tekst na opslaan in hetzelfde contractlettertype rendert én elke
-    artikeltitel even groot is (koppen blijven wél groter dan de gewone tekst,
-    gestuurd door de vaste contract-opmaak). Jinja-plekhouders ({{ ... }} /
-    {% ... %}) blijven ongemoeid: dat is tekst, geen HTML-attributen."""
+    <span>/<font>-verpakkingen), trekt alle koppen naar één niveau (<h2>), en
+    haalt body-tekst die per ongeluk binnen een kop is beland er weer uit (zie
+    _ontnest_koppen). Zo rendert alle tekst na opslaan in hetzelfde contract-
+    lettertype én is elke artikeltitel even groot (koppen blijven wél groter dan
+    de gewone tekst, gestuurd door de vaste contract-opmaak). Jinja-plekhouders
+    ({{ ... }} / {% ... %}) blijven ongemoeid: dat is tekst, geen HTML."""
     artikelen_html = _PLAK_ROMMEL_RE.sub("", artikelen_html)
     artikelen_html = _PLAK_SPAN_FONT_RE.sub("", artikelen_html)
     artikelen_html = _PLAK_KOP_OPEN_RE.sub("<h2>", artikelen_html)
     artikelen_html = _PLAK_KOP_DICHT_RE.sub("</h2>", artikelen_html)
     artikelen_html = _PLAK_STYLE_ATTR_RE.sub("", artikelen_html)
+    artikelen_html = _ontnest_koppen(artikelen_html)
     return artikelen_html
 
 

@@ -363,3 +363,26 @@ def test_schoon_artikelen_laat_de_standaardartikelen_ongemoeid():
 def test_schrijf_artikelen_slaat_opgeschoonde_versie_op(tmp_path):
     contracts.schrijf_artikelen(str(tmp_path), '<p style="font-size:14pt">Nieuwe tekst</p>')
     assert contracts.lees_artikelen(str(tmp_path)) == "<p>Nieuwe tekst</p>"
+
+
+def test_schoon_artikelen_ontnest_kop_die_heel_artikel_opslokt():
+    # Precies het patroon uit een vanuit Claude/Word geplakt artikel: de titel én
+    # alle body-alinea's zaten binnen één <h2>, waardoor alles kopgroot werd.
+    ruw = (
+        '<h2><p class="font-claude-response-body" dir="ltr"><strong>Article 13 - Maintenance and Repairs</strong></p>'
+        '<p class="x">Maintenance obligations are divided.</p>'
+        '<p class="x">Reporting <span style="font-weight: normal;">defects must be reported.</span></p></h2>'
+        "<h2>Article 14 - Access</h2><p>The landlord may enter.</p>"
+    )
+    assert contracts.schoon_artikelen(ruw) == (
+        "<h2><strong>Article 13 - Maintenance and Repairs</strong></h2>"
+        "<p>Maintenance obligations are divided.</p>"
+        "<p>Reporting defects must be reported.</p>"
+        "<h2>Article 14 - Access</h2><p>The landlord may enter.</p>"
+    )
+
+
+def test_schoon_artikelen_laat_gewone_kop_met_alinea_erna_intact():
+    # Een normale titel gevolgd door een losse alinea mag niet veranderen.
+    ruw = "<h2>Article 1 - Rented Property</h2><p>The room located at ...</p>"
+    assert contracts.schoon_artikelen(ruw) == ruw
