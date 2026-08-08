@@ -39,7 +39,7 @@
       <button type="button" class="btn btn-secondary" data-cmd="undo" title="Ongedaan maken">Ongedaan maken</button>
     </div>
     <div id="artikelen-editor" class="editor-oppervlak" contenteditable="true">{{ sjabloon|safe }}</div>
-    <textarea name="sjabloon" id="artikelen-textarea" style="display:none" required></textarea>
+    <textarea name="sjabloon" id="artikelen-textarea" style="display:none"></textarea>
     <div style="margin-top:1rem; display:flex; gap:0.6rem">
       <button class="btn" type="submit">Opslaan</button>
       <a class="btn btn-secondary" href="{{ url_for('start') }}">Annuleren</a>
@@ -62,8 +62,22 @@
       document.execCommand(knop.dataset.cmd, false, knop.dataset.arg || null);
     });
 
-    form.addEventListener("submit", function () {
+    // Houd de (verborgen) textarea doorlopend gelijk aan de editor, zodat het
+    // formulier altijd verstuurd wordt - een verborgen 'required'-veld dat pas
+    // bij submit gevuld wordt, blokkeerde de opslag stil (browservalidatie loopt
+    // vóór het submit-event).
+    function synchroniseer() {
       textarea.value = editor.innerHTML;
+    }
+    synchroniseer();
+    editor.addEventListener("input", synchroniseer);
+
+    form.addEventListener("submit", function (event) {
+      synchroniseer();
+      if (!editor.textContent.trim()) {
+        event.preventDefault();
+        alert("De artikelen mogen niet leeg zijn.");
+      }
     });
   })();
 </script>
