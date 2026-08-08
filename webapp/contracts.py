@@ -122,11 +122,36 @@ def heeft_aangepast_sjabloon(state_dir: str) -> bool:
     return _sjabloon_override_pad(state_dir).is_file()
 
 
+# Meegeplakte opmaak die het contractlettertype zou overschrijven: inline
+# style=/class= (font-family, font-size, kleur, ...) en <span>/<font>-
+# verpakkingen die tekstverwerkers (Word/Google Docs) om geplakte tekst zetten.
+# De tag-structuur zelf blijft staan, dus koppen (<h2>/<h3>) blijven groter via
+# de vaste contract-opmaak en vet/cursief blijft behouden.
+_PLAK_STYLE_ATTR_RE = re.compile(r"""\s+(?:style|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
+_PLAK_SPAN_FONT_RE = re.compile(r"</?(?:span|font)\b[^>]*>", re.IGNORECASE)
+# Word/Docs plakken soms een compleet <style>-blok, <meta>-tags of HTML-
+# commentaar mee - dat hoort niet in de artikelen thuis.
+_PLAK_ROMMEL_RE = re.compile(r"<style\b[^>]*>.*?</style>|<meta\b[^>]*>|<!--.*?-->", re.IGNORECASE | re.DOTALL)
+
+
+def schoon_artikelen(artikelen_html: str) -> str:
+    """Verwijdert meegeplakte opmaak (inline lettertype/-grootte/kleur en
+    <span>/<font>-verpakkingen) zodat alle tekst na opslaan in hetzelfde
+    contractlettertype rendert - koppen blijven wel groter (die zijn <h2>/<h3>,
+    gestuurd door de vaste contract-opmaak). Jinja-plekhouders ({{ ... }} /
+    {% ... %}) blijven ongemoeid: dat is tekst, geen HTML-attributen."""
+    artikelen_html = _PLAK_ROMMEL_RE.sub("", artikelen_html)
+    artikelen_html = _PLAK_SPAN_FONT_RE.sub("", artikelen_html)
+    artikelen_html = _PLAK_STYLE_ATTR_RE.sub("", artikelen_html)
+    return artikelen_html
+
+
 def schrijf_artikelen(state_dir: str, artikelen_html: str) -> None:
-    """Slaat aangepaste artikelen op - valideert eerst (samen met de vaste
-    opmaak eromheen) of het geldige Jinja2-syntax is (ontbrekende
-    {% endif %}'s e.d.), zodat een tikfout niet alle toekomstige
-    contractgeneraties kapotmaakt."""
+    """Slaat aangepaste artikelen op - schoont eerst meegeplakte opmaak op (zie
+    schoon_artikelen()) en valideert dan (samen met de vaste opmaak eromheen) of
+    het geldige Jinja2-syntax is (ontbrekende {% endif %}'s e.d.), zodat een
+    tikfout niet alle toekomstige contractgeneraties kapotmaakt."""
+    artikelen_html = schoon_artikelen(artikelen_html)
     voor, _standaard_artikelen, na = _split_sjabloon(lees_standaard_sjabloon())
     try:
         _env.from_string(voor + artikelen_html + na)

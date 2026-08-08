@@ -317,3 +317,42 @@ def test_genereer_contract_gebruikt_aangepaste_artikelen(tmp_path):
     # de vaste opmaak (partijen, handtekeningen) staat er nog steeds omheen
     assert "Jurian Reckman" in html
     assert "Signatures" in html
+
+
+# --- Meegeplakte opmaak opschonen (schoon_artikelen) ------------------------
+
+def test_schoon_artikelen_verwijdert_inline_lettertype_en_grootte():
+    ruw = '<p style="font-family: Arial; font-size: 14pt; color: #ff0000">Betaling</p>'
+    assert contracts.schoon_artikelen(ruw) == "<p>Betaling</p>"
+
+
+def test_schoon_artikelen_pakt_ook_enkele_quotes_en_class():
+    ruw = "<p class='MsoNormal' style='font-size:11pt'>Tekst</p>"
+    assert contracts.schoon_artikelen(ruw) == "<p>Tekst</p>"
+
+
+def test_schoon_artikelen_pelt_span_en_font_maar_houdt_de_tekst():
+    ruw = '<p><span style="font-size:20px">Grote</span> <font face="Calibri">tekst</font></p>'
+    assert contracts.schoon_artikelen(ruw) == "<p>Grote tekst</p>"
+
+
+def test_schoon_artikelen_houdt_koppen_en_vet_cursief():
+    ruw = '<h2 style="font-size:30px">Artikel 1</h2><p><strong>vet</strong> <em>cursief</em></p>'
+    assert contracts.schoon_artikelen(ruw) == "<h2>Artikel 1</h2><p><strong>vet</strong> <em>cursief</em></p>"
+
+
+def test_schoon_artikelen_laat_jinja_plekhouders_met_rust():
+    ruw = "<p>Huur is {{ huurprijs }}{% if borgsteller_naam %}, borg door {{ borgsteller_naam }}{% endif %}</p>"
+    assert contracts.schoon_artikelen(ruw) == ruw
+
+
+def test_schoon_artikelen_laat_de_standaardartikelen_ongemoeid():
+    # De meegeleverde standaardtekst heeft geen inline opmaak, dus opschonen mag
+    # er niets aan veranderen.
+    standaard = contracts.lees_standaard_artikelen()
+    assert contracts.schoon_artikelen(standaard) == standaard
+
+
+def test_schrijf_artikelen_slaat_opgeschoonde_versie_op(tmp_path):
+    contracts.schrijf_artikelen(str(tmp_path), '<p style="font-size:14pt">Nieuwe tekst</p>')
+    assert contracts.lees_artikelen(str(tmp_path)) == "<p>Nieuwe tekst</p>"

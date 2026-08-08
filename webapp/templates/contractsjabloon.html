@@ -72,6 +72,26 @@
     synchroniseer();
     editor.addEventListener("input", synchroniseer);
 
+    // Meegeplakte opmaak (lettertype/-grootte/kleur uit Word/Docs) er meteen
+    // uithalen, zodat alles in het contractlettertype blijft - koppen (die je
+    // met de 'Kop'-knop maakt) blijven wel groter. Dezelfde opschoning gebeurt
+    // sowieso nog eens bij het opslaan (server-side), dit is puur voor de weergave.
+    editor.addEventListener("paste", function (event) {
+      event.preventDefault();
+      var data = event.clipboardData || window.clipboardData;
+      var html = data.getData("text/html");
+      if (html) {
+        html = html
+          .replace(/<style\b[^>]*>[\s\S]*?<\/style>|<meta\b[^>]*>|<!--[\s\S]*?-->/gi, "")
+          .replace(/<\/?(?:span|font)\b[^>]*>/gi, "")
+          .replace(/\s(?:style|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+        document.execCommand("insertHTML", false, html);
+      } else {
+        document.execCommand("insertText", false, data.getData("text/plain"));
+      }
+      synchroniseer();
+    });
+
     form.addEventListener("submit", function (event) {
       synchroniseer();
       if (!editor.textContent.trim()) {
