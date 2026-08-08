@@ -64,7 +64,7 @@
 
 <!-- ARTIKELEN:START -->
 <h2>Article 1 - Rented Property</h2>
-<p>The room{% if kamer_omschrijving %}, {{ kamer_omschrijving }},{% endif %} located at
+<p>The room "{{ kamer }}"{% if kamer_omschrijving %}, {{ kamer_omschrijving }},{% endif %} located at
    {{ pand.naam }}{% if pand.postcode or pand.plaats %}, {{ pand.postcode }} {{ pand.plaats }}{% endif %},
    the Netherlands ("Rented Property").</p>
 <p><strong>Shared spaces:</strong> {{ pand.gedeelde_ruimtes or "[fill in shared facilities, e.g. kitchen, bathroom(s), garden, bicycle shed, laundry place]" }} are common areas.</p>
