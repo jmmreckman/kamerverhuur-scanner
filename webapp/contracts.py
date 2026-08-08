@@ -132,16 +132,23 @@ _PLAK_SPAN_FONT_RE = re.compile(r"</?(?:span|font)\b[^>]*>", re.IGNORECASE)
 # Word/Docs plakken soms een compleet <style>-blok, <meta>-tags of HTML-
 # commentaar mee - dat hoort niet in de artikelen thuis.
 _PLAK_ROMMEL_RE = re.compile(r"<style\b[^>]*>.*?</style>|<meta\b[^>]*>|<!--.*?-->", re.IGNORECASE | re.DOTALL)
+# Alle kop-niveaus (h1 t/m h6) worden één niveau (h2), zodat elke artikeltitel
+# even groot is - een meegeplakte <h1> zou anders groter blijven dan de rest.
+_PLAK_KOP_OPEN_RE = re.compile(r"<h[1-6]\b[^>]*>", re.IGNORECASE)
+_PLAK_KOP_DICHT_RE = re.compile(r"</h[1-6]\s*>", re.IGNORECASE)
 
 
 def schoon_artikelen(artikelen_html: str) -> str:
     """Verwijdert meegeplakte opmaak (inline lettertype/-grootte/kleur en
-    <span>/<font>-verpakkingen) zodat alle tekst na opslaan in hetzelfde
-    contractlettertype rendert - koppen blijven wel groter (die zijn <h2>/<h3>,
+    <span>/<font>-verpakkingen) en trekt alle koppen naar één niveau (<h2>),
+    zodat alle tekst na opslaan in hetzelfde contractlettertype rendert én elke
+    artikeltitel even groot is (koppen blijven wél groter dan de gewone tekst,
     gestuurd door de vaste contract-opmaak). Jinja-plekhouders ({{ ... }} /
     {% ... %}) blijven ongemoeid: dat is tekst, geen HTML-attributen."""
     artikelen_html = _PLAK_ROMMEL_RE.sub("", artikelen_html)
     artikelen_html = _PLAK_SPAN_FONT_RE.sub("", artikelen_html)
+    artikelen_html = _PLAK_KOP_OPEN_RE.sub("<h2>", artikelen_html)
+    artikelen_html = _PLAK_KOP_DICHT_RE.sub("</h2>", artikelen_html)
     artikelen_html = _PLAK_STYLE_ATTR_RE.sub("", artikelen_html)
     return artikelen_html
 

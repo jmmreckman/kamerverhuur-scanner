@@ -84,6 +84,8 @@
         html = html
           .replace(/<style\b[^>]*>[\s\S]*?<\/style>|<meta\b[^>]*>|<!--[\s\S]*?-->/gi, "")
           .replace(/<\/?(?:span|font)\b[^>]*>/gi, "")
+          .replace(/<h[1-6]\b[^>]*>/gi, "<h2>")
+          .replace(/<\/h[1-6]\s*>/gi, "</h2>")
           .replace(/\s(?:style|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
         document.execCommand("insertHTML", false, html);
       } else {

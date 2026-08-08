@@ -341,6 +341,13 @@ def test_schoon_artikelen_houdt_koppen_en_vet_cursief():
     assert contracts.schoon_artikelen(ruw) == "<h2>Artikel 1</h2><p><strong>vet</strong> <em>cursief</em></p>"
 
 
+def test_schoon_artikelen_trekt_alle_koppen_naar_h2():
+    # Een meegeplakte <h1> (of <h3>) zou anders groter/kleiner blijven dan de
+    # rest van de artikeltitels; alles wordt één niveau (h2).
+    ruw = '<h1>Article 13</h1><p>tekst</p><h3 style="font-size:9pt">Article 14</h3>'
+    assert contracts.schoon_artikelen(ruw) == "<h2>Article 13</h2><p>tekst</p><h2>Article 14</h2>"
+
+
 def test_schoon_artikelen_laat_jinja_plekhouders_met_rust():
     ruw = "<p>Huur is {{ huurprijs }}{% if borgsteller_naam %}, borg door {{ borgsteller_naam }}{% endif %}</p>"
     assert contracts.schoon_artikelen(ruw) == ruw
