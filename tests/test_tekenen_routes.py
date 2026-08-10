@@ -252,6 +252,26 @@ def test_tekenpagina_toont_formulier_en_iframe(mock_smtp_cls, app_client):
     assert "Sign rental agreement" in body
     assert "tenant" in body
     assert f"/tekenen/{tokens['huurder']['token']}/contract" in body
+    # De blijvende (sticky) download-als-PDF-knop bovenaan.
+    assert "Download as PDF" in body
+    assert f"/tekenen/{tokens['huurder']['token']}/pdf" in body
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_tekenen_pdf_download_werkt_met_geldige_token(mock_smtp_cls, app_client):
+    mock_smtp_cls.return_value.__enter__.return_value = MagicMock()
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(f"/pand/mahoniestraat/contracten/{bestandsnaam}/tekenverzoek")
+    tokens = _tokens(bestandsnaam)
+
+    resp = app_client.get(f"/tekenen/{tokens['huurder']['token']}/pdf")
+    assert resp.status_code == 200
+    assert resp.mimetype == "application/pdf"
+    assert resp.data[:4] == b"%PDF"
+
+
+def test_tekenen_pdf_onbekende_token_geeft_404(app_client):
+    assert app_client.get("/tekenen/onbekende-token-xyz/pdf").status_code == 404
 
 
 def test_tekenen_onbekende_token_geeft_404(app_client):

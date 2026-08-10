@@ -2434,6 +2434,27 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
         return Response(html_inhoud, mimetype="text/html")
 
+    @app.route("/tekenen/<token>/pdf")
+    def tekenen_pdf(token: str):
+        """Download-als-PDF van het te tekenen contract - publiek (geen login),
+        alleen bereikbaar met een geldige token (zelfde als tekenen_contract),
+        zodat de ondertekenaar het contract ook als PDF kan bewaren."""
+        gevonden = ondertekenen.zoek_via_token(token, config.state_dir)
+        if gevonden is None:
+            abort(404)
+        pand_slug, bestandsnaam, _ondertekenaar = gevonden
+        try:
+            pdf = contracts.genereer_pdf(pand_slug, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            abort(404)
+        except contracts.PdfGenerationError:
+            abort(500)
+        pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
+        return Response(
+            pdf, mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{pdf_bestandsnaam}"'},
+        )
+
     # --- Documenten (dezelfde automatisch aangemaakte "Steenhub <pandnaam>"-
     # Drive-map als drive_sync.py, doorbladerd via rclone - zie drive_browse.py) ---
 

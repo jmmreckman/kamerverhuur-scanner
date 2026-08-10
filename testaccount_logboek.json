@@ -148,5 +148,29 @@
     "gebruiker": "kijker",
     "ip": "127.0.0.1",
     "pad": "/account/mail-voorkeuren"
+  },
+  {
+    "tijd": "10-08-2026 14:12",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/beheer/gebruikers"
+  },
+  {
+    "tijd": "10-08-2026 14:12",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/"
+  },
+  {
+    "tijd": "10-08-2026 14:12",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/pand/mahoniestraat/"
+  },
+  {
+    "tijd": "10-08-2026 14:12",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/account/mail-voorkeuren"
   }
 ]

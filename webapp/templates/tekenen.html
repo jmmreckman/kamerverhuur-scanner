@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Sign rental agreement{% endblock %}
 {% block content %}
+<div style="position:sticky; top:0; z-index:30; display:flex; align-items:center; justify-content:space-between;
+            gap:1rem; flex-wrap:wrap; background:var(--surface); border:1px solid var(--border);
+            border-radius:var(--radius-sm); box-shadow:var(--shadow); padding:0.6rem 0.9rem; margin-bottom:1.25rem;">
+  <span class="muted">Rental agreement &mdash; {{ pand.naam }}</span>
+  <a class="btn btn-secondary" href="{{ url_for('tekenen_pdf', token=ondertekenaar.token) }}"
+     target="_blank" rel="noopener">Download as PDF</a>
+</div>
+
 <div class="page-header">
   <h1>Sign rental agreement</h1>
   <p class="muted">{{ pand.naam }} - signing as {{ {"huurder": "tenant", "verhuurder": "landlord", "borgsteller": "guarantor"}[ondertekenaar.rol] }}</p>
