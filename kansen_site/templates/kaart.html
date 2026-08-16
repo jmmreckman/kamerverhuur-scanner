@@ -58,6 +58,14 @@
         <label>Max. dagen op Funda
           <input type="number" id="filter-dagen" min="0" step="1" placeholder="bv. 3">
         </label>
+        <label>Sorteer op (laagste bovenaan)
+          <select id="filter-sorteer">
+            <option value="inleg" selected>Eigen inleg p.p. (ná verhoging)</option>
+            <option value="schakelgeld">Schakelgeld p.p. (vóór verhoging)</option>
+            <option value="winst">Winst p.p./mnd</option>
+            <option value="datum">Datum (eerst gezien)</option>
+          </select>
+        </label>
       </div>
       <p id="aantal-tekst" class="muted"></p>
       <ul id="lijst" class="lijst"></ul>

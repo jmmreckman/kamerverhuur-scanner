@@ -16,6 +16,7 @@ const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
 const filterInvesteerdersEl = document.getElementById("filter-investeerders");
 const filterSchakelgeldEl = document.getElementById("filter-schakelgeld");
+const filterSorteerEl = document.getElementById("filter-sorteer");
 const verversKnop = document.getElementById("ververs-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -47,6 +48,20 @@ function kansCijfers(kans) {
     eigenInleg: perPersoon(kans.eigen_inleg_na_ophoging_totaal),
     schakelgeld: perPersoon(kans.schakelgeld_totaal),
   };
+}
+
+// Waarde waarop de lijst gesorteerd wordt (altijd oplopend, laagste bovenaan);
+// null/onbekend zakt naar onderen.
+function sorteerWaarde(kans) {
+  const veld = filterSorteerEl ? filterSorteerEl.value : "inleg";
+  const c = kansCijfers(kans);
+  if (veld === "winst") return c.winst;
+  if (veld === "schakelgeld") return c.schakelgeld;
+  if (veld === "datum") {
+    const d = new Date(kans.eerst_gezien);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+  return c.eigenInleg;
 }
 
 function dagenOpFunda(eerstGezien) {
@@ -177,11 +192,11 @@ function renderMarkers(kansen) {
 function renderLijst(kansen) {
   lijstEl.innerHTML = "";
   const gesorteerd = [...kansen].sort((a, b) => {
-    const ea = perPersoon(a.eigen_inleg_na_ophoging_totaal);
-    const eb = perPersoon(b.eigen_inleg_na_ophoging_totaal);
-    if (ea === null) return 1;
-    if (eb === null) return -1;
-    return ea - eb;
+    const va = sorteerWaarde(a);
+    const vb = sorteerWaarde(b);
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+    return va - vb;
   });
   for (const kans of gesorteerd) {
     const li = document.createElement("li");
@@ -266,10 +281,10 @@ async function laadKansen() {
 }
 
 for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl, filterZoekEl,
-                  filterDagenEl, filterStadEl, filterInvesteerdersEl]) {
+                  filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
-for (const el of [filterStadEl, filterInvesteerdersEl]) {
+for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
 
