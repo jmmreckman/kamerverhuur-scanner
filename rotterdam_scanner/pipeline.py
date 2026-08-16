@@ -65,6 +65,7 @@ def _verwerk_den_haag(
 
     winst_pm_pp = None
     eigen_inleg_pp = None
+    schakelgeld_totaal = None
     if resultaat.max_bewoners and listing.prijs and primaire_oppervlakte:
         investering = bereken_investering_met_aantal_kamers(
             resultaat.max_bewoners, listing.prijs, 0.0, m2=primaire_oppervlakte
@@ -72,6 +73,7 @@ def _verwerk_den_haag(
         if investering is not None:
             winst_pm_pp = investering.winst_pm_pp
             eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
+            schakelgeld_totaal = investering.totale_zelf_in_te_leggen
 
     gemeenschappelijk = dict(
         object_id=object_id,
@@ -99,6 +101,7 @@ def _verwerk_den_haag(
         aantal_kamers_mogelijk=resultaat.max_bewoners,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_pp=eigen_inleg_pp,
+        schakelgeld_totaal=schakelgeld_totaal,
         check_signalen=resultaat.signalen,
     )
 
@@ -265,11 +268,13 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
 
     winst_pm_pp = None
     eigen_inleg_pp = None
+    schakelgeld_totaal = None
     if primaire_oppervlakte and listing.prijs:
         investering = bereken_investering(primaire_oppervlakte, listing.prijs, opslag_percentage)
         if investering is not None:
             winst_pm_pp = investering.winst_pm_pp
             eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
+            schakelgeld_totaal = investering.totale_zelf_in_te_leggen
 
     return ListingState(
         object_id=object_id,
@@ -294,6 +299,7 @@ def _process_new_listing(listing: FundaListing, config: Config, today: date) -> 
         aantal_kamers_mogelijk=aantal_kamers,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_pp=eigen_inleg_pp,
+        schakelgeld_totaal=schakelgeld_totaal,
     )
 
 
@@ -356,9 +362,11 @@ def _backvul_investeringscijfers(state: StateStore) -> None:
         if (
             item.winst_pm_pp != investering.winst_pm_pp
             or item.eigen_inleg_pp != investering.eigen_inleg_na_ophoging_pp
+            or item.schakelgeld_totaal != investering.totale_zelf_in_te_leggen
         ):
             item.winst_pm_pp = investering.winst_pm_pp
             item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp
+            item.schakelgeld_totaal = investering.totale_zelf_in_te_leggen
             state.upsert(item)
 
 

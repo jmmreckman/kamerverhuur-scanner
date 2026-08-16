@@ -36,8 +36,18 @@
         <label>Wijk
           <select id="filter-wijk"><option value="">Alle wijken</option></select>
         </label>
-        <label>Max. eigen inleg p.p.
+        <label>Aantal investeerders
+          <select id="filter-investeerders">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label>Max. eigen inleg p.p. (ná verhoging)
           <input type="number" id="filter-eigen-inleg" placeholder="bv. 30000">
+        </label>
+        <label>Max. schakelgeld p.p. (vóór verhoging)
+          <input type="number" id="filter-schakelgeld" placeholder="bv. 90000">
         </label>
         <label>Min. winst p.p./mnd
           <input type="number" id="filter-winst" placeholder="bv. 100">

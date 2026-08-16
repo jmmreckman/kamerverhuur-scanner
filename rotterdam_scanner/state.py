@@ -31,6 +31,14 @@ class ListingState:
     aantal_kamers_mogelijk: int | None = None
     winst_pm_pp: float | None = None
     eigen_inleg_pp: float | None = None
+    # Totale eigen inleg vóór de ophoging (= totale_zelf_in_te_leggen uit
+    # investering.py, het "schakelgeld" dat je bij aankoop nodig hebt vóór de
+    # hertaxatie/ophoging) - investeerder-onafhankelijk (niet gedeeld door het
+    # aantal investeerders). winst_pm_pp/eigen_inleg_pp staan wél al gedeeld door
+    # investering.AANTAL_INVESTEERDERS; de kaart-website deelt op basis hiervan
+    # zelf om naar 1/2/3 investeerders. None voor woningen die nog van vóór dit
+    # veld dateren (wordt bij de volgende scan/backfill ingevuld).
+    schakelgeld_totaal: float | None = None
     # Legacy: hoorde bij de inmiddels verwijderde Apify-integratie
     # (pipeline.run_apify_volledig(), zie git-geschiedenis) - niet meer
     # geschreven of gelezen. Blijft hier staan zodat bestaande state.json-

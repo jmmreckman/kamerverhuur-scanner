@@ -14,6 +14,8 @@ const filterWinstEl = document.getElementById("filter-winst");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
+const filterInvesteerdersEl = document.getElementById("filter-investeerders");
+const filterSchakelgeldEl = document.getElementById("filter-schakelgeld");
 const verversKnop = document.getElementById("ververs-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -25,6 +27,26 @@ const markerPerId = new Map();
 function formatEuro(bedrag) {
   if (bedrag === null || bedrag === undefined) return "onbekend";
   return "€" + Math.round(bedrag).toLocaleString("nl-NL");
+}
+
+// De winst en eigen inleg worden door het gekozen aantal investeerders (1/2/3)
+// gedeeld; de API levert daarvoor de investeerder-onafhankelijke totalen aan.
+function aantalInvesteerders() {
+  const n = parseInt(filterInvesteerdersEl ? filterInvesteerdersEl.value : "2", 10);
+  return n === 1 || n === 3 ? n : 2;
+}
+
+function perPersoon(totaal) {
+  if (totaal === null || totaal === undefined) return null;
+  return totaal / aantalInvesteerders();
+}
+
+function kansCijfers(kans) {
+  return {
+    winst: perPersoon(kans.winst_pm_totaal),
+    eigenInleg: perPersoon(kans.eigen_inleg_na_ophoging_totaal),
+    schakelgeld: perPersoon(kans.schakelgeld_totaal),
+  };
 }
 
 function dagenOpFunda(eerstGezien) {
@@ -51,16 +73,19 @@ function vulWijkFilter(kansen) {
 function gefilterd() {
   const wijk = filterWijkEl.value;
   const maxEigenInleg = parseFloat(filterEigenInlegEl.value);
+  const maxSchakelgeld = parseFloat(filterSchakelgeldEl.value);
   const minWinst = parseFloat(filterWinstEl.value);
   const zoek = filterZoekEl.value.trim().toLowerCase();
   const maxDagen = parseFloat(filterDagenEl.value);
   const stad = filterStadEl ? filterStadEl.value : "";
 
   return alleKansen.filter((k) => {
+    const c = kansCijfers(k);
     if (stad && (k.stad || "rotterdam") !== stad) return false;
     if (wijk && k.wijknaam !== wijk) return false;
-    if (!isNaN(maxEigenInleg) && (k.eigen_inleg_pp === null || k.eigen_inleg_pp > maxEigenInleg)) return false;
-    if (!isNaN(minWinst) && (k.winst_pm_pp === null || k.winst_pm_pp < minWinst)) return false;
+    if (!isNaN(maxEigenInleg) && (c.eigenInleg === null || c.eigenInleg > maxEigenInleg)) return false;
+    if (!isNaN(maxSchakelgeld) && (c.schakelgeld === null || c.schakelgeld > maxSchakelgeld)) return false;
+    if (!isNaN(minWinst) && (c.winst === null || c.winst < minWinst)) return false;
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
       const dagen = dagenOpFunda(k.eerst_gezien);
@@ -82,6 +107,7 @@ function bouwPopup(kans) {
     .join("<br>");
 
   const kamersWaarde = kans.aantal_kamers_mogelijk === null || kans.aantal_kamers_mogelijk === undefined ? "" : kans.aantal_kamers_mogelijk;
+  const c = kansCijfers(kans);
   div.innerHTML = `
     <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
     <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}
@@ -93,8 +119,9 @@ function bouwPopup(kans) {
       ${kamersLabel}: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
       ${kans.aantal_kamers_handmatig ? `<button type="button" class="kamers-reset-knop" title="${resetTitel}">automatisch</button>` : ""}
     </span><br>
-    ${kans.winst_pm_pp !== null ? "Winst p.p./mnd: " + formatEuro(kans.winst_pm_pp) + "<br>" : ""}
-    ${kans.eigen_inleg_pp !== null ? "Eigen inleg p.p.: " + formatEuro(kans.eigen_inleg_pp) + "<br>" : ""}
+    ${c.winst !== null ? "Winst p.p./mnd: " + formatEuro(c.winst) + "<br>" : ""}
+    ${c.eigenInleg !== null ? "Eigen inleg p.p. (ná verhoging): " + formatEuro(c.eigenInleg) + "<br>" : ""}
+    ${c.schakelgeld !== null ? "Schakelgeld p.p. (vóór verhoging): " + formatEuro(c.schakelgeld) + "<br>" : ""}
     ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
     ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
     ${kans.woz_check_nodig && kans.woz_check_url ? `<a href="${kans.woz_check_url}" target="_blank" rel="noopener">Zelf WOZ-waarde opzoeken &rarr;</a><br>` : ""}
@@ -150,22 +177,26 @@ function renderMarkers(kansen) {
 function renderLijst(kansen) {
   lijstEl.innerHTML = "";
   const gesorteerd = [...kansen].sort((a, b) => {
-    if (a.eigen_inleg_pp === null) return 1;
-    if (b.eigen_inleg_pp === null) return -1;
-    return a.eigen_inleg_pp - b.eigen_inleg_pp;
+    const ea = perPersoon(a.eigen_inleg_na_ophoging_totaal);
+    const eb = perPersoon(b.eigen_inleg_na_ophoging_totaal);
+    if (ea === null) return 1;
+    if (eb === null) return -1;
+    return ea - eb;
   });
   for (const kans of gesorteerd) {
     const li = document.createElement("li");
     li.className = "lijst-item";
     const dagen = dagenOpFunda(kans.eerst_gezien);
+    const c = kansCijfers(kans);
     li.innerHTML = `
       <button type="button" class="verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
       <span class="adres">${kans.weergavenaam}</span>
       ${kans.stad === "den_haag" ? '<span class="stad-tag">Den Haag</span>' : ""}
       <div class="cijfers">
         <span>${formatEuro(kans.prijs)}</span>
-        ${kans.winst_pm_pp !== null ? `<span class="goed">+${formatEuro(kans.winst_pm_pp)} p.p./mnd</span>` : ""}
-        ${kans.eigen_inleg_pp !== null ? `<span>${formatEuro(kans.eigen_inleg_pp)} inleg p.p.</span>` : ""}
+        ${c.winst !== null ? `<span class="goed">+${formatEuro(c.winst)} p.p./mnd</span>` : ""}
+        ${c.eigenInleg !== null ? `<span>${formatEuro(c.eigenInleg)} inleg p.p.</span>` : ""}
+        ${c.schakelgeld !== null ? `<span>${formatEuro(c.schakelgeld)} schakelgeld p.p.</span>` : ""}
         ${dagen !== null ? `<span>${dagen} dag(en) op Funda</span>` : ""}
       </div>
     `;
@@ -234,10 +265,13 @@ async function laadKansen() {
   renderAlles();
 }
 
-for (const el of [filterWijkEl, filterEigenInlegEl, filterWinstEl, filterZoekEl, filterDagenEl, filterStadEl]) {
+for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl, filterZoekEl,
+                  filterDagenEl, filterStadEl, filterInvesteerdersEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
-if (filterStadEl) filterStadEl.addEventListener("change", renderAlles);
+for (const el of [filterStadEl, filterInvesteerdersEl]) {
+  if (el) el.addEventListener("change", renderAlles);
+}
 
 verversKnop.addEventListener("click", async () => {
   verversKnop.disabled = true;

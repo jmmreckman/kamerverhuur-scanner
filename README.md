@@ -211,9 +211,11 @@ docker compose exec fundazoeker python3 herscan_afgevallen.py
 
 Naast het dagrapport is er een losse, interactieve kaart-website (`kansen_site/`) die
 dezelfde `state.json` uitleest en alle actieve kansen toont op een kaart (Leaflet +
-gratis OpenStreetMap-tiles) met een filterbare lijst ernaast (wijk, max. eigen inleg
-p.p., min. winst p.p./mnd, adres zoeken, dagen op Funda) en een "Ververs nu"-knop om de
-mail-scan meteen te laten draaien in plaats van te wachten tot 09:00. Verder:
+gratis OpenStreetMap-tiles) met een filterbare lijst ernaast (wijk, aantal investeerders
+(1/2/3, waarmee winst en eigen inleg per persoon meerekenen), max. eigen inleg p.p. ná
+verhoging, max. schakelgeld p.p. vóór verhoging, min. winst p.p./mnd, adres zoeken, dagen
+op Funda) en een "Ververs nu"-knop om de mail-scan meteen te laten draaien in plaats van te
+wachten tot 09:00. Verder:
 - **Toevoegen** — plak een lijst adressen of een kopieer-plak van een Funda-
   resultatenpagina om achterstanden in te halen (zie "Achterstand inhalen" hieronder).
 - **Verwijderd** — overzicht van handmatig verwijderde woningen, met terugplaats-knop.

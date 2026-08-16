@@ -124,6 +124,28 @@ def test_api_kansen_bevat_de_belangrijkste_velden(app_client, tmp_path):
     assert item["eerst_gezien"] == "2026-07-01"
 
 
+def test_api_kansen_bevat_investeerder_onafhankelijke_totalen(app_client, tmp_path):
+    # winst_pm_pp/eigen_inleg_pp staan al gedeeld door 2 investeerders; de totalen
+    # (voor de investeerders-omreken op de kaart) zijn dat maal 2.
+    _zet_listing(tmp_path, winst_pm_pp=150.0, eigen_inleg_pp=25_000.0, schakelgeld_totaal=180_000.0)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    item = app_client.get("/api/kansen").get_json()[0]
+    assert item["winst_pm_totaal"] == 300.0
+    assert item["eigen_inleg_na_ophoging_totaal"] == 50_000.0
+    assert item["schakelgeld_totaal"] == 180_000.0
+
+
+def test_api_kansen_totalen_zijn_none_zonder_cijfers(app_client, tmp_path):
+    _zet_listing(tmp_path, winst_pm_pp=None, eigen_inleg_pp=None)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    item = app_client.get("/api/kansen").get_json()[0]
+    assert item["winst_pm_totaal"] is None
+    assert item["eigen_inleg_na_ophoging_totaal"] is None
+    assert item["schakelgeld_totaal"] is None
+
+
 def test_ververs_zonder_login_wordt_omgeleid(app_client):
     resp = app_client.post("/ververs")
     assert resp.status_code == 302
@@ -225,6 +247,8 @@ def test_kans_kamers_aanpassen_herberekent_investering(app_client, tmp_path):
     # Winst/eigen inleg moeten meeveranderen met het handmatige aantal (minder kamers
     # dan de automatisch berekende 6 -> minder huurinkomsten dan voorheen).
     assert item.winst_pm_pp is not None
+    # Ook het schakelgeld (eigen inleg vóór verhoging) wordt herberekend/opgeslagen.
+    assert item.schakelgeld_totaal is not None
 
 
 def test_kans_kamers_leeg_veld_gaat_terug_naar_automatisch(app_client, tmp_path):

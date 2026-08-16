@@ -19,7 +19,7 @@ from werkzeug.security import check_password_hash
 from rotterdam_scanner import den_haag, pipeline
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
-from rotterdam_scanner.investering import RekenUitgangspunten, bereken_rekentool
+from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
 from rotterdam_scanner.state import StateStore
@@ -134,6 +134,12 @@ def _listing_naar_json(item) -> dict:
         "aantal_kamers_handmatig": item.aantal_kamers_handmatig,
         "winst_pm_pp": item.winst_pm_pp,
         "eigen_inleg_pp": item.eigen_inleg_pp,
+        # Investeerder-onafhankelijke totalen, zodat de kaart zelf kan omrekenen
+        # naar 1/2/3 investeerders (winst_pm_pp/eigen_inleg_pp staan al gedeeld
+        # door AANTAL_INVESTEERDERS; de totalen zijn dat maal het aantal).
+        "winst_pm_totaal": None if item.winst_pm_pp is None else item.winst_pm_pp * AANTAL_INVESTEERDERS,
+        "eigen_inleg_na_ophoging_totaal": None if item.eigen_inleg_pp is None else item.eigen_inleg_pp * AANTAL_INVESTEERDERS,
+        "schakelgeld_totaal": item.schakelgeld_totaal,
         "opslag_percentage": item.opslag_percentage,
         "huurprijsopslag_signalen": item.huurprijsopslag_signalen,
         "stad": item.stad,
@@ -266,9 +272,11 @@ def create_app(config: Config | None = None) -> Flask:
             )
             item.winst_pm_pp = investering.winst_pm_pp if investering else None
             item.eigen_inleg_pp = investering.eigen_inleg_na_ophoging_pp if investering else None
+            item.schakelgeld_totaal = investering.totale_zelf_in_te_leggen if investering else None
         else:
             item.winst_pm_pp = None
             item.eigen_inleg_pp = None
+            item.schakelgeld_totaal = None
 
         state.upsert(item)
         state.save()
