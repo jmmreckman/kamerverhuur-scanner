@@ -44,19 +44,29 @@ _ZOEKTERMEN = ("kamerverhuur", "kamerbewoning")
 _GZD = "{http://standaarden.overheid.nl/sru}"
 
 # Titels die zeker geen per-adres verleende vergunning zijn (beleidsregels,
-# verordeningen, intrekkingen/weigeringen, aanvragen, en de bulk-overgangs-
-# vergunningen voor bestaande situaties). Goedkope voorfilter vóór we een body
-# ophalen; de body-parse is daarna de uiteindelijke toets.
+# verordeningen, aanvragen/ontwerpen, intrekkingen/weigeringen, en de bulk-
+# overgangsvergunningen voor bestaande situaties). Goedkope voorfilter vóór we een
+# body ophalen; de body-parse is daarna de uiteindelijke toets (die eist dat de
+# tekst een verleende vergunning mét adres is).
 _UITSLUIT_RE = re.compile(
     r"intrekking|ingetrokken|weiger|geweigerd|buiten behandeling|beleidsregel|"
-    r"verordening|nadere regels|aanvraag|aanvragen|overgangsbepaling",
+    r"verordening|nadere regels|aanvraag|aangevraag|aanvragen|overgangsbepaling|"
+    r"ontwerp",
     re.IGNORECASE,
 )
-_PER_ADRES_RE = re.compile(r"^\s*vergunning\s+kamer(?:verhuur|bewoning)\s+\S", re.IGNORECASE)
+# Kandidaat zodra "kamerverhuur" of "kamerbewoning" ergens in de titel staat -
+# bewust ruim, want het titelformat verschilt per jaar ("Vergunning kamerverhuur
+# X", "Verleende vergunning kamerbewoning X", of kaal "kamerverhuur X"). De
+# body-parse filtert de niet-per-adres-treffers er daarna uit.
+_KANDIDAAT_RE = re.compile(r"kamer(?:verhuur|bewoning)", re.IGNORECASE)
 
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
     "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
+}
+_NL_GETAL = {
+    "een": 1, "één": 1, "twee": 2, "drie": 3, "vier": 4, "vijf": 5, "zes": 6,
+    "zeven": 7, "acht": 8, "negen": 9, "tien": 10, "elf": 11, "twaalf": 12,
 }
 
 
@@ -130,7 +140,7 @@ def enumereer_stubs(vanaf: date | None = None):
             if not records:
                 break
             for rec in records:
-                if _UITSLUIT_RE.search(rec["titel"]) or not _PER_ADRES_RE.match(rec["titel"]):
+                if not _KANDIDAAT_RE.search(rec["titel"]) or _UITSLUIT_RE.search(rec["titel"]):
                     continue
                 pid = _pub_id(rec["url"] or rec["html_url"] or "")
                 if pid:
@@ -168,11 +178,44 @@ def _nl_datum_naar_iso(tekst: str | None) -> str | None:
         return None
 
 
+def _aantal_personen(tekst: str) -> int | None:
+    # 2021+ gestructureerd: "aan 3 personen". 2019-2020 vrije tekst: "door maximaal
+    # vier personen" (getal soms als woord).
+    match = re.search(r"aan\s+(\d+)\s+persone?n", tekst, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    match = re.search(r"(?:maximaal|door)\s+([0-9]+|[a-zéëï]+)\s+persone?n", tekst, re.IGNORECASE)
+    if match:
+        woord = match.group(1).lower()
+        return int(woord) if woord.isdigit() else _NL_GETAL.get(woord)
+    return None
+
+
+def _besluitdatum(tekst: str) -> str | None:
+    # 2022+: "Verzenddatum besluit: ...". 2021: "Datum besluit: ...". 2019-2020
+    # vrije tekst: "op 20 mei 2019 de volgende vergunning heeft verleend".
+    for patroon in (
+        r"Verzenddatum besluit:\s*(\d{1,2}\s+\w+\s+\d{4})",
+        r"Datum besluit:\s*(\d{1,2}\s+\w+\s+\d{4})",
+        r"\bop\s+(\d{1,2}\s+\w+\s+\d{4})\b[^.]{0,80}verleend",
+    ):
+        match = re.search(patroon, tekst, re.IGNORECASE)
+        if match:
+            iso = _nl_datum_naar_iso(match.group(1))
+            if iso:
+                return iso
+    return None
+
+
 def parse_body(html: str) -> dict | None:
-    """Leest de gestructureerde velden uit de tekst van een kamerverhuurvergunning.
-    Geeft None als het geen bruikbare per-adres vergunning blijkt (bv. toch een
-    beleidsstuk zonder Gebied/Adres)."""
+    """Leest de velden uit de tekst van een kamerverhuurvergunning. Dekt zowel het
+    gestructureerde format (2021+: 'Gebied:/Adres:/Postcode:/... aan N personen') als
+    de oudere vrije tekst (2019-2020: '... door maximaal vier personen voor de woning
+    met adres X, 3028 BN Rotterdam/Delfshaven'). Geeft None als het geen verleende
+    per-adres vergunning blijkt (bv. een beleidsstuk of enkel een aanvraag)."""
     tekst = _tekst(html)
+    if "verleend" not in tekst.lower():
+        return None  # geen verleende vergunning (bv. aanvraag/ontwerp/beleid)
 
     def zoek(patroon: str) -> str | None:
         match = re.search(patroon, tekst, re.IGNORECASE)
@@ -181,20 +224,29 @@ def parse_body(html: str) -> dict | None:
     gebied = zoek(r"Gebied:\s*(.*?)\s+Adres:")
     adres = zoek(r"Adres:\s*(.*?)\s+Postcode:")
     postcode = zoek(r"Postcode:\s*(\d{4}\s*[A-Z]{2})")
-    personen_ruw = zoek(r"aan\s+(\d+)\s+persone?n")
-    besluit = _nl_datum_naar_iso(zoek(r"Verzenddatum besluit:\s*(\d{1,2}\s+\w+\s+\d{4})"))
-    zaaknummer = zoek(r"Zaaknummer:\s*([\w./-]+)")
 
-    if not adres or not gebied:
+    if not adres:
+        # Vrije-tekst format: "... adres <straat nr>, <postcode> Rotterdam/<wijk>".
+        vrij = re.search(
+            r"adres\s+(.+?),\s*(\d{4}\s*[A-Z]{2})\s+Rotterdam(?:\s*[/-]\s*([\w'’.\- ]+?))?\s*[.\s]",
+            tekst,
+            re.IGNORECASE,
+        )
+        if vrij:
+            adres = vrij.group(1).strip()
+            postcode = postcode or vrij.group(2)
+            gebied = gebied or (vrij.group(3).strip() if vrij.group(3) else None)
+
+    if not adres:
         return None
 
     return {
         "gebied": gebied,
         "adres": adres,
         "postcode": postcode.replace(" ", "") if postcode else None,
-        "aantal_personen": int(personen_ruw) if personen_ruw else None,
-        "besluitdatum": besluit,
-        "zaaknummer": zaaknummer,
+        "aantal_personen": _aantal_personen(tekst),
+        "besluitdatum": _besluitdatum(tekst),
+        "zaaknummer": zoek(r"Zaaknummer:\s*([\w./-]+)"),
     }
 
 
@@ -254,8 +306,12 @@ def _verwerk_stub(stub: dict) -> None:
     try:
         geo = geocode_vrij(velden["adres"], "Rotterdam")
         stub["lat"], stub["lon"] = geo.lat, geo.lon
-        if not stub.get("gebied") and geo.rotterdam_wijk:
-            stub["gebied"] = geo.rotterdam_wijk
+        # Alleen als de bekendmaking zelf geen "Gebied" noemde (zeldzaam) - en dan
+        # het grovere CBS-wijkniveau, dat qua granulariteit aansluit bij het
+        # gemeente-"Gebied" (bv. "Delfshaven"), niet het fijnere buurtniveau, zodat
+        # de per-wijk-analyse consistent blijft.
+        if not stub.get("gebied") and geo.cbs_wijknaam:
+            stub["gebied"] = geo.cbs_wijknaam
     except GeocodeError:
         stub["lat"] = stub["lon"] = None
     except Exception as exc:  # noqa: BLE001

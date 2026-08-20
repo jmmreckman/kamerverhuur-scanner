@@ -310,11 +310,17 @@ Onder water:
 - De website leest de index via `/api/vergunningen`; het dashboard rekent alle aggregaten
   client-side uit, zodat de filters direct reageren.
 
-De per-adres vergunningen worden pas sinds ~2022 in dit gestructureerde format
-gepubliceerd, dus de grafieken beginnen daar (oudere jaren leveren weinig/geen treffers).
-De gepubliceerde datum is de **besluit-/publicatiedatum**, niet de (niet-gepubliceerde)
-aanvraagdatum. Deze laag/analyse is **Rotterdam-only** (Den Haag publiceert in een ander
-format).
+De parser dekt drie titel-/tekstformats die Rotterdam door de jaren heen gebruikte:
+`Vergunning kamerverhuur <adres>` met gestructureerde velden (2022+),
+`Verleende vergunning kamerbewoning <adres>` (2021, ook gestructureerd maar met "Datum
+besluit:"), en de oudere vrije tekst uit 2019-2020 ("… door maximaal *vier* personen voor
+de woning met adres X, 3028 BN Rotterdam/Delfshaven"). Daarmee loopt de data terug tot
+**~2019**, met het gros vanaf **medio 2021**. Vóór 2019 publiceerde Rotterdam geen losse
+per-adres kamerverhuurvergunningen in de officiële bekendmakingen, dus die zijn hier niet
+te achterhalen (ook niet via de gemeente-ArcGIS-kaart: die bevat alleen de samengevoegde
+50 m-zones, geen losse vergunningen met datum/adres). De getoonde datum is de **besluit-/
+publicatiedatum**, niet de (niet-gepubliceerde) aanvraagdatum. Deze laag/analyse is
+**Rotterdam-only** (Den Haag publiceert in een ander format).
 
 ## Beschikbaarheid-check (gratis, geen betaalde scraper)
 

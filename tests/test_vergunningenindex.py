@@ -34,6 +34,46 @@ def test_parse_body_zonder_adres_geeft_none():
     assert vi.parse_body("<p>Beleidsregel kamerbewoning zonder adres.</p>") is None
 
 
+# Oudere vrije-tekst format (2019-2020): geen Gebied:/Adres:-labels, getal als woord.
+_BODY_2019 = """
+<p>Het college maakt bekend dat zij op 20 mei 2019 de volgende vergunning heeft verleend
+(op basis van artikel 21 van de Huisvestingswet 2014). Vergunning voor kamerbewoning door
+maximaal vier personen voor de woning met adres Schiedamseweg Beneden 481 C, 3028 BN
+Rotterdam/Delfshaven. Zaaknummer: 109736-2019.</p>
+"""
+
+# 2021 gestructureerd, maar met "Datum besluit:" i.p.v. "Verzenddatum besluit:".
+_BODY_2021 = """
+<p>maakt bekend dat zij de volgende vergunning voor kamerbewoning heeft verleend.
+Gebied: Kralingen-Crooswijk Adres: Charlotte de Bourbonlaan 33B Postcode: 3062 GC
+Datum besluit: 17 augustus 2021 Zaaknummer: 437973-2021
+Activiteit: vergunning kamerverhuur aan 6 personen</p>
+"""
+
+
+def test_parse_body_vrije_tekst_2019():
+    velden = vi.parse_body(_BODY_2019)
+    assert velden["adres"] == "Schiedamseweg Beneden 481 C"
+    assert velden["postcode"] == "3028BN"
+    assert velden["gebied"] == "Delfshaven"
+    assert velden["aantal_personen"] == 4
+    assert velden["besluitdatum"] == "2019-05-20"
+
+
+def test_parse_body_datum_besluit_2021():
+    velden = vi.parse_body(_BODY_2021)
+    assert velden["gebied"] == "Kralingen-Crooswijk"
+    assert velden["adres"] == "Charlotte de Bourbonlaan 33B"
+    assert velden["aantal_personen"] == 6
+    assert velden["besluitdatum"] == "2021-08-17"
+
+
+def test_parse_body_aanvraag_zonder_verleend_geeft_none():
+    # Een aanvraag (nog niet verleend) mag niet als vergunning meetellen.
+    aanvraag = "<p>Aangevraagde omgevingsvergunning voor kamerbewoning. Adres: Teststraat 1 Postcode: 3000 AA</p>"
+    assert vi.parse_body(aanvraag) is None
+
+
 @pytest.mark.parametrize(
     "tekst,iso",
     [
