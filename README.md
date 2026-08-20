@@ -282,6 +282,40 @@ en `deploy/Caddyfile` in de hoofdbranch.
 `steenhub.nl`) aangemaakt worden bij je domeinregistrar — dat kan dit systeem niet voor
 je doen. Daarna regelt Caddy automatisch gratis HTTPS, net als bij de andere subdomeinen.
 
+## Vergunningen-laag & data-analyse
+
+Naast de kansen (te koop staande panden) kan de kaart-website ook **alle verleende
+kamerverhuurvergunningen** van Rotterdam tonen, uit de officiële bekendmakingen. Twee
+vinkjes bovenaan de filters: **"Toon kansen"** (je gewone kansenlijst, standaard aan) en
+**"Toon vergunningen"** (alle verleende vergunningen als aparte, geclusterde paarse laag).
+Klik op een vergunning voor adres, wijk, **aantal personen** waarvoor is verleend,
+besluitdatum, postcode, zaaknummer en een link naar de bekendmaking.
+
+De knop **"Data-analyse"** (in de kop) opent een dashboard met grafieken (kale inline-SVG,
+geen externe library): vergunningen **per wijk**, **per week/maand/jaar** (trend over de
+tijd — groeiend of gelijk gebleven), met filters op **wijk** (bv. inzoomen op Beverwaard)
+en **"afgelopen X dagen"** (bv. hoeveel er de laatste 45 dagen zijn verleend).
+
+Onder water:
+- `rotterdam_scanner/vergunningenindex.py` bouwt de dataset op: het inventariseert alle
+  per-adres `Vergunning kamerverhuur <adres>`-bekendmakingen (KOOP SRU), haalt per stuk de
+  gestructureerde tekst op (via `repository.overheid.nl`), leest Gebied/adres/postcode/
+  aantal personen/besluitdatum/zaaknummer uit en geocodeert het adres (PDOK) voor de
+  kaartmarker. Opgeslagen in `data/vergunningen_index.json`.
+- De **`vergunningen-index`-service** (`scripts/vergunningen_index_bijwerken.py`, zie
+  `deploy/docker-compose.yml`) doet dit zelf-plannend: eenmalig het hele archief opbouwen
+  (begrensde batches, gespreid — de eerste keer duurt dat even), daarna één lichte
+  bijwerk-run per dag voor nieuwe vergunningen. Deze service stuurt niemand mail; een
+  herstart is onschadelijk.
+- De website leest de index via `/api/vergunningen`; het dashboard rekent alle aggregaten
+  client-side uit, zodat de filters direct reageren.
+
+De per-adres vergunningen worden pas sinds ~2022 in dit gestructureerde format
+gepubliceerd, dus de grafieken beginnen daar (oudere jaren leveren weinig/geen treffers).
+De gepubliceerde datum is de **besluit-/publicatiedatum**, niet de (niet-gepubliceerde)
+aanvraagdatum. Deze laag/analyse is **Rotterdam-only** (Den Haag publiceert in een ander
+format).
+
 ## Beschikbaarheid-check (gratis, geen betaalde scraper)
 
 Elke dag om 08:00 (`scripts/dagelijkse_beschikbaarheid_check.py`,

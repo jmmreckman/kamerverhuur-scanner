@@ -583,3 +583,61 @@ def test_bekendmakingen_check_roept_pipeline_aan(app_client, monkeypatch):
     resp = app_client.post("/bekendmakingen/check")
     assert resp.status_code == 200
     assert resp.get_json()["aantal_nieuw"] == 2
+
+
+# --- Vergunningenlaag + data-analyse ---
+
+
+def _zet_vergunningen_index(tmp_path, vergunningen):
+    import json
+    pad = tmp_path / "vergunningen_index.json"
+    data = {
+        "meta": {"volledige_enumeratie_gedaan": True, "bijgewerkt": "2026-08-20T07:00:00"},
+        "vergunningen": {v["publicatie_id"]: v for v in vergunningen},
+    }
+    pad.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_api_vergunningen_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "fout"})
+    resp = app_client.get("/api/vergunningen")
+    assert resp.status_code == 302
+
+
+def test_api_vergunningen_geeft_alleen_bruikbare(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_vergunningen_index(tmp_path, [
+        {"publicatie_id": "gmb-1", "verwerkt": True, "bruikbaar": True, "adres": "A-straat 1",
+         "gebied": "Delfshaven", "aantal_personen": 3, "datum": "2026-08-10",
+         "besluitdatum": "2026-08-08", "zaaknummer": "1-2026", "url": "u", "lat": 51.9, "lon": 4.45},
+        {"publicatie_id": "gmb-2", "verwerkt": True, "bruikbaar": False, "adres": None},
+    ])
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.get("/api/vergunningen")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["vergunningen"]) == 1
+    assert data["vergunningen"][0]["adres"] == "A-straat 1"
+    assert data["vergunningen"][0]["aantal_personen"] == 3
+    assert data["compleet"] is True
+
+
+def test_api_vergunningen_zonder_index_geeft_lege_lijst(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/api/vergunningen")
+    assert resp.status_code == 200
+    assert resp.get_json()["vergunningen"] == []
+
+
+def test_data_analyse_pagina_vereist_login(app_client):
+    resp = app_client.get("/data-analyse")
+    assert resp.status_code == 302
+
+
+def test_data_analyse_pagina_rendert(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/data-analyse")
+    assert resp.status_code == 200
+    assert b"Data-analyse" in resp.data

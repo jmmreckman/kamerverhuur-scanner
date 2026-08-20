@@ -16,7 +16,9 @@ from functools import wraps
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
-from rotterdam_scanner import den_haag, pipeline
+from pathlib import Path
+
+from rotterdam_scanner import den_haag, pipeline, vergunningenindex
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
@@ -255,6 +257,46 @@ def create_app(config: Config | None = None) -> Flask:
         # Funda-scan) en mailt bij nieuwe treffers.
         samenvatting = pipeline.controleer_bekendmakingen(config)
         return jsonify(samenvatting)
+
+    def _vergunningen_index_pad() -> Path:
+        return Path(config.state_path).parent / "vergunningen_index.json"
+
+    @app.route("/api/vergunningen")
+    @login_required
+    def api_vergunningen():
+        # Alle bruikbare kamerverhuurvergunningen uit de index (gevuld door de
+        # 'vergunningen-index'-service). Voedt zowel de "Toon vergunningen"-
+        # kaartlaag als het data-analyse-dashboard; het dashboard rekent zelf de
+        # aggregaten uit deze lijst (klein genoeg, en zo blijven de filters
+        # 'afgelopen X dagen' / per wijk interactief zonder extra server-calls).
+        index = vergunningenindex.VergunningIndex(_vergunningen_index_pad())
+        vergunningen = [
+            {
+                "publicatie_id": v.get("publicatie_id"),
+                "adres": v.get("adres"),
+                "gebied": v.get("gebied"),
+                "postcode": v.get("postcode"),
+                "aantal_personen": v.get("aantal_personen"),
+                "datum": v.get("datum"),
+                "besluitdatum": v.get("besluitdatum"),
+                "zaaknummer": v.get("zaaknummer"),
+                "url": v.get("url"),
+                "lat": v.get("lat"),
+                "lon": v.get("lon"),
+            }
+            for v in index.bruikbare()
+        ]
+        return jsonify({
+            "vergunningen": vergunningen,
+            "bijgewerkt": index.meta.get("bijgewerkt"),
+            "compleet": index.meta.get("volledige_enumeratie_gedaan", False)
+            and not index.onverwerkt(),
+        })
+
+    @app.route("/data-analyse")
+    @login_required
+    def data_analyse():
+        return render_template("data_analyse.html", gebruiker=session["gebruiker"])
 
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
     @login_required

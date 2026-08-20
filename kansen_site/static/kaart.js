@@ -19,6 +19,9 @@ const filterSchakelgeldEl = document.getElementById("filter-schakelgeld");
 const filterSorteerEl = document.getElementById("filter-sorteer");
 const verversKnop = document.getElementById("ververs-knop");
 const bekendmakingenKnop = document.getElementById("bekendmakingen-knop");
+const toonKansenEl = document.getElementById("toon-kansen");
+const toonVergunningenEl = document.getElementById("toon-vergunningen");
+const vergunningenStatusEl = document.getElementById("vergunningen-status");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
 const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
@@ -240,6 +243,7 @@ function markerIcoon(kans) {
 function renderMarkers(kansen) {
   markerLaag.clearLayers();
   markerPerId.clear();
+  if (toonKansenEl && !toonKansenEl.checked) return;
   for (const kans of kansen) {
     const icoon = markerIcoon(kans);
     const marker = (icoon ? L.marker([kans.lat, kans.lon], { icon: icoon }) : L.marker([kans.lat, kans.lon])).bindPopup(bouwPopup(kans));
@@ -343,6 +347,83 @@ async function laadKansen() {
   alleKansen = await resp.json();
   vulWijkFilter(alleKansen);
   renderAlles();
+}
+
+// --- Vergunningenlaag (alle verleende kamerverhuurvergunningen, geclusterd) ---
+
+const vergunningenLaag = L.markerClusterGroup
+  ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 })
+  : L.layerGroup();
+let vergunningenGeladen = false;
+let vergunningenData = [];
+
+function bouwVergunningPopup(v) {
+  const div = document.createElement("div");
+  div.className = "popup-inhoud popup-vergunning";
+  const personen = v.aantal_personen ? `${v.aantal_personen} personen` : "aantal onbekend";
+  const datum = v.besluitdatum || v.datum || "onbekend";
+  div.innerHTML = `
+    <span class="adres">${escapeHtml(v.adres || "onbekend adres")}</span>
+    <span class="vergunning-badge">vergunning</span><br>
+    ${v.gebied ? "Wijk: " + escapeHtml(v.gebied) + "<br>" : ""}
+    Verleend voor: <strong>${escapeHtml(personen)}</strong><br>
+    Besluitdatum: ${escapeHtml(datum)}<br>
+    ${v.postcode ? "Postcode: " + escapeHtml(v.postcode) + "<br>" : ""}
+    ${v.zaaknummer ? "Zaaknummer: " + escapeHtml(v.zaaknummer) + "<br>" : ""}
+    ${v.url ? `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">Bekijk bekendmaking &rarr;</a>` : ""}
+  `;
+  return div;
+}
+
+function renderVergunningen() {
+  vergunningenLaag.clearLayers();
+  const punten = vergunningenData.filter((v) => v.lat != null && v.lon != null);
+  const markers = punten.map((v) =>
+    L.circleMarker([v.lat, v.lon], {
+      radius: 6,
+      color: "#7b1fa2",
+      weight: 1,
+      fillColor: "#ab47bc",
+      fillOpacity: 0.8,
+    }).bindPopup(bouwVergunningPopup(v))
+  );
+  if (vergunningenLaag.addLayers) {
+    vergunningenLaag.addLayers(markers);
+  } else {
+    markers.forEach((m) => m.addTo(vergunningenLaag));
+  }
+}
+
+async function laadVergunningen() {
+  if (vergunningenGeladen) return;
+  vergunningenStatusEl.textContent = "Vergunningen laden...";
+  try {
+    const resp = await fetch("/api/vergunningen");
+    const data = await resp.json();
+    vergunningenData = data.vergunningen || [];
+    vergunningenGeladen = true;
+    renderVergunningen();
+    const opKaart = vergunningenData.filter((v) => v.lat != null).length;
+    const opmerking = data.compleet ? "" : " (index nog in opbouw)";
+    vergunningenStatusEl.textContent = `${vergunningenData.length} vergunningen, ${opKaart} op de kaart${opmerking}.`;
+  } catch (err) {
+    vergunningenStatusEl.textContent = "Vergunningen laden mislukt.";
+    toonVergunningenEl.checked = false;
+  }
+}
+
+if (toonKansenEl) {
+  toonKansenEl.addEventListener("change", renderAlles);
+}
+if (toonVergunningenEl) {
+  toonVergunningenEl.addEventListener("change", async () => {
+    if (toonVergunningenEl.checked) {
+      await laadVergunningen();
+      if (toonVergunningenEl.checked) kaart.addLayer(vergunningenLaag);
+    } else {
+      kaart.removeLayer(vergunningenLaag);
+    }
+  });
 }
 
 for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl, filterZoekEl,

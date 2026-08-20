@@ -6,6 +6,8 @@
   <title>Kansen - Rotterdamse kamerverhuur</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
 </head>
 <body>
@@ -16,6 +18,7 @@
       <button id="ververs-knop" type="button">Ververs nu</button>
       <button id="bekendmakingen-knop" type="button" class="link-knop" title="Check nu of er nieuwe kamerverhuurvergunningen (officiële bekendmakingen) binnen 50 m van je favorieten zijn afgegeven">Vergunningen checken</button>
       <button id="zijbalk-knop" type="button" class="link-knop">Toon lijst</button>
+      <a href="{{ url_for('data_analyse') }}" class="link-knop">Data-analyse</a>
       <a href="{{ url_for('handmatig_toevoegen') }}" class="link-knop">Toevoegen</a>
       <a href="{{ url_for('verwijderd') }}" class="link-knop">Verwijderd</a>
       <span class="muted">{{ gebruiker }}</span>
@@ -27,6 +30,9 @@
     <aside id="zijbalk" class="zijbalk">
       <button id="zijbalk-sluiten-knop" type="button" class="link-knop zijbalk-sluiten">&larr; Terug naar kaart</button>
       <div class="filters">
+        <label class="checkbox-filter"><input type="checkbox" id="toon-kansen" checked> Toon kansen</label>
+        <label class="checkbox-filter"><input type="checkbox" id="toon-vergunningen"> Toon vergunningen (alle verleende)</label>
+        <span id="vergunningen-status" class="muted"></span>
         <label>Stad
           <select id="filter-stad">
             <option value="">Alle steden</option>
@@ -76,6 +82,7 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="{{ url_for('static', filename='kaart.js') }}"></script>
 </body>
 </html>

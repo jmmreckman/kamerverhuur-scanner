@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data-analyse - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Data-analyse</h1>
+    <div class="topbar-acties">
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <main class="content analyse">
+    <h2>Kamerverhuurvergunningen Rotterdam</h2>
+    <p class="muted">
+      Alle verleende kamerverhuurvergunningen uit de officiële bekendmakingen. Data uit de
+      vergunningen-index (wordt op de achtergrond opgebouwd en dagelijks bijgewerkt).
+      <span id="meta"></span>
+    </p>
+
+    <div class="analyse-filters">
+      <label>Wijk
+        <select id="wijk-select"><option value="">Alle wijken</option></select>
+      </label>
+      <label>Afgelopen (dagen)
+        <input type="number" id="dagen-input" min="1" step="1" placeholder="alles">
+      </label>
+      <label>Groeperen op
+        <select id="periode-select">
+          <option value="maand" selected>Maand</option>
+          <option value="week">Week</option>
+          <option value="jaar">Jaar</option>
+        </select>
+      </label>
+      <button type="button" id="reset-knop" class="link-knop">Reset</button>
+    </div>
+
+    <div id="kerncijfers" class="kerncijfers"></div>
+
+    <section class="grafiek-blok">
+      <h3 id="trend-titel">Vergunningen per maand</h3>
+      <div id="trend-grafiek" class="grafiek"></div>
+    </section>
+
+    <section class="grafiek-blok">
+      <h3>Vergunningen per wijk</h3>
+      <div id="wijk-grafiek" class="grafiek"></div>
+    </section>
+
+    <p id="laad-status" class="muted">Laden...</p>
+  </main>
+
+  <script src="{{ url_for('static', filename='data_analyse.js') }}"></script>
+</body>
+</html>
