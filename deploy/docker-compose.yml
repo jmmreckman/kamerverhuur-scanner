@@ -134,6 +134,23 @@ services:
       - fundazoeker-data:/app/data
     command: ["python3", "-m", "scripts.dagelijkse_beschikbaarheid_check"]
 
+  # Bouwt en onderhoudt de volledige index van Rotterdamse kamerverhuur-
+  # vergunningen (officiële bekendmakingen) voor de "Toon vergunningen"-kaartlaag
+  # en het data-analyse-dashboard op kansen.steenhub.nl. Zelfde image/branch/
+  # volume als fundazoeker; werkt zelf-plannend (eenmalige backfill van het
+  # archief, daarna dagelijks bijwerken). Zie fundazoeker's README ("Vergunningen-
+  # laag & data-analyse").
+  vergunningen-index:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: vergunningen-index
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["python3", "-m", "scripts.vergunningen_index_bijwerken"]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
