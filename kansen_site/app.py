@@ -274,7 +274,9 @@ def create_app(config: Config | None = None) -> Flask:
             {
                 "publicatie_id": v.get("publicatie_id"),
                 "adres": v.get("adres"),
-                "gebied": v.get("gebied"),
+                # Teruggebracht naar één van de 14 officiële Rotterdamse gebieden,
+                # zodat de per-wijk-analyse niet uiteenvalt in tientallen buurten.
+                "gebied": vergunningenindex.normaliseer_gebied(v.get("gebied")),
                 "postcode": v.get("postcode"),
                 "aantal_personen": v.get("aantal_personen"),
                 "datum": v.get("datum"),

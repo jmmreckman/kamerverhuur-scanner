@@ -63,8 +63,10 @@ _KANDIDAAT_RE = re.compile(r"kamer(?:verhuur|bewoning)", re.IGNORECASE)
 # Ophogen zodra de enumeratie-filter (_KANDIDAAT_RE/_UITSLUIT_RE) of parse_body
 # wijzigt: dan doet werk_bij één keer een volledige her-inventarisatie van het
 # archief én probeert het eerder mislukte parses opnieuw met de nieuwe parser.
-# v2 = verbreed naar de oudere formats (2019-2021), zie git-geschiedenis.
-_ENUMERATIE_VERSIE = 2
+# v2 = verbreed naar de oudere formats (2019-2021). v3 = adres uit de titel als
+# terugval + losser "Gebied:" (dekt de per-adres 'bestaande situatie'-grants van 2021
+# die in de body geen 'Adres:' hebben). Zie git-geschiedenis.
+_ENUMERATIE_VERSIE = 3
 
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
@@ -213,12 +215,39 @@ def _besluitdatum(tekst: str) -> str | None:
     return None
 
 
-def parse_body(html: str) -> dict | None:
-    """Leest de velden uit de tekst van een kamerverhuurvergunning. Dekt zowel het
-    gestructureerde format (2021+: 'Gebied:/Adres:/Postcode:/... aan N personen') als
-    de oudere vrije tekst (2019-2020: '... door maximaal vier personen voor de woning
-    met adres X, 3028 BN Rotterdam/Delfshaven'). Geeft None als het geen verleende
-    per-adres vergunning blijkt (bv. een beleidsstuk of enkel een aanvraag)."""
+# Adres uit de titel halen: "(Verleende) vergunning (voor) kamer(verhuur|bewoning)
+# <adres>" of het kale "kamerverhuur <adres>" (2019). Terugval voor bekendmakingen
+# die het adres alleen in de titel zetten - o.a. de per-adres "bestaande situatie
+# onder de overgangsbepaling"-grants uit 2021, die in de body wél een "Gebied:" maar
+# géén "Adres:" hebben.
+_TITEL_ADRES_RE = re.compile(
+    r"^\s*(?:verleende?\s+)?(?:vergunning\s+)?(?:voor\s+)?kamer(?:verhuur|bewoning)\s+(?P<adres>.+?)\s*$",
+    re.IGNORECASE,
+)
+_TITEL_SUFFIX_RE = re.compile(r"\s*[-–]\s*(rectificatie|correctie|herstel).*$", re.IGNORECASE)
+
+
+def _adres_uit_titel(titel: str | None) -> str | None:
+    if not titel:
+        return None
+    match = _TITEL_ADRES_RE.match(titel)
+    if not match:
+        return None
+    adres = _TITEL_SUFFIX_RE.sub("", match.group("adres")).strip()
+    # Geen echt adres (bv. de bulk "onder de overgangsbepaling ..."-titel) -> negeren.
+    if not adres or adres.lower().startswith(("onder de", "aanvragen")):
+        return None
+    return adres
+
+
+def parse_body(html: str, titel: str | None = None) -> dict | None:
+    """Leest de velden uit de tekst van een kamerverhuurvergunning. Dekt het
+    gestructureerde format (2021+: 'Gebied:/Adres:/Postcode:/... aan N personen'), de
+    oudere vrije tekst (2019-2020: '... door maximaal vier personen voor de woning met
+    adres X, 3028 BN Rotterdam/Delfshaven') én de per-adres 'bestaande situatie'-grants
+    (2021) die in de body wél 'Gebied:' maar geen 'Adres:' hebben - daar komt het adres
+    uit de meegegeven titel. Geeft None als het geen verleende per-adres vergunning
+    blijkt (bv. een beleidsstuk of enkel een aanvraag)."""
     tekst = _tekst(html)
     if "verleend" not in tekst.lower():
         return None  # geen verleende vergunning (bv. aanvraag/ontwerp/beleid)
@@ -227,7 +256,9 @@ def parse_body(html: str) -> dict | None:
         match = re.search(patroon, tekst, re.IGNORECASE)
         return match.group(1).strip() if match else None
 
-    gebied = zoek(r"Gebied:\s*(.*?)\s+Adres:")
+    # "Gebied:" loopt door tot het volgende label - niet elk format heeft "Adres:"
+    # er direct achter (soms "Datum besluit:"/"Dossiernummer:").
+    gebied = zoek(r"Gebied:\s*(.*?)\s+(?:Adres|Postcode|Datum besluit|Verzenddatum|Dossiernummer|Zaaknummer|Activiteit):")
     adres = zoek(r"Adres:\s*(.*?)\s+Postcode:")
     postcode = zoek(r"Postcode:\s*(\d{4}\s*[A-Z]{2})")
 
@@ -242,6 +273,10 @@ def parse_body(html: str) -> dict | None:
             adres = vrij.group(1).strip()
             postcode = postcode or vrij.group(2)
             gebied = gebied or (vrij.group(3).strip() if vrij.group(3) else None)
+
+    if not adres:
+        # Laatste terugval: het adres uit de titel (body noemt alleen "Gebied:").
+        adres = _adres_uit_titel(titel)
 
     if not adres:
         return None
@@ -301,7 +336,7 @@ def _verwerk_stub(stub: dict) -> None:
         stub["verwerkt"] = False  # netwerkfout: volgende run opnieuw proberen
         return
 
-    velden = parse_body(html)
+    velden = parse_body(html, stub.get("titel"))
     if velden is None:
         return
 
@@ -373,6 +408,99 @@ def werk_bij(index_path: Path, batch: int = 200, vandaag: date | None = None) ->
 
 def _iso_maand(datum_iso: str) -> str | None:
     return datum_iso[:7] if datum_iso and len(datum_iso) >= 7 else None
+
+
+# De 14 officiële Rotterdamse gebieden. De bekendmakingen noemen in "Gebied:" meestal
+# al één hiervan (soms als "Gebied/Wijk", bv. "Centrum/Stadsdriehoek"), maar de
+# geocode-fallback en enkele oudere teksten leveren fijnere CBS-wijknamen. Daarom
+# brengen we elke waarde terug naar één van deze 14 (zie normaliseer_gebied), zodat
+# de per-wijk-analyse niet uiteenvalt in tientallen losse buurten.
+GEBIEDEN = [
+    "Centrum", "Charlois", "Delfshaven", "Feijenoord", "Hillegersberg-Schiebroek",
+    "Hoek van Holland", "Hoogvliet", "IJsselmonde", "Kralingen-Crooswijk", "Noord",
+    "Overschie", "Pernis", "Prins Alexander", "Rozenburg",
+]
+
+
+def _gebied_sleutel(tekst: str) -> str:
+    """Normaliseert een gebied-/wijknaam tot een vergelijkbare sleutel: kleine
+    letters, alleen a-z/0-9, losse woorden met één spatie ('Kralingen-Crooswijk' ->
+    'kralingen crooswijk', "'s-Gravenland" -> 's gravenland')."""
+    return re.sub(r"[^a-z0-9]+", " ", tekst.lower()).strip()
+
+
+_GEBIED_CANON = {_gebied_sleutel(g): g for g in GEBIEDEN}
+
+# CBS-wijk/buurt -> officieel gebied. Alleen nodig voor waarden die geen gebiednaam
+# zijn (geocode-fallback of "Gebied/Wijk"-tweede-deel). Niet uitputtend; onbekende
+# waarden vallen op "Overig" (zie normaliseer_gebied) i.p.v. verkeerd gegokt.
+_WIJK_NAAR_GEBIED = {_gebied_sleutel(w): g for w, g in {
+    # Centrum
+    "Stadsdriehoek": "Centrum", "Cool": "Centrum", "Oude Westen": "Centrum",
+    "Nieuwe Werk": "Centrum", "Dijkzigt": "Centrum", "CS-kwartier": "Centrum",
+    # Delfshaven
+    "Bospolder": "Delfshaven", "Tussendijken": "Delfshaven", "Spangen": "Delfshaven",
+    "Nieuwe Westen": "Delfshaven", "Middelland": "Delfshaven", "Oud-Mathenesse": "Delfshaven",
+    "Witte Dorp": "Delfshaven", "Schiemond": "Delfshaven",
+    # Noord
+    "Agniesebuurt": "Noord", "Provenierswijk": "Noord", "Oude Noorden": "Noord",
+    "Liskwartier": "Noord", "Bergpolder": "Noord", "Blijdorp": "Noord",
+    "Blijdorpsepolder": "Noord",
+    # Kralingen-Crooswijk
+    "Rubroek": "Kralingen-Crooswijk", "Nieuw Crooswijk": "Kralingen-Crooswijk",
+    "Oud Crooswijk": "Kralingen-Crooswijk", "Crooswijk": "Kralingen-Crooswijk",
+    "Kralingen-West": "Kralingen-Crooswijk", "Kralingen-Oost": "Kralingen-Crooswijk",
+    "Kralingen": "Kralingen-Crooswijk", "Kralingse Bos": "Kralingen-Crooswijk",
+    "De Esch": "Kralingen-Crooswijk", "Struisenburg": "Kralingen-Crooswijk",
+    # Feijenoord
+    "Noordereiland": "Feijenoord", "Kop van Zuid": "Feijenoord",
+    "Kop van Zuid-Entrepot": "Feijenoord", "Entrepot": "Feijenoord",
+    "Afrikaanderwijk": "Feijenoord", "Bloemhof": "Feijenoord", "Hillesluis": "Feijenoord",
+    "Vreewijk": "Feijenoord", "Katendrecht": "Feijenoord",
+    # IJsselmonde
+    "Oud-IJsselmonde": "IJsselmonde", "Lombardijen": "IJsselmonde",
+    "Groot-IJsselmonde": "IJsselmonde", "Beverwaard": "IJsselmonde",
+    "Reyeroord": "IJsselmonde", "Sportdorp": "IJsselmonde", "Hordijkerveld": "IJsselmonde",
+    # Charlois
+    "Tarwewijk": "Charlois", "Carnisse": "Charlois", "Zuidwijk": "Charlois",
+    "Pendrecht": "Charlois", "Zuidplein": "Charlois", "Wielewaal": "Charlois",
+    "Heijplaat": "Charlois", "Oud-Charlois": "Charlois", "Charlois Zuidrand": "Charlois",
+    # Prins Alexander
+    "Het Lage Land": "Prins Alexander", "Lage Land": "Prins Alexander",
+    "Prinsenland": "Prins Alexander", "'s-Gravenland": "Prins Alexander",
+    "Zevenkamp": "Prins Alexander", "Ommoord": "Prins Alexander",
+    "Oosterflank": "Prins Alexander", "Nesselande": "Prins Alexander",
+    "Kralingseveer": "Prins Alexander",
+    # Hillegersberg-Schiebroek
+    "Schiebroek": "Hillegersberg-Schiebroek", "Hillegersberg-Zuid": "Hillegersberg-Schiebroek",
+    "Hillegersberg-Noord": "Hillegersberg-Schiebroek", "Hillegersberg": "Hillegersberg-Schiebroek",
+    "Terbregge": "Hillegersberg-Schiebroek", "Molenlaankwartier": "Hillegersberg-Schiebroek",
+    "110-Morgen": "Hillegersberg-Schiebroek",
+    # Overschie
+    "Kleinpolder": "Overschie", "Zestienhoven": "Overschie", "Noord-Kethel": "Overschie",
+    "Schieveen": "Overschie",
+    # Hoogvliet
+    "Hoogvliet-Noord": "Hoogvliet", "Hoogvliet-Zuid": "Hoogvliet",
+}.items()}
+
+
+def normaliseer_gebied(waarde) -> str:
+    """Brengt een gebied-/wijkwaarde terug naar één van de 14 officiële gebieden.
+    Verwerkt "Gebied/Wijk"-combinaties (neemt het gebied), losse wijknamen (via de
+    map hierboven) en spelling-/koppeltekenvarianten. Onbekend -> "Overig"; leeg ->
+    "Onbekend"."""
+    if not waarde or not str(waarde).strip():
+        return "Onbekend"
+    delen = [d for d in str(waarde).split("/") if d.strip()]
+    for deel in delen:
+        canon = _GEBIED_CANON.get(_gebied_sleutel(deel))
+        if canon:
+            return canon
+    for deel in delen:
+        gebied = _WIJK_NAAR_GEBIED.get(_gebied_sleutel(deel))
+        if gebied:
+            return gebied
+    return "Overig"
 
 
 def analyse(vergunningen: list[dict], vandaag: date | None = None, dagen: int | None = None) -> dict:

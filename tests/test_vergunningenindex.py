@@ -68,6 +68,39 @@ def test_parse_body_datum_besluit_2021():
     assert velden["besluitdatum"] == "2021-08-17"
 
 
+# 2021 "bestaande situatie"-grant: body heeft wél "Gebied:" maar géén "Adres:";
+# het adres staat alleen in de titel.
+_BODY_2021_TITELADRES = """
+<p>Het college maakt bekend dat zij de volgende vergunning voor kamerbewoning heeft verleend
+voor maximaal 3 personen voor een bestaande situatie van kamerbewoning onder de overgangsbepaling.
+Gebied: Delfshaven Datum besluit: 4 november 2021 Dossiernummer: 57944</p>
+"""
+
+
+def test_parse_body_adres_uit_titel_als_body_geen_adres_heeft():
+    velden = vi.parse_body(_BODY_2021_TITELADRES, "Verleende vergunning kamerbewoning Osseweistraat 38B")
+    assert velden["adres"] == "Osseweistraat 38B"
+    assert velden["gebied"] == "Delfshaven"
+    assert velden["aantal_personen"] == 3
+    assert velden["besluitdatum"] == "2021-11-04"
+
+
+def test_parse_body_zonder_adres_en_zonder_titel_geeft_none():
+    assert vi.parse_body(_BODY_2021_TITELADRES) is None
+
+
+@pytest.mark.parametrize("titel,verwacht", [
+    ("Vergunning kamerverhuur Sint-Jacobstraat 99", "Sint-Jacobstraat 99"),
+    ("Verleende vergunning kamerbewoning Osseweistraat 38B", "Osseweistraat 38B"),
+    ("verleende vergunning voor kamerbewoning Bergweg 183", "Bergweg 183"),
+    ("kamerverhuur Schiedamseweg Beneden 481C", "Schiedamseweg Beneden 481C"),
+    ("Vergunning kamerverhuur Zuidhoek 101A - Rectificatie", "Zuidhoek 101A"),
+    ("Vergunning kamerbewoning onder de overgangsbepaling voor bestaande situaties", None),
+])
+def test_adres_uit_titel(titel, verwacht):
+    assert vi._adres_uit_titel(titel) == verwacht
+
+
 def test_parse_body_aanvraag_zonder_verleend_geeft_none():
     # Een aanvraag (nog niet verleend) mag niet als vergunning meetellen.
     aanvraag = "<p>Aangevraagde omgevingsvergunning voor kamerbewoning. Adres: Teststraat 1 Postcode: 3000 AA</p>"
@@ -181,3 +214,29 @@ def test_analyse_aggregeert_en_filtert_op_dagen():
     recent = vi.analyse(vergunningen, vandaag=date(2026, 8, 20), dagen=30)
     assert recent["totaal"] == 2
     assert recent["per_wijk"] == {"Delfshaven": 2}
+
+
+@pytest.mark.parametrize("waarde,verwacht", [
+    ("Delfshaven", "Delfshaven"),
+    ("Kralingen-Crooswijk", "Kralingen-Crooswijk"),
+    ("kralingen crooswijk", "Kralingen-Crooswijk"),   # spelling/koppelteken
+    ("IJsselmonde", "IJsselmonde"),
+    ("Centrum/Stadsdriehoek", "Centrum"),             # gebied/wijk -> gebied
+    ("Nieuwe Westen", "Delfshaven"),                   # cbs-wijk -> gebied
+    ("Beverwaard", "IJsselmonde"),
+    ("Carnisse", "Charlois"),
+    ("'s-Gravenland", "Prins Alexander"),
+    ("Schiebroek", "Hillegersberg-Schiebroek"),
+    ("", "Onbekend"),
+    (None, "Onbekend"),
+    ("Onbestaandiets", "Overig"),
+])
+def test_normaliseer_gebied(waarde, verwacht):
+    assert vi.normaliseer_gebied(waarde) == verwacht
+
+
+def test_normaliseer_gebied_dekt_14_gebieden():
+    # Elk officieel gebied moet één-op-één op zichzelf normaliseren.
+    for g in vi.GEBIEDEN:
+        assert vi.normaliseer_gebied(g) == g
+    assert len(vi.GEBIEDEN) == 14

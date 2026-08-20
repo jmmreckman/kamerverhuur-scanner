@@ -310,7 +310,15 @@ Onder water:
   per-adres `Vergunning kamerverhuur <adres>`-bekendmakingen (KOOP SRU), haalt per stuk de
   gestructureerde tekst op (via `repository.overheid.nl`), leest Gebied/adres/postcode/
   aantal personen/besluitdatum/zaaknummer uit en geocodeert het adres (PDOK) voor de
-  kaartmarker. Opgeslagen in `data/vergunningen_index.json`.
+  kaartmarker. Opgeslagen in `data/vergunningen_index.json`. Het adres komt uit de body
+  óf — voor de 2021 "bestaande situatie"-grants die in de body alleen een `Gebied:` maar
+  geen `Adres:` hebben — uit de titel. De wijk wordt genormaliseerd naar één van de
+  **14 officiële Rotterdamse gebieden** (`normaliseer_gebied`), zodat losse CBS-buurten
+  niet als aparte "wijk" in de analyse verschijnen.
+- De index heeft een `enumeratie_versie`: bij een parser-/filterwijziging wordt die
+  opgehoogd, waarna de indexer één keer het hele archief opnieuw inventariseert en eerder
+  niet-bruikbare publicaties opnieuw probeert met de nieuwe parser (geen handmatige
+  migratie nodig).
 - De **`vergunningen-index`-service** (`scripts/vergunningen_index_bijwerken.py`, zie
   `deploy/docker-compose.yml`) doet dit zelf-plannend: eenmalig het hele archief opbouwen
   (begrensde batches, gespreid — de eerste keer duurt dat even), daarna één lichte
