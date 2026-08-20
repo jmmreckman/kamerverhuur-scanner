@@ -60,6 +60,12 @@ _UITSLUIT_RE = re.compile(
 # body-parse filtert de niet-per-adres-treffers er daarna uit.
 _KANDIDAAT_RE = re.compile(r"kamer(?:verhuur|bewoning)", re.IGNORECASE)
 
+# Ophogen zodra de enumeratie-filter (_KANDIDAAT_RE/_UITSLUIT_RE) of parse_body
+# wijzigt: dan doet werk_bij één keer een volledige her-inventarisatie van het
+# archief én probeert het eerder mislukte parses opnieuw met de nieuwe parser.
+# v2 = verbreed naar de oudere formats (2019-2021), zie git-geschiedenis.
+_ENUMERATIE_VERSIE = 2
+
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
     "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
@@ -326,10 +332,19 @@ def werk_bij(index_path: Path, batch: int = 200, vandaag: date | None = None) ->
     vandaag = vandaag or date.today()
     index = VergunningIndex(index_path)
 
-    if not index.meta.get("volledige_enumeratie_gedaan"):
-        logger.info("Eenmalige volledige inventarisatie van het vergunningen-archief...")
+    if index.meta.get("enumeratie_versie") != _ENUMERATIE_VERSIE:
+        # Eerste run, of het enumeratie-/parse-filter is gewijzigd: het hele archief
+        # (opnieuw) inventariseren. Nieuwe titels worden als stub toegevoegd; eerder
+        # als "niet bruikbaar" afgeschreven publicaties krijgen een herkansing met de
+        # nieuwe parser (verwerkt terug op False). Bestaande, wél bruikbare records
+        # blijven ongemoeid (setdefault overschrijft niet).
+        logger.info("Volledige (her)inventarisatie van het archief (enumeratie-versie %s)...", _ENUMERATIE_VERSIE)
         for pid, stub in enumereer_stubs().items():
             index.vergunningen.setdefault(pid, stub)
+        for stub in index.vergunningen.values():
+            if stub.get("verwerkt") and not stub.get("bruikbaar"):
+                stub["verwerkt"] = False
+        index.meta["enumeratie_versie"] = _ENUMERATIE_VERSIE
         index.meta["volledige_enumeratie_gedaan"] = True
     else:
         # Dagelijkse bijwerking: alleen recente publicaties opzoeken.

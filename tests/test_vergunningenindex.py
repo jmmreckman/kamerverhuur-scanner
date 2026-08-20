@@ -133,6 +133,38 @@ def test_werk_bij_verwerkt_batch_en_is_resumable(tmp_path, monkeypatch):
     assert voortgang2["compleet"] is True
 
 
+def test_werk_bij_herinventariseert_bij_versiewijziging(tmp_path, monkeypatch):
+    # Simuleer een index gebouwd met een oudere enumeratie-versie: één publicatie is
+    # eerder als "niet bruikbaar" afgeschreven. Na een versiewijziging moet die een
+    # herkansing krijgen (verwerkt terug op False) en de versie worden bijgewerkt.
+    import json
+
+    index_path = tmp_path / "vergunningen_index.json"
+    index_path.write_text(json.dumps({
+        "meta": {"volledige_enumeratie_gedaan": True, "enumeratie_versie": 1},
+        "vergunningen": {
+            "gmb-oud-1": {"publicatie_id": "gmb-oud-1", "titel": "Vergunning kamerverhuur X 1",
+                          "html_url": "u", "verwerkt": True, "bruikbaar": False},
+        },
+    }), encoding="utf-8")
+
+    monkeypatch.setattr(vi, "enumereer_stubs", lambda vanaf=None: {})
+
+    def _fake_verwerk(stub):
+        stub["verwerkt"] = True
+        stub["bruikbaar"] = True
+        stub["gebied"] = "Delfshaven"
+        stub["adres"] = "X 1"
+
+    monkeypatch.setattr(vi, "_verwerk_stub", _fake_verwerk)
+
+    voortgang = vi.werk_bij(index_path, batch=5, vandaag=date(2026, 8, 20))
+    # De eerder-mislukte publicatie is opnieuw geprobeerd en nu bruikbaar.
+    assert voortgang["bruikbaar"] == 1
+    index = vi.VergunningIndex(index_path)
+    assert index.meta["enumeratie_versie"] == vi._ENUMERATIE_VERSIE
+
+
 def test_analyse_aggregeert_en_filtert_op_dagen():
     vergunningen = [
         {"gebied": "Delfshaven", "datum": "2026-08-10"},
