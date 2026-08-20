@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import date
+from pathlib import Path
 
-from . import den_haag
+from . import bekendmakingen, den_haag
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
+from .mailer import send_report
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .geocode import GeocodeError, geocode_address, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
@@ -536,7 +538,54 @@ def run(config: Config, today: date | None = None) -> RunResult:
         te_verwijderen_ids = set()
 
     _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
+    _controleer_favoriet_bekendmakingen(config, state, today, result)
     return result
+
+
+def _bekendmakingen_cache_path(config: Config) -> Path:
+    """Naast state.json, in hetzelfde data-volume, zodat de geocode-cache van
+    bekendmakingen een container-herstart overleeft."""
+    return Path(config.state_path).parent / "bekendmakingen_cache.json"
+
+
+def _controleer_favoriet_bekendmakingen(
+    config: Config, state: StateStore, today: date, result: RunResult
+) -> int:
+    """Draait de kamerverhuurvergunning-check voor favoriete panden mee op de
+    (dagelijkse of handmatige) scan en mailt over nieuw gevonden treffers. Geeft het
+    aantal nieuwe waarschuwingen terug. Volledig best-effort: een storing bij
+    KOOP/PDOK of de mailserver zet alleen een melding in result.fouten en laat de
+    rest van de scan ongemoeid."""
+    try:
+        nieuw_per_pand = bekendmakingen.controleer_favorieten(
+            state, _bekendmakingen_cache_path(config), vandaag=today
+        )
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Bekendmakingen-check voor favorieten mislukt: {exc}")
+        return 0
+
+    if not nieuw_per_pand:
+        return 0
+
+    aantal_nieuw = sum(len(nieuwe) for _fav, nieuwe in nieuw_per_pand)
+    onderwerp, html_body, text_body = bekendmakingen.bouw_alert_mail(nieuw_per_pand)
+    try:
+        send_report(config, onderwerp, html_body, text_body)
+    except Exception as exc:  # noqa: BLE001 - de waarschuwing staat al bij de woning; mail is extra
+        result.fouten.append(f"Versturen van de bekendmaking-waarschuwing mislukt: {exc}")
+    return aantal_nieuw
+
+
+def controleer_bekendmakingen(config: Config, today: date | None = None) -> dict:
+    """Losse ingang voor een handmatige "check vergunningen nu" vanaf de
+    kaart-website: draait alleen de favoriet-bekendmakingcheck (geen Funda-scan) en
+    verstuurt bij treffers dezelfde mail. Geeft een korte samenvatting terug voor de
+    UI."""
+    today = today or date.today()
+    state = StateStore(config.state_path)
+    result = RunResult()
+    aantal_nieuw = _controleer_favoriet_bekendmakingen(config, state, today, result)
+    return {"aantal_nieuw": aantal_nieuw, "fouten": result.fouten}
 
 
 def run_beschikbaarheidscheck(config: Config, today: date | None = None) -> RunResult:

@@ -318,3 +318,66 @@ body {
   font-weight: 600;
   color: var(--groen);
 }
+
+/* --- Favoriet-sterretje + vergunning-waarschuwing --- */
+
+.ster-knop {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #c9a227;
+  padding: 0;
+  line-height: 1;
+}
+
+.ster-knop.ster-actief { color: #f4b400; }
+
+/* Sterretje in de kaart-popup: linksboven, groot en goed aanklikbaar. */
+.popup-inhoud .ster-knop {
+  position: absolute;
+  top: -0.2rem;
+  left: -0.2rem;
+  font-size: 1.5em;
+}
+
+/* Sterretje in de lijst: inline vóór het adres. */
+.ster-lijst { font-size: 1.1em; margin-right: 0.25rem; vertical-align: middle; }
+
+.lijst-waarschuwing {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+  background: #fbe1de;
+  color: #b3261e;
+  vertical-align: middle;
+}
+
+.vergunning-waarschuwing {
+  margin: 0.2rem 0 0.5rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #f0b4ad;
+  border-left: 3px solid #b3261e;
+  border-radius: 4px;
+  background: #fdeceb;
+  color: #8a1f1a;
+  font-size: 0.9em;
+}
+
+.vergunning-waarschuwing ul { margin: 0.25rem 0 0; padding-left: 1.1rem; }
+.vergunning-waarschuwing a { color: #b3261e; font-weight: 600; }
+
+/* Marker voor favorieten (goud) / favoriet-met-waarschuwing (rood). */
+.favoriet-marker-punt {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 22px;
+  text-align: center;
+}

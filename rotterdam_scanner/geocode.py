@@ -140,3 +140,16 @@ def geocode_address(straat: str, huisnummer: str, woonplaats: str = "Rotterdam")
     # koppelteken die het fq-filter anders verkeerd interpreteert.
     doc = _zoek_pdok_adres(query, [f'woonplaatsnaam:"{woonplaats}"'])
     return _doc_naar_resultaat(doc, query)
+
+
+def geocode_vrij(adres: str, woonplaats: str = "Rotterdam") -> GeocodeResult:
+    """Geocodeert een vrije adrestekst (straat + huisnummer als één string, bv.
+    'C.P.Tielestraat 30B') binnen een woonplaats. Gebruikt voor adressen die niet
+    al opgesplitst in straat/huisnummer binnenkomen - zoals het adres uit de titel
+    van een officiële kamerverhuurvergunning (zie bekendmakingen.py). Het
+    woonplaats-filter voorkomt dat een gelijkende straatnaam in een andere plaats
+    matcht; een niet-adresachtige tekst (bv. een beleidstitel) levert geen
+    PDOK-match op en geeft dus netjes een GeocodeError i.p.v. een gok."""
+    query = f"{adres}, {woonplaats}"
+    doc = _zoek_pdok_adres(query, [f'woonplaatsnaam:"{woonplaats}"'])
+    return _doc_naar_resultaat(doc, query)

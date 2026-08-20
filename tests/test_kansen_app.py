@@ -525,3 +525,61 @@ def test_start_zonder_kansen_users_maar_met_steenhub_file_mag(tmp_path):
 def test_start_zonder_enige_inlogbron_weigert(tmp_path):
     with pytest.raises(SystemExit):
         create_app(_config(tmp_path, kansen_app_users={}, steenhub_users_file=""))
+
+
+# --- Favoriet + bekendmakingen-check ---
+
+
+def test_favoriet_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.post("/kansen/3000AA-1/favoriet")
+    assert resp.status_code == 302
+
+
+def test_favoriet_togglet_heen_en_weer(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    resp = client.post("/kansen/3000AA-1/favoriet")
+    assert resp.status_code == 200
+    assert resp.get_json()["favoriet"] is True
+    assert StateStore(tmp_path / "state.json").get("3000AA-1").favoriet is True
+
+    resp = client.post("/kansen/3000AA-1/favoriet")
+    assert resp.get_json()["favoriet"] is False
+    assert StateStore(tmp_path / "state.json").get("3000AA-1").favoriet is False
+
+
+def test_favoriet_onbekende_woning_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/kansen/onbekend/favoriet")
+    assert resp.status_code == 404
+
+
+def test_api_kansen_toont_afgevallen_favoriet(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    # Een afgevallen woning die tóch favoriet is, moet op de kaart blijven staan.
+    _zet_listing(tmp_path, status="afgevallen", favoriet=True)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.get("/api/kansen")
+    data = resp.get_json()
+    assert len(data) == 1
+    assert data[0]["favoriet"] is True
+    assert data[0]["status"] == "afgevallen"
+
+
+def test_bekendmakingen_check_roept_pipeline_aan(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+
+    monkeypatch.setattr(
+        appmodule.pipeline, "controleer_bekendmakingen",
+        lambda config: {"aantal_nieuw": 2, "fouten": []},
+    )
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/bekendmakingen/check")
+    assert resp.status_code == 200
+    assert resp.get_json()["aantal_nieuw"] == 2

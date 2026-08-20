@@ -245,6 +245,21 @@ van te wachten tot 09:00. Verder:
   mnd en rendement). Alles wat je invult wordt automatisch bij die woning bewaard, zodat je
   later verder kunt rekenen. Standaard staan de uitgangspunten op de scanner-aannames, dus
   de beginuitkomst is gelijk aan wat de kaart voor die woning laat zien.
+- **Favoriet + vergunningbewaking (sterretje)** — klik op het sterretje linksboven in het
+  informatievenstertje (of vóór het adres in de lijst) om een woning als favoriet te
+  markeren. Favorieten worden dagelijks (meeliftend op de 09:00-scan, of direct via de
+  knop **"Vergunningen checken"** in de kop) gecontroleerd tegen de officiële
+  bekendmakingen: zodra er een **nieuwe kamerverhuurvergunning binnen 50 m** van een
+  favoriet is afgegeven, komt er een waarschuwing bij de woning (rode marker + venstertje)
+  én een e-mail naar `REPORT_TO_ADDRESS`. Dit vult de bestaande 50m-check aan (die
+  gebruikt de gemeentekaart, `rotterdam_scanner/gis.py`): de officiële bekendmakingen
+  verschijnen dáár eerder dan op die kaart, dus dit is de vroege waarschuwing — juist
+  handig vlak na aankoop, als een nieuwe buurvergunning je eigen vergunningskansen
+  (nulquotum/afstandseis) nog kan raken. Zie `rotterdam_scanner/bekendmakingen.py`
+  (KOOP SRU-zoekdienst → adres uit de vergunningstitel → PDOK-geocoding → afstandscheck).
+  Een favoriet blijft op de kaart staan én gemonitord, ook als de woning inmiddels van
+  Funda verdwenen ("afgevallen") is, zodat je de waarschuwing niet kwijtraakt na aankoop.
+  Elke publicatie wordt per woning maar één keer gemeld (geen dubbele mails).
 
 Draait als eigen container (`kansen`) op dezelfde VPS als `fundazoeker`, gebouwd vanaf
 dezelfde branch/dezelfde `state.json` (gedeeld volume) — zie `deploy/docker-compose.yml`

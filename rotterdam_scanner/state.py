@@ -75,6 +75,19 @@ class ListingState:
     # de standaardaannames + voorgevulde koopsom/aantal kamers. Wordt automatisch
     # opgeslagen zodra de gebruiker iets wijzigt (zie kansen_site/app.py).
     berekening: dict | None = None
+    # Door de gebruiker als favoriet gemarkeerd (sterretje op kansen.steenhub.nl).
+    # Alleen favorieten worden actief gemonitord op nieuwe kamerverhuurvergunningen
+    # binnen 50 m (zie rotterdam_scanner/bekendmakingen.py) - die officiële
+    # bekendmakingen lopen vóór op de gemeentekaart die gis.py raadpleegt. Een
+    # favoriet blijft gemonitord én zichtbaar op de kaart, ook als de woning
+    # inmiddels van Funda is verdwenen ("afgevallen").
+    favoriet: bool = False
+    # Nieuwe kamerverhuurvergunningen die binnen 50 m van deze (favoriete) woning
+    # zijn afgegeven, gevonden in de officiële bekendmakingen. Elke waarschuwing is
+    # een dict: publicatie_id, titel, datum (ISO), url, adres, afstand_m. Wordt
+    # aangevuld door de dagelijkse check; per publicatie-id maar één keer opgeslagen
+    # (en dus maar één keer gemaild), zie bekendmakingen.controleer_favorieten.
+    bekendmaking_waarschuwingen: list[dict] = field(default_factory=list)
 
     @property
     def primaire_oppervlakte(self) -> int | None:

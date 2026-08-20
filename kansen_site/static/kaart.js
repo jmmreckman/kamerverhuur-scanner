@@ -18,6 +18,7 @@ const filterInvesteerdersEl = document.getElementById("filter-investeerders");
 const filterSchakelgeldEl = document.getElementById("filter-schakelgeld");
 const filterSorteerEl = document.getElementById("filter-sorteer");
 const verversKnop = document.getElementById("ververs-knop");
+const bekendmakingenKnop = document.getElementById("bekendmakingen-knop");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
 const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
@@ -62,6 +63,29 @@ function sorteerWaarde(kans) {
     return isNaN(d.getTime()) ? null : d.getTime();
   }
   return c.eigenInleg;
+}
+
+function escapeHtml(tekst) {
+  const div = document.createElement("div");
+  div.textContent = tekst === null || tekst === undefined ? "" : String(tekst);
+  return div.innerHTML;
+}
+
+// Waarschuwingsblok met nieuwe kamerverhuurvergunningen (officiële bekendmakingen)
+// binnen 50 m van deze woning - leeg als er niets is.
+function waarschuwingHtml(kans) {
+  const lijst = kans.bekendmaking_waarschuwingen || [];
+  if (!lijst.length) return "";
+  const regels = lijst
+    .map((w) => {
+      const datum = w.datum ? ` (${escapeHtml(w.datum)})` : "";
+      return `<li><a href="${escapeHtml(w.url)}" target="_blank" rel="noopener">${escapeHtml(w.adres)}</a> — ${escapeHtml(w.afstand_m)} m${datum}</li>`;
+    })
+    .join("");
+  return `<div class="vergunning-waarschuwing">
+      ⚠ Kamerverhuurvergunning binnen 50 m afgegeven:
+      <ul>${regels}</ul>
+    </div>`;
 }
 
 function dagenOpFunda(eerstGezien) {
@@ -125,7 +149,9 @@ function bouwPopup(kans) {
   const c = kansCijfers(kans);
   div.innerHTML = `
     <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
-    <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}
+    <button type="button" class="ster-knop ${kans.favoriet ? "ster-actief" : ""}" title="${kans.favoriet ? "Favoriet - wordt gemonitord op nieuwe vergunningen binnen 50 m" : "Als favoriet instellen (monitoren op nieuwe kamerverhuurvergunningen binnen 50 m)"}">${kans.favoriet ? "★" : "☆"}</button>
+    ${waarschuwingHtml(kans)}
+    <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}${kans.status && kans.status !== "actief" ? ' <span class="stad-tag" title="Niet meer actief op Funda, blijft staan omdat het een favoriet is">niet meer op Funda</span>' : ""}
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
     ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
@@ -147,6 +173,7 @@ function bouwPopup(kans) {
   `;
 
   div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
+  div.querySelector(".ster-knop").addEventListener("click", () => favorietToggle(kans));
 
   const kamersInput = div.querySelector(".kamers-input");
   kamersInput.addEventListener("change", () => kamersAanpassen(kans, kamersInput.value));
@@ -179,11 +206,43 @@ async function kamersAanpassen(kans, waarde) {
   }
 }
 
+async function favorietToggle(kans) {
+  try {
+    const resp = await fetch(`/kansen/${encodeURIComponent(kans.object_id)}/favoriet`, {
+      method: "POST",
+    });
+    if (!resp.ok) throw new Error("favoriet mislukt");
+    const data = await resp.json();
+    kans.favoriet = data.favoriet;
+    renderAlles();
+    const marker = markerPerId.get(kans.object_id);
+    if (marker) marker.openPopup();
+  } catch (err) {
+    alert("Favoriet instellen is mislukt - probeer het nog eens.");
+  }
+}
+
+// Favorieten krijgen een goudkleurige, iets grotere marker; een favoriet met een
+// openstaande vergunning-waarschuwing wordt rood, zodat 'm meteen opvalt.
+function markerIcoon(kans) {
+  const heeftWaarschuwing = (kans.bekendmaking_waarschuwingen || []).length > 0;
+  if (!kans.favoriet && !heeftWaarschuwing) return null;
+  const kleur = heeftWaarschuwing ? "#b3261e" : "#f4b400";
+  const teken = heeftWaarschuwing ? "⚠" : "★";
+  return L.divIcon({
+    className: "favoriet-marker",
+    html: `<div class="favoriet-marker-punt" style="background:${kleur}">${teken}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
 function renderMarkers(kansen) {
   markerLaag.clearLayers();
   markerPerId.clear();
   for (const kans of kansen) {
-    const marker = L.marker([kans.lat, kans.lon]).bindPopup(bouwPopup(kans));
+    const icoon = markerIcoon(kans);
+    const marker = (icoon ? L.marker([kans.lat, kans.lon], { icon: icoon }) : L.marker([kans.lat, kans.lon])).bindPopup(bouwPopup(kans));
     marker.addTo(markerLaag);
     markerPerId.set(kans.object_id, marker);
   }
@@ -205,8 +264,10 @@ function renderLijst(kansen) {
     const c = kansCijfers(kans);
     li.innerHTML = `
       <button type="button" class="verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
+      <button type="button" class="ster-knop ster-lijst ${kans.favoriet ? "ster-actief" : ""}" title="${kans.favoriet ? "Favoriet" : "Als favoriet instellen"}">${kans.favoriet ? "★" : "☆"}</button>
       <span class="adres">${kans.weergavenaam}</span>
       ${kans.stad === "den_haag" ? '<span class="stad-tag">Den Haag</span>' : ""}
+      ${(kans.bekendmaking_waarschuwingen || []).length ? '<span class="lijst-waarschuwing" title="Nieuwe kamerverhuurvergunning binnen 50 m">⚠ vergunning &lt;50 m</span>' : ""}
       <div class="cijfers">
         <span>${formatEuro(kans.prijs)}</span>
         ${c.winst !== null ? `<span class="goed">+${formatEuro(c.winst)} p.p./mnd</span>` : ""}
@@ -224,6 +285,10 @@ function renderLijst(kansen) {
     li.querySelector(".verwijder-knop").addEventListener("click", (event) => {
       event.stopPropagation();
       verwijderKans(kans);
+    });
+    li.querySelector(".ster-knop").addEventListener("click", (event) => {
+      event.stopPropagation();
+      favorietToggle(kans);
     });
     lijstEl.appendChild(li);
   }
@@ -303,6 +368,28 @@ verversKnop.addEventListener("click", async () => {
     statusTekstEl.textContent = "Verversen mislukt - probeer het nog eens.";
   } finally {
     verversKnop.disabled = false;
+  }
+});
+
+bekendmakingenKnop.addEventListener("click", async () => {
+  bekendmakingenKnop.disabled = true;
+  statusTekstEl.textContent = "Bezig met checken van officiële bekendmakingen...";
+  try {
+    const resp = await fetch("/bekendmakingen/check", { method: "POST" });
+    const data = await resp.json();
+    if (data.aantal_nieuw) {
+      statusTekstEl.textContent = `${data.aantal_nieuw} nieuwe vergunning(en) binnen 50 m van een favoriet gevonden - zie de gemarkeerde woning(en) + je mail.`;
+    } else {
+      statusTekstEl.textContent = "Geen nieuwe kamerverhuurvergunningen binnen 50 m van je favorieten.";
+    }
+    if (data.fouten && data.fouten.length) {
+      statusTekstEl.textContent += ` Waarschuwing: ${data.fouten.join(" | ")}`;
+    }
+    await laadKansen();
+  } catch (err) {
+    statusTekstEl.textContent = "Checken van bekendmakingen mislukt - probeer het nog eens.";
+  } finally {
+    bekendmakingenKnop.disabled = false;
   }
 });
 

@@ -149,6 +149,9 @@ def _listing_naar_json(item) -> dict:
         "opmerking": item.opmerking,
         "eerst_gezien": item.eerst_gezien,
         "laatst_gezien": item.laatst_gezien,
+        "status": item.status,
+        "favoriet": item.favoriet,
+        "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,
     }
 
 
@@ -205,8 +208,17 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def api_kansen():
         state = StateStore(config.state_path)
-        actief = [item for item in state.all() if item.status == "actief" and item.lat is not None and item.lon is not None]
-        return jsonify([_listing_naar_json(item) for item in actief])
+        # Favorieten blijven op de kaart staan, ook als de woning inmiddels van
+        # Funda is (afgevallen) - zodat een eventuele vergunning-waarschuwing bij
+        # het pand zichtbaar blijft en je 'm niet kwijtraakt zodra je gekocht hebt.
+        zichtbaar = [
+            item
+            for item in state.all()
+            if (item.status == "actief" or item.favoriet)
+            and item.lat is not None
+            and item.lon is not None
+        ]
+        return jsonify([_listing_naar_json(item) for item in zichtbaar])
 
     @app.route("/ververs", methods=["POST"])
     @login_required
@@ -220,6 +232,29 @@ def create_app(config: Config | None = None) -> Flask:
             "nieuw_afgevallen": len(result.nieuw_afgevallen),
             "fouten": result.fouten,
         })
+
+    @app.route("/kansen/<object_id>/favoriet", methods=["POST"])
+    @login_required
+    def kans_favoriet(object_id):
+        # Zet het sterretje aan/uit. Alleen favorieten worden gemonitord op nieuwe
+        # kamerverhuurvergunningen binnen 50 m (zie bekendmakingen.py); de check
+        # zelf loopt mee op de dagelijkse scan of via "Vergunningen checken".
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+        item.favoriet = not item.favoriet
+        state.upsert(item)
+        state.save()
+        return jsonify({"favoriet": item.favoriet})
+
+    @app.route("/bekendmakingen/check", methods=["POST"])
+    @login_required
+    def bekendmakingen_check():
+        # Handmatige "check nu": draait alleen de favoriet-vergunningcheck (geen
+        # Funda-scan) en mailt bij nieuwe treffers.
+        samenvatting = pipeline.controleer_bekendmakingen(config)
+        return jsonify(samenvatting)
 
     @app.route("/kansen/<object_id>/verwijderen", methods=["POST"])
     @login_required
