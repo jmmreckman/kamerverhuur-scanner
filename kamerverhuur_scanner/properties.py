@@ -4,6 +4,7 @@ en bunq-koppeling met de andere panden."""
 from __future__ import annotations
 
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -40,6 +41,19 @@ def _parse_sleutels(waarde) -> list[str]:
         return []
     regels = waarde.splitlines() if isinstance(waarde, str) else waarde
     return [str(regel).strip() for regel in regels if str(regel).strip()]
+
+
+_HEX_KLEUR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _normaliseer_kleur(waarde) -> str:
+    """Accepteert alleen een geldige 6-cijferige hexkleur (bv. "#1b7a43"). Alles
+    anders -> lege string. Zo kan er nooit onveilige tekst in de inline CSS
+    belanden die base.html van deze waarde maakt."""
+    if not isinstance(waarde, str):
+        return ""
+    waarde = waarde.strip()
+    return waarde if _HEX_KLEUR_RE.match(waarde) else ""
 
 
 def _parse_verhuurders(waarde) -> list[Verhuurder]:
@@ -110,6 +124,7 @@ def load_properties(path: str) -> list[Pand]:
                     energiekosten_per_maand=_parse_optioneel_bedrag(item.get("energiekosten_per_maand")),
                     belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
                     sleutels=_parse_sleutels(item.get("sleutels")),
+                    kleur=_normaliseer_kleur(item.get("kleur")),
                 )
             )
         except KeyError as exc:

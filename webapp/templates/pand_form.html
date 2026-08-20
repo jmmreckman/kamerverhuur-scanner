@@ -73,6 +73,17 @@
 {% endfor %}{% endif %}</textarea>
     </label>
 
+    {% set huidige_kleur = (pand.kleur|hexkleur) if pand else '' %}
+    <label style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap">
+      <input type="checkbox" name="kleur_aan" id="kleur_aan" {{ 'checked' if huidige_kleur }} style="width:auto">
+      Eigen herkenningskleur voor dit pand
+      <input type="color" name="kleur" id="kleur" value="{{ huidige_kleur or '#4f46e5' }}"
+             style="width:44px; height:30px; padding:0; border:1px solid var(--border); border-radius:6px">
+    </label>
+    <p class="muted" style="margin-top:0.25rem">Alleen zichtbaar voor gebruikers die "Kleurenherkenning panden"
+       aan hebben staan (in te stellen per gebruiker onder Gebruikers). De navigatie, knoppen en de pandkiezer
+       kleuren dan subtiel mee in deze kleur op de pagina's van dit pand.</p>
+
     <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
     <p class="muted">Deze velden worden gebruikt om automatisch een huurcontract te genereren (zie
        Contracten). Zonder deze gegevens ingevuld staan er lege plekken in het gegenereerde contract.</p>

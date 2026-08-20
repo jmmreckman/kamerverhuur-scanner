@@ -162,6 +162,11 @@ class Pand:
     # Vrije lijst met sleutelomschrijvingen van dit pand (bv. "Lips 961 zolder
     # straatkant") - puur informatief, getoond op de Sleuteloverzicht-pagina.
     sleutels: list[str] = field(default_factory=list)
+    # Herkenningskleur van dit pand (hex, bv. "#1b7a43"). Leeg = geen eigen kleur.
+    # Wordt alleen zichtbaar voor gebruikers die "kleurenherkenning panden" aan
+    # hebben staan: dan kleurt de site-accent (navigatie, knoppen, pandkiezer)
+    # mee in deze kleur op de pagina's van dit pand. Zie webapp/templates/base.html.
+    kleur: str = ""
 
 
 @dataclass(frozen=True)

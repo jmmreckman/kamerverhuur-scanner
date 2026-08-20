@@ -94,3 +94,23 @@ def test_zet_mail_voorkeuren_leeg_email_wordt_none():
 def test_zet_mail_voorkeuren_onbekende_gebruiker_geeft_fout():
     with pytest.raises(ValueError):
         zet_mail_voorkeuren({}, "onbekend", "x@example.com", {})
+
+
+# --- Kleurenherkenning (persoonlijke voorkeur) ---
+
+
+def test_zet_gebruiker_slaat_kleurenherkenning_op():
+    users = zet_gebruiker({}, "nieuw", "geheim123", True, [], kleurenherkenning=True)
+    assert users["nieuw"]["kleurenherkenning"] is True
+
+
+def test_zet_gebruiker_kleurenherkenning_default_uit():
+    users = zet_gebruiker({}, "nieuw", "geheim123", True, [])
+    assert users["nieuw"]["kleurenherkenning"] is False
+
+
+def test_user_uit_gegevens_leest_kleurenherkenning():
+    aan = user_uit_gegevens("jij", {"wachtwoord_hash": "x", "alle_panden": True, "kleurenherkenning": True})
+    uit = user_uit_gegevens("jij", {"wachtwoord_hash": "x", "alle_panden": True})
+    assert aan.kleurenherkenning is True
+    assert uit.kleurenherkenning is False

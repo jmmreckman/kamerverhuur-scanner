@@ -205,3 +205,14 @@ def test_echte_beheerder_wordt_niet_geblokkeerd(client):
     resp = c.post("/beheer/gebruikers/justin/verwijderen", follow_redirects=True)
     assert "testaccount" not in resp.get_data(as_text=True).lower()
     assert "justin" not in json.loads(users_file.read_text())
+
+
+def test_beheerder_kan_kleurenherkenning_aanzetten(client):
+    c, users_file = client
+    _login(c, "beheerder")
+    c.post("/beheer/gebruikers/justin/bewerken",
+           data={"wachtwoord": "", "panden": "mahoniestraat", "kleurenherkenning": "on"})
+    assert json.loads(users_file.read_text())["justin"]["kleurenherkenning"] is True
+    # Zonder het vinkje weer uit.
+    c.post("/beheer/gebruikers/justin/bewerken", data={"wachtwoord": "", "panden": "mahoniestraat"})
+    assert json.loads(users_file.read_text())["justin"]["kleurenherkenning"] is False

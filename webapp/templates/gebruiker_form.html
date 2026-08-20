@@ -48,6 +48,15 @@
        stap - een mail versturen, iets opslaan/wijzigen/verwijderen, een gebruiker of pand beheren - verschijnt een
        waarschuwing en wordt de actie niet uitgevoerd. Handig om iemand veilig te laten rondkijken.</p>
 
+    <label style="margin-top:1rem">
+      <input type="checkbox" name="kleurenherkenning" style="width:auto; display:inline-block"
+             {{ 'checked' if gebruiker and gebruiker.kleurenherkenning }}>
+      Kleurenherkenning panden
+    </label>
+    <p class="muted" style="margin-top:0.25rem">Kleurt de navigatie, knoppen en de pandkiezer subtiel mee in de
+       herkenningskleur van het pand waar je in zit (in te stellen per pand onder Panden). Handig als je snel wilt
+       zien in welk pand je bezig bent. Staat dit uit, dan ziet de gebruiker de standaardkleuren.</p>
+
     <button class="btn" type="submit">Opslaan</button>
     <a class="btn btn-secondary" href="{{ url_for('gebruikers_overzicht') }}">Annuleren</a>
   </form>

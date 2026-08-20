@@ -25,7 +25,7 @@ class User(UserMixin):
     def __init__(
         self, username: str, alle_panden: bool = False, panden: list[str] | None = None,
         email: str | None = None, mail_voorkeuren: dict | None = None,
-        test_account: bool = False,
+        test_account: bool = False, kleurenherkenning: bool = False,
     ):
         self.id = username
         self.alle_panden = alle_panden
@@ -33,6 +33,9 @@ class User(UserMixin):
         self.email = email
         self.mail_voorkeuren = mail_voorkeuren or {}
         self.test_account = test_account
+        # Persoonlijke voorkeur: kleurt de site-accent mee in de herkenningskleur
+        # van het pand waar je in zit (zie webapp/templates/base.html).
+        self.kleurenherkenning = kleurenherkenning
 
     def heeft_toegang(self, pand_slug: str) -> bool:
         return self.alle_panden or pand_slug in self.panden
@@ -61,13 +64,13 @@ def save_users(path: str, users: dict) -> None:
 
 def zet_gebruiker(
     users: dict, username: str, wachtwoord: str | None, alle_panden: bool, panden: list[str],
-    test_account: bool = False,
+    test_account: bool = False, kleurenherkenning: bool = False,
 ) -> dict:
     """Voegt een gebruiker toe of werkt 'm bij. Zonder wachtwoord blijft het
     bestaande wachtwoord staan (voor het bewerken van alleen de toegang).
     Bestaande velden die deze functie niet zelf zet (e-mail, mailvoorkeuren)
-    blijven behouden - alleen wachtwoord, pand-toegang en de testaccount-vlag
-    worden overschreven."""
+    blijven behouden - alleen wachtwoord, pand-toegang, de testaccount-vlag en
+    de kleurenherkenning-voorkeur worden overschreven."""
     bestaand = users.get(username, {})
     wachtwoord_hash = generate_password_hash(wachtwoord) if wachtwoord else bestaand.get("wachtwoord_hash")
     if not wachtwoord_hash:
@@ -77,6 +80,7 @@ def zet_gebruiker(
     gebruiker["alle_panden"] = alle_panden
     gebruiker["panden"] = panden
     gebruiker["test_account"] = test_account
+    gebruiker["kleurenherkenning"] = kleurenherkenning
     users[username] = gebruiker
     return users
 
@@ -90,7 +94,7 @@ def user_uit_gegevens(username: str, gebruiker: dict) -> User:
     return User(
         username, gebruiker.get("alle_panden", False), gebruiker.get("panden", []),
         gebruiker.get("email"), gebruiker.get("mail_voorkeuren"),
-        gebruiker.get("test_account", False),
+        gebruiker.get("test_account", False), gebruiker.get("kleurenherkenning", False),
     )
 
 

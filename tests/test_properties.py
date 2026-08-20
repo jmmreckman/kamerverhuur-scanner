@@ -206,3 +206,31 @@ def test_verwijder_pand(tmp_path):
     verwijder_pand(str(path), "baumannlaan")
     panden = load_properties(str(path))
     assert [p.slug for p in panden] == ["mahoniestraat"]
+
+
+def test_load_properties_leest_geldige_hexkleur(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "baumannlaan", "naam": "Baumannlaan", "google_sheet_id": "x",
+         "bunq_rekening_iban": "NL81BUNQ2163127125", "kleur": "#1b7a43"},
+    ]))
+    assert load_properties(str(path))[0].kleur == "#1b7a43"
+
+
+def test_load_properties_negeert_ongeldige_kleur(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "baumannlaan", "naam": "Baumannlaan", "google_sheet_id": "x",
+         "bunq_rekening_iban": "NL81BUNQ2163127125", "kleur": "javascript:alert(1)"},
+    ]))
+    # Onveilige/ongeldige waarde -> leeg, komt nooit in de CSS terecht.
+    assert load_properties(str(path))[0].kleur == ""
+
+
+def test_load_properties_zonder_kleur_is_leeg(tmp_path):
+    path = tmp_path / "properties.json"
+    path.write_text(json.dumps([
+        {"slug": "baumannlaan", "naam": "Baumannlaan", "google_sheet_id": "x",
+         "bunq_rekening_iban": "NL81BUNQ2163127125"},
+    ]))
+    assert load_properties(str(path))[0].kleur == ""

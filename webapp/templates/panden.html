@@ -17,7 +17,11 @@
     <tr><th>Naam</th><th>Slug</th><th>Google Sheet</th><th>bunq IBAN</th><th></th></tr>
     {% for pand in panden %}
     <tr>
-      <td>{{ pand.naam }}</td>
+      <td>
+        {% set pk = pand.kleur|hexkleur %}
+        {% if pk %}<span class="pand-kleurstip" style="background:{{ pk }}" title="Herkenningskleur"></span> {% endif %}
+        {{ pand.naam }}
+      </td>
       <td><code>{{ pand.slug }}</code></td>
       <td><a href="https://docs.google.com/spreadsheets/d/{{ pand.google_sheet_id }}/edit" target="_blank" rel="noopener">Bekijken</a></td>
       <td>{{ pand.bunq_rekening_iban }}</td>

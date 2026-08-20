@@ -96,6 +96,15 @@ def create_app(config: Config | None = None) -> Flask:
     def status_klasse(status_tekst: str) -> str:
         return "status-" + status_tekst.lower().replace(" ", "-")
 
+    @app.template_filter("hexkleur")
+    def hexkleur(waarde) -> str:
+        """Geeft de waarde alleen terug als het een geldige 6-cijferige hexkleur is,
+        anders een lege string - zodat een pandkleur veilig in inline CSS gebruikt
+        kan worden (base.html/pand_kiezer.html)."""
+        if isinstance(waarde, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", waarde.strip()):
+            return waarde.strip()
+        return ""
+
     _MAAND_NAMEN = [
         "januari", "februari", "maart", "april", "mei", "juni",
         "juli", "augustus", "september", "oktober", "november", "december",
@@ -352,7 +361,8 @@ def create_app(config: Config | None = None) -> Flask:
             else:
                 alle_panden, panden = _panden_uit_form(request.form)
                 test_account = request.form.get("test_account") == "on"
-                zet_gebruiker(users, username, wachtwoord, alle_panden, panden, test_account)
+                kleurenherkenning = request.form.get("kleurenherkenning") == "on"
+                zet_gebruiker(users, username, wachtwoord, alle_panden, panden, test_account, kleurenherkenning)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' aangemaakt.")
                 return redirect(url_for("gebruikers_overzicht"))
@@ -370,12 +380,13 @@ def create_app(config: Config | None = None) -> Flask:
             wachtwoord = request.form.get("wachtwoord", "")
             alle_panden, panden = _panden_uit_form(request.form)
             test_account = request.form.get("test_account") == "on"
+            kleurenherkenning = request.form.get("kleurenherkenning") == "on"
             if wachtwoord and len(wachtwoord) < 8:
                 flash("Gebruik een wachtwoord van minimaal 8 tekens.")
             elif username == current_user.id and not alle_panden:
                 flash("Je kunt jezelf niet de toegang tot alle panden ontnemen.")
             else:
-                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden, test_account)
+                zet_gebruiker(users, username, wachtwoord or None, alle_panden, panden, test_account, kleurenherkenning)
                 save_users(config.users_file, users)
                 flash(f"Gebruiker '{username}' bijgewerkt.")
                 return redirect(url_for("gebruikers_overzicht"))
@@ -432,6 +443,10 @@ def create_app(config: Config | None = None) -> Flask:
             "energiekosten_per_maand": form.get("energiekosten_per_maand", "").strip() or None,
             "belasting_per_maand": form.get("belasting_per_maand", "").strip() or None,
             "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
+            # Alleen een kleur opslaan als het vinkje "eigen kleur" aanstaat; een
+            # <input type=color> levert altijd een geldige hex, maar we filteren
+            # 'm alsnog (defensief) via het hexkleur-filter bij weergave.
+            "kleur": form.get("kleur", "").strip() if form.get("kleur_aan") == "on" else "",
         }
 
     @app.route("/beheer/panden")

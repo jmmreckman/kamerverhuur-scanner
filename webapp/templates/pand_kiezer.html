@@ -9,7 +9,9 @@
 {% if panden %}
 <div class="grid">
   {% for pand in panden %}
-  <a class="card kamer-tile" href="{{ url_for('dashboard', pand_slug=pand.slug) }}">
+  {% set tegelkleur = (pand.kleur|hexkleur) if current_user.kleurenherkenning else '' %}
+  <a class="card kamer-tile {{ 'pand-getint' if tegelkleur }}" href="{{ url_for('dashboard', pand_slug=pand.slug) }}"
+     {% if tegelkleur %}style="--tegel-kleur: {{ tegelkleur }}"{% endif %}>
     <div class="stat-icon" style="margin-bottom:0.6rem">{{ icon_kamers() }}</div>
     <h2>{{ pand.naam }}</h2>
   </a>

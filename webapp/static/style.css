@@ -604,3 +604,34 @@ form textarea { min-height: 6rem; }
 .tile-icon { width: 30px; height: 30px; color: var(--primary); }
 .tile-naam { font-size: 0.85rem; font-weight: 600; word-break: break-word; }
 .tile-meta { font-size: 0.75rem; color: var(--muted); }
+
+/* --- Kleurenherkenning per pand --- */
+/* Wanneer een gebruiker "kleurenherkenning panden" aan heeft (body.pand-thema),
+   is --primary al overschreven met de pandkleur (zie base.html), dus de hele
+   accentkleur loopt automatisch mee. Deze regels voegen alleen wat extra,
+   subtiele herkenning toe zonder de achtergrond te raken. */
+.pand-thema .navbar {
+  border-top: 3px solid var(--primary);
+}
+.pand-thema .logo-mark {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #000));
+}
+
+/* Pandkiezer: elke tegel krijgt zijn eigen herkenningskleur (--tegel-kleur). */
+.kamer-tile.pand-getint {
+  border-left: 4px solid var(--tegel-kleur);
+}
+.kamer-tile.pand-getint .stat-icon {
+  background: color-mix(in srgb, var(--tegel-kleur) 15%, var(--surface));
+  color: var(--tegel-kleur);
+}
+
+/* Klein gekleurd bolletje om een pandkleur te tonen (bv. in de panden-lijst). */
+.pand-kleurstip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+}

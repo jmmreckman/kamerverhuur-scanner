@@ -259,3 +259,25 @@ def test_laatste_pand_kan_niet_verwijderd_worden(client):
     assert b"laatste overgebleven pand niet verwijderen" in resp.data
     panden = json.loads(properties_file.read_text())
     assert len(panden) == 1
+
+
+def test_beheerder_kan_pandkleur_opslaan_en_wissen(client):
+    c, properties_file = client
+    _login(c, "beheerder")
+    # Kleur aanzetten + hex meegeven -> opgeslagen.
+    c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
+        "google_sheet_worksheet": "Huurders", "history_worksheet": "Historie",
+        "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "kleur_aan": "on", "kleur": "#7b1fa2",
+    }, follow_redirects=True)
+    assert json.loads(properties_file.read_text())[0]["kleur"] == "#7b1fa2"
+
+    # Vinkje uit -> kleur gewist (ook al staat er nog een hex in het veld).
+    c.post("/beheer/panden/mahoniestraat/bewerken", data={
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
+        "google_sheet_worksheet": "Huurders", "history_worksheet": "Historie",
+        "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL81BUNQ2163127125",
+        "kleur": "#7b1fa2",
+    }, follow_redirects=True)
+    assert json.loads(properties_file.read_text())[0]["kleur"] == ""

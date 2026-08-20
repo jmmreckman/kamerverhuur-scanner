@@ -1,13 +1,26 @@
 <!doctype html>
 <html lang="nl">
+{# Kleurenherkenning: alleen als de ingelogde gebruiker die voorkeur aan heeft én
+   het huidige pand een geldige (hex-gevalideerde) kleur heeft. Dan kleurt de
+   site-accent (--primary c.s.) mee in de pandkleur - de rest van de site blijft. #}
+{% set pandkleur = (huidig_pand.kleur|hexkleur) if (current_user.is_authenticated and current_user.kleurenherkenning and huidig_pand) else '' %}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Steenhub{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% if pandkleur %}
+  <style>
+    :root {
+      --primary: {{ pandkleur }};
+      --primary-hover: color-mix(in srgb, {{ pandkleur }} 78%, #000);
+      --primary-soft: color-mix(in srgb, {{ pandkleur }} 14%, var(--surface));
+    }
+  </style>
+  {% endif %}
 </head>
-<body>
+<body class="{{ 'pand-thema' if pandkleur }}">
   {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox, icon_megafoon, icon_panden, icon_baksteen %}
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
