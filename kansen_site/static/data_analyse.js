@@ -6,6 +6,8 @@
 const wijkSelect = document.getElementById("wijk-select");
 const dagenInput = document.getElementById("dagen-input");
 const periodeSelect = document.getElementById("periode-select");
+const toon4plusEl = document.getElementById("toon-4plus");
+const toon3kamerEl = document.getElementById("toon-3kamer-analyse");
 const resetKnop = document.getElementById("reset-knop");
 const kerncijfersEl = document.getElementById("kerncijfers");
 const trendEl = document.getElementById("trend-grafiek");
@@ -43,10 +45,18 @@ function periodeKey(datumStr, periode) {
   return d ? isoWeekKey(d) : null;
 }
 
-// De actueel gefilterde selectie (wijk + afgelopen X dagen).
+// Precies 3 bewoners = "3-kamer" (legt geen 50m-eis op); 4+ en onbekend vallen
+// in de "4+"-bak.
+function isDrieKamer(v) {
+  return v.aantal_personen === 3;
+}
+
+// De actueel gefilterde selectie (wijk + afgelopen X dagen + grootte-toggles).
 function gefilterd() {
   const wijk = wijkSelect.value;
   const dagen = parseInt(dagenInput.value, 10);
+  const toon3 = toon3kamerEl.checked;
+  const toon4 = toon4plusEl.checked;
   let grens = null;
   if (!isNaN(dagen) && dagen > 0) {
     const d = new Date();
@@ -54,6 +64,9 @@ function gefilterd() {
     grens = d.toISOString().slice(0, 10);
   }
   return alleVergunningen.filter((v) => {
+    const drie = isDrieKamer(v);
+    if (drie && !toon3) return false;
+    if (!drie && !toon4) return false;
     if (wijk && (v.gebied || "Onbekend") !== wijk) return false;
     if (grens && (v.datum || "") < grens) return false;
     return true;
@@ -189,7 +202,7 @@ async function laad() {
   }
 }
 
-for (const el of [wijkSelect, dagenInput, periodeSelect]) {
+for (const el of [wijkSelect, dagenInput, periodeSelect, toon4plusEl, toon3kamerEl]) {
   el.addEventListener("input", render);
   el.addEventListener("change", render);
 }
@@ -197,6 +210,8 @@ resetKnop.addEventListener("click", () => {
   wijkSelect.value = "";
   dagenInput.value = "";
   periodeSelect.value = "maand";
+  toon4plusEl.checked = true;
+  toon3kamerEl.checked = true;
   render();
 });
 

@@ -21,6 +21,7 @@ const verversKnop = document.getElementById("ververs-knop");
 const bekendmakingenKnop = document.getElementById("bekendmakingen-knop");
 const toonKansenEl = document.getElementById("toon-kansen");
 const toonVergunningenEl = document.getElementById("toon-vergunningen");
+const toon3kamerEl = document.getElementById("toon-3kamer");
 const vergunningenStatusEl = document.getElementById("vergunningen-status");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -82,11 +83,12 @@ function waarschuwingHtml(kans) {
   const regels = lijst
     .map((w) => {
       const datum = w.datum ? ` (${escapeHtml(w.datum)})` : "";
-      return `<li><a href="${escapeHtml(w.url)}" target="_blank" rel="noopener">${escapeHtml(w.adres)}</a> — ${escapeHtml(w.afstand_m)} m${datum}</li>`;
+      const pers = w.aantal_personen ? `${escapeHtml(w.aantal_personen)} pers., ` : "";
+      return `<li><a href="${escapeHtml(w.url)}" target="_blank" rel="noopener">${escapeHtml(w.adres)}</a> — ${pers}${escapeHtml(w.afstand_m)} m${datum}</li>`;
     })
     .join("");
   return `<div class="vergunning-waarschuwing">
-      ⚠ Kamerverhuurvergunning binnen 50 m afgegeven:
+      ⚠ Vergunning (4+ bewoners) binnen 50 m afgegeven:
       <ul>${regels}</ul>
     </div>`;
 }
@@ -375,18 +377,29 @@ function bouwVergunningPopup(v) {
   return div;
 }
 
+// 3-kamer vergunningen (precies 3 bewoners) leggen geen 50m-eis op; standaard
+// tonen we alleen de 4+ (en onbekende, conservatief). Het vinkje "ook 3-kamer"
+// voegt de 3-persoons toe, in een andere kleur.
+function isDrieKamer(v) {
+  return v.aantal_personen === 3;
+}
+
 function renderVergunningen() {
   vergunningenLaag.clearLayers();
-  const punten = vergunningenData.filter((v) => v.lat != null && v.lon != null);
-  const markers = punten.map((v) =>
-    L.circleMarker([v.lat, v.lon], {
-      radius: 6,
-      color: "#7b1fa2",
-      weight: 1,
-      fillColor: "#ab47bc",
-      fillOpacity: 0.8,
-    }).bindPopup(bouwVergunningPopup(v))
+  const toon3 = toon3kamerEl && toon3kamerEl.checked;
+  const punten = vergunningenData.filter(
+    (v) => v.lat != null && v.lon != null && (toon3 || !isDrieKamer(v))
   );
+  const markers = punten.map((v) => {
+    const drie = isDrieKamer(v);
+    return L.circleMarker([v.lat, v.lon], {
+      radius: drie ? 5 : 6,
+      color: drie ? "#00796b" : "#7b1fa2",
+      weight: 1,
+      fillColor: drie ? "#4db6ac" : "#ab47bc",
+      fillOpacity: 0.8,
+    }).bindPopup(bouwVergunningPopup(v));
+  });
   if (vergunningenLaag.addLayers) {
     vergunningenLaag.addLayers(markers);
   } else {
@@ -403,9 +416,10 @@ async function laadVergunningen() {
     vergunningenData = data.vergunningen || [];
     vergunningenGeladen = true;
     renderVergunningen();
-    const opKaart = vergunningenData.filter((v) => v.lat != null).length;
+    const drie = vergunningenData.filter(isDrieKamer).length;
+    const vierPlus = vergunningenData.length - drie;
     const opmerking = data.compleet ? "" : " (index nog in opbouw)";
-    vergunningenStatusEl.textContent = `${vergunningenData.length} vergunningen, ${opKaart} op de kaart${opmerking}.`;
+    vergunningenStatusEl.textContent = `${vergunningenData.length} vergunningen: ${vierPlus}× 4+, ${drie}× 3-kamer${opmerking}.`;
   } catch (err) {
     vergunningenStatusEl.textContent = "Vergunningen laden mislukt.";
     toonVergunningenEl.checked = false;
@@ -423,6 +437,11 @@ if (toonVergunningenEl) {
     } else {
       kaart.removeLayer(vergunningenLaag);
     }
+  });
+}
+if (toon3kamerEl) {
+  toon3kamerEl.addEventListener("change", () => {
+    if (vergunningenGeladen && toonVergunningenEl.checked) renderVergunningen();
   });
 }
 

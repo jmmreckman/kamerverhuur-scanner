@@ -47,6 +47,14 @@ STRAAL_METER = 50.0
 # op publicatie-id uitgefilterd.
 TERUGKIJK_DAGEN = 60
 
+# De 50 m-afstandseis van Rotterdam telt alléén reeds verleende vergunningen voor
+# 4 of méér kamerbewoners (Verordening samenstelling Woningvoorraad 2025, art.
+# 2.2.3 lid 1 sub b + lid 2). Een 3-persoonsvergunning legt geen 50 m-zone op en is
+# dus niet relevant voor de vroege waarschuwing bij favorieten - die filteren we
+# eruit. Onbekend aantal (body niet te parsen) laten we conservatief wél
+# waarschuwen, om nooit een echte 4+ te missen.
+MIN_KAMERBEWONERS_VOOR_AFSTANDSEIS = 4
+
 # Zoektermen waaronder de per-adres vergunningen verschijnen. Rotterdam titelt ze
 # tegenwoordig "Vergunning kamerverhuur ..."; "kamerbewoning" vangt oudere en
 # afwijkende formuleringen af. Beleidsregels/verordeningen die op deze termen ook
@@ -94,6 +102,8 @@ class Vergunning:
     stad: str
     lat: float | None = None
     lon: float | None = None
+    html_url: str | None = None
+    aantal_personen: int | None = None
 
 
 def _pub_id(url: str) -> str:
@@ -140,11 +150,16 @@ def _haal_sru(term: str, creator: str, cutoff: date, max_records: int = 200) -> 
         url = rec.find(".//gzd:preferredUrl", _NS)
         if titel is None or not titel.text or url is None or not url.text:
             continue
+        html_url = None
+        for item in rec.iter(_GZD_TAG.replace("gzd", "itemUrl")):
+            if item.get("manifestation") == "html" and item.text:
+                html_url = item.text
         records.append(
             {
                 "titel": titel.text,
                 "datum": datum.text if datum is not None and datum.text else "",
                 "url": url.text,
+                "html_url": html_url,
             }
         )
     return records
@@ -199,8 +214,10 @@ def haal_recente_vergunningen(
             cached = cache.get(pid)
             if cached is not None:
                 lat, lon = cached.get("lat"), cached.get("lon")
+                personen = cached.get("aantal_personen")
             else:
                 lat = lon = None
+                personen = None
                 try:
                     geo = geocode_vrij(adres, cfg["woonplaats"])
                     lat, lon = geo.lat, geo.lon
@@ -212,18 +229,49 @@ def haal_recente_vergunningen(
                     "titel": rec["titel"],
                     "datum": rec["datum"],
                     "url": rec["url"],
+                    "html_url": rec.get("html_url"),
                     "adres": adres,
                     "stad": stad,
                     "lat": lat,
                     "lon": lon,
+                    "aantal_personen": None,
                 }
 
             vergunningen.append(
-                Vergunning(pid, rec["titel"], rec["datum"], rec["url"], adres, stad, lat, lon)
+                Vergunning(
+                    pid, rec["titel"], rec["datum"], rec["url"], adres, stad, lat, lon,
+                    html_url=rec.get("html_url") or (cached or {}).get("html_url"),
+                    aantal_personen=personen,
+                )
             )
 
     _schrijf_cache(cache_path, cache)
     return vergunningen
+
+
+def _resolve_aantal_personen(verg: Vergunning, cache: dict) -> int | None:
+    """Haalt (indien nog niet bekend) het aantal kamerbewoners uit de body van de
+    bekendmaking - alleen aangeroepen voor vergunningen die al binnen 50 m van een
+    favoriet blijken te liggen, dus zelden. Resultaat wordt in de cache bewaard.
+    Hergebruikt de body-parser van de vergunningen-index (lokale import om een
+    circulaire import te vermijden)."""
+    if verg.aantal_personen is not None:
+        return verg.aantal_personen
+    if not verg.html_url:
+        return None
+    from . import vergunningenindex  # lokale import: vergunningenindex importeert bekendmakingen
+
+    try:
+        html = requests.get(verg.html_url, timeout=30).text
+    except requests.exceptions.RequestException as exc:
+        logger.info("Body ophalen mislukt voor personen-check (%s): %s", verg.publicatie_id, exc)
+        return None
+    velden = vergunningenindex.parse_body(html) or {}
+    personen = velden.get("aantal_personen")
+    if personen is not None and verg.publicatie_id in cache:
+        cache[verg.publicatie_id]["aantal_personen"] = personen
+    verg.aantal_personen = personen
+    return personen
 
 
 def afstand_meter(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -259,6 +307,9 @@ def controleer_favorieten(state, cache_path: Path, vandaag: date | None = None):
     if not vergunningen:
         return []
 
+    # Cache (opnieuw) laden zodat we het achterhaalde aantal personen kunnen bewaren.
+    cache = _laad_cache(cache_path)
+
     nieuw_per_pand = []
     for fav in favorieten:
         al_bekend = {w.get("publicatie_id") for w in fav.bekendmaking_waarschuwingen}
@@ -269,6 +320,11 @@ def controleer_favorieten(state, cache_path: Path, vandaag: date | None = None):
             afstand = afstand_meter(fav.lat, fav.lon, verg.lat, verg.lon)
             if afstand > STRAAL_METER:
                 continue
+            # Alleen 4+-vergunningen leggen een 50 m-afstandseis op (zie
+            # MIN_KAMERBEWONERS_VOOR_AFSTANDSEIS); een bekende 3-persoons overslaan.
+            personen = _resolve_aantal_personen(verg, cache)
+            if personen is not None and personen < MIN_KAMERBEWONERS_VOOR_AFSTANDSEIS:
+                continue
             waarschuwing = {
                 "publicatie_id": verg.publicatie_id,
                 "titel": verg.titel,
@@ -276,6 +332,7 @@ def controleer_favorieten(state, cache_path: Path, vandaag: date | None = None):
                 "url": verg.url,
                 "adres": verg.adres,
                 "afstand_m": round(afstand),
+                "aantal_personen": personen,
             }
             fav.bekendmaking_waarschuwingen.append(waarschuwing)
             al_bekend.add(verg.publicatie_id)
@@ -285,6 +342,7 @@ def controleer_favorieten(state, cache_path: Path, vandaag: date | None = None):
             state.upsert(fav)
             nieuw_per_pand.append((fav, nieuwe))
 
+    _schrijf_cache(cache_path, cache)
     if nieuw_per_pand:
         state.save()
     return nieuw_per_pand
@@ -323,10 +381,12 @@ def bouw_alert_mail(nieuw_per_pand) -> tuple[str, str, str]:
         html_blokken.append(f"<h3 style='margin-bottom:4px'>{fav.weergavenaam}</h3><ul>")
         for w in nieuwe:
             datum = w.get("datum") or "onbekende datum"
-            regel = f"  • {w['adres']} — {w['afstand_m']} m — {datum} — {w['url']}"
+            pers = w.get("aantal_personen")
+            pers_txt = f"{pers} personen" if pers else "aantal personen onbekend"
+            regel = f"  • {w['adres']} — {pers_txt} — {w['afstand_m']} m — {datum} — {w['url']}"
             tekst_regels.append(regel)
             html_blokken.append(
-                f"<li><strong>{w['adres']}</strong> — {w['afstand_m']} m — {datum} — "
+                f"<li><strong>{w['adres']}</strong> — {pers_txt} — {w['afstand_m']} m — {datum} — "
                 f"<a href=\"{w['url']}\">bekijk bekendmaking</a></li>"
             )
         html_blokken.append("</ul>")

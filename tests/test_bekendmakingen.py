@@ -128,6 +128,43 @@ def test_controleer_favorieten_meldt_geen_dubbele(tmp_path, monkeypatch):
     assert tweede == []  # zelfde publicatie -> geen nieuwe melding
 
 
+def test_controleer_favorieten_slaat_3persoons_over(tmp_path, monkeypatch):
+    # Een 3-persoonsvergunning legt geen 50m-afstandseis op -> geen waarschuwing.
+    state = _favoriet(tmp_path)
+    monkeypatch.setattr(
+        bekendmakingen,
+        "haal_recente_vergunningen",
+        lambda *a, **k: [
+            Vergunning(
+                "gmb-2026-3", "Vergunning kamerverhuur C.P.Tielestraat 30B", "2026-08-12",
+                "https://zoek/gmb-2026-3.html", "C.P.Tielestraat 30B",
+                "rotterdam", 51.91402645, 4.45286674, aantal_personen=3,
+            )
+        ],
+    )
+    nieuw = bekendmakingen.controleer_favorieten(state, tmp_path / "cache.json", vandaag=date(2026, 8, 20))
+    assert nieuw == []
+
+
+def test_controleer_favorieten_waarschuwt_voor_4plus(tmp_path, monkeypatch):
+    state = _favoriet(tmp_path)
+    monkeypatch.setattr(
+        bekendmakingen,
+        "haal_recente_vergunningen",
+        lambda *a, **k: [
+            Vergunning(
+                "gmb-2026-4", "Vergunning kamerverhuur C.P.Tielestraat 30B", "2026-08-12",
+                "https://zoek/gmb-2026-4.html", "C.P.Tielestraat 30B",
+                "rotterdam", 51.91402645, 4.45286674, aantal_personen=5,
+            )
+        ],
+    )
+    nieuw = bekendmakingen.controleer_favorieten(state, tmp_path / "cache.json", vandaag=date(2026, 8, 20))
+    assert len(nieuw) == 1
+    _fav, waarschuwingen = nieuw[0]
+    assert waarschuwingen[0]["aantal_personen"] == 5
+
+
 def test_controleer_favorieten_negeert_vergunning_buiten_50m(tmp_path, monkeypatch):
     state = _favoriet(tmp_path)
     monkeypatch.setattr(

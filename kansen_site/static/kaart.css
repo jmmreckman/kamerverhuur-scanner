@@ -448,3 +448,5 @@ body {
 }
 
 .grafiek svg { display: block; }
+
+.checkbox-sub { margin-left: 1.2rem; font-weight: 400; font-size: 0.9em; color: var(--tekst-zwak); }

@@ -251,7 +251,11 @@ van te wachten tot 09:00. Verder:
   knop **"Vergunningen checken"** in de kop) gecontroleerd tegen de officiële
   bekendmakingen: zodra er een **nieuwe kamerverhuurvergunning binnen 50 m** van een
   favoriet is afgegeven, komt er een waarschuwing bij de woning (rode marker + venstertje)
-  én een e-mail naar `REPORT_TO_ADDRESS`. Dit vult de bestaande 50m-check aan (die
+  én een e-mail naar `REPORT_TO_ADDRESS`. **Alleen vergunningen voor 4 of meer bewoners**
+  tellen mee: de 50 m-afstandseis van Rotterdam geldt uitsluitend t.o.v. bestaande 4+-
+  vergunningen (Verordening samenstelling Woningvoorraad 2025, art. 2.2.3), dus een
+  3-persoonsvergunning in de buurt is voor je vergunningskansen niet relevant en wordt niet
+  gemeld (het aantal personen wordt uit de body van de bekendmaking gelezen). Dit vult de bestaande 50m-check aan (die
   gebruikt de gemeentekaart, `rotterdam_scanner/gis.py`): de officiële bekendmakingen
   verschijnen dáár eerder dan op die kaart, dus dit is de vroege waarschuwing — juist
   handig vlak na aankoop, als een nieuwe buurvergunning je eigen vergunningskansen
@@ -287,14 +291,19 @@ je doen. Daarna regelt Caddy automatisch gratis HTTPS, net als bij de andere sub
 Naast de kansen (te koop staande panden) kan de kaart-website ook **alle verleende
 kamerverhuurvergunningen** van Rotterdam tonen, uit de officiële bekendmakingen. Twee
 vinkjes bovenaan de filters: **"Toon kansen"** (je gewone kansenlijst, standaard aan) en
-**"Toon vergunningen"** (alle verleende vergunningen als aparte, geclusterde paarse laag).
-Klik op een vergunning voor adres, wijk, **aantal personen** waarvoor is verleend,
-besluitdatum, postcode, zaaknummer en een link naar de bekendmaking.
+**"Toon vergunningen"** (de verleende **4+**-vergunningen als aparte, geclusterde paarse
+laag — dit zijn de vergunningen die de 50 m-afstandseis opleggen). Een extra vinkje **"ook
+3-kamer vergunningen"** voegt de 3-persoonsvergunningen toe (in een andere kleur); die
+leggen geen afstandseis op en staan daarom ook niet op de gemeentekaart. Klik op een
+vergunning voor adres, wijk, **aantal personen** waarvoor is verleend, besluitdatum,
+postcode, zaaknummer en een link naar de bekendmaking.
 
 De knop **"Data-analyse"** (in de kop) opent een dashboard met grafieken (kale inline-SVG,
 geen externe library): vergunningen **per wijk**, **per week/maand/jaar** (trend over de
 tijd — groeiend of gelijk gebleven), met filters op **wijk** (bv. inzoomen op Beverwaard)
-en **"afgelopen X dagen"** (bv. hoeveel er de laatste 45 dagen zijn verleend).
+en **"afgelopen X dagen"** (bv. hoeveel er de laatste 45 dagen zijn verleend). Twee vinkjes
+**"4+ vergunningen"** en **"3-kamer vergunningen"** zetten elk vergunningstype los aan/uit
+in alle grafieken en kerncijfers.
 
 Onder water:
 - `rotterdam_scanner/vergunningenindex.py` bouwt de dataset op: het inventariseert alle
