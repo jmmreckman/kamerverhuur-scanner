@@ -49,29 +49,80 @@ REKENVELDEN = [
 
 _PROCENT_VELDEN = {key for key, _label, soort in REKENVELDEN if soort == "procent"}
 
+# Gedeelde (markt/model-)uitgangspunten: gelden als globale standaard voor álle
+# panden en zijn instelbaar op /reken-instellingen. Koopsom en aantal kamers horen
+# bij de woning zelf en zijn dus géén gedeelde standaard.
+_GEDEELDE_REKENVELDEN = [k for k, _l, _s in REKENVELDEN if k not in ("koopsom", "aantal_kamers")]
 
-def _reken_uitgangspunten_dict(item) -> dict:
-    """Standaardaannames (RekenUitgangspunten) met de koopsom en het aantal kamers
-    voorgevuld uit de woning zelf. Percentages als fractie (0.08)."""
-    return asdict(RekenUitgangspunten(
+
+def _reken_defaults_pad(config) -> Path:
+    return Path(config.state_path).parent / "reken_defaults.json"
+
+
+def _laad_reken_defaults(config) -> dict:
+    """Globaal ingestelde standaardwaarden (reken_defaults.json). Leeg = nog nooit
+    iets globaal aangepast, dan gelden de RekenUitgangspunten-constanten."""
+    try:
+        data = json.loads(_reken_defaults_pad(config).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _schrijf_reken_defaults(config, defaults: dict) -> None:
+    pad = _reken_defaults_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    pad.write_text(json.dumps(defaults, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _ongeveer_gelijk(a, b) -> bool:
+    """Float-veilige gelijkheid: een pand 'volgde' de oude globale waarde als zijn
+    opgeslagen waarde daar (vrijwel) aan gelijk is."""
+    try:
+        return abs(float(a) - float(b)) < 1e-9
+    except (TypeError, ValueError):
+        return a == b
+
+
+def _effectieve_globale_defaults(config) -> dict:
+    """De gedeelde uitgangspunten: de RekenUitgangspunten-standaard, overschreven
+    door wat er globaal is ingesteld (reken_defaults.json). Alleen de gedeelde velden
+    (dus zonder koopsom/aantal_kamers). Percentages als fractie."""
+    # koopsom/aantal_kamers zijn verplichte velden maar irrelevant voor de gedeelde
+    # standaarden; dummy 0 om de overige defaults uit te lezen.
+    basis = asdict(RekenUitgangspunten(koopsom=0, aantal_kamers=0))
+    globaal = _laad_reken_defaults(config)
+    return {key: globaal.get(key, basis[key]) for key in _GEDEELDE_REKENVELDEN}
+
+
+def _reken_uitgangspunten_dict(item, globale_defaults: dict) -> dict:
+    """Standaardaannames met de koopsom en het aantal kamers voorgevuld uit de woning
+    zelf, en de gedeelde velden op de globaal ingestelde standaard. Fractie (0.08)."""
+    uitg = asdict(RekenUitgangspunten(
         koopsom=float(item.prijs or 0),
         aantal_kamers=int(item.aantal_kamers_mogelijk or 0),
     ))
+    for key, waarde in globale_defaults.items():
+        if key in uitg:
+            uitg[key] = waarde
+    return uitg
 
 
-def _huidige_uitgangspunten(item) -> dict:
-    """De voor déze woning geldende uitgangspunten: standaard + voorvulling,
+def _huidige_uitgangspunten(item, config) -> dict:
+    """De voor déze woning geldende uitgangspunten: globale standaard + voorvulling,
     overschreven door wat de gebruiker eerder op de rekenpagina heeft aangepast."""
-    uitg = _reken_uitgangspunten_dict(item)
+    uitg = _reken_uitgangspunten_dict(item, _effectieve_globale_defaults(config))
     for key, waarde in (item.berekening or {}).items():
         if key in uitg:
             uitg[key] = waarde
     return uitg
 
 
-def _velden_voor_weergave(uitg: dict) -> list[dict]:
+def _velden_voor_weergave(uitg: dict, alleen_gedeeld: bool = False) -> list[dict]:
     velden = []
     for key, label, soort in REKENVELDEN:
+        if alleen_gedeeld and key not in _GEDEELDE_REKENVELDEN:
+            continue
         waarde = uitg[key]
         if soort == "procent":
             waarde = round(waarde * 100, 4)
@@ -372,7 +423,7 @@ def create_app(config: Config | None = None) -> Flask:
         item = state.get(object_id)
         if item is None:
             abort(404)
-        uitg = _huidige_uitgangspunten(item)
+        uitg = _huidige_uitgangspunten(item, config)
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return render_template(
             "berekening.html", item=item, velden=_velden_voor_weergave(uitg),
@@ -390,7 +441,7 @@ def create_app(config: Config | None = None) -> Flask:
             return jsonify({"fout": "Onbekende woning."}), 404
 
         data = request.get_json(silent=True) or {}
-        uitg = _huidige_uitgangspunten(item)
+        uitg = _huidige_uitgangspunten(item, config)
         for key, _label, soort in REKENVELDEN:
             if key not in data:
                 continue
@@ -410,6 +461,66 @@ def create_app(config: Config | None = None) -> Flask:
         state.save()
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
+
+    @app.route("/reken-instellingen", methods=["GET", "POST"])
+    @login_required
+    def reken_instellingen():
+        # Globale standaard-uitgangspunten voor de rekentool van álle panden. Wijzig
+        # je hier bv. de rente, dan geldt dat voor elk pand dat de oude globale waarde
+        # volgde; een pand waar je bewust iets anders invulde blijft ongemoeid.
+        state = StateStore(config.state_path)
+        oud = _effectieve_globale_defaults(config)
+
+        if request.method == "POST":
+            nieuw = dict(oud)
+            for key, _label, soort in REKENVELDEN:
+                if key not in _GEDEELDE_REKENVELDEN or key not in request.form:
+                    continue
+                ruw = request.form.get(key, "").replace(",", ".").strip()
+                if ruw == "":
+                    continue
+                try:
+                    waarde = float(ruw)
+                except ValueError:
+                    flash(f"Ongeldige waarde voor {key} - overgeslagen.")
+                    continue
+                nieuw[key] = waarde / 100 if soort == "procent" else waarde
+            nieuw["aantal_investeerders"] = int(round(nieuw["aantal_investeerders"])) or 1
+
+            # Propageer elke gewijzigde waarde naar de panden die de óude globale
+            # waarde volgden (of er geen eigen waarde voor hadden). Panden met een
+            # afwijkende (bewust ingevulde) waarde blijven ongewijzigd.
+            gewijzigd = [k for k in _GEDEELDE_REKENVELDEN if not _ongeveer_gelijk(nieuw[k], oud[k])]
+            bijgewerkt = 0
+            if gewijzigd:
+                for woning in state.all():
+                    ber = woning.berekening
+                    if not ber:
+                        continue  # geen eigen berekening -> volgt de globale vanzelf
+                    pand_gewijzigd = False
+                    for k in gewijzigd:
+                        if k in ber and _ongeveer_gelijk(ber[k], oud[k]):
+                            ber[k] = nieuw[k]
+                            pand_gewijzigd = True
+                    if pand_gewijzigd:
+                        woning.berekening = ber
+                        state.upsert(woning)
+                        bijgewerkt += 1
+                if bijgewerkt:
+                    state.save()
+
+            _schrijf_reken_defaults(config, {k: nieuw[k] for k in _GEDEELDE_REKENVELDEN})
+            flash(
+                f"Standaardwaarden opgeslagen. {bijgewerkt} pand(en) volgden de oude waarde "
+                "en zijn meebijgewerkt; panden met een eigen waarde bleven ongewijzigd."
+            )
+            return redirect(url_for("reken_instellingen"))
+
+        return render_template(
+            "reken_instellingen.html",
+            velden=_velden_voor_weergave(dict(oud), alleen_gedeeld=True),
+            gebruiker=session["gebruiker"],
+        )
 
     @app.route("/kansen/<object_id>/terugplaatsen", methods=["POST"])
     @login_required

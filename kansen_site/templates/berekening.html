@@ -12,6 +12,7 @@
     <h1>Rekentool</h1>
     <div class="topbar-acties">
       <span id="opslag-status" class="muted"></span>
+      <a href="{{ url_for('reken_instellingen') }}" class="link-knop">Instellingen alle panden</a>
       <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
       <span class="muted">{{ gebruiker }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>

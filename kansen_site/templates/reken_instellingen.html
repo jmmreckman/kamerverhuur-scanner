@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reken-instellingen - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='berekening.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Reken-instellingen</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="reken-kop">
+    <h2>Standaard-uitgangspunten voor alle panden</h2>
+    <p class="muted">
+      Deze waarden zijn het startpunt voor de rekentool van élk pand. Pas je hier bijvoorbeeld de
+      rente aan, dan schuift dat door naar alle panden die de oude waarde volgden. Een pand waar je
+      op de rekentool zelf bewust iets anders invulde, houdt die eigen waarde. Koopsom en aantal
+      kamers stel je per pand in.
+    </p>
+  </div>
+
+  {% with berichten = get_flashed_messages() %}
+    {% if berichten %}
+      <div class="reken-flash">{% for b in berichten %}<p>{{ b }}</p>{% endfor %}</div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="reken-kolom reken-instellingen">
+    <form id="reken-instellingen-form" method="post" autocomplete="off">
+      {% for veld in velden %}
+      <label class="reken-veld">
+        <span>{{ veld.label }}</span>
+        <span class="reken-invoer">
+          {% if veld.soort == "euro" %}<span class="teken">€</span>{% endif %}
+          <input type="number" step="{{ '1' if veld.soort == 'aantal' else 'any' }}"
+                 {% if veld.soort == 'aantal' %}min="0"{% endif %}
+                 name="{{ veld.key }}" value="{{ veld.waarde }}" inputmode="decimal">
+          {% if veld.soort == "procent" %}<span class="teken">%</span>{% endif %}
+        </span>
+      </label>
+      {% endfor %}
+      <p class="muted reken-koppeling-uitleg">De BAR volgt automatisch de rente
+        (ΔBAR = LTV × Δrente). Handmatig overschrijven mag.</p>
+      <div class="reken-instellingen-acties">
+        <button type="submit" class="reken-knop-primair">Opslaan voor alle panden</button>
+        <a href="{{ url_for('kaart') }}" class="link-knop">Annuleren</a>
+      </div>
+    </form>
+  </div>
+
+  <script src="{{ url_for('static', filename='reken_instellingen.js') }}"></script>
+</body>
+</html>

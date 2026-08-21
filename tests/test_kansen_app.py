@@ -641,3 +641,59 @@ def test_data_analyse_pagina_rendert(app_client):
     resp = app_client.get("/data-analyse")
     assert resp.status_code == 200
     assert b"Data-analyse" in resp.data
+
+
+# --- Globale reken-instellingen ---
+
+from dataclasses import asdict as _asdict
+from rotterdam_scanner.investering import RekenUitgangspunten as _RU
+
+
+def test_reken_instellingen_pagina_rendert(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/reken-instellingen")
+    assert resp.status_code == 200
+    assert "Standaard-uitgangspunten voor alle panden".encode() in resp.data
+
+
+def test_reken_instellingen_propageert_naar_volgende_panden_niet_naar_custom(tmp_path):
+    import json
+    default_rente = _asdict(_RU(koopsom=0, aantal_kamers=0))["rente"]  # de huidige globale standaard (fractie)
+
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    # Pand A volgt de oude globale rente; pand B heeft een eigen (afwijkende) rente;
+    # pand C heeft helemaal geen eigen berekening.
+    _zet_listing(tmp_path, object_id="A", berekening={"rente": default_rente, "bar": 0.076})
+    _zet_listing(tmp_path, object_id="B", berekening={"rente": default_rente + 0.001, "bar": 0.076})
+    _zet_listing(tmp_path, object_id="C")
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    nieuwe_rente_procent = round(default_rente * 100 + 1, 4)  # +1 procentpunt
+    resp = client.post("/reken-instellingen", data={"rente": str(nieuwe_rente_procent)}, follow_redirects=True)
+    assert resp.status_code == 200
+
+    listings = json.loads((tmp_path / "state.json").read_text())["listings"]
+    assert listings["A"]["berekening"]["rente"] == pytest.approx(default_rente + 0.01)  # meebijgewerkt
+    assert listings["B"]["berekening"]["rente"] == pytest.approx(default_rente + 0.001)  # eigen waarde blijft
+    assert listings["C"]["berekening"] is None  # geen eigen berekening -> volgt globaal vanzelf
+
+    defaults = json.loads((tmp_path / "reken_defaults.json").read_text())
+    assert defaults["rente"] == pytest.approx(default_rente + 0.01)
+
+
+def test_woning_zonder_berekening_volgt_globale_rente(tmp_path):
+    default_rente = _asdict(_RU(koopsom=0, aantal_kamers=0))["rente"]
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path, object_id="C", prijs=350_000, aantal_kamers_mogelijk=6)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    client.post("/reken-instellingen", data={"rente": str(round(default_rente * 100 + 2, 4))})
+    # De rekentool van pand C (zonder eigen berekening) toont nu de nieuwe globale rente.
+    resp = client.get("/woning/C/berekening")
+    nieuw = round(default_rente * 100 + 2, 4)
+    getoond = str(int(nieuw)) if float(nieuw).is_integer() else str(nieuw)
+    assert f'name="rente" value="{getoond}"'.encode() in resp.data

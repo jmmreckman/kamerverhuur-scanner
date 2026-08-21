@@ -93,3 +93,36 @@
   font-size: 1.02em;
 }
 .reken-uitkomst tr.groot td:last-child { color: var(--groen); }
+
+/* --- Globale reken-instellingen-pagina --- */
+.reken-instellingen {
+  max-width: 520px;
+  margin: 1rem auto 2rem;
+}
+.reken-flash {
+  max-width: 520px;
+  margin: 0 auto;
+  background: #e7f6ec;
+  border: 1px solid #b5e0c4;
+  color: #1b5e35;
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+}
+.reken-flash p { margin: 0.2rem 0; }
+.reken-instellingen-acties {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.2rem;
+}
+.reken-knop-primair {
+  background: var(--groen);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reken-knop-primair:hover { opacity: 0.92; }
