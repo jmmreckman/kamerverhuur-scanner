@@ -38,7 +38,7 @@ from kamerverhuur_scanner.runner import (
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen
+from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen, wwso
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
@@ -2173,10 +2173,32 @@ def create_app(config: Config | None = None) -> Flask:
                     aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
             pdf_bestandsnaam = Path(bestandsnaam).with_suffix(".pdf").name
+            bijlagen = [(pdf_bestandsnaam, "application/pdf", pdf)]
+
+            # Naast het huurcontract hoort het per-kamer WWSO-rapport uit de
+            # Drive (wwso/<jaar>/<kamernaam>.pdf) - onderin het contract wordt
+            # ernaar verwezen. Lukt het bijvoegen niet, dan waarschuwen we
+            # vóór het mailen zodat de beheerder het eerst kan rechtzetten;
+            # met het vinkje "toch zonder" gaat de mail bewust zonder mee.
+            toch_zonder_wwso = bool(request.form.get("toch_zonder_wwso"))
+            if not toch_zonder_wwso:
+                try:
+                    bijlagen.append(
+                        wwso.haal_wwso_bijlage(
+                            config, g.pand, metadata.get("kamer", ""),
+                            wwso.wwso_jaar(metadata),
+                        )
+                    )
+                except wwso.WwsoOntbreekt as exc:
+                    return render_template(
+                        "contract_mailen.html", bestandsnaam=bestandsnaam,
+                        aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
+                        wwso_waarschuwing=str(exc),
+                    )
             try:
                 verstuur_email(
                     config, aan, onderwerp, tekst, bcc=bcc_adressen,
-                    bijlagen=[(pdf_bestandsnaam, "application/pdf", pdf)],
+                    bijlagen=bijlagen,
                 )
             except MailError as exc:
                 flash(str(exc))
@@ -2184,7 +2206,10 @@ def create_app(config: Config | None = None) -> Flask:
                     "contract_mailen.html", bestandsnaam=bestandsnaam,
                     aan=aan, onderwerp=onderwerp, tekst=tekst, bcc_adressen=bcc_adressen,
                 )
-            flash(f"Concept-huurcontract gemaild naar {aan}.")
+            if toch_zonder_wwso:
+                flash(f"Concept-huurcontract gemaild naar {aan} - zónder WWSO-rapport.")
+            else:
+                flash(f"Concept-huurcontract + WWSO-rapport gemaild naar {aan}.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
 
         opgesteld = contracts.bouw_concept_email(g.pand, metadata)

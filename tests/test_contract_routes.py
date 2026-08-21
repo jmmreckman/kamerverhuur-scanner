@@ -259,8 +259,9 @@ def test_contract_mailen_vult_emailadres_en_engelse_tekst_voor(app_client):
     assert "Bold" in body
 
 
+@patch("webapp.wwso.haal_wwso_bijlage", return_value=("1.pdf", "application/pdf", b"%PDF-wwso"))
 @patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
-def test_contract_mailen_verstuurt_met_pdf_bijlage_en_bcc(mock_smtp_cls, app_client):
+def test_contract_mailen_verstuurt_met_pdf_bijlage_en_bcc(mock_smtp_cls, mock_wwso, app_client):
     smtp_instance = MagicMock()
     mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
     bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
@@ -280,8 +281,53 @@ def test_contract_mailen_verstuurt_met_pdf_bijlage_en_bcc(mock_smtp_cls, app_cli
     assert verzonden_bericht["Bcc"] == "jurian@example.com, justin@example.com"
     assert verzonden_bericht["Cc"] is None
     bijlagen = list(verzonden_bericht.iter_attachments())
-    assert len(bijlagen) == 1
+    # naast het contract hoort het per-kamer WWSO-rapport meegestuurd te worden.
+    assert len(bijlagen) == 2
     assert bijlagen[0].get_content_type() == "application/pdf"
+    assert bijlagen[0].get_content().startswith(b"%PDF")
+    # het WWSO-rapport uit de Drive is met de juiste kamer en jaar opgevraagd.
+    args = mock_wwso.call_args[0]
+    assert args[2] == "1"  # kamer
+    assert args[3] == 2026  # jaar van de ingangsdatum
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_contract_mailen_waarschuwt_en_verstuurt_niet_als_wwso_ontbreekt(mock_smtp_cls, app_client):
+    # In de testconfig is geen Drive-koppeling (RCLONE_REMOTE) ingesteld, dus het
+    # WWSO-rapport kan niet opgehaald worden: er hoort een waarschuwing te komen
+    # en er mag NIETS verstuurd worden.
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/mailen",
+        data={"aan": "bence@example.com", "onderwerp": "Draft", "tekst": "Dear Bence, ..."},
+    )
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "WWSO-rapport kon niet bijgevoegd worden" in body
+    assert "toch_zonder_wwso" in body
+    smtp_instance.send_message.assert_not_called()
+
+
+@patch("kamerverhuur_scanner.mailer.smtplib.SMTP")
+def test_contract_mailen_toch_zonder_wwso_verstuurt_alleen_contract(mock_smtp_cls, app_client):
+    smtp_instance = MagicMock()
+    mock_smtp_cls.return_value.__enter__.return_value = smtp_instance
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/mailen",
+        data={"aan": "bence@example.com", "onderwerp": "Draft", "tekst": "Dear Bence, ...",
+              "toch_zonder_wwso": "1"},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "zónder WWSO-rapport" in resp.get_data(as_text=True)
+    verzonden_bericht = smtp_instance.send_message.call_args[0][0]
+    bijlagen = list(verzonden_bericht.iter_attachments())
+    assert len(bijlagen) == 1
     assert bijlagen[0].get_content().startswith(b"%PDF")
 
 

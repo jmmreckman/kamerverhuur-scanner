@@ -11,9 +11,19 @@
     <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}" target="_blank" rel="noopener">Bekijk contract</a>
     - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}">Download als PDF</a>
   </p>
-  <p class="muted">Het contract wordt automatisch als PDF-bijlage meegestuurd, verzonden vanaf info@steenhub.nl.
+  <p class="muted">Het contract wordt automatisch als PDF-bijlage meegestuurd, samen met het
+     bijbehorende WWSO-rapport (puntentelling) uit de Drive. Verzonden vanaf info@steenhub.nl.
      {% if bcc_adressen %}In BCC (blind, huurder ziet dit niet): {{ bcc_adressen|join(', ') }}.{% endif %}
      Je kunt onderwerp en tekst hieronder nog aanpassen voordat je 'm verstuurt.</p>
+
+  {% if wwso_waarschuwing %}
+  <div class="melding melding-waarschuwing" style="border:1px solid #d99; background:#fdf3f3; color:#8a2b2b; padding:0.8rem 1rem; border-radius:6px; margin:1rem 0">
+    <strong>Het WWSO-rapport kon niet bijgevoegd worden - er is nog niets verstuurd.</strong>
+    <p style="margin:0.4rem 0 0">{{ wwso_waarschuwing }}</p>
+    <p style="margin:0.4rem 0 0">Zet het rapport goed in de Drive en klik nogmaals op <em>Versturen</em>,
+       óf vink hieronder aan om het bewust zonder WWSO-rapport te versturen.</p>
+  </div>
+  {% endif %}
 
   <form method="post" onsubmit="return confirm('Concept-huurcontract nu versturen naar ' + this.aan.value + '?');">
     <label>Aan (e-mailadres huurder)
@@ -25,6 +35,12 @@
     <label>Tekst
       <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
     </label>
+
+    {% if wwso_waarschuwing %}
+    <label class="checkbox-filter" style="display:flex; align-items:center; gap:0.5rem; margin-top:1rem">
+      <input type="checkbox" name="toch_zonder_wwso" value="1"> Toch mailen zonder WWSO-rapport
+    </label>
+    {% endif %}
 
     <div style="margin-top:1rem; display:flex; gap:0.6rem">
       <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
