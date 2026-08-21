@@ -41,6 +41,10 @@
         <label class="checkbox-filter"><input type="checkbox" id="toon-4plus" checked> 4+ vergunningen</label>
         <label class="checkbox-filter"><input type="checkbox" id="toon-3kamer-analyse" checked> 3-kamer vergunningen</label>
       </span>
+      <span class="grootte-toggles">
+        <label class="checkbox-filter"><input type="checkbox" id="toon-regulier" checked> reguliere vergunningen</label>
+        <label class="checkbox-filter"><input type="checkbox" id="toon-overgang" checked> legalisatie (overgangsbepaling)</label>
+      </span>
       <button type="button" id="reset-knop" class="link-knop">Reset</button>
     </div>
 
@@ -48,6 +52,7 @@
 
     <section class="grafiek-blok">
       <h3 id="trend-titel">Vergunningen per maand</h3>
+      <div id="trend-legenda" class="grafiek-legenda"></div>
       <div id="trend-grafiek" class="grafiek"></div>
     </section>
 

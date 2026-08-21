@@ -8,9 +8,12 @@ const dagenInput = document.getElementById("dagen-input");
 const periodeSelect = document.getElementById("periode-select");
 const toon4plusEl = document.getElementById("toon-4plus");
 const toon3kamerEl = document.getElementById("toon-3kamer-analyse");
+const toonRegulierEl = document.getElementById("toon-regulier");
+const toonOvergangEl = document.getElementById("toon-overgang");
 const resetKnop = document.getElementById("reset-knop");
 const kerncijfersEl = document.getElementById("kerncijfers");
 const trendEl = document.getElementById("trend-grafiek");
+const trendLegendaEl = document.getElementById("trend-legenda");
 const trendTitelEl = document.getElementById("trend-titel");
 const wijkGrafiekEl = document.getElementById("wijk-grafiek");
 const statusEl = document.getElementById("laad-status");
@@ -51,12 +54,29 @@ function isDrieKamer(v) {
   return v.aantal_personen === 3;
 }
 
+// Regulier vs. legalisatie (overgangsbepaling), plus "onbekend" zolang een record
+// nog niet is her-geclassificeerd (soort === null tijdens de opbouw van de index).
+const SOORTEN = [
+  { key: "regulier", label: "regulier", kleur: "#ab47bc" },
+  { key: "overgangsbepaling", label: "legalisatie (overgangsbepaling)", kleur: "#ef6c00" },
+  { key: "onbekend", label: "nog niet geclassificeerd", kleur: "#c4ccd4" },
+];
+const SOORT_KLEUR = Object.fromEntries(SOORTEN.map((s) => [s.key, s.kleur]));
+
+function soortVan(v) {
+  if (v.soort === "overgangsbepaling") return "overgangsbepaling";
+  if (v.soort === "regulier") return "regulier";
+  return "onbekend";
+}
+
 // De actueel gefilterde selectie (wijk + afgelopen X dagen + grootte-toggles).
 function gefilterd() {
   const wijk = wijkSelect.value;
   const dagen = parseInt(dagenInput.value, 10);
   const toon3 = toon3kamerEl.checked;
   const toon4 = toon4plusEl.checked;
+  const toonRegulier = toonRegulierEl.checked;
+  const toonOvergang = toonOvergangEl.checked;
   let grens = null;
   if (!isNaN(dagen) && dagen > 0) {
     const d = new Date();
@@ -67,6 +87,11 @@ function gefilterd() {
     const drie = isDrieKamer(v);
     if (drie && !toon3) return false;
     if (!drie && !toon4) return false;
+    const soort = soortVan(v);
+    // "onbekend" (nog niet geclassificeerd) blijft altijd zichtbaar, zodat er
+    // niets stil verdwijnt terwijl de index de soort-classificatie nog opbouwt.
+    if (soort === "regulier" && !toonRegulier) return false;
+    if (soort === "overgangsbepaling" && !toonOvergang) return false;
     if (wijk && (v.gebied || "Onbekend") !== wijk) return false;
     if (grens && (v.datum || "") < grens) return false;
     return true;
@@ -85,34 +110,43 @@ function telPer(vergunningen, sleutelFn) {
 
 // --- SVG-grafieken ---
 
-function verticaleBars(paren, opts) {
-  // paren: [[label, waarde], ...] in chronologische volgorde
-  if (!paren.length) return '<p class="muted">Geen data in deze selectie.</p>';
+function gestapeldeBars(rijen) {
+  // rijen: [[label, {regulier, overgangsbepaling, onbekend}], ...] chronologisch.
+  // Elke staaf is gestapeld per soort, met het totaal als label erboven, zodat je
+  // in één blik de legalisatie-hap (oranje) los ziet van de reguliere verlening.
+  if (!rijen.length) return '<p class="muted">Geen data in deze selectie.</p>';
   const barB = 26;
   const gap = 6;
   const hoogte = 200;
   const marge = { boven: 12, onder: 46, links: 34 };
-  const maxV = Math.max(...paren.map((p) => p[1]), 1);
+  const totaalVan = (t) => SOORTEN.reduce((s, so) => s + (t[so.key] || 0), 0);
+  const maxV = Math.max(...rijen.map((r) => totaalVan(r[1])), 1);
   const plotH = hoogte - marge.boven - marge.onder;
-  const breedte = marge.links + paren.length * (barB + gap) + gap;
-  const labelElke = Math.ceil(paren.length / 24);
+  const breedte = marge.links + rijen.length * (barB + gap) + gap;
+  const labelElke = Math.ceil(rijen.length / 24);
 
   let svg = `<svg viewBox="0 0 ${breedte} ${hoogte}" width="${breedte}" height="${hoogte}" role="img">`;
-  // y-as referentielijnen (0 en max)
   const yBij = (v) => marge.boven + plotH - (v / maxV) * plotH;
   for (const v of [0, maxV]) {
     const y = yBij(v);
     svg += `<line x1="${marge.links}" y1="${y}" x2="${breedte}" y2="${y}" stroke="#e2e6ea"/>`;
     svg += `<text x="${marge.links - 5}" y="${y + 3}" text-anchor="end" font-size="10" fill="#66707a">${v}</text>`;
   }
-  paren.forEach((p, i) => {
+  rijen.forEach((r, i) => {
     const x = marge.links + gap + i * (barB + gap);
-    const h = (p[1] / maxV) * plotH;
-    const y = marge.boven + plotH - h;
-    svg += `<rect x="${x}" y="${y}" width="${barB}" height="${h}" fill="${opts.kleur}" rx="2"><title>${escapeHtml(p[0])}: ${p[1]}</title></rect>`;
-    svg += `<text x="${x + barB / 2}" y="${y - 3}" text-anchor="middle" font-size="9" fill="#1c2126">${p[1]}</text>`;
+    const tellingen = r[1];
+    const totaal = totaalVan(tellingen);
+    let onder = marge.boven + plotH; // stapel van onderaf op
+    for (const so of SOORTEN) {
+      const aantal = tellingen[so.key] || 0;
+      if (!aantal) continue;
+      const h = (aantal / maxV) * plotH;
+      onder -= h;
+      svg += `<rect x="${x}" y="${onder}" width="${barB}" height="${h}" fill="${so.kleur}"><title>${escapeHtml(r[0])} — ${escapeHtml(so.label)}: ${aantal}</title></rect>`;
+    }
+    svg += `<text x="${x + barB / 2}" y="${onder - 3}" text-anchor="middle" font-size="9" fill="#1c2126">${totaal}</text>`;
     if (i % labelElke === 0) {
-      svg += `<text x="${x + barB / 2}" y="${hoogte - marge.onder + 14}" text-anchor="end" font-size="9" fill="#66707a" transform="rotate(-45 ${x + barB / 2} ${hoogte - marge.onder + 14})">${escapeHtml(p[0])}</text>`;
+      svg += `<text x="${x + barB / 2}" y="${hoogte - marge.onder + 14}" text-anchor="end" font-size="9" fill="#66707a" transform="rotate(-45 ${x + barB / 2} ${hoogte - marge.onder + 14})">${escapeHtml(r[0])}</text>`;
     }
   });
   svg += "</svg>";
@@ -148,13 +182,25 @@ function render() {
   const selectie = gefilterd();
   const periode = periodeSelect.value;
 
-  // Trend per periode (chronologisch gesorteerd).
-  const perPeriode = [...telPer(selectie, (v) => periodeKey(v.datum, periode)).entries()].sort(
-    (a, b) => (a[0] < b[0] ? -1 : 1)
-  );
+  // Trend per periode (chronologisch), gestapeld per soort (regulier/legalisatie).
+  const perPeriodeMap = new Map();
+  for (const v of selectie) {
+    const k = periodeKey(v.datum, periode);
+    if (k === null || k === undefined) continue;
+    let t = perPeriodeMap.get(k);
+    if (!t) {
+      t = { regulier: 0, overgangsbepaling: 0, onbekend: 0 };
+      perPeriodeMap.set(k, t);
+    }
+    t[soortVan(v)] += 1;
+  }
+  const perPeriode = [...perPeriodeMap.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const labelPeriode = { week: "week", maand: "maand", jaar: "jaar" }[periode];
   trendTitelEl.textContent = `Vergunningen per ${labelPeriode}${wijkSelect.value ? " — " + wijkSelect.value : ""}`;
-  trendEl.innerHTML = verticaleBars(perPeriode, { kleur: "#ab47bc" });
+  trendLegendaEl.innerHTML = SOORTEN.map(
+    (s) => `<span class="legenda-item"><span class="legenda-vlak" style="background:${s.kleur}"></span>${escapeHtml(s.label)}</span>`
+  ).join("");
+  trendEl.innerHTML = gestapeldeBars(perPeriode);
 
   // Per wijk (desc).
   const perWijk = [...telPer(selectie, (v) => v.gebied || "Onbekend").entries()].sort((a, b) => b[1] - a[1]);
@@ -165,10 +211,26 @@ function render() {
   const drukste = perWijk[0];
   const aantalWeken = perPeriode.length && periode === "week" ? perPeriode.length : null;
   const gemPerWeek = periode === "week" && aantalWeken ? (totaal / aantalWeken).toFixed(1) : null;
+  // Aandeel legalisatie (overgangsbepaling), berekend over de wél geclassificeerde
+  // records - zodat het percentage niet vertekent door de "onbekend"-bak die tijdens
+  // het opbouwen van de index nog gevuld wordt.
+  let nOvergang = 0;
+  let nRegulier = 0;
+  let nOnbekend = 0;
+  for (const v of selectie) {
+    const s = soortVan(v);
+    if (s === "overgangsbepaling") nOvergang++;
+    else if (s === "regulier") nRegulier++;
+    else nOnbekend++;
+  }
+  const geclassificeerd = nOvergang + nRegulier;
+  const pct = geclassificeerd ? Math.round((nOvergang / geclassificeerd) * 100) : null;
   kerncijfersEl.innerHTML =
     kaart("vergunningen in selectie", totaal) +
     kaart("wijken", perWijk.length) +
     (drukste ? kaart("drukste wijk", `${drukste[0]} (${drukste[1]})`) : "") +
+    (geclassificeerd ? kaart("waarvan legalisatie", `${nOvergang}${pct === null ? "" : ` (${pct}%)`}`) : "") +
+    (nOnbekend ? kaart("nog te classificeren", nOnbekend) : "") +
     (gemPerWeek ? kaart("gem. per week", gemPerWeek) : "");
 }
 
@@ -202,7 +264,7 @@ async function laad() {
   }
 }
 
-for (const el of [wijkSelect, dagenInput, periodeSelect, toon4plusEl, toon3kamerEl]) {
+for (const el of [wijkSelect, dagenInput, periodeSelect, toon4plusEl, toon3kamerEl, toonRegulierEl, toonOvergangEl]) {
   el.addEventListener("input", render);
   el.addEventListener("change", render);
 }
@@ -212,6 +274,8 @@ resetKnop.addEventListener("click", () => {
   periodeSelect.value = "maand";
   toon4plusEl.checked = true;
   toon3kamerEl.checked = true;
+  toonRegulierEl.checked = true;
+  toonOvergangEl.checked = true;
   render();
 });
 

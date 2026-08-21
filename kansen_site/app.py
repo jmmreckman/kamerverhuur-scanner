@@ -330,6 +330,9 @@ def create_app(config: Config | None = None) -> Flask:
                 "gebied": vergunningenindex.normaliseer_gebied(v.get("gebied")),
                 "postcode": v.get("postcode"),
                 "aantal_personen": v.get("aantal_personen"),
+                # regulier vs. overgangsbepaling (legalisatie bestaande situatie) -
+                # None zolang een record nog niet is her-geclassificeerd.
+                "soort": v.get("soort"),
                 "datum": v.get("datum"),
                 "besluitdatum": v.get("besluitdatum"),
                 "zaaknummer": v.get("zaaknummer"),

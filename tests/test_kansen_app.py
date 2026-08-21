@@ -610,7 +610,7 @@ def test_api_vergunningen_geeft_alleen_bruikbare(tmp_path):
     client = app.test_client()
     _zet_vergunningen_index(tmp_path, [
         {"publicatie_id": "gmb-1", "verwerkt": True, "bruikbaar": True, "adres": "A-straat 1",
-         "gebied": "Delfshaven", "aantal_personen": 3, "datum": "2026-08-10",
+         "gebied": "Delfshaven", "aantal_personen": 3, "datum": "2026-08-10", "soort": "overgangsbepaling",
          "besluitdatum": "2026-08-08", "zaaknummer": "1-2026", "url": "u", "lat": 51.9, "lon": 4.45},
         {"publicatie_id": "gmb-2", "verwerkt": True, "bruikbaar": False, "adres": None},
     ])
@@ -621,6 +621,7 @@ def test_api_vergunningen_geeft_alleen_bruikbare(tmp_path):
     assert len(data["vergunningen"]) == 1
     assert data["vergunningen"][0]["adres"] == "A-straat 1"
     assert data["vergunningen"][0]["aantal_personen"] == 3
+    assert data["vergunningen"][0]["soort"] == "overgangsbepaling"
     assert data["compleet"] is True
 
 

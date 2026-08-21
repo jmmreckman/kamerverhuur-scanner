@@ -70,6 +70,13 @@ _KANDIDAAT_RE = re.compile(r"kamer(?:verhuur|bewoning)", re.IGNORECASE)
 # ontbraken en verklaarden het gat met de gemeentekaart). Zie git-geschiedenis.
 _ENUMERATIE_VERSIE = 4
 
+# Ophogen zodra parse_body een nieuw veld op de body baseert dat we op reeds
+# verwerkte records willen bijwerken zónder de (dure) her-inventarisatie +
+# her-geocodering van een enumeratie-versiebump. werk_bij haalt dan alleen de
+# body's opnieuw op om dat veld bij te werken (best-effort, in batches). v1 =
+# het 'soort'-veld (regulier vs. overgangsbepaling/legalisatie).
+_PARSE_VERSIE = 1
+
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
     "juli": 7, "augustus": 8, "september": 9, "oktober": 10, "november": 11, "december": 12,
@@ -292,7 +299,21 @@ def parse_body(html: str, titel: str | None = None) -> dict | None:
         "aantal_personen": _aantal_personen(tekst),
         "besluitdatum": _besluitdatum(tekst),
         "zaaknummer": zoek(r"Zaaknummer:\s*([\w./-]+)"),
+        "soort": _soort(tekst, titel),
     }
+
+
+def _soort(tekst: str, titel: str | None) -> str:
+    """Onderscheidt een reguliere nieuwe vergunning van een legalisatie van een
+    bestaande situatie ('overgangsbepaling'). Die laatste categorie is de golf
+    die in 2021-2022 als inhaalslag werd verleend; door hem apart te labelen kun
+    je in het dashboard de echte, nieuwe vergunningverlening los zien van de
+    eenmalige legalisatie. Signaal: de bekendmaking (titel of body) noemt de
+    'overgangsbepaling' of een 'bestaande situatie'."""
+    bron = f"{titel or ''} {tekst}".lower()
+    if "overgangsbepaling" in bron or "bestaande situatie" in bron:
+        return "overgangsbepaling"
+    return "regulier"
 
 
 class VergunningIndex:
@@ -364,6 +385,26 @@ def _verwerk_stub(stub: dict) -> None:
         stub["lat"] = stub["lon"] = None
 
 
+def _herparse_stub(stub: dict) -> None:
+    """Leest alleen de body opnieuw om body-afgeleide velden (nu: 'soort') bij te
+    werken op een al verwerkt & geocodeerd record - zónder opnieuw te geocoderen,
+    zodat een parse-versiebump goedkoop is en de kaartcoördinaten intact blijven.
+    Bij een netwerkfout blijft de herparse-vlag staan voor een volgende poging."""
+    html_url = stub.get("html_url")
+    if not html_url:
+        stub.pop("herparse", None)
+        return
+    try:
+        html = _get(html_url).text
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Herparse body ophalen mislukt (%s): %s", stub.get("publicatie_id"), exc)
+        return  # vlag blijft staan: volgende run opnieuw proberen
+    velden = parse_body(html, stub.get("titel"))
+    if velden is not None and velden.get("soort"):
+        stub["soort"] = velden["soort"]
+    stub.pop("herparse", None)
+
+
 def werk_bij(index_path: Path, batch: int = 200, vandaag: date | None = None) -> dict:
     """Werkt de index één stap bij: (1) eenmalig het hele archief inventariseren als
     stubs, (2) altijd recente publicaties toevoegen, (3) een begrensde batch nog niet
@@ -390,14 +431,30 @@ def werk_bij(index_path: Path, batch: int = 200, vandaag: date | None = None) ->
         for pid, stub in enumereer_stubs(vanaf=vandaag - timedelta(days=120)).items():
             index.vergunningen.setdefault(pid, stub)
 
+    # Parse-versiebump: markeer eerder verwerkte, bruikbare records die het nieuwe
+    # body-veld ('soort') nog missen voor een goedkope her-parse (alleen body, geen
+    # re-geocode). Nieuw verwerkte records krijgen 'soort' al direct uit parse_body.
+    if index.meta.get("parse_versie") != _PARSE_VERSIE:
+        for stub in index.vergunningen.values():
+            if stub.get("bruikbaar") and "soort" not in stub:
+                stub["herparse"] = True
+        index.meta["parse_versie"] = _PARSE_VERSIE
+
     onverwerkt = index.onverwerkt()
     for stub in onverwerkt[:batch]:
         _verwerk_stub(stub)
 
+    # Resterende batchruimte gebruiken voor de goedkope soort-herparse; nieuwe
+    # publicaties krijgen zo voorrang boven het opknappen van bestaande records.
+    herparse_ruimte = batch - min(len(onverwerkt), batch)
+    teherparsen = [v for v in index.vergunningen.values() if v.get("herparse")]
+    for stub in teherparsen[:herparse_ruimte]:
+        _herparse_stub(stub)
+
     index.meta["bijgewerkt"] = datetime.now().isoformat(timespec="seconds")
     index.save()
 
-    resterend = len(index.onverwerkt())
+    resterend = len(index.onverwerkt()) + len([v for v in index.vergunningen.values() if v.get("herparse")])
     return {
         "totaal": len(index.vergunningen),
         "bruikbaar": len(index.bruikbare()),

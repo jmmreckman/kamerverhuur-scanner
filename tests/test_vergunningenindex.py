@@ -27,6 +27,7 @@ def test_parse_body_leest_alle_velden():
         "aantal_personen": 3,
         "besluitdatum": "2026-07-22",
         "zaaknummer": "523472-2026",
+        "soort": "regulier",
     }
 
 
@@ -148,6 +149,7 @@ def test_werk_bij_verwerkt_batch_en_is_resumable(tmp_path, monkeypatch):
         stub["gebied"] = "Delfshaven"
         stub["adres"] = stub["titel"].split("kamerverhuur ")[1]
         stub["aantal_personen"] = 3
+        stub["soort"] = "regulier"
         stub["lat"], stub["lon"] = 51.9, 4.45
 
     monkeypatch.setattr(vi, "_verwerk_stub", _fake_verwerk)
@@ -188,6 +190,7 @@ def test_werk_bij_herinventariseert_bij_versiewijziging(tmp_path, monkeypatch):
         stub["bruikbaar"] = True
         stub["gebied"] = "Delfshaven"
         stub["adres"] = "X 1"
+        stub["soort"] = "regulier"
 
     monkeypatch.setattr(vi, "_verwerk_stub", _fake_verwerk)
 
@@ -267,3 +270,63 @@ def test_parse_body_leest_straat_label_bestaande_situatie():
     assert velden["postcode"] == "3023XS"
     assert velden["aantal_personen"] == 4
     assert velden["besluitdatum"] == "2022-12-23"
+
+
+def test_parse_body_soort_regulier_bij_gewone_vergunning():
+    assert vi.parse_body(_BODY)["soort"] == "regulier"
+    assert vi.parse_body(_BODY_2019)["soort"] == "regulier"
+
+
+def test_parse_body_soort_overgangsbepaling_uit_titel():
+    # Body noemt de overgangsbepaling niet, maar de titel wel -> legalisatie.
+    assert vi.parse_body(_BODY_OVERGANG, _TITEL_OVERGANG)["soort"] == "overgangsbepaling"
+
+
+def test_parse_body_soort_overgangsbepaling_uit_body():
+    # Body noemt zelf "bestaande situatie ... onder de overgangsbepaling".
+    velden = vi.parse_body(_BODY_2021_TITELADRES, "Verleende vergunning kamerbewoning Osseweistraat 38B")
+    assert velden["soort"] == "overgangsbepaling"
+
+
+def test_werk_bij_backfilt_soort_op_bestaande_records(tmp_path, monkeypatch):
+    # Een index gebouwd vóór het 'soort'-veld: een bruikbaar record zonder soort.
+    # Na de parse-versiebump moet werk_bij de body één keer opnieuw lezen (zónder
+    # opnieuw te geocoderen) en 'soort' invullen - hier een legalisatie.
+    import json
+    from unittest.mock import MagicMock
+
+    index_path = tmp_path / "vergunningen_index.json"
+    index_path.write_text(json.dumps({
+        "meta": {"volledige_enumeratie_gedaan": True, "enumeratie_versie": vi._ENUMERATIE_VERSIE},
+        "vergunningen": {
+            "gmb-oud-1": {
+                "publicatie_id": "gmb-oud-1", "titel": _TITEL_OVERGANG,
+                "html_url": "https://repo/gmb-oud-1.html", "datum": "2022-12-23",
+                "verwerkt": True, "bruikbaar": True, "adres": "Ruilstraat 26A-01",
+                "gebied": "Delfshaven", "aantal_personen": 4, "lat": 51.9, "lon": 4.45,
+            },
+        },
+    }), encoding="utf-8")
+
+    monkeypatch.setattr(vi, "enumereer_stubs", lambda vanaf=None: {})
+    haal_aangeroepen = []
+
+    def _fake_get(url):
+        haal_aangeroepen.append(url)
+        return MagicMock(text=_BODY_OVERGANG)
+
+    monkeypatch.setattr(vi, "_get", _fake_get)
+    # geocode mag NIET opnieuw aangeroepen worden bij een herparse.
+    monkeypatch.setattr(vi, "geocode_vrij", lambda *a, **k: (_ for _ in ()).throw(AssertionError("geen re-geocode")))
+
+    voortgang = vi.werk_bij(index_path, batch=5, vandaag=date(2026, 8, 20))
+    assert voortgang["compleet"] is True
+    assert haal_aangeroepen == ["https://repo/gmb-oud-1.html"]
+
+    index = vi.VergunningIndex(index_path)
+    rec = index.vergunningen["gmb-oud-1"]
+    assert rec["soort"] == "overgangsbepaling"
+    assert "herparse" not in rec
+    # coördinaten bleven intact (geen re-geocode).
+    assert rec["lat"] == 51.9 and rec["lon"] == 4.45
+    assert index.meta["parse_versie"] == vi._PARSE_VERSIE
