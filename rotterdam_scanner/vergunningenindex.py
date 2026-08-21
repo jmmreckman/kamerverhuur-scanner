@@ -44,14 +44,15 @@ _ZOEKTERMEN = ("kamerverhuur", "kamerbewoning")
 _GZD = "{http://standaarden.overheid.nl/sru}"
 
 # Titels die zeker geen per-adres verleende vergunning zijn (beleidsregels,
-# verordeningen, aanvragen/ontwerpen, intrekkingen/weigeringen, en de bulk-
-# overgangsvergunningen voor bestaande situaties). Goedkope voorfilter vóór we een
-# body ophalen; de body-parse is daarna de uiteindelijke toets (die eist dat de
-# tekst een verleende vergunning mét adres is).
+# verordeningen, aanvragen/ontwerpen, intrekkingen/weigeringen). Goedkope voorfilter
+# vóór we een body ophalen; de body-parse is daarna de uiteindelijke toets (die eist
+# dat de tekst een verleende vergunning mét adres is). NB: "overgangsbepaling" staat
+# hier bewust NIET meer bij - de "bestaande situatie onder de overgangsbepaling"-
+# publicaties zijn gewoon per-adres verleende vergunningen (één adres per stuk, met
+# "Straat:" in de body) en horen dus mee te tellen.
 _UITSLUIT_RE = re.compile(
     r"intrekking|ingetrokken|weiger|geweigerd|buiten behandeling|beleidsregel|"
-    r"verordening|nadere regels|aanvraag|aangevraag|aanvragen|overgangsbepaling|"
-    r"ontwerp",
+    r"verordening|nadere regels|aanvraag|aangevraag|aanvragen|ontwerp",
     re.IGNORECASE,
 )
 # Kandidaat zodra "kamerverhuur" of "kamerbewoning" ergens in de titel staat -
@@ -64,9 +65,10 @@ _KANDIDAAT_RE = re.compile(r"kamer(?:verhuur|bewoning)", re.IGNORECASE)
 # wijzigt: dan doet werk_bij één keer een volledige her-inventarisatie van het
 # archief én probeert het eerder mislukte parses opnieuw met de nieuwe parser.
 # v2 = verbreed naar de oudere formats (2019-2021). v3 = adres uit de titel als
-# terugval + losser "Gebied:" (dekt de per-adres 'bestaande situatie'-grants van 2021
-# die in de body geen 'Adres:' hebben). Zie git-geschiedenis.
-_ENUMERATIE_VERSIE = 3
+# terugval + losser "Gebied:". v4 = de "overgangsbepaling/bestaande situatie"-grants
+# niet langer uitsluiten + "Straat:" als adreslabel lezen (die per-adres legalisaties
+# ontbraken en verklaarden het gat met de gemeentekaart). Zie git-geschiedenis.
+_ENUMERATIE_VERSIE = 4
 
 _MAANDEN = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4, "mei": 5, "juni": 6,
@@ -257,9 +259,11 @@ def parse_body(html: str, titel: str | None = None) -> dict | None:
         return match.group(1).strip() if match else None
 
     # "Gebied:" loopt door tot het volgende label - niet elk format heeft "Adres:"
-    # er direct achter (soms "Datum besluit:"/"Dossiernummer:").
-    gebied = zoek(r"Gebied:\s*(.*?)\s+(?:Adres|Postcode|Datum besluit|Verzenddatum|Dossiernummer|Zaaknummer|Activiteit):")
-    adres = zoek(r"Adres:\s*(.*?)\s+Postcode:")
+    # er direct achter (soms "Straat:"/"Datum besluit:"/"Dossiernummer:").
+    gebied = zoek(r"Gebied:\s*(.*?)\s+(?:Adres|Straat|Postcode|Datum besluit|Verzenddatum|Dossiernummer|Zaaknummer|Activiteit):")
+    # Het adreslabel is "Adres:" (nieuwe grants) of "Straat:" (de bestaande-situatie/
+    # overgangsbepaling-grants gebruiken dat).
+    adres = zoek(r"Adres:\s*(.*?)\s+Postcode:") or zoek(r"Straat:\s*(.*?)\s+Postcode:")
     postcode = zoek(r"Postcode:\s*(\d{4}\s*[A-Z]{2})")
 
     if not adres:

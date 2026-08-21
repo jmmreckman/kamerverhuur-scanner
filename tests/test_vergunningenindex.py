@@ -240,3 +240,30 @@ def test_normaliseer_gebied_dekt_14_gebieden():
     for g in vi.GEBIEDEN:
         assert vi.normaliseer_gebied(g) == g
     assert len(vi.GEBIEDEN) == 14
+
+
+# "Bestaande situatie onder de overgangsbepaling"-grant: per-adres, body gebruikt
+# "Straat:" i.p.v. "Adres:", en de titel bevat "overgangsbepaling" (mag niet meer
+# worden uitgesloten).
+_BODY_OVERGANG = """
+<p>maakt bekend dat zij de volgende vergunning voor kamerbewoning heeft verleend
+(artikel 21 van de Huisvestingswet 2014). Gebied: Delfshaven Straat: Ruilstraat 26A-01
+Postcode: 3023 XS Activiteit: vergunning kamerverhuur aan 4 personen
+Datum besluit: 23 december 2022 Zaaknummer: 123456-2022</p>
+"""
+_TITEL_OVERGANG = ("Vergunning kamerbewoning onder de overgangsbepaling voor "
+                   "bestaande situaties van kamerbewoning Ruilstraat 26A-01")
+
+
+def test_overgangsbepaling_titel_wordt_niet_uitgesloten():
+    assert not vi._UITSLUIT_RE.search(_TITEL_OVERGANG)
+    assert vi._KANDIDAAT_RE.search(_TITEL_OVERGANG)
+
+
+def test_parse_body_leest_straat_label_bestaande_situatie():
+    velden = vi.parse_body(_BODY_OVERGANG, _TITEL_OVERGANG)
+    assert velden["gebied"] == "Delfshaven"
+    assert velden["adres"] == "Ruilstraat 26A-01"
+    assert velden["postcode"] == "3023XS"
+    assert velden["aantal_personen"] == 4
+    assert velden["besluitdatum"] == "2022-12-23"
