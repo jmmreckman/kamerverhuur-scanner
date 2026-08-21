@@ -1401,6 +1401,14 @@ def create_app(config: Config | None = None) -> Flask:
             bestandsnaam = _genereer_concept_contract_uit_ai_resultaat(pand, pand_slug, verzoek, ai_resultaat, aanmelding_rij)
             documentverzoek.zet_ai_resultaat(pand_slug, verzoek["sleutel"], ai_resultaat, mismatches, bestandsnaam, config.state_dir)
 
+            # De kandidaat leverde documenten aan onder haar zelf-ingevulde
+            # naam; het contract is nu opgesteld met de volledige, wettelijke
+            # naam van het ID-bewijs. Verhuis de al aangemaakte documentenmap
+            # naar die officiële naam, zodat documenten + concept + straks het
+            # getekende contract in één map blijven i.p.v. twee losse mapjes.
+            officiele_naam = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir).get("huurder_naam", "")
+            drive_sync.hernoem_huurder_map(config, pand, verzoek["naam"], officiele_naam)
+
             contract_url = url_for("contract_mailen", pand_slug=pand_slug, bestandsnaam=bestandsnaam, _external=True)
             mismatch_tekst = ("\n\nLet op, mogelijk afwijkende gegevens:\n- " + "\n- ".join(mismatches)) if mismatches else ""
             verstuur_email(
@@ -2113,7 +2121,13 @@ def create_app(config: Config | None = None) -> Flask:
         except FileNotFoundError:
             abort(404)
         if request.method == "POST":
+            oude_naam = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir).get("huurder_naam", "")
             contracts.bewerk_contract(pand_slug, g.pand, bestandsnaam, request.form, config.state_dir)
+            # Corrigeert de beheerder hier de naam (bv. een fout uitgelezen
+            # ID-naam), dan de al aangemaakte Drive-map meeverhuizen zodat
+            # documenten en contract in dezelfde, juist benoemde map blijven.
+            nieuwe_naam = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir).get("huurder_naam", "")
+            drive_sync.hernoem_huurder_map(config, g.pand, oude_naam, nieuwe_naam)
             flash("Concept-huurcontract bijgewerkt.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
         metadata = contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir)

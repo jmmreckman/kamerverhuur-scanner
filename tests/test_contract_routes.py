@@ -480,6 +480,27 @@ def test_contract_bewerken_post_werkt_gegevens_bij_zonder_sheet_te_raken(app_cli
     assert bestandsnamen == {bestandsnaam}
 
 
+def test_contract_bewerken_gecorrigeerde_naam_hernoemt_drive_map(app_client, monkeypatch):
+    # Corrigeert de beheerder de (fout uitgelezen) huurdersnaam, dan hoort de
+    # al aangemaakte Drive-map mee te verhuizen i.p.v. een tweede mapje.
+    import webapp.app as appmodule
+    hernoemingen = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "hernoem_huurder_map",
+        lambda config, pand, oude, nieuwe: hernoemingen.append((oude, nieuwe)) or True,
+    )
+    bestandsnaam = _genereer_en_haal_bestandsnaam(app_client)
+    app_client.post(
+        f"/pand/mahoniestraat/contracten/{bestandsnaam}/bewerken",
+        data={
+            "kamer": "1", "huurder_naam": "Bence Andras Neumayer", "huurprijs": "919,00",
+            "ingangsdatum": "2026-07-01", "borg": "1000,00", "email": "bence@example.com",
+        },
+        follow_redirects=True,
+    )
+    assert ("Bence Neumayer", "Bence Andras Neumayer") in hernoemingen
+
+
 def test_contract_bewerken_van_getekend_contract_wordt_geweigerd(app_client):
     resp = app_client.get(
         "/pand/mahoniestraat/contracten/2026-01-01_1-iemand-getekend.html/bewerken", follow_redirects=True

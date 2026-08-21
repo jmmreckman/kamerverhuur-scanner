@@ -93,6 +93,32 @@ def verhuis_naar_oude_huurders(config: Config, pand: Pand, huurder_naam: str) ->
     return _run("moveto", van, naar)
 
 
+def hernoem_huurder_map(config: Config, pand: Pand, oude_naam: str, nieuwe_naam: str) -> bool:
+    """Hernoemt de map van een huurder onder 'Huidige huurders' van
+    <oude_naam> naar <nieuwe_naam> - server-side. Bedoeld om te voorkomen dat
+    er twee losse mapjes voor dezelfde huurder ontstaan: de kandidaat levert
+    documenten aan onder haar zelf-ingevulde naam (bv. "Jane Doe"), terwijl
+    het contract later met de volledige, wettelijke naam van het ID-bewijs
+    wordt opgesteld (bv. "Jane Amanda Doe"). Zodra die officiële naam bekend
+    is, verhuizen we de bestaande map ernaartoe i.p.v. er een tweede naast te
+    zetten.
+
+    Bestaat de doelmap al (bv. omdat er eerder toch al een tweede mapje was
+    aangemaakt), dan worden de bestanden samengevoegd - 'move' i.p.v. 'moveto'
+    - en de nu lege bronmap opgeruimd. Doet niets (en faalt stil, net als de
+    rest van drive_sync) als de namen gelijk zijn (hoofdletterongevoelig) of
+    een van beide leeg is, of als er geen Drive-koppeling is."""
+    oude_naam = (oude_naam or "").strip()
+    nieuwe_naam = (nieuwe_naam or "").strip()
+    if not oude_naam or not nieuwe_naam or oude_naam.casefold() == nieuwe_naam.casefold():
+        return False
+    van = _huurder_pad(config, pand, oude_naam, HUIDIGE_HUURDERS)
+    naar = _huurder_pad(config, pand, nieuwe_naam, HUIDIGE_HUURDERS)
+    if van is None or naar is None:
+        return False
+    return _run("move", van, naar, "--delete-empty-src-dirs")
+
+
 def _run(*args: str) -> bool:
     try:
         subprocess.run(["rclone", *args], check=True, capture_output=True, timeout=_TIMEOUT_SECONDEN)

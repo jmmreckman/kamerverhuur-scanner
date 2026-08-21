@@ -496,6 +496,29 @@ def test_concept_contract_gebruikt_ai_naam_niet_de_oude_aanmeldingsnaam(app_clie
     assert "Jane Elizabeth Doe" in contract.get_data(as_text=True)
 
 
+def test_concept_contract_hernoemt_documentenmap_naar_officiele_naam(app_client, monkeypatch):
+    # De kandidaat leverde documenten aan onder "Jane Doe"; de AI leest de
+    # volledige ID-naam "Jane Elizabeth Doe" uit. De al aangemaakte Drive-map
+    # hoort dan hernoemd te worden i.p.v. dat er een tweede mapje ontstaat.
+    import webapp.app as appmodule
+    monkeypatch.setattr(
+        appmodule.document_ai, "lees_documenten_uit",
+        lambda config, documenten: {**_AI_RESULTAAT, "volledige_naam": "Jane Elizabeth Doe"},
+    )
+    hernoemingen = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "hernoem_huurder_map",
+        lambda config, pand, oude, nieuwe: hernoemingen.append((oude, nieuwe)) or True,
+    )
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert ("Jane Doe", "Jane Elizabeth Doe") in hernoemingen
+
+
 def test_concept_contract_toont_mismatch_met_aanmelding(app_client, fake_ai):
     sheet = _fake_sheet_singleton["mahoniestraat"]
     sheet.aanmeldingen_rijen = [

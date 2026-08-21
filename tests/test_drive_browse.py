@@ -136,3 +136,42 @@ def test_maak_map_mislukt_geeft_foutmelding(monkeypatch):
     monkeypatch.setattr(subprocess, "run", _raise)
     with pytest.raises(DriveBrowseError):
         drive_browse.maak_map(_config(), PAND, "", "Nieuwe map")
+
+
+# --- drive_sync.hernoem_huurder_map -----------------------------------------
+
+def test_hernoem_huurder_map_verplaatst_en_voegt_samen(monkeypatch):
+    from kamerverhuur_scanner import drive_sync
+    opgevangen = {}
+
+    def _fake_run(cmd, **kwargs):
+        opgevangen["cmd"] = cmd
+        return MagicMock(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    assert drive_sync.hernoem_huurder_map(_config(), PAND, "Jane Doe", "Jane Amanda Doe") is True
+    assert opgevangen["cmd"] == [
+        "rclone", "move",
+        "gdrive:vastgoed/Steenhub Mahoniestraat 15/Huidige huurders/Jane Doe",
+        "gdrive:vastgoed/Steenhub Mahoniestraat 15/Huidige huurders/Jane Amanda Doe",
+        "--delete-empty-src-dirs",
+    ]
+
+
+def test_hernoem_huurder_map_gelijke_naam_doet_niets(monkeypatch):
+    from kamerverhuur_scanner import drive_sync
+    aangeroepen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kwargs: aangeroepen.append(cmd) or MagicMock(returncode=0))
+    # zelfde naam (ook hoofdletterongevoelig) en lege namen: geen rclone-actie.
+    assert drive_sync.hernoem_huurder_map(_config(), PAND, "Jane Doe", "jane doe") is False
+    assert drive_sync.hernoem_huurder_map(_config(), PAND, "", "Jane Doe") is False
+    assert drive_sync.hernoem_huurder_map(_config(), PAND, "Jane Doe", "") is False
+    assert aangeroepen == []
+
+
+def test_hernoem_huurder_map_zonder_koppeling_doet_niets(monkeypatch):
+    from kamerverhuur_scanner import drive_sync
+    aangeroepen = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kwargs: aangeroepen.append(cmd) or MagicMock(returncode=0))
+    assert drive_sync.hernoem_huurder_map(_config(None), PAND, "Jane Doe", "Jane Amanda Doe") is False
+    assert aangeroepen == []
