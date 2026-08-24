@@ -4,6 +4,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
 }).addTo(kaart);
 
+const straalLaag = L.layerGroup().addTo(kaart);
 const markerLaag = L.layerGroup().addTo(kaart);
 const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
@@ -242,6 +243,27 @@ function markerIcoon(kans) {
   });
 }
 
+// Lichtblauwe 50m-straal rond elke favoriet: zo zie je in één oogopslag welke
+// omliggende panden binnen de afstandseis vallen en dus in de gaten gehouden
+// moeten worden voor nieuwe kamerverhuurvergunningen. Bewust onafhankelijk van de
+// filters en de "toon kansen"-toggle - je favorietenzones blijven zichtbaar, ook
+// als je alleen de vergunningenlaag aan hebt om te checken wat erbinnen valt.
+function renderStralen() {
+  straalLaag.clearLayers();
+  for (const kans of alleKansen) {
+    if (!kans.favoriet || kans.lat == null || kans.lon == null) continue;
+    L.circle([kans.lat, kans.lon], {
+      radius: 50, // meter
+      color: "#0284c7",
+      weight: 1.5,
+      opacity: 0.8,
+      fillColor: "#7dd3fc",
+      fillOpacity: 0.15,
+      interactive: false, // klikken gaan door naar de markers/vergunningen eronder
+    }).addTo(straalLaag);
+  }
+}
+
 function renderMarkers(kansen) {
   markerLaag.clearLayers();
   markerPerId.clear();
@@ -303,6 +325,7 @@ function renderLijst(kansen) {
 
 function renderAlles() {
   const kansen = gefilterd();
+  renderStralen();
   renderMarkers(kansen);
   renderLijst(kansen);
 }
