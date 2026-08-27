@@ -50,6 +50,11 @@ REKENVELDEN = [
 
 _PROCENT_VELDEN = {key for key, _label, soort in REKENVELDEN if soort == "procent"}
 
+# Vaste eigenaar(s) die het toegangsbeheer altijd mogen bedienen, ook als ze met
+# hun steenhub-account inloggen (dat account staat niet in KANSEN_APP_USERS). Te
+# overschrijven/uitbreiden via de env-variabele KANSEN_APP_BEHEERDERS.
+_STANDAARD_BEHEERDERS = {"jmmreckman"}
+
 # Gedeelde (markt/model-)uitgangspunten: gelden als globale standaard voor álle
 # panden en zijn instelbaar op /reken-instellingen. Koopsom en aantal kamers horen
 # bij de woning zelf en zijn dus géén gedeelde standaard.
@@ -282,9 +287,13 @@ def create_app(config: Config | None = None) -> Flask:
 
     app.secret_key = config.kansen_app_secret_key
 
-    # Wie het toegangsbeheer mag bedienen. Standaard de eigen env-accounts
-    # (KANSEN_APP_USERS); de meelezende steenhub-collega's horen daar dus niet bij.
-    beheerders = set(config.kansen_app_beheerders) or set(config.kansen_app_users)
+    # Wie het toegangsbeheer mag bedienen. KANSEN_APP_BEHEERDERS (env) heeft
+    # voorrang; anders de eigen env-accounts (KANSEN_APP_USERS) plus de vaste
+    # eigenaar hieronder, zodat de eigenaar ook als hij met zijn steenhub-account
+    # inlogt de beheerpagina ziet. De meelezende collega's horen hier niet bij.
+    beheerders = set(config.kansen_app_beheerders) or (
+        set(config.kansen_app_users) | _STANDAARD_BEHEERDERS
+    )
 
     def login_required(view):
         @wraps(view)

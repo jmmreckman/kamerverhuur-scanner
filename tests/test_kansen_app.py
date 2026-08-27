@@ -784,3 +784,20 @@ def test_beheerder_kan_zichzelf_niet_buitensluiten(tmp_path):
     client.post("/toegangsbeheer", data={"buiten_werking": ["jurian", "justin"]}, follow_redirects=True)
     data = json.loads((tmp_path / "toegang.json").read_text())
     assert data["buiten_werking"] == ["justin"]
+
+
+def test_vaste_eigenaar_is_beheerder_via_steenhub_login(tmp_path):
+    # Eigenaar logt in met zijn steenhub-account (niet in KANSEN_APP_USERS) en moet
+    # tóch de beheerpagina + "Toegang"-link zien, zonder env-config.
+    users = tmp_path / "steenhub_users.json"
+    users.write_text(json.dumps({
+        "jmmreckman": {"wachtwoord_hash": generate_password_hash("eigenaar-pw")},
+    }))
+    app = create_app(_config(tmp_path, kansen_app_users={"jurian": "geheim123"},
+                             steenhub_users_file=str(users)))
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jmmreckman", "wachtwoord": "eigenaar-pw"})
+    kaart = client.get("/")
+    assert b"Toegang" in kaart.data
+    assert client.get("/toegangsbeheer").status_code == 200
