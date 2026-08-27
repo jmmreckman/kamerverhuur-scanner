@@ -281,6 +281,16 @@ en `deploy/Caddyfile` in de hoofdbranch.
   Een nieuwe steenhub-gebruiker werkt meteen, zonder de kansen-container te herstarten.
 - `KANSEN_APP_SECRET_KEY` — willekeurige geheime tekenreeks voor de inlogsessie
   (`python3 -c "import secrets; print(secrets.token_hex(32))"`). Verplicht.
+- `KANSEN_APP_BEHEERDERS` — optioneel; komma-lijst van gebruikersnamen die de pagina
+  **Toegangsbeheer** mogen bedienen. Leeg = automatisch alle `KANSEN_APP_USERS`.
+
+**Toegangsbeheer** (kaart → *Toegang*, alleen voor beheerders): zet een account
+*buiten werking* om het de toegang te ontnemen zónder dat expliciet te melden — zo'n
+account krijgt bij het inloggen alleen nog een neutrale storingspagina (503), en een
+zittende sessie valt meteen om. De pagina toont per geblokkeerd account hoe vaak het
+tóch nog probeert in te loggen. De blokkeerlijst + het pogingen-logboek staan in
+`toegang.json` naast `state.json`; de `users.json` van steenhub.nl wordt hierbij nooit
+gewijzigd, dus de werking van steenhub.nl blijft ongemoeid.
 
 **DNS:** `kansen.steenhub.nl` moet zelf nog als DNS-record (A of CNAME, zelfde IP als
 `steenhub.nl`) aangemaakt worden bij je domeinregistrar — dat kan dit systeem niet voor

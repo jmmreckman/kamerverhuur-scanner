@@ -698,3 +698,89 @@ def test_woning_zonder_berekening_volgt_globale_rente(tmp_path):
     nieuw = round(default_rente * 100 + 2, 4)
     getoond = str(int(nieuw)) if float(nieuw).is_integer() else str(nieuw)
     assert f'name="rente" value="{getoond}"'.encode() in resp.data
+
+
+# --- Toegangsbeheer: accounts "buiten werking" zetten ---
+
+def _beheer_config(tmp_path, **overrides):
+    # jurian = beheerder, justin = gewoon (blokkeerbaar) account.
+    defaults = dict(kansen_app_beheerders={"jurian"})
+    defaults.update(overrides)
+    return _config(tmp_path, **defaults)
+
+
+def _beheer_client(tmp_path, **overrides):
+    app = create_app(_beheer_config(tmp_path, **overrides))
+    app.testing = True
+    return app.test_client()
+
+
+def test_buiten_werking_account_krijgt_storing_ipv_login(tmp_path):
+    (tmp_path / "toegang.json").write_text(json.dumps({"buiten_werking": ["justin"]}))
+    client = _beheer_client(tmp_path)
+    resp = client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    assert resp.status_code == 503
+    assert "niet bereikbaar".encode() in resp.data
+    # Niets verklapt dat de toegang bewust is ontzegd.
+    assert b"buiten werking" not in resp.data
+    assert b"geen toegang" not in resp.data.lower()
+    # Niet ingelogd: de kaart blijft achter de login.
+    vervolg = client.get("/", follow_redirects=False)
+    assert vervolg.status_code == 302
+
+
+def test_buiten_werking_poging_wordt_geteld(tmp_path):
+    (tmp_path / "toegang.json").write_text(json.dumps({"buiten_werking": ["justin"]}))
+    client = _beheer_client(tmp_path)
+    client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    client.post("/login", data={"gebruiker": "justin", "wachtwoord": "fout"})
+    data = json.loads((tmp_path / "toegang.json").read_text())
+    poging = data["pogingen"]["justin"]
+    assert poging["aantal"] == 2
+    assert poging["laatste_wachtwoord_klopte"] is False  # laatste poging had fout wachtwoord
+
+
+def test_niet_geblokkeerd_account_kan_gewoon_inloggen(tmp_path):
+    client = _beheer_client(tmp_path)
+    resp = client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"},
+                       follow_redirects=False)
+    assert resp.status_code == 302  # normaal ingelogd
+
+
+def test_zittende_sessie_valt_om_zodra_account_buiten_werking(tmp_path):
+    client = _beheer_client(tmp_path)
+    client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    assert client.get("/").status_code == 200  # eerst nog toegang
+    (tmp_path / "toegang.json").write_text(json.dumps({"buiten_werking": ["justin"]}))
+    resp = client.get("/")
+    assert resp.status_code == 503  # sessie meteen ongeldig
+
+
+def test_toegangsbeheer_alleen_voor_beheerder(tmp_path):
+    client = _beheer_client(tmp_path)
+    # Anoniem -> naar login.
+    assert client.get("/toegangsbeheer").status_code == 302
+    # Gewoon account -> 404 (bestaan wordt niet verklapt).
+    client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    assert client.get("/toegangsbeheer").status_code == 404
+
+
+def test_beheerder_ziet_en_zet_buiten_werking(tmp_path):
+    client = _beheer_client(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.get("/toegangsbeheer")
+    assert resp.status_code == 200
+    assert b"justin" in resp.data
+    # Zet justin buiten werking.
+    client.post("/toegangsbeheer", data={"buiten_werking": "justin"}, follow_redirects=True)
+    data = json.loads((tmp_path / "toegang.json").read_text())
+    assert data["buiten_werking"] == ["justin"]
+
+
+def test_beheerder_kan_zichzelf_niet_buitensluiten(tmp_path):
+    client = _beheer_client(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    # Probeer jurian (beheerder) én justin te blokkeren; alleen justin blijft over.
+    client.post("/toegangsbeheer", data={"buiten_werking": ["jurian", "justin"]}, follow_redirects=True)
+    data = json.loads((tmp_path / "toegang.json").read_text())
+    assert data["buiten_werking"] == ["justin"]

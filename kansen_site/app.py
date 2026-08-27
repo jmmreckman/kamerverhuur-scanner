@@ -11,6 +11,7 @@ from __future__ import annotations
 import hmac
 import json
 from dataclasses import asdict
+from datetime import datetime, timezone
 from functools import wraps
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
@@ -57,6 +58,61 @@ _GEDEELDE_REKENVELDEN = [k for k, _l, _s in REKENVELDEN if k not in ("koopsom", 
 
 def _reken_defaults_pad(config) -> Path:
     return Path(config.state_path).parent / "reken_defaults.json"
+
+
+# --- Toegangsbeheer (kansen-only) --------------------------------------------
+# Sommige samenwerkingen lopen niet en dan wil je zo'n account de toegang tot de
+# kaart ontnemen zonder het expliciet te melden: de gebruiker krijgt dan een
+# neutrale storingspagina te zien i.p.v. "geen toegang". Deze lijst + het
+# pogingen-logboek staan in een eigen JSON naast state.json; de users.json van
+# steenhub.nl wordt hierbij nooit aangeraakt (alleen gelezen om te kunnen
+# inloggen), zodat de werking van steenhub.nl ongewijzigd blijft.
+def _toegang_pad(config) -> Path:
+    return Path(config.state_path).parent / "toegang.json"
+
+
+def _laad_toegang(config) -> dict:
+    try:
+        with open(_toegang_pad(config), encoding="utf-8") as bestand:
+            data = json.load(bestand)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("buiten_werking", [])
+    data.setdefault("pogingen", {})
+    return data
+
+
+def _schrijf_toegang(config, data: dict) -> None:
+    pad = _toegang_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    with open(pad, "w", encoding="utf-8") as bestand:
+        json.dump(data, bestand, ensure_ascii=False, indent=2)
+
+
+def _is_buiten_werking(config, gebruiker: str) -> bool:
+    return bool(gebruiker) and gebruiker in set(_laad_toegang(config).get("buiten_werking", []))
+
+
+def _registreer_geblokkeerde_poging(config, gebruiker: str, wachtwoord_klopte: bool,
+                                    ip: str | None, user_agent: str | None) -> None:
+    """Telt (en verrijkt) een inlogpoging van een buiten-werking-gezet account, zodat
+    je op de beheerpagina ziet dát en hoe vaak ze het blijven proberen."""
+    data = _laad_toegang(config)
+    pogingen = data.setdefault("pogingen", {})
+    record = pogingen.setdefault(gebruiker, {
+        "aantal": 0, "eerste": None, "laatste": None,
+        "laatste_ip": None, "laatste_user_agent": None, "laatste_wachtwoord_klopte": None,
+    })
+    nu = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    record["aantal"] = int(record.get("aantal", 0)) + 1
+    record["eerste"] = record.get("eerste") or nu
+    record["laatste"] = nu
+    record["laatste_ip"] = ip
+    record["laatste_user_agent"] = user_agent
+    record["laatste_wachtwoord_klopte"] = wachtwoord_klopte
+    _schrijf_toegang(config, data)
 
 
 def _laad_reken_defaults(config) -> dict:
@@ -226,11 +282,32 @@ def create_app(config: Config | None = None) -> Flask:
 
     app.secret_key = config.kansen_app_secret_key
 
+    # Wie het toegangsbeheer mag bedienen. Standaard de eigen env-accounts
+    # (KANSEN_APP_USERS); de meelezende steenhub-collega's horen daar dus niet bij.
+    beheerders = set(config.kansen_app_beheerders) or set(config.kansen_app_users)
+
     def login_required(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
-            if not session.get("gebruiker"):
+            gebruiker = session.get("gebruiker")
+            if not gebruiker:
                 return redirect(url_for("login", next=request.path))
+            # Account tussentijds buiten werking gezet? Meteen "storing" tonen en de
+            # sessie leegmaken, zodat de omzetting direct effect heeft (niet pas bij
+            # de volgende login) en het net een technische storing lijkt.
+            if _is_buiten_werking(config, gebruiker):
+                session.pop("gebruiker", None)
+                return render_template("storing.html"), 503
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    def beheerder_required(view):
+        @wraps(view)
+        @login_required
+        def wrapped(*args, **kwargs):
+            if session.get("gebruiker") not in beheerders:
+                abort(404)  # 404 i.p.v. 403: niet-beheerders merken niet dat de pagina bestaat.
             return view(*args, **kwargs)
 
         return wrapped
@@ -241,7 +318,17 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             gebruiker = request.form.get("gebruiker", "").strip()
             wachtwoord = request.form.get("wachtwoord", "")
-            if _kloppend_wachtwoord(config, gebruiker, wachtwoord):
+            klopt = _kloppend_wachtwoord(config, gebruiker, wachtwoord)
+            # Buiten werking gezet account: registreer de poging (ook bij een fout
+            # wachtwoord, zodat je ziet hoe vaak ze het proberen) en toon een neutrale
+            # storingspagina - nooit inloggen, nooit "geen toegang" verklappen.
+            if _is_buiten_werking(config, gebruiker):
+                _registreer_geblokkeerde_poging(
+                    config, gebruiker, klopt,
+                    request.remote_addr, request.headers.get("User-Agent"),
+                )
+                return render_template("storing.html"), 503
+            if klopt:
                 session["gebruiker"] = gebruiker
                 return redirect(request.args.get("next") or url_for("kaart"))
             fout = "Onjuiste gebruikersnaam of wachtwoord."
@@ -255,7 +342,10 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/")
     @login_required
     def kaart():
-        return render_template("kaart.html", gebruiker=session["gebruiker"])
+        return render_template(
+            "kaart.html", gebruiker=session["gebruiker"],
+            is_beheerder=session["gebruiker"] in beheerders,
+        )
 
     @app.route("/api/kansen")
     @login_required
@@ -580,6 +670,40 @@ def create_app(config: Config | None = None) -> Flask:
                 }
         return render_template(
             "handmatig_toevoegen.html", resultaat=resultaat, gebruiker=session["gebruiker"],
+        )
+
+    @app.route("/toegangsbeheer", methods=["GET", "POST"])
+    @beheerder_required
+    def toegangsbeheer():
+        # Beheerpagina: vink een account "buiten werking" aan (dan ziet het bij het
+        # inloggen enkel een storingspagina) en zie hoe vaak zo'n account het tóch
+        # nog probeert. Beheerders kunnen nooit zichzelf/elkaar buitensluiten.
+        data = _laad_toegang(config)
+        if request.method == "POST":
+            aangevinkt = set(request.form.getlist("buiten_werking"))
+            data["buiten_werking"] = sorted(n for n in aangevinkt if n not in beheerders)
+            _schrijf_toegang(config, data)
+            flash("Toegangsinstellingen opgeslagen.")
+            return redirect(url_for("toegangsbeheer"))
+
+        geblokkeerd = set(data.get("buiten_werking", []))
+        pogingen = data.get("pogingen", {})
+        # Alle bekende accounts: eigen env-accounts + steenhub-collega's + al eerder
+        # geblokkeerde namen (die eventueel niet meer in een bron voorkomen).
+        namen = set(config.kansen_app_users) | geblokkeerd
+        if config.steenhub_users_file:
+            namen |= set(_laad_steenhub_users(config.steenhub_users_file))
+        accounts = [
+            {
+                "naam": naam,
+                "beheerder": naam in beheerders,
+                "buiten_werking": naam in geblokkeerd,
+                "poging": pogingen.get(naam),
+            }
+            for naam in sorted(namen)
+        ]
+        return render_template(
+            "toegangsbeheer.html", accounts=accounts, gebruiker=session["gebruiker"],
         )
 
     return app

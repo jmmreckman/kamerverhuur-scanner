@@ -39,6 +39,10 @@ class Config:
     # open komt te staan.
     kansen_app_users: dict[str, str] = field(default_factory=dict)
     kansen_app_secret_key: str = ""
+    # Gebruikersnamen die het toegangsbeheer op kansen.steenhub.nl mogen bedienen
+    # (accounts "buiten werking" zetten). Leeg = automatisch alle KANSEN_APP_USERS
+    # (de eigen env-accounts, los van de meelezende steenhub-collega's).
+    kansen_app_beheerders: set[str] = field(default_factory=set)
     # Pad naar de users.json van de steenhub.nl-app (kamerverhuur-webapp), read-only
     # ingekoppeld in de kansen-container (zie deploy/docker-compose.yml). Als dit
     # gezet is, kan er op de kaart-website ook worden ingelogd met de accounts van
@@ -93,6 +97,9 @@ def load_config(env_path: Path | None = None) -> Config:
         smtp_from_naam=os.environ.get("SMTP_FROM_NAAM", ""),
         kansen_app_users=_parse_kansen_app_users(os.environ.get("KANSEN_APP_USERS", "")),
         kansen_app_secret_key=os.environ.get("KANSEN_APP_SECRET_KEY", ""),
+        kansen_app_beheerders={
+            naam.strip() for naam in os.environ.get("KANSEN_APP_BEHEERDERS", "").split(",") if naam.strip()
+        },
         steenhub_users_file=os.environ.get("STEENHUB_USERS_FILE", ""),
     )
 

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toegangsbeheer - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <style>
+    .toegang-kop { padding: 1rem 1.5rem 0; }
+    .toegang-kop p { max-width: 46rem; line-height: 1.5; }
+    .toegang-tabel { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    .toegang-tabel th, .toegang-tabel td {
+      text-align: left; padding: .55rem .75rem; border-bottom: 1px solid rgba(128,128,128,.25);
+      vertical-align: top; }
+    .toegang-tabel th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; opacity: .7; }
+    .toegang-naam { font-weight: 600; }
+    .toegang-badge { font-size: .72rem; padding: .1rem .45rem; border-radius: .6rem;
+      background: rgba(128,128,128,.18); margin-left: .4rem; }
+    .toegang-pogingen { font-size: .85rem; }
+    .toegang-pogingen .veel { color: #b91c1c; font-weight: 600; }
+    .toegang-detail { font-size: .78rem; opacity: .7; }
+    .toegang-acties { padding: .5rem 0 2rem; }
+    .toegang-form { padding: 0 1.5rem; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Toegangsbeheer</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="toegang-kop">
+    <h2>Wie mag op de kaart?</h2>
+    <p class="muted">
+      Zet je een account <strong>buiten werking</strong>, dan krijgt het bij het inloggen alleen
+      nog een neutrale storingspagina te zien &mdash; het lijkt dus alsof de site het niet doet, niet
+      alsof de toegang bewust is ontzegd. Zittende sessies vallen meteen om. In de kolom
+      &ldquo;pogingen&rdquo; zie je of &mdash; en hoe vaak &mdash; zo&rsquo;n account het tóch nog probeert.
+      Beheerders kun je niet buitensluiten.
+    </p>
+  </div>
+
+  {% with berichten = get_flashed_messages() %}
+    {% if berichten %}
+      <div class="reken-flash toegang-form">{% for b in berichten %}<p>{{ b }}</p>{% endfor %}</div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="post" class="toegang-form">
+    <table class="toegang-tabel">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>Buiten werking</th>
+          <th>Inlogpogingen (geblokkeerd)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for account in accounts %}
+        <tr>
+          <td class="toegang-naam">
+            {{ account.naam }}
+            {% if account.beheerder %}<span class="toegang-badge">beheerder</span>{% endif %}
+          </td>
+          <td>
+            {% if account.beheerder %}
+              <span class="muted">&mdash;</span>
+            {% else %}
+              <label><input type="checkbox" name="buiten_werking" value="{{ account.naam }}"
+                     {% if account.buiten_werking %}checked{% endif %}> buiten werking</label>
+            {% endif %}
+          </td>
+          <td class="toegang-pogingen">
+            {% if account.poging %}
+              <span class="{{ 'veel' if account.poging.aantal >= 3 else '' }}">{{ account.poging.aantal }}&times;</span>
+              <div class="toegang-detail">
+                laatst: {{ account.poging.laatste }}
+                {% if account.poging.laatste_wachtwoord_klopte %}(juist wachtwoord){% else %}(fout wachtwoord){% endif %}
+                {% if account.poging.laatste_ip %}&middot; {{ account.poging.laatste_ip }}{% endif %}
+              </div>
+            {% else %}
+              <span class="muted">&mdash;</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="toegang-acties">
+      <button type="submit" class="reken-knop-primair">Opslaan</button>
+    </div>
+  </form>
+</body>
+</html>
