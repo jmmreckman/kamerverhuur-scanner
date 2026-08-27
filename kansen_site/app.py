@@ -72,6 +72,12 @@ def _reken_defaults_pad(config) -> Path:
 # pogingen-logboek staan in een eigen JSON naast state.json; de users.json van
 # steenhub.nl wordt hierbij nooit aangeraakt (alleen gelezen om te kunnen
 # inloggen), zodat de werking van steenhub.nl ongewijzigd blijft.
+def _storing_respons():
+    """Kale platte-tekst 500 - onopgemaakt, zodat het een gewone serverfout lijkt
+    (geen herkenbare 'nette' pagina die verraadt dat de toegang bewust geblokkeerd is)."""
+    return "Internal Server Error", 500, {"Content-Type": "text/plain; charset=utf-8"}
+
+
 def _toegang_pad(config) -> Path:
     return Path(config.state_path).parent / "toegang.json"
 
@@ -306,7 +312,7 @@ def create_app(config: Config | None = None) -> Flask:
             # de volgende login) en het net een technische storing lijkt.
             if _is_buiten_werking(config, gebruiker):
                 session.pop("gebruiker", None)
-                return render_template("storing.html"), 503
+                return _storing_respons()
             return view(*args, **kwargs)
 
         return wrapped
@@ -336,7 +342,7 @@ def create_app(config: Config | None = None) -> Flask:
                     config, gebruiker, klopt,
                     request.remote_addr, request.headers.get("User-Agent"),
                 )
-                return render_template("storing.html"), 503
+                return _storing_respons()
             if klopt:
                 session["gebruiker"] = gebruiker
                 return redirect(request.args.get("next") or url_for("kaart"))

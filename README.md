@@ -286,7 +286,8 @@ en `deploy/Caddyfile` in de hoofdbranch.
 
 **Toegangsbeheer** (kaart → *Toegang*, alleen voor beheerders): zet een account
 *buiten werking* om het de toegang te ontnemen zónder dat expliciet te melden — zo'n
-account krijgt bij het inloggen alleen nog een neutrale storingspagina (503), en een
+account krijgt bij het inloggen alleen nog een kale serverfout (500 Internal Server
+Error, platte tekst - lijkt op een gewone crash), en een
 zittende sessie valt meteen om. De pagina toont per geblokkeerd account hoe vaak het
 tóch nog probeert in te loggen. De blokkeerlijst + het pogingen-logboek staan in
 `toegang.json` naast `state.json`; de `users.json` van steenhub.nl wordt hierbij nooit

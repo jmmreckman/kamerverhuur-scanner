@@ -719,11 +719,11 @@ def test_buiten_werking_account_krijgt_storing_ipv_login(tmp_path):
     (tmp_path / "toegang.json").write_text(json.dumps({"buiten_werking": ["justin"]}))
     client = _beheer_client(tmp_path)
     resp = client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
-    assert resp.status_code == 503
-    assert "niet bereikbaar".encode() in resp.data
-    # Niets verklapt dat de toegang bewust is ontzegd.
+    # Kale, onopgemaakte serverfout - lijkt op een gewone crash, niets verklapt dat
+    # de toegang bewust is ontzegd.
+    assert resp.status_code == 500
+    assert resp.get_data(as_text=True) == "Internal Server Error"
     assert b"buiten werking" not in resp.data
-    assert b"geen toegang" not in resp.data.lower()
     # Niet ingelogd: de kaart blijft achter de login.
     vervolg = client.get("/", follow_redirects=False)
     assert vervolg.status_code == 302
@@ -753,7 +753,7 @@ def test_zittende_sessie_valt_om_zodra_account_buiten_werking(tmp_path):
     assert client.get("/").status_code == 200  # eerst nog toegang
     (tmp_path / "toegang.json").write_text(json.dumps({"buiten_werking": ["justin"]}))
     resp = client.get("/")
-    assert resp.status_code == 503  # sessie meteen ongeldig
+    assert resp.status_code == 500  # sessie meteen ongeldig
 
 
 def test_toegangsbeheer_alleen_voor_beheerder(tmp_path):
