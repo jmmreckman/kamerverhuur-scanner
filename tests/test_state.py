@@ -3,7 +3,8 @@ from datetime import date
 from rotterdam_scanner.state import ListingState, StateStore
 
 
-def _listing(object_id="1", eerst="2026-07-01", laatst="2026-07-01", status="actief"):
+def _listing(object_id="1", eerst="2026-07-01", laatst="2026-07-01", status="actief",
+             favoriet=False):
     return ListingState(
         object_id=object_id,
         url=f"https://www.funda.nl/x/{object_id}/",
@@ -11,6 +12,7 @@ def _listing(object_id="1", eerst="2026-07-01", laatst="2026-07-01", status="act
         eerst_gezien=eerst,
         laatst_gezien=laatst,
         status=status,
+        favoriet=favoriet,
     )
 
 
@@ -43,6 +45,20 @@ def test_prune_expired_verwijdert_oude_listings(tmp_path):
 
     assert store.get("oud") is None
     assert store.get("recent") is not None
+
+
+def test_prune_expired_bewaart_favoriet_ongeacht_leeftijd(tmp_path):
+    # Een favoriet die al lang niet meer in een Funda-alert is langsgekomen mag
+    # nooit vanzelf worden opgeruimd (blijft zichtbaar en gemonitord op de kaart).
+    store = StateStore(tmp_path / "state.json")
+    store.upsert(_listing(object_id="fav", eerst="2026-01-01", laatst="2026-01-01",
+                          favoriet=True))
+    store.upsert(_listing(object_id="oud", eerst="2026-01-01", laatst="2026-01-01"))
+
+    store.prune_expired(expiry_days=60, today=date(2026, 7, 5))
+
+    assert store.get("fav") is not None
+    assert store.get("oud") is None
 
 
 def test_dagen_bekend_berekent_verschil_met_eerst_gezien(tmp_path):

@@ -140,6 +140,14 @@ class StateStore:
         today = today or date.today()
         keep: dict[str, ListingState] = {}
         for object_id, item in self._listings.items():
+            # Een favoriet blijft altijd bewaard, ook als de woning al lang niet
+            # meer in een Funda-alert is langsgekomen (laatst_gezien loopt niet mee
+            # zolang een woning ongewijzigd te koop blijft). Zo verdwijnt een
+            # handmatig gemarkeerde favoriet nooit vanzelf van de kaart - conform
+            # de belofte bij het favoriet-veld in ListingState.
+            if item.favoriet:
+                keep[object_id] = item
+                continue
             last_seen = datetime.fromisoformat(item.laatst_gezien).date()
             if (today - last_seen).days <= expiry_days:
                 keep[object_id] = item
