@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import threading
 from dataclasses import asdict
 from datetime import datetime, timezone
 from functools import wraps
@@ -72,6 +73,28 @@ def _reken_defaults_pad(config) -> Path:
 # pogingen-logboek staan in een eigen JSON naast state.json; de users.json van
 # steenhub.nl wordt hierbij nooit aangeraakt (alleen gelezen om te kunnen
 # inloggen), zodat de werking van steenhub.nl ongewijzigd blijft.
+def _handmatige_run_pad(config) -> Path:
+    return Path(config.state_path).parent / "handmatige_run.json"
+
+
+def _lees_handmatige_run(config) -> dict | None:
+    """Laatste (of lopende) handmatige-toevoeg-run. Losbestaand van state.json zodat de
+    uitkomst bewaard blijft nadat de gebruiker de pagina heeft verlaten."""
+    try:
+        with open(_handmatige_run_pad(config), encoding="utf-8") as bestand:
+            data = json.load(bestand)
+        return data if isinstance(data, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _schrijf_handmatige_run(config, data: dict) -> None:
+    pad = _handmatige_run_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    with open(pad, "w", encoding="utf-8") as bestand:
+        json.dump(data, bestand, ensure_ascii=False, indent=2)
+
+
 def _storing_respons():
     """Kale platte-tekst 500 - onopgemaakt, zodat het een gewone serverfout lijkt
     (geen herkenbare 'nette' pagina die verraadt dat de toegang bewust geblokkeerd is)."""
@@ -664,28 +687,74 @@ def create_app(config: Config | None = None) -> Flask:
         # parser (rotterdam_scanner/handmatig.py) en dezelfde checks als het
         # bestaande CLI-script handmatig_toevoegen.py, nu ook vanaf de
         # website bereikbaar.
-        resultaat = None
         if request.method == "POST":
             tekst = request.form.get("tekst", "")
             forceer_herprocessen = request.form.get("forceer_herprocessen") == "on"
             listings, parse_fouten = parse_bestand(tekst)
+
+            lopend = _lees_handmatige_run(config)
+            if lopend and lopend.get("status") == "bezig":
+                flash("Er loopt al een verwerking - even wachten tot die klaar is.")
+                return redirect(url_for("handmatig_toevoegen"))
             if not listings:
                 flash("Geen enkel adres kon uit de geplakte tekst gelezen worden.")
-            else:
-                run_result = pipeline.run_handmatig(
-                    config, listings, forceer_herprocessen=forceer_herprocessen,
-                )
-                resultaat = {
-                    "aangeleverd": len(listings),
-                    "nieuw_actief": len(run_result.nieuw_actief),
-                    "nieuw_afgevallen": len(run_result.nieuw_afgevallen),
-                    "nieuw_onbekend_adres": len(run_result.nieuw_onbekend_adres),
-                    "al_bekend": len(run_result.al_bekend),
-                    "fouten": parse_fouten + run_result.fouten,
-                }
+                return redirect(url_for("handmatig_toevoegen"))
+
+            # Op de achtergrond draaien: een grote batch (geocoding + checks) duurt te
+            # lang voor één request - die zou door de gebruiker of een server-time-out
+            # worden afgebroken, en de state wordt pas aan het eind opgeslagen. Nu start
+            # de verwerking in een aparte thread en wordt de uitkomst weggeschreven, zodat
+            # je het tabblad mag sluiten en de bevestiging er staat als je terugkomt.
+            gestart = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            gebruiker = session["gebruiker"]  # vastleggen: in de thread is er geen sessie
+            _schrijf_handmatige_run(config, {
+                "status": "bezig", "gestart": gestart,
+                "aangeleverd": len(listings), "gebruiker": gebruiker,
+            })
+
+            def _draai():
+                try:
+                    run_result = pipeline.run_handmatig(
+                        config, listings, forceer_herprocessen=forceer_herprocessen,
+                    )
+                    _schrijf_handmatige_run(config, {
+                        "status": "klaar", "gestart": gestart,
+                        "klaar": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "gebruiker": gebruiker,
+                        "resultaat": {
+                            "aangeleverd": len(listings),
+                            "nieuw_actief": len(run_result.nieuw_actief),
+                            "nieuw_afgevallen": len(run_result.nieuw_afgevallen),
+                            "nieuw_onbekend_adres": len(run_result.nieuw_onbekend_adres),
+                            "al_bekend": len(run_result.al_bekend),
+                            "fouten": parse_fouten + run_result.fouten,
+                        },
+                    })
+                except Exception as exc:  # noqa: BLE001 - alles vangen zodat de status niet op "bezig" blijft hangen
+                    _schrijf_handmatige_run(config, {
+                        "status": "fout", "gestart": gestart,
+                        "klaar": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "gebruiker": gebruiker, "aangeleverd": len(listings),
+                        "fout": str(exc), "parse_fouten": parse_fouten,
+                    })
+
+            threading.Thread(target=_draai, daemon=True).start()
+            flash(
+                f"Verwerking van {len(listings)} adres(sen) gestart. Je kunt dit tabblad "
+                "sluiten - de uitkomst verschijnt hier zodra het klaar is."
+            )
+            return redirect(url_for("handmatig_toevoegen"))
+
         return render_template(
-            "handmatig_toevoegen.html", resultaat=resultaat, gebruiker=session["gebruiker"],
+            "handmatig_toevoegen.html",
+            laatste=_lees_handmatige_run(config), gebruiker=session["gebruiker"],
         )
+
+    @app.route("/handmatig-toevoegen/status")
+    @login_required
+    def handmatig_status():
+        # De pagina pollt dit om "bezig -> klaar" live te tonen, ook na terugkomst.
+        return jsonify(_lees_handmatige_run(config) or {"status": "leeg"})
 
     @app.route("/toegangsbeheer", methods=["GET", "POST"])
     @beheerder_required

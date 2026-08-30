@@ -359,6 +359,18 @@ def test_handmatig_toevoegen_zonder_leesbare_adressen_toont_foutmelding(app_clie
     assert "geen enkel adres" in resp.get_data(as_text=True).lower()
 
 
+def _wacht_op_run_klaar(client, timeout=3.0):
+    """De verwerking draait op de achtergrond; wacht tot de status niet meer 'bezig' is."""
+    import time
+    einde = time.time() + timeout
+    while time.time() < einde:
+        data = client.get("/handmatig-toevoegen/status").get_json()
+        if data.get("status") not in ("bezig", "leeg"):
+            return data
+        time.sleep(0.02)
+    raise AssertionError(f"Run niet op tijd klaar; laatste status: {data}")
+
+
 def test_handmatig_toevoegen_verwerkt_adresregel_en_toont_resultaat(tmp_path, monkeypatch):
     import kansen_site.app as appmodule
 
@@ -375,11 +387,14 @@ def test_handmatig_toevoegen_verwerkt_adresregel_en_toont_resultaat(tmp_path, mo
     client = app.test_client()
     client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
+    # Start de (nu asynchrone) verwerking; de POST leidt om naar de pagina.
     resp = client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A"})
-    assert resp.status_code == 200
-    tekst = resp.get_data(as_text=True)
-    assert "1 nieuwe kans" in tekst
-    assert "een waarschuwing" in tekst
+    assert resp.status_code == 302
+
+    run = _wacht_op_run_klaar(client)
+    assert run["status"] == "klaar"
+    assert run["resultaat"]["nieuw_actief"] == 1
+    assert "een waarschuwing" in run["resultaat"]["fouten"]
 
     assert len(aangeroepen) == 1
     listings, forceer_herprocessen = aangeroepen[0]
@@ -405,7 +420,39 @@ def test_handmatig_toevoegen_forceer_herprocessen_vinkje(tmp_path, monkeypatch):
     client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
     client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A", "forceer_herprocessen": "on"})
+    _wacht_op_run_klaar(client)
     assert aangeroepen == [True]
+
+
+def test_handmatig_toevoegen_weigert_tweede_run_terwijl_bezig(tmp_path, monkeypatch):
+    import threading
+
+    import kansen_site.app as appmodule
+
+    config = _config(tmp_path)
+    gestart = threading.Event()
+    los = threading.Event()
+
+    def _traag(config, listings, today=None, forceer_herprocessen=False):
+        gestart.set()
+        los.wait(3.0)  # houd de run "bezig" tot de test 'm loslaat
+        return RunResult()
+
+    monkeypatch.setattr(appmodule.pipeline, "run_handmatig", _traag)
+    app = appmodule.create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    client.post("/handmatig-toevoegen", data={"tekst": "3073KJ 47A"})
+    assert gestart.wait(2.0)  # eerste run draait nu
+
+    # Tweede poging tijdens een lopende run wordt geweigerd (geen dubbele state-write).
+    resp = client.post("/handmatig-toevoegen", data={"tekst": "3078CN 44"}, follow_redirects=True)
+    assert "al een verwerking" in resp.get_data(as_text=True).lower()
+
+    los.set()
+    _wacht_op_run_klaar(client)
 
 
 # --- Rekentool per woning ---------------------------------------------------
