@@ -118,3 +118,31 @@ def test_geocode_by_postcode_met_letter_in_huisnummer_checkt_niet_op_meerdere_ee
     with patch("rotterdam_scanner.geocode.requests.get", return_value=_mock_response([_DOC])) as mock_get:
         geocode_by_postcode("3073KJ", "47A", "")
     assert mock_get.call_count == 1
+
+
+def test_geocode_by_postcode_probeert_opnieuw_bij_tijdelijke_timeout():
+    # Twee keer een read-timeout, dan een geldige response -> moet alsnog slagen
+    # (geen onnodig gesneuveld adres bij een tijdelijke PDOK-storing).
+    import requests as _requests
+    beurten = [
+        _requests.exceptions.ReadTimeout("read timed out"),
+        _requests.exceptions.ReadTimeout("read timed out"),
+        _mock_response([_DOC]),
+    ]
+    with patch("rotterdam_scanner.geocode.time.sleep"), patch(
+        "rotterdam_scanner.geocode.requests.get", side_effect=beurten
+    ) as mock_get:
+        result = geocode_by_postcode("3073KJ", "47A")
+    assert result.postcode == "3073KJ"
+    assert mock_get.call_count == 3
+
+
+def test_geocode_by_postcode_gooit_fout_door_na_alle_pogingen():
+    import requests as _requests
+    with patch("rotterdam_scanner.geocode.time.sleep"), patch(
+        "rotterdam_scanner.geocode.requests.get",
+        side_effect=_requests.exceptions.ReadTimeout("read timed out"),
+    ) as mock_get:
+        with pytest.raises(_requests.exceptions.ReadTimeout):
+            geocode_by_postcode("3073KJ", "47A")
+    assert mock_get.call_count == 3

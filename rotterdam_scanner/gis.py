@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 
 import requests
+
+
+def _get_met_retry(url: str, *, params: dict | None = None, timeout: int = 20, pogingen: int = 3):
+    """GET met retries + backoff. De gemeente-ArcGIS geeft onder druk read-timeouts of
+    resets; zonder retry sneuvelt een adres dan onnodig op een tijdelijke fout."""
+    laatste = None
+    for i in range(pogingen):
+        if i:
+            time.sleep(2 * i)
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.RequestException as exc:
+            laatste = exc
+    raise laatste
 
 # De gemeente Rotterdam publiceert de kaartlagen achter de "Kamerverhuur"-kaart
 # (https://experience.arcgis.com/experience/90c482180dbd4ab7ac0040c746ed80f5) periodiek
@@ -30,8 +47,7 @@ class LayerUrls:
 
 @lru_cache(maxsize=1)
 def resolve_layer_urls() -> LayerUrls:
-    resp = requests.get(WEBMAP_DATA_URL, params={"f": "json"}, timeout=20)
-    resp.raise_for_status()
+    resp = _get_met_retry(WEBMAP_DATA_URL, params={"f": "json"}, timeout=20)
     layers = resp.json().get("operationalLayers", [])
 
     nulquotum_url = None
@@ -52,7 +68,7 @@ def resolve_layer_urls() -> LayerUrls:
 
 
 def _point_intersects(layer_url: str, rd_x: float, rd_y: float) -> bool:
-    resp = requests.get(
+    resp = _get_met_retry(
         f"{layer_url}/query",
         params={
             "geometry": f"{rd_x},{rd_y}",
@@ -65,7 +81,6 @@ def _point_intersects(layer_url: str, rd_x: float, rd_y: float) -> bool:
         },
         timeout=20,
     )
-    resp.raise_for_status()
     data = resp.json()
     if "error" in data:
         raise RuntimeError(f"ArcGIS-fout bij bevragen {layer_url}: {data['error']}")

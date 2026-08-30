@@ -1,11 +1,30 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 
 import requests
 
 PDOK_FREE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/free"
+
+
+def _get_met_retry(url: str, *, params: dict | None = None, timeout: int = 15, pogingen: int = 3):
+    """GET met retries + backoff. PDOK geeft onder druk regelmatig een read-timeout of
+    een reset; zonder retry sneuvelt een adres dan onnodig op een tijdelijke fout (zoals
+    bij een handmatige batch met tientallen adressen achter elkaar). Gooit de laatste
+    fout door als alle pogingen mislukken."""
+    laatste = None
+    for i in range(pogingen):
+        if i:
+            time.sleep(2 * i)  # 0s, 2s, 4s - zelfde opzet als vergunningenindex._get
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.RequestException as exc:
+            laatste = exc
+    raise laatste
 
 _RD_POINT_RE = re.compile(r"POINT\(([-\d.]+) ([-\d.]+)\)")
 # WGS84 (lon/lat, in die volgorde binnen de WKT POINT) - voor de kaart op
@@ -70,8 +89,7 @@ def _zoek_pdok_adres(query: str, extra_filters: list[str]) -> dict:
         "rows": 1,
         "fq": ["type:adres", *extra_filters],
     }
-    resp = requests.get(PDOK_FREE_URL, params=params, timeout=15)
-    resp.raise_for_status()
+    resp = _get_met_retry(PDOK_FREE_URL, params=params, timeout=15)
     docs = resp.json().get("response", {}).get("docs", [])
     if not docs:
         raise GeocodeError(f"Geen PDOK-match voor '{query}'")
@@ -89,7 +107,7 @@ def heeft_meerdere_eenheden(postcode_kaal: str, huisnummer: str) -> bool:
     over een andere eenheid gaat (bv. "19-B") -- precies wat er met Grondherendijk 19
     misging (adrestekst zonder toevoeging in de mail, terwijl het pand uit meerdere
     eenheden bestaat)."""
-    resp = requests.get(
+    resp = _get_met_retry(
         PDOK_FREE_URL,
         params={
             "q": f"{postcode_kaal} {huisnummer}",
@@ -98,7 +116,6 @@ def heeft_meerdere_eenheden(postcode_kaal: str, huisnummer: str) -> bool:
         },
         timeout=15,
     )
-    resp.raise_for_status()
     docs = resp.json().get("response", {}).get("docs", [])
     patroon = re.compile(rf"^{re.escape(huisnummer)}([A-Za-z].*)?$")
     aantal_eenheden = sum(1 for d in docs if patroon.match(str(d.get("huis_nlt", ""))))
