@@ -356,6 +356,14 @@ tr:last-child td { border-bottom: none; }
 .status-te-weinig-ontvangen, .status-te-veel-ontvangen { background: var(--warn-soft); color: var(--warn); }
 .status-nog-niet-ontvangen { background: var(--bad-soft); color: var(--bad); }
 .pil-neutral { background: var(--primary-soft); color: var(--primary); margin-right: 0.3rem; }
+.pil svg { width: 0.9em; height: 0.9em; margin-right: 0.2rem; flex-shrink: 0; }
+
+/* Compacte oud-huurder-waarschuwing op de betaalpagina (icoon klein houden,
+   anders schaalt de inline-SVG naar volle breedte). */
+.oud-huurder-waarschuwing { border-left: 4px solid var(--warn); }
+.oud-huurder-kop { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--warn); font-weight: 700; font-size: 0.95rem; }
+.oud-huurder-icoon { display: inline-flex; flex-shrink: 0; }
+.oud-huurder-icoon svg { width: 1.1em; height: 1.1em; }
 td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, td.status-nog-niet-ontvangen {
   background: none;
 }
