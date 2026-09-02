@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="nl">
+{# Kleurenherkenning: alleen als de ingelogde gebruiker die voorkeur aan heeft én
+   het huidige pand een geldige (hex-gevalideerde) kleur heeft. Dan kleurt de
+   site-accent (--primary c.s.) mee in de pandkleur - de rest van de site blijft. #}
+{% set pandkleur = (huidig_pand.kleur|hexkleur) if (current_user.is_authenticated and current_user.kleurenherkenning and huidig_pand) else '' %}
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Steenhub{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% if pandkleur %}
+  <style>
+    :root {
+      --primary: {{ pandkleur }};
+      --primary-hover: color-mix(in srgb, {{ pandkleur }} 78%, #000);
+      --primary-soft: color-mix(in srgb, {{ pandkleur }} 14%, var(--surface));
+    }
+  </style>
+  {% endif %}
+</head>
+<body class="{{ 'pand-thema' if pandkleur }}">
+  {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox, icon_megafoon, icon_panden, icon_baksteen %}
+  {% if current_user.is_authenticated %}
+  {% set ep = request.endpoint or "" %}
+  <nav class="navbar">
+    <a class="navbar-brand" href="{{ url_for('start') }}">
+      <span class="logo-mark">{{ icon_baksteen() }}</span>
+      <span>{{ huidig_pand.naam if huidig_pand else "Steenhub" }}</span>
+    </a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox">
+    <label for="nav-toggle" class="nav-toggle-btn" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </label>
+    <div class="nav-menu">
+      {% if huidig_pand %}
+      <div class="nav-links">
+        <a class="nav-link {{ 'actief' if ep == 'dashboard' }}" href="{{ url_for('dashboard', pand_slug=huidig_pand.slug) }}">{{ icon_dashboard() }} Dashboard</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_kamers() }} Kamers</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">{{ icon_huurders() }} Huurders</a>
+        <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('aanmeldingen') }}" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Aanmeldingen</a>
+      </div>
+      {% else %}
+      <div class="nav-links">
+        <a class="nav-link" href="{{ url_for('start') }}">{{ icon_dashboard() }} Terug naar beheer</a>
+      </div>
+      {% endif %}
+      <div class="nav-right">
+        {% if alle_panden|length > 1 %}
+        <select onchange="if (this.value) window.location.href = this.value">
+          <option value="">Wissel van pand...</option>
+          {% for pand in alle_panden %}
+          <option value="{{ pand_wissel_url(pand.slug) }}" {{ 'selected' if huidig_pand and pand.slug == huidig_pand.slug }}>{{ pand.naam }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+        <a class="nav-link" href="{{ url_for('aanbod_overzicht') }}" target="aanbod-voorbeeld" rel="noopener">{{ icon_megafoon() }} Bekijk aanbod</a>
+        <a class="nav-link" href="https://kansen.steenhub.nl" target="_blank" rel="noopener">{{ icon_baksteen() }} Kansen</a>
+        {% if current_user.mag_gebruikers_beheren() %}
+        <a class="nav-link {{ 'actief' if ep.startswith('pand_') or ep.startswith('panden_') }}" href="{{ url_for('panden_overzicht') }}">{{ icon_panden() }} Panden</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('gebruiker') }}" href="{{ url_for('gebruikers_overzicht') }}">{{ icon_instellingen() }} Gebruikers</a>
+        {% endif %}
+        <a class="nav-link {{ 'actief' if ep == 'mail_voorkeuren_overzicht' }}" href="{{ url_for('mail_voorkeuren_overzicht') }}">{{ icon_instellingen() }} Mailvoorkeuren</a>
+        <a class="nav-logout" href="{{ url_for('logout') }}">{{ icon_logout() }} {{ current_user.id }}</a>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="container">
+    {% if current_user.is_authenticated and current_user.is_test_account() %}
+    <div class="testaccount-banner">🧪 Je bent ingelogd als <strong>testaccount</strong>.</div>
+    {% endif %}
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">
+          {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

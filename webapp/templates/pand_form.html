@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{% if pand %}Pand {{ pand.naam }} bewerken{% else %}Nieuw pand{% endif %}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{% if pand %}Pand {{ pand.naam }} bewerken{% else %}Nieuw pand toevoegen{% endif %}</h1>
+</div>
+
+<div class="warning-box">
+  <p>Zorg dat de Google Sheet (met de juiste kolomkoppen, zie README) en - als je die gebruikt -
+     de Drive-map al bestaan en gedeeld zijn met het e-mailadres uit je
+     <code>google-service-account.json</code>, vóórdat je hier opslaat. De bunq-koppeling zelf
+     (<code>bunq_production.conf</code>) is gedeeld met alle panden; hier vul je alleen het IBAN
+     in van de specifieke rekening van dit pand.</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    {% if pand %}
+    <label>Slug (niet meer te wijzigen)
+      <input type="text" value="{{ slug }}" disabled>
+    </label>
+    {% else %}
+    <label>Slug (verschijnt in de URL, bv. "baumannlaan" - alleen kleine letters, cijfers, streepjes)
+      <input type="text" name="slug" required pattern="[a-z0-9-]+" autofocus>
+    </label>
+    {% endif %}
+    <label>Naam (weergavenaam, bv. "Burgemeester Baumannlaan 70b")
+      <input type="text" name="naam" value="{{ pand.naam if pand else '' }}" required>
+    </label>
+    <label>Google Sheet ID (het stuk uit de URL van de sheet)
+      <input type="text" name="google_sheet_id" value="{{ pand.google_sheet_id if pand else '' }}" required>
+    </label>
+    <label>Tabbladnaam met de kamers
+      <input type="text" name="google_sheet_worksheet" value="{{ pand.google_sheet_worksheet if pand else 'Huurders' }}">
+    </label>
+    <label>Tabbladnaam voor betaalgeschiedenis
+      <input type="text" name="history_worksheet" value="{{ pand.history_worksheet if pand else 'Historie' }}">
+    </label>
+    <label>Tabbladnaam voor aanmeldingen
+      <input type="text" name="aanmeldingen_worksheet" value="{{ pand.aanmeldingen_worksheet if pand else 'Aanmeldingen' }}">
+    </label>
+    <label>Tabbladnaam voor vertrokken huurders
+      <input type="text" name="vertrokken_worksheet" value="{{ pand.vertrokken_worksheet if pand else 'Vertrokken' }}">
+    </label>
+    <label>bunq IBAN van de rekening waar de huur van dit pand op binnenkomt
+      <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>
+    </label>
+    <label>Extra BCC bij herinnering/ingebrekestelling-mails van dit pand (optioneel, komma-gescheiden -
+      bv. een mede-eigenaar van alleen dit pand). Je eigen adres uit EMAIL_BCC in .env gaat sowieso
+      altijd mee, voor alle panden.
+      <input type="text" name="extra_bcc" value="{{ pand.extra_bcc|join(', ') if pand else '' }}">
+    </label>
+    <label>Onderhoudsreserve per maand (optioneel - telt mee als kostenpost bij "Winstberekening" op
+      het dashboard van dit pand, naast de belasting, energiekosten en automatisch herkende vaste
+      lasten. Leeg = €0 onderhoudsreserve.)
+      <input type="text" name="onderhoud_reserve_per_maand"
+             value="{{ pand.onderhoud_reserve_per_maand|eur if pand and pand.onderhoud_reserve_per_maand is not none else '' }}">
+    </label>
+    <label>Energiekosten per maand (optioneel - handmatig in te vullen vaste energiepost die meetelt bij
+      "Winstberekening". Leeg = €0. Let op: vul je 'm in en herkent de bunq-scan óók een energie-last,
+      negeer die dan op de winstpagina om dubbeltellen te voorkomen.)
+      <input type="text" name="energiekosten_per_maand"
+             value="{{ pand.energiekosten_per_maand|eur if pand and pand.energiekosten_per_maand is not none else '' }}">
+    </label>
+    <label>Belasting per maand (optioneel - handmatig in te vullen vaste belastingpost die meetelt bij
+      "Winstberekening". Leeg = de standaard €75/maand.)
+      <input type="text" name="belasting_per_maand"
+             value="{{ pand.belasting_per_maand|eur if pand and pand.belasting_per_maand is not none else '' }}">
+    </label>
+    <label>Sleutels (één per regel, bv. "Lips 961 zolder straatkant") - getoond op het
+      Sleuteloverzicht van dit pand.
+      <textarea name="sleutels" rows="4">{% if pand %}{% for s in pand.sleutels %}{{ s }}
+{% endfor %}{% endif %}</textarea>
+    </label>
+
+    {% set huidige_kleur = (pand.kleur|hexkleur) if pand else '' %}
+    <label style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap">
+      <input type="checkbox" name="kleur_aan" id="kleur_aan" {{ 'checked' if huidige_kleur }} style="width:auto">
+      Eigen herkenningskleur voor dit pand
+      <input type="color" name="kleur" id="kleur" value="{{ huidige_kleur or '#4f46e5' }}"
+             style="width:44px; height:30px; padding:0; border:1px solid var(--border); border-radius:6px">
+    </label>
+    <p class="muted" style="margin-top:0.25rem">Alleen zichtbaar voor gebruikers die "Kleurenherkenning panden"
+       aan hebben staan (in te stellen per gebruiker onder Gebruikers). De navigatie, knoppen en de pandkiezer
+       kleuren dan subtiel mee in deze kleur op de pagina's van dit pand.</p>
+
+    <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
+    <p class="muted">Deze velden worden gebruikt om automatisch een huurcontract te genereren (zie
+       Contracten). Zonder deze gegevens ingevuld staan er lege plekken in het gegenereerde contract.</p>
+    <label>Postcode
+      <input type="text" name="postcode" value="{{ pand.postcode if pand else '' }}">
+    </label>
+    <label>Plaats
+      <input type="text" name="plaats" value="{{ pand.plaats if pand else '' }}">
+    </label>
+    <label>Verhuurder(s) - één per regel, formaat "Naam | Adres" of "Naam, Adres" (adres is optioneel)
+      <textarea name="verhuurders" rows="3">{% if pand %}{% for v in pand.verhuurders %}{{ v.naam }}{% if v.adres %} | {{ v.adres }}{% endif %}
+{% endfor %}{% endif %}</textarea>
+    </label>
+    <label>Naam rekeninghouder (zoals genoemd in het contract als ontvanger van de huur)
+      <input type="text" name="rekeninghouder_naam" value="{{ pand.rekeninghouder_naam if pand else '' }}">
+    </label>
+    <label>Gedeelde ruimtes (bv. "keuken, badkamer, woonkamer, tuin")
+      <input type="text" name="gedeelde_ruimtes" value="{{ pand.gedeelde_ruimtes if pand else '' }}">
+    </label>
+    <label>Bijzondere bepalingen / huisregels (vrije tekst, komt letterlijk in het contract)
+      <textarea name="bijzondere_bepalingen" rows="4">{{ pand.bijzondere_bepalingen if pand else '' }}</textarea>
+    </label>
+    <label>Gemeentelijk meldpunt ongewenst verhuurgedrag (naam/website, optioneel)
+      <input type="text" name="gemeente_meldpunt" value="{{ pand.gemeente_meldpunt if pand else '' }}">
+    </label>
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="heeft_bold_slot" {{ 'checked' if not pand or pand.heeft_bold_slot }} style="width:auto">
+      Dit pand heeft een Bold digitale sleutel/slim slot (bepaalt of de contract- en ondertekenmails
+      de Bold-sleutel noemen)
+    </label>
+
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('panden_overzicht') }}">Annuleren</a>
+  </form>
+</div>
+{% endblock %}

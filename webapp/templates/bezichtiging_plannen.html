@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Bezichtiging inplannen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Bezichtiging inplannen</h1>
+  <p class="muted">Vul de datum en het tijdvak in - de geselecteerde aanmelders worden achter elkaar ingepland.</p>
+</div>
+
+<div class="card">
+  <h2>Uitgenodigd</h2>
+  <ul>
+    {% for a in aanmelders %}
+    <li>{{ a.naam }} (kamer {{ a.kamer }}) - {{ a.bezichtiging }}</li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if toevoegen_aan_datum %}
+<div class="card">
+  <p class="muted">Wordt toegevoegd aan de bestaande lijst van {{ toevoegen_aan_datum }} - de begintijd sluit aan op
+     het laatste al geplande tijdslot van die dag.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="{{ url_for('bezichtiging_voorstel', pand_slug=huidig_pand.slug) }}">
+    {% for r in ruwe_aanmelders %}
+    <input type="hidden" name="aanmelders" value="{{ r }}">
+    {% endfor %}
+    <input type="hidden" name="toevoegen_aan_datum" value="{{ toevoegen_aan_datum or '' }}">
+
+    <label>Datum
+      <input type="date" name="datum" value="{{ datum }}" required>
+    </label>
+    <label>Vanaf
+      <input type="time" name="tijd_vanaf" value="{{ tijd_vanaf }}" required>
+    </label>
+    <label>Tot
+      <input type="time" name="tijd_tot" value="{{ tijd_tot }}" required>
+    </label>
+    <label>Tijd per bezichtiging (minuten)
+      <input type="number" name="duur_minuten" value="{{ duur_minuten }}" min="1" required>
+    </label>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Voorstel maken</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

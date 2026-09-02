@@ -1,0 +1,23 @@
+# Eén domein voor de hele site (alle panden zitten in dezelfde app, met een
+# dropdown/toegangscontrole per gebruiker - zie properties.json en users.json).
+
+steenhub.nl {
+    reverse_proxy app:8000
+}
+
+www.steenhub.nl {
+    redir https://steenhub.nl{uri} permanent
+}
+
+# Los project (gewicht-tracker) op hetzelfde domein/dezelfde VPS - zie de
+# 'weight-tracker'-service in docker-compose.yml.
+gewicht.steenhub.nl {
+    reverse_proxy weight-tracker:8420
+}
+
+# Kaart-website bij fundazoeker (kansen.steenhub.nl) - zie de 'kansen'-service
+# in docker-compose.yml. DNS-record voor dit subdomein moet nog wel handmatig
+# aangemaakt worden bij de domeinregistrar (zelfde IP als steenhub.nl).
+kansen.steenhub.nl {
+    reverse_proxy kansen:8080
+}

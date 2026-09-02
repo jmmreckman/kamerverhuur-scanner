@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# secrets - nooit committen
+.env
+*.conf
+google-service-account.json
+bunq_production.conf
+bunq_sandbox.conf
+users.json
+properties.json
+laatste_resultaat*.json
+gegenereerde_contracten/
+gegenereerde_advertenties/
+
+# deployment (VPS) - secrets en per-pand data, nooit committen
+deploy/*.env
+deploy/data/

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_plus, icon_foto %}
+{% block title %}Kamer {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Kamer {{ kamer.kamer }}</h1>
+</div>
+
+{% if aanzeg_status and (aanzeg_status.moet_nu_aanzeggen or aanzeg_status.venster_verstreken) %}
+<div class="card warning-box">
+  {% if aanzeg_status.venster_verstreken %}
+    <p><strong>Let op:</strong> de wettelijke aanzegtermijn voor dit contract loopt al (moest vóór
+       {{ aanzeg_status.venster_einde.strftime("%d-%m-%Y") }}) - regel dit zo snel mogelijk.</p>
+  {% else %}
+    <p><strong>Aanzeggen nodig:</strong> dit tijdelijke contract loopt af op
+       {{ aanzeg_status.einddatum.strftime("%d-%m-%Y") }}. Zeg dit schriftelijk aan vóór
+       {{ aanzeg_status.venster_einde.strftime("%d-%m-%Y") }}, anders wordt het contract automatisch
+       voor onbepaalde tijd.</p>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  {% if kamer.naam %}
+    <p><strong>Huurder:</strong> {{ kamer.naam }}</p>
+    {% if kamer.email %}<p><strong>Mail:</strong> <a href="mailto:{{ kamer.email }}">{{ kamer.email }}</a></p>{% endif %}
+    {% if kamer.telefoonnummer %}<p><strong>Telefoonnummer:</strong> <a href="tel:{{ kamer.telefoonnummer }}">{{ kamer.telefoonnummer }}</a></p>{% endif %}
+    <p><strong>Totale huur:</strong> {{ kamer.verwacht_bedrag|eur }} / maand
+      {% if kamer.kale_huurprijs is not none and kamer.servicekosten is not none %}
+        <span class="muted">(kaal {{ kamer.kale_huurprijs|eur }} + servicekosten {{ kamer.servicekosten|eur }})</span>
+      {% endif %}
+    </p>
+    {% if kamer.contract_einddatum %}<p><strong>Contract einddatum:</strong> {{ kamer.contract_einddatum }}</p>{% endif %}
+    {% if kamer.opmerking %}<p><strong>Opmerking:</strong> {{ kamer.opmerking }}</p>{% endif %}
+    {% if kamer.iban %}<p><strong>IBAN:</strong> {{ kamer.iban }}</p>{% endif %}
+    {% if cache_status %}
+      <p><strong>Laatste controle:</strong>
+        <span class="pil {{ cache_status['status']|status_klasse }}">{{ cache_status["status"] }}</span>
+        (ontvangen {{ cache_status["ontvangen_bedrag"]|eur }})
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="muted">Deze kamer staat op dit moment leeg.</p>
+  {% endif %}
+  <a class="btn" href="{{ url_for('kamer_aanbod', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    {{ icon_foto() }} Kamer adverteren
+    {% if kamer.beschikbaar %}<span class="pil status-betaald" style="margin-left:0.4rem">Te huur</span>{% endif %}
+  </a>
+</div>
+
+<div class="card">
+  <h2>Contracten</h2>
+  {% if contracten %}
+    <ul>
+    {% for c in contracten %}
+      <li><a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" target="_blank" rel="noopener">{{ c }}</a></li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Nog geen contract gegenereerd voor deze kamer.</p>
+  {% endif %}
+  <a class="btn btn-secondary" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug) }}">{{ icon_plus() }} Nieuw huurcontract</a>
+  <a class="btn btn-secondary" href="{{ url_for('directe_aanvraag', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ icon_plus() }} Nieuwe huurder rechtstreeks</a>
+  <p class="muted" style="margin-top:0.5rem">Voor een huurder die je via-via gevonden hebt, zonder bezichtiging:
+     stuurt haar één link waar ze haar gegevens invult én documenten uploadt, waarna automatisch een concept-huurcontract volgt.</p>
+</div>
+
+<div class="card">
+  <h2>Betaalgeschiedenis</h2>
+  {% if betrouwbaarheid %}
+    <p><strong>Betrouwbaarheid:</strong> {{ betrouwbaarheid.percentage }}% op orde
+       ({{ betrouwbaarheid.op_orde }} van {{ betrouwbaarheid.totaal }} maanden)</p>
+  {% else %}
+    <p class="muted">Nog geen geschiedenis - deze wordt opgebouwd bij elke uitgevoerde controle.</p>
+  {% endif %}
+  {% if geschiedenis %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Maand</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Betaald op</th></tr>
+    {% for regel in geschiedenis %}
+    <tr>
+      <td>{{ regel.maand|maandnaam }}</td>
+      <td>{{ regel.huurder }}</td>
+      <td>{{ regel.verwacht_bedrag|eur }}</td>
+      <td>{{ regel.ontvangen_bedrag|eur }}</td>
+      <td><span class="pil {{ regel.status.value|status_klasse }}">{{ regel.status.value }}</span></td>
+      <td>{{ regel.betaaldatum.strftime("%d-%m-%Y") if regel.betaaldatum else "-" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

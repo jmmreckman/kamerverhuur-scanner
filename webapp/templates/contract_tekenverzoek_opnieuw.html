@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Opnieuw mailen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Opnieuw mailen</h1>
+</div>
+
+<div class="card">
+  <p class="muted">Naar {{ doelwit.naam }} ({{ doelwit.rol }}, {{ doelwit.email }}).</p>
+
+  {% if is_huurder %}
+  <p class="muted">Kies wat er als herinnering ("nog niet ontvangen") in de mail moet staan - het andere
+     wordt dan als bevestiging ("al ontvangen") geformuleerd. Minstens een van beide moet aangevinkt zijn.</p>
+  <form method="get" action="{{ url_for('contract_tekenverzoek_opnieuw', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam, ondertekenaar_id=doelwit.id) }}"
+        onsubmit="return (this.onderteken.checked || this.betaal.checked) ? true : (alert('Vink minstens een van beide aan.'), false);">
+    <div class="warning-box">
+      <label style="display:flex; align-items:center; gap:0.5rem">
+        <input type="checkbox" name="onderteken" value="1" {% if onderteken_herinnering %}checked{% endif %} style="width:auto">
+        Onderteken herinnering
+      </label>
+      <label style="display:flex; align-items:center; gap:0.5rem; margin-top:0.4rem">
+        <input type="checkbox" name="betaal" value="1" {% if betaal_herinnering %}checked{% endif %} style="width:auto">
+        Betaal herinnering
+      </label>
+    </div>
+    <p style="margin-top:0.6rem">
+      <button class="btn btn-secondary" type="submit">Tekst vernieuwen</button>
+    </p>
+  </form>
+  {% endif %}
+
+  <form method="post" onsubmit="return confirm('Deze mail nu versturen naar {{ doelwit.naam }}?');">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="16" required>{{ tekst }}</textarea>
+    </label>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('contract_ondertekenstatus', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

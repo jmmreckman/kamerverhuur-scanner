@@ -1,0 +1,10 @@
+gspread>=6.1.0
+google-auth>=2.29.0
+bunq_sdk>=1.28.0
+python-dotenv>=1.0.1
+Flask>=3.0.0
+Flask-Login>=0.6.3
+gunicorn>=22.0.0
+tzdata>=2024.1
+xhtml2pdf>=0.2.16
+anthropic>=0.117.0

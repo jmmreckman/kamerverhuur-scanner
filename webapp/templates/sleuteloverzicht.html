@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Sleuteloverzicht - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Sleuteloverzicht</h1>
+  <p class="muted">{{ huidig_pand.naam }}</p>
+</div>
+
+<div class="card">
+  {% if sleutels %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Sleutel</th></tr>
+    {% for sleutel in sleutels %}
+    <tr><td>{{ sleutel }}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen sleutels ingevuld{% if current_user.mag_gebruikers_beheren() %} - vul die in bij
+     <a href="{{ url_for('pand_bewerken', slug=huidig_pand.slug) }}">Panden beheren</a>{% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}
