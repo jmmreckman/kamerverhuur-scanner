@@ -172,5 +172,53 @@
     "gebruiker": "kijker",
     "ip": "127.0.0.1",
     "pad": "/account/mail-voorkeuren"
+  },
+  {
+    "tijd": "02-09-2026 06:38",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/beheer/gebruikers"
+  },
+  {
+    "tijd": "02-09-2026 06:38",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/"
+  },
+  {
+    "tijd": "02-09-2026 06:38",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/pand/mahoniestraat/"
+  },
+  {
+    "tijd": "02-09-2026 06:38",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/account/mail-voorkeuren"
+  },
+  {
+    "tijd": "02-09-2026 06:42",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/beheer/gebruikers"
+  },
+  {
+    "tijd": "02-09-2026 06:42",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/"
+  },
+  {
+    "tijd": "02-09-2026 06:42",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/pand/mahoniestraat/"
+  },
+  {
+    "tijd": "02-09-2026 06:42",
+    "gebruiker": "kijker",
+    "ip": "127.0.0.1",
+    "pad": "/account/mail-voorkeuren"
   }
 ]

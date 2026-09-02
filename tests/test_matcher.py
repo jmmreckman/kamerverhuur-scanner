@@ -322,3 +322,32 @@ def test_geen_tekort_als_laatste_maand_al_betaald_was():
 def test_tekort_negeert_de_huidige_maand_zelf():
     geschiedenis = [_regel("2026-07", status=Status.NIET_ONTVANGEN, ontvangen="0.00")]
     assert openstaand_tekort_uit_geschiedenis(geschiedenis, "2026-07") == Decimal("0")
+
+
+# --- Oud-huurder-herkenning op de betaalpagina ---
+
+def test_betaling_matcht_naam_volledige_naam():
+    from kamerverhuur_scanner.matcher import betaling_matcht_naam
+    assert betaling_matcht_naam("Jan de Vries", "Huur augustus", "Jan de Vries") is True
+
+
+def test_betaling_matcht_naam_op_achternaam_deel():
+    from kamerverhuur_scanner.matcher import betaling_matcht_naam
+    # Bank toont vaak "J DE VRIES" - de losse (>=4 tekens) achternaam moet matchen.
+    assert betaling_matcht_naam("J DE VRIES", "huur", "Jan de Vries") is True
+
+
+def test_betaling_matcht_naam_negeert_korte_voornaam():
+    from kamerverhuur_scanner.matcher import betaling_matcht_naam
+    # "Jan" (<4 tekens) mag geen valse match geven op een willekeurige Jan.
+    assert betaling_matcht_naam("Jan Bakker", "cadeau", "Jan de Vries") is False
+
+
+def test_betaling_matcht_naam_geen_match():
+    from kamerverhuur_scanner.matcher import betaling_matcht_naam
+    assert betaling_matcht_naam("Piet Pietersen", "iets", "Jan de Vries") is False
+
+
+def test_betaling_matcht_naam_lege_naam():
+    from kamerverhuur_scanner.matcher import betaling_matcht_naam
+    assert betaling_matcht_naam("Jan de Vries", "huur", "") is False

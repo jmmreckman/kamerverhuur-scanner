@@ -30,6 +30,25 @@
   <h1>Betalingen controleren</h1>
 </div>
 
+{% if oud_huurder_signalen %}
+<div class="card" style="border-left: 4px solid var(--warn);">
+  <h2 style="color: var(--warn)">{{ icon_alert() }} Mogelijke betaling van een oud-huurder</h2>
+  <p>De volgende niet-gekoppelde betaling(en) lijken op de naam van een <strong>vertrokken huurder</strong> —
+     waarschijnlijk een vergeten automatische overschrijving van iemand die net is uitgetrokken.
+     Controleer, vraag om stopzetten en stort zo nodig terug.</p>
+  <ul style="margin: 0.4rem 0 0; padding-left: 1.2rem;">
+    {% for s in oud_huurder_signalen %}
+    <li style="margin-bottom: 0.25rem;">
+      <strong>{{ s.tegenpartij_naam }}</strong> &middot; {{ s.bedrag|eur }} op {{ s.datum }} &mdash;
+      lijkt op oud-huurder
+      {% if s.row_index %}<a href="{{ url_for('oude_huurder_detail', pand_slug=huidig_pand.slug, row_index=s.row_index) }}">{{ s.oud_naam }}</a>{% else %}{{ s.oud_naam }}{% endif %}
+      (voorheen kamer {{ s.kamer }})
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 {% if net_gecontroleerd %}
 <div class="card">
   <h2>Resultaat van deze controle</h2>
@@ -58,9 +77,12 @@
     <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
     <tbody>
     {% for p in net_gecontroleerd["unmatched"] %}
+    {% set oud = herken_oud_huurder(p.tegenpartij_naam, p.omschrijving) %}
     <tr>
       <td data-label="Datum">{{ p.datum.strftime("%d-%m-%Y") }}</td>
-      <td data-label="Van">{{ p.tegenpartij_naam }}</td>
+      <td data-label="Van">{{ p.tegenpartij_naam }}
+        {% if oud %}<span class="pil" style="background: var(--warn-soft); color: var(--warn);" title="Lijkt op oud-huurder {{ oud.naam }} (kamer {{ oud.kamer }})">{{ icon_alert() }} oud-huurder?</span>{% endif %}
+      </td>
       <td data-label="Bedrag">{{ p.bedrag|eur }}</td>
       <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p.omschrijving }}</td>
     </tr>
@@ -98,9 +120,12 @@
     <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
     <tbody>
     {% for p in cache["niet_gekoppelde_betalingen_lijst"] %}
+    {% set oud = herken_oud_huurder(p["tegenpartij_naam"], p["omschrijving"]) %}
     <tr>
       <td data-label="Datum">{{ p["datum"] }}</td>
-      <td data-label="Van">{{ p["tegenpartij_naam"] }}</td>
+      <td data-label="Van">{{ p["tegenpartij_naam"] }}
+        {% if oud %}<span class="pil" style="background: var(--warn-soft); color: var(--warn);" title="Lijkt op oud-huurder {{ oud.naam }} (kamer {{ oud.kamer }})">{{ icon_alert() }} oud-huurder?</span>{% endif %}
+      </td>
       <td data-label="Bedrag">{{ p["bedrag"]|eur }}</td>
       <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p["omschrijving"] }}</td>
     </tr>

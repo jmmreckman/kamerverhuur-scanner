@@ -27,6 +27,7 @@ from kamerverhuur_scanner import document_ai, drive_browse, drive_sync, mail_voo
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
+from kamerverhuur_scanner.matcher import betaling_matcht_naam
 from kamerverhuur_scanner.models import Status, Tenant
 from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
 from kamerverhuur_scanner.runner import (
@@ -1055,12 +1056,52 @@ def create_app(config: Config | None = None) -> Flask:
             for kamer in tenants_by_kamer
             for soort in _EMAIL_SOORTEN
         }
+        cache = state.load(pand_slug, config.state_dir)
+
+        # Oud-huurder-signaal: een niet-gekoppelde betaling die op de naam van een
+        # vertrokken huurder lijkt, is vaak een vergeten automatische overschrijving
+        # van iemand die net is uitgetrokken. Die wil je niet missen - vandaar een
+        # aparte, prominente waarschuwing bovenaan (naast het gewone rijtje). Puur een
+        # verrijking: mag de betaalpagina nooit breken, ook niet als de "Vertrokken"-
+        # sheet ontbreekt of de opvraging hapert.
+        try:
+            vertrokken = sheet.get_alle_vertrokken_huurders()
+        except Exception:  # noqa: BLE001 - niet-kritisch: val terug op geen signaal
+            vertrokken = []
+
+        def _oud_huurder(tegenpartij_naam, omschrijving):
+            for oud in vertrokken:
+                if betaling_matcht_naam(tegenpartij_naam or "", omschrijving or "", oud.naam):
+                    return oud
+            return None
+
+        if net_gecontroleerd:
+            ongekoppeld = [
+                (p.tegenpartij_naam, p.omschrijving, p.bedrag, p.datum.strftime("%d-%m-%Y"))
+                for p in net_gecontroleerd["unmatched"]
+            ]
+        else:
+            ongekoppeld = [
+                (p.get("tegenpartij_naam", ""), p.get("omschrijving", ""), p.get("bedrag"), p.get("datum"))
+                for p in (cache or {}).get("niet_gekoppelde_betalingen_lijst", [])
+            ]
+        oud_huurder_signalen = []
+        for tegenpartij_naam, omschrijving, bedrag, datum in ongekoppeld:
+            oud = _oud_huurder(tegenpartij_naam, omschrijving)
+            if oud is not None:
+                oud_huurder_signalen.append({
+                    "oud_naam": oud.naam, "kamer": oud.kamer, "row_index": oud.row_index,
+                    "tegenpartij_naam": tegenpartij_naam, "bedrag": bedrag, "datum": datum,
+                })
+
         return render_template(
             "betalingen.html",
             net_gecontroleerd=net_gecontroleerd,
-            cache=state.load(pand_slug, config.state_dir),
+            cache=cache,
             tenants_by_kamer=tenants_by_kamer,
             verzonden=verzonden,
+            herken_oud_huurder=_oud_huurder,
+            oud_huurder_signalen=oud_huurder_signalen,
         )
 
     @app.route("/pand/<pand_slug>/betalingen/geschiedenis-aanvullen", methods=["POST"])

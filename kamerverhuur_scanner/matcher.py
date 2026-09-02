@@ -137,6 +137,24 @@ def _matches(tenant: Tenant, payment: Payment) -> bool:
     return _matches_sterk(tenant, payment) or _matches_los(tenant, payment)
 
 
+def betaling_matcht_naam(tegenpartij_naam: str, omschrijving: str, naam: str, *, min_deellengte: int = 4) -> bool:
+    """Of een (niet-gekoppelde) inkomende betaling qua tegenpartijnaam of
+    omschrijving bij `naam` past. Gebruikt voor het oud-huurder-signaal op de
+    betaalpagina: een betaling die aan geen enkele huidige huurder kon worden
+    gekoppeld maar wél op de naam van een vertrokken huurder lijkt, is vaak een
+    vergeten automatische overschrijving. Iets strenger dan de gewone
+    huurder-matching (naamdelen >= 4 i.p.v. 3 tekens) om valse treffers op korte,
+    veelvoorkomende voornamen te beperken."""
+    haystack = f"{tegenpartij_naam} {omschrijving}".lower()
+    naam = naam.strip().lower()
+    if not naam:
+        return False
+    if naam in haystack:
+        return True
+    delen = [deel for woord in naam.split() for deel in woord.split("-") if len(deel) >= min_deellengte]
+    return any(deel in haystack for deel in delen)
+
+
 def _naam_delen(naam: str) -> list[str]:
     """Alle los bruikbare delen van een naam (elk woord, en delen van
     koppelnamen), gefilterd op minimaal 3 tekens om valse matches te voorkomen."""
