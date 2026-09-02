@@ -93,6 +93,58 @@ body {
   font-size: 0.9em;
 }
 
+/* --- Topbar "Menu"-dropdown: houdt de secundaire acties gebundeld i.p.v.
+   allemaal los naast elkaar (vooral op telefoon) --- */
+.menu { position: relative; }
+.menu > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--tekst-zwak);
+  text-decoration: underline;
+  font-size: 0.9em;
+  user-select: none;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu > summary::after { content: " \25BE"; text-decoration: none; }
+.menu[open] > summary::after { content: " \25B4"; }
+.menu-inhoud {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.6rem);
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem;
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  z-index: 1000;
+}
+.menu-inhoud form { margin: 0; }
+.menu-inhoud .menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.95em;
+  cursor: pointer;
+}
+.menu-inhoud .menu-item:hover { background: var(--achtergrond); }
+.menu-gebruiker {
+  padding: 0.45rem 0.6rem 0.2rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid var(--rand);
+  color: var(--tekst-zwak);
+  font-size: 0.85em;
+}
+
 .layout {
   display: flex;
   height: calc(100vh - 53px);

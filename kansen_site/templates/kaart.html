@@ -16,15 +16,20 @@
     <div class="topbar-acties">
       <span id="status-tekst" class="muted"></span>
       <button id="ververs-knop" type="button">Ververs nu</button>
-      <button id="bekendmakingen-knop" type="button" class="link-knop" title="Check nu of er nieuwe kamerverhuurvergunningen (officiële bekendmakingen) binnen 50 m van je favorieten zijn afgegeven">Vergunningen checken</button>
       <button id="zijbalk-knop" type="button" class="link-knop">Toon lijst</button>
-      <a href="{{ url_for('data_analyse') }}" class="link-knop">Data-analyse</a>
-      <a href="{{ url_for('reken_instellingen') }}" class="link-knop">Reken-instellingen</a>
-      <a href="{{ url_for('handmatig_toevoegen') }}" class="link-knop">Toevoegen</a>
-      <a href="{{ url_for('verwijderd') }}" class="link-knop">Verwijderd</a>
-      {% if is_beheerder %}<a href="{{ url_for('toegangsbeheer') }}" class="link-knop">Toegang</a>{% endif %}
-      <span class="muted">{{ gebruiker }}</span>
-      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+      <details class="menu">
+        <summary>Menu</summary>
+        <div class="menu-inhoud">
+          <button id="bekendmakingen-knop" type="button" class="menu-item" title="Check nu of er nieuwe kamerverhuurvergunningen (officiële bekendmakingen) binnen 50 m van je favorieten zijn afgegeven">Vergunningen checken</button>
+          <a href="{{ url_for('data_analyse') }}" class="menu-item">Data-analyse</a>
+          <a href="{{ url_for('reken_instellingen') }}" class="menu-item">Reken-instellingen</a>
+          <a href="{{ url_for('handmatig_toevoegen') }}" class="menu-item">Toevoegen</a>
+          <a href="{{ url_for('verwijderd') }}" class="menu-item">Verwijderd</a>
+          {% if is_beheerder %}<a href="{{ url_for('toegangsbeheer') }}" class="menu-item">Toegang</a>{% endif %}
+          <span class="menu-gebruiker">Ingelogd als <strong>{{ gebruiker }}</strong></span>
+          <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="menu-item">Uitloggen</button></form>
+        </div>
+      </details>
     </div>
   </header>
 
@@ -87,5 +92,19 @@
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="{{ url_for('static', filename='kaart.js') }}"></script>
+  <script>
+    // Menu-dropdown netjes sluiten: bij klik buiten het menu, en nadat je in het
+    // menu iets aanklikt (een link navigeert toch weg; een knop sluit 'm gelijk).
+    (function () {
+      const menu = document.querySelector(".menu");
+      if (!menu) return;
+      document.addEventListener("click", (e) => {
+        if (menu.open && !menu.contains(e.target)) menu.open = false;
+      });
+      menu.querySelectorAll(".menu-item").forEach((item) => {
+        item.addEventListener("click", () => { menu.open = false; });
+      });
+    })();
+  </script>
 </body>
 </html>
