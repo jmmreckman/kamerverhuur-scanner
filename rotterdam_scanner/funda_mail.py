@@ -30,7 +30,6 @@ _PRIJS_RE = re.compile(r"€\s?([\d]{2,3}(?:[.,]\d{3})*)")
 # Zie _KAART_TEMPLATE in tests/test_funda_mail.py: geverifieerd tegen een echte
 # funda-alertmail, formaat "97 m² • 4 kamers" in één <span>.
 _OPPERVLAKTE_RE = re.compile(r"(\d{1,4})\s*m²")
-_BEKIJK_ALLE_RE = re.compile(r"Bekijk alle (\d+) woning", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
 
 # Ruim bemeten venster: in een echte funda-mail zit de prijs ~500 tekens (ruwe HTML)
@@ -152,15 +151,11 @@ def scan_email_body(body: str) -> FundaMailScan:
             oppervlakte_advertentie=oppervlakte_advertentie,
         )
 
+    # De vroegere "Bekijk alle N woningen"-waarschuwing (funda toont er standaard maar
+    # 2 los per mail) is bewust weggehaald: de NVM-/Move.nl-mails zijn nu de hoofdbron
+    # en leveren het volledige aanbod, dus die Funda-truncatie is geen gemis meer en
+    # zou alleen ruis in de dagelijkse mail opleveren.
     waarschuwingen = []
-    aangekondigd = sum(int(n) for n in _BEKIJK_ALLE_RE.findall(body))
-    if aangekondigd and len(listings) < aangekondigd:
-        waarschuwingen.append(
-            f"Funda-mail kondigt in totaal {aangekondigd} woning(en) aan via 'Bekijk alle...'-knoppen, "
-            f"maar er konden er maar {len(listings)} individueel herkend worden. Mogelijk toont funda "
-            "meer dan de standaard 2 woningen per zoekopdracht niet los in de mail -- check je "
-            "Funda-account handmatig voor deze dag, of splits je zoekopdracht in kleinere stukken."
-        )
     for url in onherkend_urls:
         waarschuwingen.append(f"Kon adres niet herleiden uit e-mailtekst voor link: {url}")
 

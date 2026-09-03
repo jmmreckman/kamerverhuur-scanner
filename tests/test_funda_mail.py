@@ -114,16 +114,12 @@ def test_scan_email_body_lege_body():
     assert scan.waarschuwingen == []
 
 
-def test_scan_email_body_waarschuwt_als_niet_alle_aangekondigde_woningen_gevonden_zijn():
+def test_scan_email_body_geen_bekijk_alle_waarschuwing_meer():
+    # De "Bekijk alle N woningen"-truncatiewaarschuwing is bewust weggehaald: de
+    # NVM-mails zijn nu de hoofdbron met het volledige aanbod, dus dit is geen gemis.
     body = _kaart() + "Bekijk alle 3 woningen"
     scan = scan_email_body(body)
     assert len(scan.listings) == 1
-    assert any("3" in w and "1" in w for w in scan.waarschuwingen)
-
-
-def test_scan_email_body_geen_waarschuwing_als_aantallen_kloppen():
-    body = _kaart() + "Bekijk alle 1 woningen"
-    scan = scan_email_body(body)
     assert scan.waarschuwingen == []
 
 
