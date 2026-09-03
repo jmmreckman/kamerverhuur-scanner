@@ -848,3 +848,20 @@ def test_vaste_eigenaar_is_beheerder_via_steenhub_login(tmp_path):
     kaart = client.get("/")
     assert b"Toegang" in kaart.data
     assert client.get("/toegangsbeheer").status_code == 200
+
+
+def test_api_broninfo_geeft_bronverdeling(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path, object_id="F", bronnen=["funda"])
+    _zet_listing(tmp_path, object_id="N", bronnen=["nvm"])
+    _zet_listing(tmp_path, object_id="B", bronnen=["funda", "nvm"])
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    data = client.get("/api/broninfo").get_json()
+    assert data["funda"] == 2
+    assert data["nvm"] == 2
+    assert data["beide"] == 1
+    assert data["alleen_funda"] == 1
+    assert data["alleen_nvm"] == 1
+    assert data["totaal"] == 3

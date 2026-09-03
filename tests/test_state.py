@@ -4,7 +4,7 @@ from rotterdam_scanner.state import ListingState, StateStore
 
 
 def _listing(object_id="1", eerst="2026-07-01", laatst="2026-07-01", status="actief",
-             favoriet=False):
+             favoriet=False, bronnen=None):
     return ListingState(
         object_id=object_id,
         url=f"https://www.funda.nl/x/{object_id}/",
@@ -13,6 +13,7 @@ def _listing(object_id="1", eerst="2026-07-01", laatst="2026-07-01", status="act
         laatst_gezien=laatst,
         status=status,
         favoriet=favoriet,
+        bronnen=list(bronnen) if bronnen else [],
     )
 
 
@@ -115,3 +116,17 @@ def test_prijs_per_m2_overleeft_json_persistentie(tmp_path):
 
     herladen = StateStore(tmp_path / "state.json")
     assert herladen.get("1").prijs_per_m2 == 3000.0
+
+
+def test_bron_statistieken_telt_overlap_en_alleen_bronnen():
+    from rotterdam_scanner.state import bron_statistieken
+    items = [
+        _listing(object_id="a", bronnen=["funda"]),
+        _listing(object_id="b", bronnen=["nvm"]),
+        _listing(object_id="c", bronnen=["funda", "nvm"]),
+        _listing(object_id="d", bronnen=[]),  # legacy: van vóór de bron-tracking
+    ]
+    assert bron_statistieken(items) == {
+        "totaal": 3, "funda": 2, "nvm": 2, "beide": 1,
+        "alleen_funda": 1, "alleen_nvm": 1, "onbekende_bron": 1,
+    }

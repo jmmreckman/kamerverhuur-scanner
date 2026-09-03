@@ -26,7 +26,7 @@ from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
-from rotterdam_scanner.state import StateStore
+from rotterdam_scanner.state import StateStore, bron_statistieken
 
 # Velden op de rekentool-pagina (kansen.steenhub.nl), in weergavevolgorde. `soort`
 # stuurt de opmaak/parsing: "euro" en "aantal" staan gelijk aan hun opgeslagen
@@ -295,6 +295,7 @@ def _listing_naar_json(item) -> dict:
         "status": item.status,
         "favoriet": item.favoriet,
         "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,
+        "bronnen": item.bronnen,
     }
 
 
@@ -400,6 +401,14 @@ def create_app(config: Config | None = None) -> Flask:
             and item.lon is not None
         ]
         return jsonify([_listing_naar_json(item) for item in zichtbaar])
+
+    @app.route("/api/broninfo")
+    @login_required
+    def api_broninfo():
+        # Telling per databron (Funda / NVM): hoeveel woningen elk kanaal levert,
+        # hoeveel overlappen en hoeveel maar via één van de twee binnenkomen.
+        state = StateStore(config.state_path)
+        return jsonify(bron_statistieken(state.all()))
 
     @app.route("/ververs", methods=["POST"])
     @login_required

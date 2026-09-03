@@ -164,3 +164,24 @@ class StateStore:
         item = self._listings[object_id]
         eerst = datetime.fromisoformat(item.eerst_gezien).date()
         return (today - eerst).days
+
+
+def bron_statistieken(items: list[ListingState]) -> dict:
+    """Telling per bron over de woningen met een bekende bron, voor de Broninfo-
+    sectie op kansen.steenhub.nl. Laat over de tijd zien hoeveel woningen elk
+    kanaal (Funda / NVM) levert, hoeveel overlappen en hoeveel maar via één van de
+    twee binnenkwamen - zo zie je of je via een van beide wegen structureel iets
+    mist. 'onbekende_bron' zijn woningen van vóór de bron-tracking."""
+    met_bron = [i for i in items if i.bronnen]
+    aantal_funda = sum(1 for i in met_bron if "funda" in i.bronnen)
+    aantal_nvm = sum(1 for i in met_bron if "nvm" in i.bronnen)
+    aantal_beide = sum(1 for i in met_bron if "funda" in i.bronnen and "nvm" in i.bronnen)
+    return {
+        "totaal": len(met_bron),
+        "funda": aantal_funda,
+        "nvm": aantal_nvm,
+        "beide": aantal_beide,
+        "alleen_funda": aantal_funda - aantal_beide,
+        "alleen_nvm": aantal_nvm - aantal_beide,
+        "onbekende_bron": sum(1 for i in items if not i.bronnen),
+    }

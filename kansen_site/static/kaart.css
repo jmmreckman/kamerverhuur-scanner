@@ -145,6 +145,22 @@ body {
   font-size: 0.85em;
 }
 
+/* --- Broninfo-blok in de zijbalk (Funda vs. NVM dekking) --- */
+.broninfo { margin-bottom: 0.8rem; border: 1px solid var(--rand); border-radius: 8px; }
+.broninfo > summary {
+  cursor: pointer; padding: 0.5rem 0.7rem; font-weight: 600; font-size: 0.9em;
+  list-style: none;
+}
+.broninfo > summary::-webkit-details-marker { display: none; }
+.broninfo > summary::after { content: " ▾"; color: var(--tekst-zwak); }
+.broninfo[open] > summary::after { content: " ▴"; }
+.broninfo-inhoud { padding: 0 0.7rem 0.6rem; }
+.broninfo-rij {
+  display: flex; justify-content: space-between; gap: 0.6rem;
+  padding: 0.25rem 0; font-size: 0.88em; border-bottom: 1px solid var(--achtergrond);
+}
+.broninfo-rij.broninfo-totaal { border-bottom: none; border-top: 1px solid var(--rand); margin-top: 0.2rem; padding-top: 0.35rem; }
+
 .layout {
   display: flex;
   height: calc(100vh - 53px);

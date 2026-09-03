@@ -36,6 +36,12 @@
   <div class="layout">
     <aside id="zijbalk" class="zijbalk">
       <button id="zijbalk-sluiten-knop" type="button" class="link-knop zijbalk-sluiten">&larr; Terug naar kaart</button>
+      <details class="broninfo">
+        <summary>Broninfo</summary>
+        <div id="broninfo-inhoud" class="broninfo-inhoud">
+          <p class="muted">Laden…</p>
+        </div>
+      </details>
       <div class="filters">
         <label class="checkbox-filter"><input type="checkbox" id="toon-kansen" checked> Toon kansen</label>
         <label class="checkbox-filter"><input type="checkbox" id="toon-vergunningen"> Toon vergunningen (4+ bewoners)</label>
@@ -104,6 +110,28 @@
       menu.querySelectorAll(".menu-item").forEach((item) => {
         item.addEventListener("click", () => { menu.open = false; });
       });
+    })();
+
+    // Broninfo: laat zien hoeveel woningen uit Funda vs. NVM komen, hoeveel
+    // overlappen en hoeveel maar via één van de twee - om dekkingsgaten te spotten.
+    (function () {
+      const doel = document.getElementById("broninfo-inhoud");
+      if (!doel) return;
+      const rij = (label, waarde, extra) =>
+        `<div class="broninfo-rij"><span>${label}</span><strong>${waarde}${extra || ""}</strong></div>`;
+      fetch("{{ url_for('api_broninfo') }}", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          doel.innerHTML =
+            rij("Uit Funda", d.funda) +
+            rij("Uit NVM", d.nvm) +
+            rij("Via beide", d.beide) +
+            rij("Alleen Funda", d.alleen_funda, " ⚠") +
+            rij("Alleen NVM", d.alleen_nvm, " ⚠") +
+            `<div class="broninfo-rij broninfo-totaal"><span>Totaal (met bron)</span><strong>${d.totaal}</strong></div>` +
+            (d.onbekende_bron ? `<p class="muted" style="margin:.4rem 0 0;font-size:.8em;">${d.onbekende_bron} van vóór de bron-tracking</p>` : "");
+        })
+        .catch(() => { doel.innerHTML = '<p class="muted">Broninfo kon niet geladen worden.</p>'; });
     })();
   </script>
 </body>
