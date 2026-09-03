@@ -60,6 +60,12 @@ class FundaListing:
     # gebruikt de pipeline gewoon vandaag als eerst_gezien (net als bij nieuwe
     # woningen uit de dagelijkse e-mail-alert, die altijd echt nieuw zijn).
     eerst_gezien_override: date | None = None
+    # Welke bron deze woning aanleverde: "funda" (de eigen Funda-alertmails) of
+    # "nvm" (de makelaars-/Move.nl-mails, zie nvm_mail.py). De pipeline houdt per
+    # woning bij via welke bron(nen) hij binnenkwam, zodat op kansen.steenhub.nl te
+    # zien is wat elk kanaal wel/niet oplevert (bron-tracking). Default "funda" zodat
+    # de bestaande Funda-scan ongewijzigd blijft.
+    bron: str = "funda"
 
     @property
     def adres_bekend(self) -> bool:
