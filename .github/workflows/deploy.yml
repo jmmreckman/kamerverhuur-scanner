@@ -19,15 +19,28 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
             set -euo pipefail
             cd /opt/kamerverhuur-scanner/deploy
-            # De fundazoeker/kansen-images bouwen vanaf een remote git-context; GitHub
-            # rate-limit onauthenticated downloads soms kort ("please retry later"). Daarom
-            # de build een paar keer opnieuw proberen met backoff i.p.v. meteen falen.
+            # De fundazoeker/kansen-images bouwen vanaf een remote git-context. GitHub
+            # staat onauthenticated fetches daarvan niet meer toe ("could not read
+            # Username"). We authenticeren de build daarom met de workflow-eigen,
+            # kortlevende GITHUB_TOKEN via een tijdelijke compose-override, zonder de
+            # VPS-compose zelf aan te raken. De override wordt na afloop weer verwijderd.
+            GH_TOKEN=${{ github.token }}
+            CTX="https://x-access-token:${GH_TOKEN}@github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0"
+            {
+              echo "services:"
+              for s in fundazoeker kansen beschikbaarheid-check vergunningen-index; do
+                echo "  ${s}:"
+                echo "    build:"
+                echo "      context: ${CTX}"
+              done
+            } > docker-compose.override.yml
+            trap "rm -f docker-compose.override.yml" EXIT
             n=0
-            until docker compose build --no-cache fundazoeker kansen beschikbaarheid-check vergunningen-index; do
+            until docker compose -f docker-compose.yml -f docker-compose.override.yml build --no-cache fundazoeker kansen beschikbaarheid-check vergunningen-index; do
               n=$((n+1))
-              if [ "$n" -ge 4 ]; then echo "Build bleef falen na $n pogingen." >&2; exit 1; fi
-              echo "Build-poging $n mislukt (mogelijk tijdelijke GitHub-rate-limit); 30s wachten en opnieuw..." >&2
-              sleep 30
+              if [ "$n" -ge 3 ]; then echo "Build bleef falen na $n pogingen." >&2; exit 1; fi
+              echo "Build-poging $n mislukt; 20s wachten en opnieuw..." >&2
+              sleep 20
             done
             docker compose up -d fundazoeker kansen beschikbaarheid-check vergunningen-index
           '

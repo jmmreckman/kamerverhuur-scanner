@@ -11,6 +11,7 @@ from __future__ import annotations
 import hmac
 import json
 import threading
+from urllib.parse import quote_plus
 from dataclasses import asdict
 from datetime import datetime, timezone
 from functools import wraps
@@ -296,6 +297,9 @@ def _listing_naar_json(item) -> dict:
         "favoriet": item.favoriet,
         "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,
         "bronnen": item.bronnen,
+        # Funda-zoeklink op adres: fallback voor woningen die (nog) alleen via de
+        # NVM-bron binnenkwamen en dus geen directe Funda-link hebben.
+        "funda_zoek_url": "https://www.funda.nl/zoeken/koop?query=" + quote_plus(item.weergavenaam or ""),
     }
 
 

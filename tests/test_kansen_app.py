@@ -865,3 +865,16 @@ def test_api_broninfo_geeft_bronverdeling(tmp_path):
     assert data["alleen_funda"] == 1
     assert data["alleen_nvm"] == 1
     assert data["totaal"] == 3
+
+
+def test_api_kansen_geeft_funda_zoek_url_als_fallback(tmp_path):
+    # Een woning zonder directe Funda-link (bv. alleen via NVM) krijgt een
+    # Funda-zoeklink op adres mee als fallback.
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path, url="", weergavenaam="Westzeedijk 74B, 3016AG Rotterdam")
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    item = client.get("/api/kansen").get_json()[0]
+    assert item["funda_zoek_url"].startswith("https://www.funda.nl/zoeken/koop?query=")
+    assert "Westzeedijk" in item["funda_zoek_url"]
