@@ -28,6 +28,18 @@ from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspun
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
 from rotterdam_scanner.state import StateStore, bron_statistieken
+from rotterdam_scanner.wwso_punten import (
+    ENERGIELABEL_PUNTEN,
+    KEUKEN_VOORZIENINGEN,
+    SANITAIR_VOORZIENINGEN,
+    GedeeldeKeuken,
+    GedeeldeRuimte,
+    GedeeldSanitair,
+    GemeenschappelijkeBuitenruimte,
+    Kamer,
+    Woning,
+    bereken_woning,
+)
 
 # Velden op de rekentool-pagina (kansen.steenhub.nl), in weergavevolgorde. `soort`
 # stuurt de opmaak/parsing: "euro" en "aantal" staan gelijk aan hun opgeslagen
@@ -51,6 +63,40 @@ REKENVELDEN = [
 
 
 _PROCENT_VELDEN = {key for key, _label, soort in REKENVELDEN if soort == "procent"}
+
+# Gemiddelde WOZ-waarde per m² in de COROP-regio Groot-Rijnmond (waar Rotterdam
+# onder valt), vastgesteld 1 januari 2026 - Bijlage 1 van het WWSO-beleidsboek.
+# Voorvulling voor de WWSO-rekentool; de gebruiker kan het overschrijven.
+COROP_GROOT_RIJNMOND_WOZ_M2 = 3884.0
+
+# Leesbare labels bij de WWSO-voorzieningssleutels (voor de rekentool-UI).
+KEUKEN_VOORZIENING_LABELS = {
+    "afzuiginstallatie": "Inbouw afzuiginstallatie",
+    "kookplaat_inductie": "Inbouw kookplaat (inductie)",
+    "kookplaat_keramisch": "Inbouw kookplaat (keramisch)",
+    "kookplaat_gas": "Inbouw kookplaat (gas)",
+    "koelkast": "Inbouw koelkast",
+    "vrieskast": "Inbouw vrieskast",
+    "oven_elektrisch": "Inbouw oven (elektrisch)",
+    "oven_gas": "Inbouw oven (gas)",
+    "magnetron": "Inbouw magnetron",
+    "vaatwasser": "Inbouw vaatwasser",
+    "eenhandsmengkraan": "Eénhandsmengkraan",
+    "thermostatische_mengkraan": "Thermostatische mengkraan",
+    "kokend_water": "Kokendwaterfunctie",
+}
+
+SANITAIR_VOORZIENING_LABELS = {
+    "toilet_staand_toiletruimte": "Staand toilet in toiletruimte",
+    "toilet_staand_badkamer": "Staand toilet in badkamer",
+    "toilet_hangend_toiletruimte": "Hangend toilet in toiletruimte",
+    "toilet_hangend_badkamer": "Hangend toilet in badkamer",
+    "wastafel": "Wastafel",
+    "meerpersoonswastafel": "Meerpersoonswastafel",
+    "douche": "Douche",
+    "bad": "Bad",
+    "bad_douche": "Bad/douche-combinatie",
+}
 
 # Vaste eigenaar(s) die het toegangsbeheer altijd mogen bedienen, ook als ze met
 # hun steenhub-account inloggen (dat account staat niet in KANSEN_APP_USERS). Te
@@ -605,6 +651,158 @@ def create_app(config: Config | None = None) -> Flask:
         state.save()
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
+
+    def _woning_uit_payload(data: dict) -> Woning:
+        """Bouw een Woning (WWSO-invoer) uit de JSON van het rekenscherm."""
+        def f(x, standaard=0.0):
+            try:
+                return float(str(x).replace(",", ".").strip())
+            except (TypeError, ValueError):
+                return standaard
+
+        def i(x, standaard=0):
+            try:
+                return int(round(float(str(x).replace(",", ".").strip())))
+            except (TypeError, ValueError):
+                return standaard
+
+        kamers = [
+            Kamer(
+                oppervlakte_m2=f(k.get("oppervlakte_m2")),
+                verwarmd=bool(k.get("verwarmd", True)),
+            )
+            for k in (data.get("kamers") or [])
+            if f(k.get("oppervlakte_m2")) > 0
+        ]
+
+        keuken = None
+        kd = data.get("keuken") or {}
+        if f(kd.get("aanrecht_m")) > 0:
+            keuken = GedeeldeKeuken(
+                aanrecht_m=f(kd.get("aanrecht_m")),
+                voorzieningen=[v for v in (kd.get("voorzieningen") or [])
+                               if v in KEUKEN_VOORZIENINGEN],
+                extra_kastruimte_60cm=i(kd.get("extra_kastruimte_60cm")),
+            )
+
+        sanitair = None
+        sd = data.get("sanitair") or {}
+        san_voorz = [v for v in (sd.get("voorzieningen") or [])
+                     if v in SANITAIR_VOORZIENINGEN]
+        if san_voorz:
+            sanitair = GedeeldSanitair(voorzieningen=san_voorz)
+
+        gedeelde_ruimten = []
+        for r in (data.get("gedeelde_ruimten") or []):
+            if f(r.get("oppervlakte_m2")) > 0:
+                gedeelde_ruimten.append(GedeeldeRuimte(
+                    oppervlakte_m2=f(r.get("oppervlakte_m2")),
+                    is_vertrek=bool(r.get("is_vertrek", True)),
+                    verwarmd=bool(r.get("verwarmd", False)),
+                    aantal_adressen=max(1, i(r.get("aantal_adressen"), 1)),
+                ))
+
+        gem_buiten = None
+        bd = data.get("gemeenschappelijke_buitenruimte") or {}
+        if f(bd.get("oppervlakte_m2")) > 0:
+            gem_buiten = GemeenschappelijkeBuitenruimte(
+                oppervlakte_m2=f(bd.get("oppervlakte_m2")),
+                aantal_adressen=max(1, i(bd.get("aantal_adressen"), 1)),
+            )
+
+        label = (data.get("energielabel") or "").strip().upper() or None
+        if label not in ENERGIELABEL_PUNTEN:
+            label = None
+        return Woning(
+            kamers=kamers,
+            energielabel=label,
+            bouwjaar=i(data.get("bouwjaar")) or None,
+            woz_waarde=f(data.get("woz_waarde")) or None,
+            woz_oppervlakte_m2=f(data.get("woz_oppervlakte_m2")) or None,
+            corop_gemiddelde_woz_m2=(f(data.get("corop_gemiddelde_woz_m2"))
+                                     or COROP_GROOT_RIJNMOND_WOZ_M2),
+            gedeelde_keuken=keuken,
+            gedeeld_sanitair=sanitair,
+            gedeelde_ruimten=gedeelde_ruimten,
+            gemeenschappelijke_buitenruimte=gem_buiten,
+        )
+
+    @app.route("/woning/<object_id>/wwso")
+    @login_required
+    def wwso(object_id):
+        # WWSO-rekentool: schat per kamer de maximale kale huur (punten -> euro,
+        # Huurcommissie-beleidsboek onzelfstandige woonruimte). De uitkomst kan met
+        # één klik als "kale huur per kamer" in de investerings-rekentool worden gezet.
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            abort(404)
+        aantal_kamers = item.aantal_kamers_mogelijk or 1
+        totaal_m2 = item.primaire_oppervlakte or 0
+        kamer_m2 = round(totaal_m2 / aantal_kamers, 1) if aantal_kamers else 0
+        return render_template(
+            "wwso.html",
+            item=item,
+            gebruiker=session["gebruiker"],
+            aantal_kamers=aantal_kamers,
+            kamer_m2=kamer_m2,
+            energielabels=list(ENERGIELABEL_PUNTEN.keys()),
+            keuken_voorzieningen=KEUKEN_VOORZIENING_LABELS,
+            sanitair_voorzieningen=SANITAIR_VOORZIENING_LABELS,
+            corop_woz_m2=COROP_GROOT_RIJNMOND_WOZ_M2,
+        )
+
+    @app.route("/woning/<object_id>/wwso/bereken", methods=["POST"])
+    @login_required
+    def wwso_bereken(object_id):
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+        data = request.get_json(silent=True) or {}
+        woning = _woning_uit_payload(data)
+        if not woning.kamers:
+            return jsonify({"fout": "Vul minstens één kamer met oppervlakte in."}), 400
+        resultaten = bereken_woning(woning)
+        kamers = [
+            {
+                "oppervlakte_m2": r.kamer.oppervlakte_m2,
+                "punten_per_rubriek": r.punten_per_rubriek,
+                "totaal_punten": r.totaal_punten,
+                "max_kale_huur": round(r.max_kale_huur, 2),
+            }
+            for r in resultaten
+        ]
+        huren = [r.max_kale_huur for r in resultaten]
+        return jsonify({
+            "kamers": kamers,
+            "gemiddelde_huur": round(sum(huren) / len(huren), 2),
+            "laagste_huur": round(min(huren), 2),
+            "totaal_huur": round(sum(huren), 2),
+        })
+
+    @app.route("/woning/<object_id>/wwso/gebruik", methods=["POST"])
+    @login_required
+    def wwso_gebruik(object_id):
+        # Zet de gekozen (gemiddelde) WWSO-huur als "kale huur per kamer" in de
+        # investerings-rekentool van deze woning en spring daarheen.
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            return jsonify({"fout": "Onbekende woning."}), 404
+        data = request.get_json(silent=True) or {}
+        try:
+            huur = float(str(data.get("kale_huur_per_kamer")).replace(",", ".").strip())
+        except (TypeError, ValueError):
+            return jsonify({"fout": "Ongeldige huurwaarde."}), 400
+        if huur <= 0:
+            return jsonify({"fout": "Ongeldige huurwaarde."}), 400
+        uitg = _huidige_uitgangspunten(item, config)
+        uitg["kale_huur_per_kamer"] = round(huur, 2)
+        item.berekening = uitg
+        state.upsert(item)
+        state.save()
+        return jsonify({"ok": True, "url": url_for("berekening", object_id=object_id)})
 
     @app.route("/reken-instellingen", methods=["GET", "POST"])
     @login_required

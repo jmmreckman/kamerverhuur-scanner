@@ -1,0 +1,89 @@
+/* WWSO-rekentool (kansen.steenhub.nl) - bouwt voort op kaart.css + berekening.css. */
+
+.wwso-disclaimer { font-size: 0.82em; font-style: italic; margin-top: 0.3rem; }
+
+.wwso-blok {
+  border: 1px solid var(--rand);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem 0.9rem;
+  margin: 0 0 1rem;
+}
+.wwso-blok legend {
+  font-weight: 600;
+  font-size: 0.95em;
+  padding: 0 0.4rem;
+}
+.wwso-blok small { color: var(--tekst-zwak); font-weight: 400; }
+
+.wwso-blok select,
+.wwso-blok input[type="number"] {
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+}
+.wwso-blok input[type="number"] { width: 7.5rem; text-align: right; }
+#aantal-kamers { width: 5rem; }
+
+.wwso-checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.15rem 0.9rem;
+  margin: 0.4rem 0 0.2rem;
+}
+@media (max-width: 520px) { .wwso-checks { grid-template-columns: 1fr; } }
+
+.wwso-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.88em;
+  padding: 0.15rem 0;
+}
+.wwso-check.wwso-inline { display: inline-flex; margin: 0 0 0.4rem; }
+
+.kamer-rij {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.25rem 0;
+  flex-wrap: wrap;
+}
+.kamer-rij .kamer-nr { flex: 0 0 5rem; color: #303840; font-size: 0.9em; }
+.kamer-rij .kamer-m2 { width: 6rem; }
+
+.wwso-knop-primair {
+  display: inline-block;
+  background: var(--groen);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+.wwso-knop-primair:hover { filter: brightness(1.06); }
+.wwso-knop-primair:disabled { opacity: 0.6; cursor: default; }
+
+.wwso-fout {
+  color: #b02a2a;
+  background: #fdeeee;
+  border: 1px solid #f2c2c2;
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9em;
+}
+
+.wwso-samenvatting { margin-bottom: 0.8rem; }
+.wwso-samenvatting .groot td { font-size: 1.15em; font-weight: 700; }
+
+#wwso-kamer-tabel th {
+  text-align: left;
+  font-size: 0.82em;
+  color: var(--tekst-zwak);
+  border-bottom: 1px solid var(--rand);
+  padding: 0.2rem 0.3rem;
+}

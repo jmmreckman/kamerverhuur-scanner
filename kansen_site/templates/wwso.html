@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WWSO-huur - {{ item.weergavenaam }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='berekening.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='wwso.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>WWSO-huur</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('berekening', object_id=item.object_id) }}" class="link-knop">&larr; Naar rekentool</a>
+      <a href="{{ url_for('kaart') }}" class="link-knop">Kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="reken-kop">
+    <h2>{{ item.weergavenaam }}{% if item.stad == "den_haag" %} <span class="stad-tag">Den Haag</span>{% endif %}</h2>
+    <p class="muted">
+      {% if item.wijknaam %}{{ item.wijknaam }} &middot; {% endif %}
+      {% if item.primaire_oppervlakte %}{{ item.primaire_oppervlakte }} m² &middot; {% endif %}
+      Maximale kale huur per kamer volgens het woningwaarderingsstelsel voor
+      onzelfstandige woonruimte (Huurcommissie, per 1-1-2026).
+    </p>
+    <p class="muted wwso-disclaimer">Schatting op basis van je eigen invoer &mdash;
+      geen officiële huurprijscheck. Controleer de losse waarden zelf bij twijfel.</p>
+  </div>
+
+  <div class="reken-layout" data-object-id="{{ item.object_id }}">
+    <section class="reken-kolom">
+      <form id="wwso-form" autocomplete="off">
+
+        <fieldset class="wwso-blok">
+          <legend>Woning &amp; WOZ</legend>
+          <label class="reken-veld"><span>Energielabel</span>
+            <span class="reken-invoer">
+              <select name="energielabel" id="energielabel">
+                <option value="">— onbekend —</option>
+                {% for l in energielabels %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+              </select>
+            </span>
+          </label>
+          <label class="reken-veld"><span>Bouwjaar <small>(alleen als label onbekend)</small></span>
+            <span class="reken-invoer"><input type="number" name="bouwjaar" step="1" min="1800" placeholder="bv. 1930"></span>
+          </label>
+          <label class="reken-veld"><span>WOZ-waarde hele adres</span>
+            <span class="reken-invoer"><span class="teken">€</span><input type="number" name="woz_waarde" step="any" inputmode="decimal" placeholder="bv. 295000"></span>
+          </label>
+          <label class="reken-veld"><span>WOZ-oppervlakte hele adres</span>
+            <span class="reken-invoer"><input type="number" name="woz_oppervlakte_m2" step="any" inputmode="decimal" placeholder="m²"><span class="teken">m²</span></span>
+          </label>
+          <label class="reken-veld"><span>Gem. WOZ/m² in regio <small>(Groot-Rijnmond)</small></span>
+            <span class="reken-invoer"><span class="teken">€</span><input type="number" name="corop_gemiddelde_woz_m2" step="any" value="{{ corop_woz_m2 }}"></span>
+          </label>
+        </fieldset>
+
+        <fieldset class="wwso-blok">
+          <legend>Kamers</legend>
+          <label class="reken-veld"><span>Aantal kamers</span>
+            <span class="reken-invoer"><input type="number" id="aantal-kamers" step="1" min="1" value="{{ aantal_kamers }}"></span>
+          </label>
+          <p class="muted">Elke kamer telt als eigen (verwarmd) privévertrek. Pas de m² per kamer aan.</p>
+          <div id="kamer-rijen" data-kamer-m2="{{ kamer_m2 }}"></div>
+        </fieldset>
+
+        <fieldset class="wwso-blok">
+          <legend>Gedeelde keuken</legend>
+          <label class="reken-veld"><span>Aanrechtlengte</span>
+            <span class="reken-invoer">
+              <select name="aanrecht_m" id="aanrecht_m">
+                <option value="0">geen keuken</option>
+                <option value="1.5">1 – 2 meter (4 pt)</option>
+                <option value="2.5" selected>2 – 3 meter (7 pt)</option>
+                <option value="4">3 – 5 meter (10 pt)</option>
+                <option value="6">meer dan 5 meter (13 pt, ≥8 kamers)</option>
+              </select>
+            </span>
+          </label>
+          <div class="wwso-checks">
+            {% for key, label in keuken_voorzieningen.items() %}
+            <label class="wwso-check"><input type="checkbox" class="keuken-voorz" value="{{ key }}"> {{ label }}</label>
+            {% endfor %}
+          </div>
+          <label class="reken-veld"><span>Extra kastruimte <small>(per 60 cm)</small></span>
+            <span class="reken-invoer"><input type="number" name="extra_kastruimte_60cm" step="1" min="0" value="0"></span>
+          </label>
+        </fieldset>
+
+        <fieldset class="wwso-blok">
+          <legend>Gedeeld sanitair</legend>
+          <div class="wwso-checks">
+            {% for key, label in sanitair_voorzieningen.items() %}
+            <label class="wwso-check"><input type="checkbox" class="sanitair-voorz" value="{{ key }}"> {{ label }}</label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <fieldset class="wwso-blok">
+          <legend>Gedeelde ruimtes &amp; buitenruimte</legend>
+          <label class="reken-veld"><span>Gedeelde woonkamer (vertrek)</span>
+            <span class="reken-invoer"><input type="number" name="woonkamer_m2" step="any" min="0" value="0" inputmode="decimal"><span class="teken">m²</span></span>
+          </label>
+          <label class="wwso-check wwso-inline"><input type="checkbox" id="woonkamer_verwarmd" checked> woonkamer verwarmd</label>
+          <label class="reken-veld"><span>Gedeelde berging/bijkeuken (overige)</span>
+            <span class="reken-invoer"><input type="number" name="berging_m2" step="any" min="0" value="0" inputmode="decimal"><span class="teken">m²</span></span>
+          </label>
+          <label class="reken-veld"><span>Gemeenschappelijke buitenruimte (tuin/dakterras)</span>
+            <span class="reken-invoer"><input type="number" name="buitenruimte_m2" step="any" min="0" value="0" inputmode="decimal"><span class="teken">m²</span></span>
+          </label>
+          <label class="reken-veld"><span>Adressen die deze delen <small>(meestal 1)</small></span>
+            <span class="reken-invoer"><input type="number" name="aantal_adressen" step="1" min="1" value="1"></span>
+          </label>
+        </fieldset>
+      </form>
+    </section>
+
+    <section class="reken-kolom">
+      <button type="button" id="wwso-bereken" class="wwso-knop-primair">Bereken maximale huur</button>
+      <p id="wwso-fout" class="wwso-fout" hidden></p>
+
+      <div id="wwso-resultaat" hidden>
+        <table class="reken-uitkomst wwso-samenvatting">
+          <tr class="groot"><td>Gemiddelde max. kale huur / kamer</td><td data-veld="gemiddelde_huur"></td></tr>
+          <tr><td>Laagste kamer</td><td data-veld="laagste_huur"></td></tr>
+          <tr><td>Totaal alle kamers / maand</td><td data-veld="totaal_huur"></td></tr>
+        </table>
+
+        <button type="button" id="wwso-gebruik" class="wwso-knop-primair">
+          Gebruik gemiddelde als kale huur per kamer &rarr;
+        </button>
+        <p class="muted">Zet de gemiddelde huur in de investerings-rekentool van deze woning.</p>
+
+        <h3>Per kamer</h3>
+        <table class="reken-uitkomst" id="wwso-kamer-tabel">
+          <thead><tr><th>Kamer</th><th>m²</th><th>Punten</th><th>Max. huur</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <h3>Puntenopbouw kamer 1</h3>
+        <table class="reken-uitkomst" id="wwso-rubriek-tabel"><tbody></tbody></table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    window.__wwso = {
+      berekenUrl: {{ url_for('wwso_bereken', object_id=item.object_id) | tojson }},
+      gebruikUrl: {{ url_for('wwso_gebruik', object_id=item.object_id) | tojson }},
+    };
+  </script>
+  <script src="{{ url_for('static', filename='wwso.js') }}"></script>
+</body>
+</html>

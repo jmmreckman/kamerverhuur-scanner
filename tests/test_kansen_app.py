@@ -878,3 +878,68 @@ def test_api_kansen_geeft_funda_zoek_url_als_fallback(tmp_path):
     item = client.get("/api/kansen").get_json()[0]
     assert item["funda_zoek_url"].startswith("https://www.funda.nl/zoeken/koop?query=")
     assert "Westzeedijk" in item["funda_zoek_url"]
+
+
+def test_wwso_pagina_vereist_login(app_client):
+    resp = app_client.get("/woning/3000AA-1/wwso")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_wwso_pagina_toont_scherm(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path, aantal_kamers_mogelijk=6, prijs=350_000)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.get("/woning/3000AA-1/wwso")
+    assert resp.status_code == 200
+    assert "WWSO-huur" in resp.get_data(as_text=True)
+
+
+def test_wwso_bereken_geeft_huur_per_kamer(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path, aantal_kamers_mogelijk=6)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    payload = {
+        "kamers": [{"oppervlakte_m2": "14", "verwarmd": True} for _ in range(6)],
+        "energielabel": "B",
+        "woz_waarde": "295000", "woz_oppervlakte_m2": "90",
+        "corop_gemiddelde_woz_m2": "3884",
+        "keuken": {"aanrecht_m": "2.5", "voorzieningen": ["koelkast"], "extra_kastruimte_60cm": "0"},
+        "sanitair": {"voorzieningen": ["douche", "toilet_staand_badkamer", "wastafel"]},
+        "gedeelde_ruimten": [],
+        "gemeenschappelijke_buitenruimte": {"oppervlakte_m2": "51", "aantal_adressen": "1"},
+    }
+    resp = client.post("/woning/3000AA-1/wwso/bereken", json=payload)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["kamers"]) == 6
+    assert data["gemiddelde_huur"] > 0
+    # Sanity: energie-rubriek van kamer 1 is label B (0,50) x 14 m² = 7,0.
+    assert data["kamers"][0]["punten_per_rubriek"]["energie"] == 7.0
+
+
+def test_wwso_bereken_zonder_kamers_geeft_fout(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.post("/woning/3000AA-1/wwso/bereken", json={"kamers": []})
+    assert resp.status_code == 400
+
+
+def test_wwso_gebruik_zet_kale_huur_in_rekentool(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = client.post("/woning/3000AA-1/wwso/gebruik", json={"kale_huur_per_kamer": 512.5})
+    assert resp.status_code == 200
+    assert resp.get_json()["ok"] is True
+    item = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert item.berekening["kale_huur_per_kamer"] == 512.5
