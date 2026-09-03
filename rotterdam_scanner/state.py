@@ -88,6 +88,12 @@ class ListingState:
     # aangevuld door de dagelijkse check; per publicatie-id maar één keer opgeslagen
     # (en dus maar één keer gemaild), zie bekendmakingen.controleer_favorieten.
     bekendmaking_waarschuwingen: list[dict] = field(default_factory=list)
+    # Via welke bron(nen) deze woning ooit is binnengekomen: "funda" (eigen
+    # Funda-alertmails) en/of "nvm" (makelaars-/Move.nl-mails). Accumuleert over de
+    # tijd, zodat op kansen.steenhub.nl te zien is hoeveel woningen elk kanaal levert,
+    # hoeveel overlappen en hoeveel maar via één van de twee binnenkomen (bron-tracking
+    # om dekkingsgaten op te sporen). Leeg = van vóór deze functie (telt als onbekend).
+    bronnen: list[str] = field(default_factory=list)
 
     @property
     def primaire_oppervlakte(self) -> int | None:

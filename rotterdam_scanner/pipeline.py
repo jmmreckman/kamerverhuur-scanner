@@ -11,6 +11,7 @@ from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
 from .mailer import send_report
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
+from .nvm_mail import haal_nvm_woningen
 from .geocode import GeocodeError, geocode_address, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
 from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
@@ -447,6 +448,13 @@ def _backvul_opkoopbescherming(state: StateStore, config: Config, today_iso: str
 _HANDMATIG_VERWIJDERD_REDEN = "Handmatig verwijderd via de verwijder-link in het rapport."
 
 
+def _voeg_bron_toe(item: ListingState, bron: str) -> None:
+    """Registreer via welke bron ('funda'/'nvm') deze woning (opnieuw) is gezien.
+    Accumuleert, zodat de bron-tracking laat zien welk kanaal wat oplevert."""
+    if bron and bron not in item.bronnen:
+        item.bronnen.append(bron)
+
+
 def _verwerk_listings(
     listings: list[FundaListing],
     te_verwijderen_ids: set[str],
@@ -476,11 +484,15 @@ def _verwerk_listings(
         handmatig_verwijderd = existing is not None and existing.handmatig_verwijderd
         if existing is not None and (not forceer_herprocessen or handmatig_verwijderd):
             existing.laatst_gezien = today_iso
-            existing.url = listing.url
+            # Alleen overschrijven met een niet-lege waarde: de NVM-bron heeft geen
+            # Funda-link (url="") en mag een eerder via Funda gevonden link niet wissen.
+            if listing.url:
+                existing.url = listing.url
             if listing.prijs is not None:
                 existing.prijs = listing.prijs
             if listing.oppervlakte_advertentie is not None:
                 existing.oppervlakte_advertentie = listing.oppervlakte_advertentie
+            _voeg_bron_toe(existing, listing.bron)
             state.upsert(existing)
             result.al_bekend.append(existing)
             continue
@@ -491,6 +503,7 @@ def _verwerk_listings(
             result.fouten.append(f"Fout bij verwerken van {listing.url}: {exc}")
             continue
 
+        _voeg_bron_toe(processed, listing.bron)
         if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
             processed.afvalreden = _HANDMATIG_VERWIJDERD_REDEN
@@ -527,9 +540,22 @@ def run(config: Config, today: date | None = None) -> RunResult:
         result.fouten.append(f"Kon Funda-alertmail niet uitlezen: {exc}")
         scan = None
 
-    listings = list(scan.listings) if scan else []
+    funda_listings = list(scan.listings) if scan else []
     if scan:
         result.fouten.extend(scan.waarschuwingen)
+
+    # Tweede bron: de NVM-/Move.nl-makelaarsmails (zie nvm_mail.py). Fail-safe - een
+    # storing hier mag de Funda-verwerking nooit tegenhouden. NVM eerst in de lijst,
+    # Funda daarna: bij dezelfde woning (zelfde object_id) wint zo de Funda-link, en
+    # beide bronnen worden geregistreerd voor de bron-tracking.
+    try:
+        nvm_listings, nvm_waarschuwingen = haal_nvm_woningen(config)
+        result.fouten.extend(nvm_waarschuwingen)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon NVM-makelaarsmail niet uitlezen: {exc}")
+        nvm_listings = []
+
+    listings = nvm_listings + funda_listings
 
     try:
         te_verwijderen_ids = fetch_verwijder_commandos(config)

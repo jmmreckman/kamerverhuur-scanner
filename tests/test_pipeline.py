@@ -13,7 +13,10 @@ from rotterdam_scanner.monumenten import HuurprijsopslagSignaal
 
 @pytest.fixture(autouse=True)
 def _geen_verwijder_commandos_tenzij_expliciet_gemockt():
-    with patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value=set()):
+    # Standaard geen verwijder-commando's en geen NVM-mails (anders zou run() een
+    # echte IMAP-verbinding proberen); tests die dat willen, mocken het expliciet.
+    with patch("rotterdam_scanner.pipeline.fetch_verwijder_commandos", return_value=set()), \
+         patch("rotterdam_scanner.pipeline.haal_nvm_woningen", return_value=([], [])):
         yield
 
 
@@ -1052,3 +1055,65 @@ def test_straat_adres_zonder_postcode_geocodeert_op_adres_en_krijgt_postcode_id(
     assert result.status == "actief"
     # _geo_den_haag geeft postcode "2596CA" -> canonieke id.
     assert result.object_id == "2596CA-257"
+
+
+# --- Bron-tracking (Funda + NVM) ---
+
+def _nvm_listing(object_id="3000AA-1", postcode="3000AA", huisnummer="1", prijs=350_000):
+    return FundaListing(
+        object_id=object_id, url="", straatnaam="Teststraat", huisnummer=huisnummer,
+        toevoeging="", postcode=postcode, woonplaats="Rotterdam", prijs=prijs,
+        oppervlakte_advertentie=80, bron="nvm",
+    )
+
+
+def test_bron_tracking_nvm_en_funda_ontdubbelen_op_object_id(tmp_path):
+    from rotterdam_scanner.state import StateStore
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    result = pipeline.RunResult()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
+        # NVM eerst (url=""), Funda daarna (echte link) - zelfde object_id.
+        pipeline._verwerk_listings(
+            [_nvm_listing(), _listing()], set(), config, date(2026, 7, 5), state, result,
+        )
+    item = state.get("3000AA-1")
+    assert item is not None
+    assert item.bronnen == ["nvm", "funda"]  # beide geregistreerd, in volgorde
+    assert item.url.startswith("https://links.funda.nl")  # lege NVM-url wist de Funda-link niet
+
+
+def test_alleen_nvm_woning_houdt_bron_nvm(tmp_path):
+    from rotterdam_scanner.state import StateStore
+    config = _config(tmp_path)
+    state = StateStore(config.state_path)
+    result = pipeline.RunResult()
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5:
+        pipeline._verwerk_listings(
+            [_nvm_listing(object_id="3000BB-2", postcode="3000BB", huisnummer="2")],
+            set(), config, date(2026, 7, 5), state, result,
+        )
+    assert state.get("3000BB-2").bronnen == ["nvm"]
+
+
+def test_run_combineert_funda_en_nvm(tmp_path):
+    from rotterdam_scanner.state import StateStore
+    config = _config(tmp_path)
+    p1, p2, p3, p4, p5 = _patch_geo_checks()
+    with p1, p2, p3, p4, p5, patch(
+        "rotterdam_scanner.pipeline.fetch_recent_funda_mail_scan",
+        return_value=FundaMailScan(listings=[_listing(object_id="3000AA-1")]),
+    ), patch(
+        "rotterdam_scanner.pipeline.haal_nvm_woningen",
+        return_value=([_nvm_listing(object_id="3000AA-1"),
+                       _nvm_listing(object_id="3000BB-2", postcode="3000BB", huisnummer="2")], []),
+    ), patch("rotterdam_scanner.pipeline._controleer_favoriet_bekendmakingen"):
+        pipeline.run(config, today=date(2026, 7, 5))
+
+    state = StateStore(config.state_path)
+    gedeeld = state.get("3000AA-1")
+    assert set(gedeeld.bronnen) == {"funda", "nvm"}
+    assert gedeeld.url.startswith("https://links.funda.nl")
+    assert state.get("3000BB-2").bronnen == ["nvm"]
