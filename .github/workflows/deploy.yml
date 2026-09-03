@@ -19,6 +19,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
             set -euo pipefail
             cd /opt/kamerverhuur-scanner/deploy
-            docker compose build --no-cache fundazoeker kansen beschikbaarheid-check vergunningen-index
+            # De fundazoeker/kansen-images bouwen vanaf een remote git-context; GitHub
+            # rate-limit onauthenticated downloads soms kort ("please retry later"). Daarom
+            # de build een paar keer opnieuw proberen met backoff i.p.v. meteen falen.
+            n=0
+            until docker compose build --no-cache fundazoeker kansen beschikbaarheid-check vergunningen-index; do
+              n=$((n+1))
+              if [ "$n" -ge 4 ]; then echo "Build bleef falen na $n pogingen." >&2; exit 1; fi
+              echo "Build-poging $n mislukt (mogelijk tijdelijke GitHub-rate-limit); 30s wachten en opnieuw..." >&2
+              sleep 30
+            done
             docker compose up -d fundazoeker kansen beschikbaarheid-check vergunningen-index
           '
