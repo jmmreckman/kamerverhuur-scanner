@@ -42,15 +42,99 @@
 }
 .wwso-check.wwso-inline { display: inline-flex; margin: 0 0 0.4rem; }
 
-.kamer-rij {
+/* Kamer-kaart */
+.wwso-kamer {
+  border: 1px solid var(--rand);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem 0.6rem;
+  margin: 0 0 0.7rem;
+  background: #fafbfc;
+}
+.wwso-kamer-kop {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.25rem 0;
   flex-wrap: wrap;
 }
-.kamer-rij .kamer-nr { flex: 0 0 5rem; color: #303840; font-size: 0.9em; }
-.kamer-rij .kamer-m2 { width: 6rem; }
+.wwso-kamer-kop .kamer-nr { flex: 1 1 auto; font-weight: 600; font-size: 0.92em; }
+.wwso-kamer-kop .kamer-m2 { width: 5.5rem; }
+.wwso-kamer-elementen { margin: 0.4rem 0 0; }
+
+/* Element-kaartje (privé of gedeeld) */
+.wwso-element {
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem 0.5rem;
+  margin: 0.4rem 0;
+  background: white;
+}
+.wwso-element-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+.wwso-element-body { margin-top: 0.3rem; }
+.wwso-veldje {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.86em;
+  padding: 0.15rem 0;
+}
+.wwso-veldje small { color: var(--tekst-zwak); font-weight: 400; }
+.wwso-veldje select,
+.wwso-veldje input[type="number"] {
+  font: inherit;
+  padding: 0.15rem 0.3rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+}
+.wwso-veldje input[type="number"] { width: 6rem; text-align: right; }
+.wwso-veldje .veld-aanrecht { max-width: 14rem; }
+
+.wwso-verwijder {
+  border: none;
+  background: none;
+  color: var(--tekst-zwak);
+  font-size: 1.25em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+.wwso-verwijder:hover { color: #b02a2a; }
+
+.wwso-toevoeg-rij {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+  flex-wrap: wrap;
+}
+.wwso-toevoeg-rij select {
+  font: inherit;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  flex: 1 1 12rem;
+}
+
+.wwso-knop-secundair {
+  background: white;
+  color: var(--groen);
+  border: 1px solid var(--groen);
+  border-radius: 8px;
+  padding: 0.35rem 0.8rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wwso-knop-secundair:hover { background: #f0f7f2; }
+
+.wwso-kamer-rij { cursor: pointer; }
+.wwso-kamer-rij:hover { background: #f0f7f2; }
 
 .wwso-knop-primair {
   display: inline-block;

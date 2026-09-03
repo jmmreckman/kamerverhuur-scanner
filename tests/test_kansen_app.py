@@ -904,14 +904,19 @@ def test_wwso_bereken_geeft_huur_per_kamer(tmp_path):
     _zet_listing(tmp_path, aantal_kamers_mogelijk=6)
     client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
     payload = {
-        "kamers": [{"oppervlakte_m2": "14", "verwarmd": True} for _ in range(6)],
+        "kamers": [{"oppervlakte_m2": "14", "verwarmd": True, "elementen": []}
+                   for _ in range(6)],
         "energielabel": "B",
         "woz_waarde": "295000", "woz_oppervlakte_m2": "90",
         "corop_gemiddelde_woz_m2": "3884",
-        "keuken": {"aanrecht_m": "2.5", "voorzieningen": ["koelkast"], "extra_kastruimte_60cm": "0"},
-        "sanitair": {"voorzieningen": ["douche", "toilet_staand_badkamer", "wastafel"]},
-        "gedeelde_ruimten": [],
-        "gemeenschappelijke_buitenruimte": {"oppervlakte_m2": "51", "aantal_adressen": "1"},
+        "gedeelde_elementen": [
+            {"type": "open_keuken", "aanrecht_m": "2.5", "voorzieningen": ["koelkast"],
+             "extra_kastruimte_60cm": "0"},
+            {"type": "douche"},
+            {"type": "toilet_badkamer"},
+            {"type": "wastafel"},
+            {"type": "tuin", "oppervlakte_m2": "51"},
+        ],
     }
     resp = client.post("/woning/3000AA-1/wwso/bereken", json=payload)
     assert resp.status_code == 200
@@ -920,6 +925,32 @@ def test_wwso_bereken_geeft_huur_per_kamer(tmp_path):
     assert data["gemiddelde_huur"] > 0
     # Sanity: energie-rubriek van kamer 1 is label B (0,50) x 14 m² = 7,0.
     assert data["kamers"][0]["punten_per_rubriek"]["energie"] == 7.0
+    # Gedeelde tuin 51 m² over 6 kamers -> 6,50; gedeeld sanitair 6 pt / 6 = 1,0.
+    assert data["kamers"][0]["punten_per_rubriek"]["buitenruimte"] == 6.50
+    assert data["kamers"][0]["punten_per_rubriek"]["sanitair"] == 1.0
+
+
+def test_wwso_bereken_eigen_keuken_per_kamer(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path)
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    payload = {
+        "kamers": [{
+            "oppervlakte_m2": "18", "verwarmd": True,
+            "elementen": [{"type": "open_keuken", "aanrecht_m": "2.5",
+                           "voorzieningen": [], "extra_kastruimte_60cm": "0"}],
+        }],
+        "energielabel": "C",
+    }
+    resp = client.post("/woning/3000AA-1/wwso/bereken", json=payload)
+    assert resp.status_code == 200
+    data = resp.get_json()
+    # Eigen open keuken (aanrecht 2-3 m) telt volledig: 7 keukenpunten.
+    assert data["kamers"][0]["punten_per_rubriek"]["keuken"] == 7.0
+    # Verwarmde kamer met open keuken = 4 verwarmingspunten.
+    assert data["kamers"][0]["punten_per_rubriek"]["verwarming"] == 4.0
 
 
 def test_wwso_bereken_zonder_kamers_geeft_fout(tmp_path):

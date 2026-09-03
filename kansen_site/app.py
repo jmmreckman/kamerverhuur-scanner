@@ -32,11 +32,9 @@ from rotterdam_scanner.wwso_punten import (
     ENERGIELABEL_PUNTEN,
     KEUKEN_VOORZIENINGEN,
     SANITAIR_VOORZIENINGEN,
-    GedeeldeKeuken,
     GedeeldeRuimte,
-    GedeeldSanitair,
-    GemeenschappelijkeBuitenruimte,
     Kamer,
+    Keuken,
     Woning,
     bereken_woning,
 )
@@ -96,6 +94,38 @@ SANITAIR_VOORZIENING_LABELS = {
     "douche": "Douche",
     "bad": "Bad",
     "bad_douche": "Bad/douche-combinatie",
+}
+
+# De ruimtes/voorzieningen die je in de WWSO-rekentool kunt "toevoegen". `effect`
+# koppelt het element aan een rubriek in de puntentelling; `velden` bepaalt welke
+# invoer de UI toont (m2 = oppervlakte, verwarmd = verwarmingsvinkje, keuken =
+# aanrechtlengte + apparatuur); `context` bepaalt of het als privé (in een kamer),
+# gedeeld, of beide toe te voegen is.
+WWSO_ELEMENTEN = {
+    "open_keuken": {"label": "Keuken / keukenblok", "effect": "keuken",
+                    "velden": ["keuken"], "context": "beide"},
+    "toilet_toiletruimte": {"label": "Toilet (aparte toiletruimte)", "effect": "sanitair",
+                            "key": "toilet_staand_toiletruimte", "velden": [], "context": "beide"},
+    "toilet_badkamer": {"label": "Toilet (in badkamer)", "effect": "sanitair",
+                        "key": "toilet_staand_badkamer", "velden": [], "context": "beide"},
+    "douche": {"label": "Douche", "effect": "sanitair", "key": "douche",
+               "velden": [], "context": "beide"},
+    "bad_douche": {"label": "Bad/douche-combinatie", "effect": "sanitair", "key": "bad_douche",
+                   "velden": [], "context": "beide"},
+    "bad": {"label": "Bad", "effect": "sanitair", "key": "bad", "velden": [], "context": "beide"},
+    "wastafel": {"label": "Wastafel", "effect": "sanitair", "key": "wastafel",
+                 "velden": [], "context": "beide"},
+    "woonkamer": {"label": "Woonkamer (vertrek)", "effect": "vertrek",
+                  "velden": ["m2", "verwarmd"], "context": "gedeeld"},
+    "berging": {"label": "Berging / bijkeuken / wasruimte", "effect": "overige",
+                "velden": ["m2"], "context": "beide"},
+    "overloop": {"label": "Gang / overloop (verkeersruimte)", "effect": "verkeer",
+                 "velden": ["verwarmd"], "context": "gedeeld"},
+    "tuin": {"label": "Tuin", "effect": "buitenruimte", "velden": ["m2"], "context": "beide"},
+    "balkon": {"label": "Balkon / dakterras", "effect": "buitenruimte",
+               "velden": ["m2"], "context": "beide"},
+    "fietsenstalling": {"label": "Fietsenstalling", "effect": "buitenruimte",
+                        "velden": ["m2"], "context": "gedeeld"},
 }
 
 # Vaste eigenaar(s) die het toegangsbeheer altijd mogen bedienen, ook als ze met
@@ -653,7 +683,9 @@ def create_app(config: Config | None = None) -> Flask:
         return jsonify(asdict(resultaat))
 
     def _woning_uit_payload(data: dict) -> Woning:
-        """Bouw een Woning (WWSO-invoer) uit de JSON van het rekenscherm."""
+        """Bouw een Woning (WWSO-invoer) uit de JSON van het rekenscherm. De UI
+        werkt additief: elke kamer heeft zijn eigen (privé)elementen en er is een
+        lijst gedeelde elementen. `type` bepaalt het effect (zie WWSO_ELEMENTEN)."""
         def f(x, standaard=0.0):
             try:
                 return float(str(x).replace(",", ".").strip())
@@ -666,49 +698,64 @@ def create_app(config: Config | None = None) -> Flask:
             except (TypeError, ValueError):
                 return standaard
 
-        kamers = [
-            Kamer(
-                oppervlakte_m2=f(k.get("oppervlakte_m2")),
-                verwarmd=bool(k.get("verwarmd", True)),
-            )
-            for k in (data.get("kamers") or [])
-            if f(k.get("oppervlakte_m2")) > 0
-        ]
-
-        keuken = None
-        kd = data.get("keuken") or {}
-        if f(kd.get("aanrecht_m")) > 0:
-            keuken = GedeeldeKeuken(
-                aanrecht_m=f(kd.get("aanrecht_m")),
-                voorzieningen=[v for v in (kd.get("voorzieningen") or [])
+        def _keuken(el) -> Keuken | None:
+            if f(el.get("aanrecht_m")) <= 0:
+                return None
+            return Keuken(
+                aanrecht_m=f(el.get("aanrecht_m")),
+                voorzieningen=[v for v in (el.get("voorzieningen") or [])
                                if v in KEUKEN_VOORZIENINGEN],
-                extra_kastruimte_60cm=i(kd.get("extra_kastruimte_60cm")),
+                extra_kastruimte_60cm=i(el.get("extra_kastruimte_60cm")),
             )
 
-        sanitair = None
-        sd = data.get("sanitair") or {}
-        san_voorz = [v for v in (sd.get("voorzieningen") or [])
-                     if v in SANITAIR_VOORZIENINGEN]
-        if san_voorz:
-            sanitair = GedeeldSanitair(voorzieningen=san_voorz)
+        kamers = []
+        for k in (data.get("kamers") or []):
+            if f(k.get("oppervlakte_m2")) <= 0:
+                continue
+            kamer = Kamer(oppervlakte_m2=f(k.get("oppervlakte_m2")),
+                          verwarmd=bool(k.get("verwarmd", True)))
+            for el in (k.get("elementen") or []):
+                spec = WWSO_ELEMENTEN.get(el.get("type"))
+                if not spec:
+                    continue
+                effect = spec["effect"]
+                if effect == "keuken":
+                    kamer.keuken = _keuken(el)
+                elif effect == "sanitair":
+                    kamer.eigen_sanitair.append(spec["key"])
+                elif effect == "buitenruimte":
+                    kamer.eigen_buitenruimte_m2 += f(el.get("oppervlakte_m2"))
+                elif effect in ("overige", "vertrek"):
+                    kamer.eigen_overige_m2 += f(el.get("oppervlakte_m2"))
+            kamers.append(kamer)
 
         gedeelde_ruimten = []
-        for r in (data.get("gedeelde_ruimten") or []):
-            if f(r.get("oppervlakte_m2")) > 0:
+        for el in (data.get("gedeelde_elementen") or []):
+            spec = WWSO_ELEMENTEN.get(el.get("type"))
+            if not spec:
+                continue
+            toegang = i(el.get("aantal_kamers_toegang")) or None
+            adressen = max(1, i(el.get("aantal_adressen"), 1))
+            effect = spec["effect"]
+            if effect == "keuken":
+                keuken = _keuken(el)
+                if keuken:
+                    gedeelde_ruimten.append(GedeeldeRuimte(
+                        soort="keuken", keuken=keuken, aantal_kamers_toegang=toegang))
+            elif effect == "sanitair":
                 gedeelde_ruimten.append(GedeeldeRuimte(
-                    oppervlakte_m2=f(r.get("oppervlakte_m2")),
-                    is_vertrek=bool(r.get("is_vertrek", True)),
-                    verwarmd=bool(r.get("verwarmd", False)),
-                    aantal_adressen=max(1, i(r.get("aantal_adressen"), 1)),
-                ))
-
-        gem_buiten = None
-        bd = data.get("gemeenschappelijke_buitenruimte") or {}
-        if f(bd.get("oppervlakte_m2")) > 0:
-            gem_buiten = GemeenschappelijkeBuitenruimte(
-                oppervlakte_m2=f(bd.get("oppervlakte_m2")),
-                aantal_adressen=max(1, i(bd.get("aantal_adressen"), 1)),
-            )
+                    soort="sanitair", sanitair=[spec["key"]],
+                    aantal_kamers_toegang=toegang))
+            elif effect == "verkeer":
+                gedeelde_ruimten.append(GedeeldeRuimte(
+                    soort="verkeer", verwarmd=bool(el.get("verwarmd")),
+                    aantal_adressen=adressen, aantal_kamers_toegang=toegang))
+            elif effect in ("vertrek", "overige", "buitenruimte"):
+                if f(el.get("oppervlakte_m2")) > 0:
+                    gedeelde_ruimten.append(GedeeldeRuimte(
+                        soort=effect, oppervlakte_m2=f(el.get("oppervlakte_m2")),
+                        verwarmd=bool(el.get("verwarmd")),
+                        aantal_adressen=adressen, aantal_kamers_toegang=toegang))
 
         label = (data.get("energielabel") or "").strip().upper() or None
         if label not in ENERGIELABEL_PUNTEN:
@@ -721,10 +768,7 @@ def create_app(config: Config | None = None) -> Flask:
             woz_oppervlakte_m2=f(data.get("woz_oppervlakte_m2")) or None,
             corop_gemiddelde_woz_m2=(f(data.get("corop_gemiddelde_woz_m2"))
                                      or COROP_GROOT_RIJNMOND_WOZ_M2),
-            gedeelde_keuken=keuken,
-            gedeeld_sanitair=sanitair,
             gedeelde_ruimten=gedeelde_ruimten,
-            gemeenschappelijke_buitenruimte=gem_buiten,
         )
 
     @app.route("/woning/<object_id>/wwso")
@@ -740,6 +784,10 @@ def create_app(config: Config | None = None) -> Flask:
         aantal_kamers = item.aantal_kamers_mogelijk or 1
         totaal_m2 = item.primaire_oppervlakte or 0
         kamer_m2 = round(totaal_m2 / aantal_kamers, 1) if aantal_kamers else 0
+        prive_palet = {k: v for k, v in WWSO_ELEMENTEN.items()
+                       if v["context"] in ("prive", "beide")}
+        gedeeld_palet = {k: v for k, v in WWSO_ELEMENTEN.items()
+                         if v["context"] in ("gedeeld", "beide")}
         return render_template(
             "wwso.html",
             item=item,
@@ -748,7 +796,9 @@ def create_app(config: Config | None = None) -> Flask:
             kamer_m2=kamer_m2,
             energielabels=list(ENERGIELABEL_PUNTEN.keys()),
             keuken_voorzieningen=KEUKEN_VOORZIENING_LABELS,
-            sanitair_voorzieningen=SANITAIR_VOORZIENING_LABELS,
+            elementen=WWSO_ELEMENTEN,
+            prive_palet=prive_palet,
+            gedeeld_palet=gedeeld_palet,
             corop_woz_m2=COROP_GROOT_RIJNMOND_WOZ_M2,
         )
 

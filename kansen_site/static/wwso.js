@@ -1,7 +1,10 @@
 "use strict";
-// WWSO-rekentool: verzamelt de invoer, vraagt de puntentelling op bij de server
-// en toont per kamer de maximale kale huur. "Gebruik" zet de gemiddelde huur als
-// kale huur per kamer in de investerings-rekentool van deze woning.
+// WWSO-rekentool: bouw de woning additief op (kamers met eigen voorzieningen +
+// gedeelde ruimtes), vraag de puntentelling op bij de server en toon per kamer de
+// maximale kale huur. "Gebruik" zet de gemiddelde huur als kale huur per kamer in
+// de investerings-rekentool.
+
+const W = window.__wwso;
 
 const RUBRIEK_LABELS = {
   oppervlakte: "Oppervlakte (vertrek + overige)",
@@ -13,92 +16,162 @@ const RUBRIEK_LABELS = {
   woz: "WOZ-waarde",
 };
 
+const AANRECHT_OPTIES = [
+  ["0", "geen keuken"],
+  ["1.5", "1 – 2 meter (4 pt)"],
+  ["2.5", "2 – 3 meter (7 pt)"],
+  ["4", "3 – 5 meter (10 pt)"],
+  ["6", "meer dan 5 meter (13 pt, ≥8 kamers)"],
+];
+
 function euro(bedrag) {
   return "€ " + Number(bedrag).toLocaleString("nl-NL", {
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   });
 }
 
-function bouwKamerRijen() {
-  const container = document.getElementById("kamer-rijen");
-  const aantalInput = document.getElementById("aantal-kamers");
-  const standaardM2 = container.dataset.kamerM2 || "";
-  let aantal = parseInt(aantalInput.value, 10);
-  if (!Number.isFinite(aantal) || aantal < 1) aantal = 1;
-  if (aantal > 40) aantal = 40;
+function el(tag, cls, html) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (html !== undefined) n.innerHTML = html;
+  return n;
+}
 
-  // Bewaar bestaande ingevulde m²-waarden zodat herbouwen niets wist.
-  const bestaand = Array.from(container.querySelectorAll(".kamer-m2")).map((i) => i.value);
-  container.innerHTML = "";
-  for (let n = 0; n < aantal; n++) {
-    const rij = document.createElement("div");
-    rij.className = "kamer-rij";
-    const waarde = bestaand[n] !== undefined ? bestaand[n] : standaardM2;
-    rij.innerHTML =
-      '<span class="kamer-nr">Kamer ' + (n + 1) + '</span>' +
-      '<span class="reken-invoer"><input type="number" class="kamer-m2" step="any" ' +
-      'min="0" inputmode="decimal" value="' + waarde + '"><span class="teken">m²</span></span>' +
-      '<label class="wwso-check wwso-inline"><input type="checkbox" class="kamer-verwarmd" checked> verwarmd</label>';
-    container.appendChild(rij);
+// --- Velden van één element (keuken / m² / verwarmd) ------------------------
+function keukenVeldenHtml() {
+  const opties = AANRECHT_OPTIES
+    .map(([v, l]) => '<option value="' + v + '"' + (v === "2.5" ? " selected" : "") + ">" + l + "</option>")
+    .join("");
+  const voorz = Object.entries(W.keukenVoorzieningen)
+    .map(([k, l]) => '<label class="wwso-check"><input type="checkbox" class="keuken-voorz" value="' + k + '"> ' + l + "</label>")
+    .join("");
+  return (
+    '<label class="wwso-veldje"><span>Aanrechtlengte</span>' +
+    '<select class="veld-aanrecht">' + opties + "</select></label>" +
+    '<div class="wwso-checks">' + voorz + "</div>" +
+    '<label class="wwso-veldje"><span>Extra kastruimte (per 60 cm)</span>' +
+    '<input type="number" class="veld-kastruimte" step="1" min="0" value="0"></label>'
+  );
+}
+
+function elementVeldenHtml(spec) {
+  let h = "";
+  if (spec.effect === "keuken") h += keukenVeldenHtml();
+  if ((spec.velden || []).includes("m2")) {
+    h += '<label class="wwso-veldje"><span>Oppervlakte</span>' +
+      '<span class="reken-invoer"><input type="number" class="veld-m2" step="any" min="0" value="0" inputmode="decimal"><span class="teken">m²</span></span></label>';
   }
+  if ((spec.velden || []).includes("verwarmd")) {
+    h += '<label class="wwso-check wwso-inline"><input type="checkbox" class="veld-verwarmd" checked> verwarmd</label>';
+  }
+  return h;
+}
+
+// --- Eén element-kaartje (privé of gedeeld) ---------------------------------
+function maakElement(type, gedeeld) {
+  const spec = W.elementen[type];
+  const node = el("div", "wwso-element");
+  node.dataset.type = type;
+  node.appendChild(el("div", "wwso-element-kop",
+    "<span>" + spec.label + "</span>" +
+    '<button type="button" class="wwso-verwijder" title="Verwijderen">&times;</button>'));
+  const body = el("div", "wwso-element-body", elementVeldenHtml(spec));
+  if (gedeeld) {
+    body.insertAdjacentHTML("beforeend",
+      '<label class="wwso-veldje"><span>Gedeeld door … kamers <small>(leeg = alle)</small></span>' +
+      '<input type="number" class="veld-toegang" step="1" min="1" placeholder="alle"></label>');
+  }
+  node.appendChild(body);
+  node.querySelector(".wwso-verwijder").addEventListener("click", () => node.remove());
+  return node;
+}
+
+// --- Kamer-kaart -----------------------------------------------------------
+function paletOpties(keys) {
+  return keys.map((k) => '<option value="' + k + '">' + W.elementen[k].label + "</option>").join("");
+}
+
+function maakKamer(m2) {
+  const kamer = el("div", "wwso-kamer");
+  kamer.innerHTML =
+    '<div class="wwso-kamer-kop">' +
+    '<span class="kamer-nr"></span>' +
+    '<span class="reken-invoer"><input type="number" class="kamer-m2" step="any" min="0" ' +
+    'inputmode="decimal" value="' + (m2 || "") + '"><span class="teken">m²</span></span>' +
+    '<label class="wwso-check wwso-inline"><input type="checkbox" class="kamer-verwarmd" checked> verwarmd</label>' +
+    '<button type="button" class="wwso-verwijder" title="Kamer verwijderen">&times;</button>' +
+    "</div>" +
+    '<div class="wwso-kamer-elementen"></div>' +
+    '<div class="wwso-toevoeg-rij">' +
+    '<select class="kamer-kies"><option value="">— voorziening toevoegen —</option>' +
+    paletOpties(W.privePalet) + "</select>" +
+    '<button type="button" class="wwso-knop-secundair kamer-el-toevoegen">+ toevoegen</button>' +
+    "</div>";
+
+  kamer.querySelector(".wwso-verwijder").addEventListener("click", () => {
+    kamer.remove();
+    nummerKamers();
+  });
+  const kies = kamer.querySelector(".kamer-kies");
+  kamer.querySelector(".kamer-el-toevoegen").addEventListener("click", () => {
+    if (!kies.value) return;
+    kamer.querySelector(".wwso-kamer-elementen").appendChild(maakElement(kies.value, false));
+    kies.value = "";
+  });
+  return kamer;
+}
+
+function nummerKamers() {
+  document.querySelectorAll("#kamers .wwso-kamer").forEach((k, n) => {
+    k.querySelector(".kamer-nr").textContent = "Kamer " + (n + 1);
+  });
+}
+
+// --- Uitlezen ---------------------------------------------------------------
+function leesElement(node) {
+  const spec = W.elementen[node.dataset.type];
+  const out = { type: node.dataset.type };
+  if (spec.effect === "keuken") {
+    out.aanrecht_m = node.querySelector(".veld-aanrecht").value;
+    out.voorzieningen = Array.from(node.querySelectorAll(".keuken-voorz:checked")).map((c) => c.value);
+    out.extra_kastruimte_60cm = node.querySelector(".veld-kastruimte").value;
+  }
+  const m2 = node.querySelector(".veld-m2");
+  if (m2) out.oppervlakte_m2 = m2.value;
+  const verw = node.querySelector(".veld-verwarmd");
+  if (verw) out.verwarmd = verw.checked;
+  const toegang = node.querySelector(".veld-toegang");
+  if (toegang) out.aantal_kamers_toegang = toegang.value;
+  return out;
 }
 
 function verzamelPayload() {
-  const num = (sel) => document.querySelector(sel).value;
-  const kamers = Array.from(document.querySelectorAll(".kamer-rij")).map((rij) => ({
-    oppervlakte_m2: rij.querySelector(".kamer-m2").value,
-    verwarmd: rij.querySelector(".kamer-verwarmd").checked,
+  const val = (id) => document.getElementById(id).value;
+  const kamers = Array.from(document.querySelectorAll("#kamers .wwso-kamer")).map((k) => ({
+    oppervlakte_m2: k.querySelector(".kamer-m2").value,
+    verwarmd: k.querySelector(".kamer-verwarmd").checked,
+    elementen: Array.from(k.querySelectorAll(".wwso-kamer-elementen .wwso-element")).map(leesElement),
   }));
-
-  const keukenVoorz = Array.from(document.querySelectorAll(".keuken-voorz:checked")).map((c) => c.value);
-  const sanitairVoorz = Array.from(document.querySelectorAll(".sanitair-voorz:checked")).map((c) => c.value);
-
-  const gedeeldeRuimten = [];
-  const woonkamer = num('input[name="woonkamer_m2"]');
-  if (parseFloat(woonkamer) > 0) {
-    gedeeldeRuimten.push({
-      oppervlakte_m2: woonkamer, is_vertrek: true,
-      verwarmd: document.getElementById("woonkamer_verwarmd").checked,
-      aantal_adressen: num('input[name="aantal_adressen"]'),
-    });
-  }
-  const berging = num('input[name="berging_m2"]');
-  if (parseFloat(berging) > 0) {
-    gedeeldeRuimten.push({
-      oppervlakte_m2: berging, is_vertrek: false, verwarmd: false,
-      aantal_adressen: num('input[name="aantal_adressen"]'),
-    });
-  }
-
+  const gedeelde = Array.from(document.querySelectorAll("#gedeelde-ruimtes .wwso-element")).map(leesElement);
   return {
     kamers,
-    energielabel: num("#energielabel"),
-    bouwjaar: num('input[name="bouwjaar"]'),
-    woz_waarde: num('input[name="woz_waarde"]'),
-    woz_oppervlakte_m2: num('input[name="woz_oppervlakte_m2"]'),
-    corop_gemiddelde_woz_m2: num('input[name="corop_gemiddelde_woz_m2"]'),
-    keuken: {
-      aanrecht_m: num("#aanrecht_m"),
-      voorzieningen: keukenVoorz,
-      extra_kastruimte_60cm: num('input[name="extra_kastruimte_60cm"]'),
-    },
-    sanitair: { voorzieningen: sanitairVoorz },
-    gedeelde_ruimten: gedeeldeRuimten,
-    gemeenschappelijke_buitenruimte: {
-      oppervlakte_m2: num('input[name="buitenruimte_m2"]'),
-      aantal_adressen: num('input[name="aantal_adressen"]'),
-    },
+    gedeelde_elementen: gedeelde,
+    energielabel: val("energielabel"),
+    bouwjaar: val("bouwjaar"),
+    woz_waarde: val("woz_waarde"),
+    woz_oppervlakte_m2: val("woz_oppervlakte_m2"),
+    corop_gemiddelde_woz_m2: val("corop_gemiddelde_woz_m2"),
   };
 }
 
+// --- Rekenen + tonen --------------------------------------------------------
 let laatsteGemiddelde = null;
 
 async function bereken() {
   const foutEl = document.getElementById("wwso-fout");
-  const resEl = document.getElementById("wwso-resultaat");
   foutEl.hidden = true;
   try {
-    const resp = await fetch(window.__wwso.berekenUrl, {
+    const resp = await fetch(W.berekenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(verzamelPayload()),
@@ -107,7 +180,7 @@ async function bereken() {
     if (!resp.ok) {
       foutEl.textContent = data.fout || "Er ging iets mis bij het rekenen.";
       foutEl.hidden = false;
-      resEl.hidden = true;
+      document.getElementById("wwso-resultaat").hidden = true;
       return;
     }
     toonResultaat(data);
@@ -115,6 +188,20 @@ async function bereken() {
     foutEl.textContent = "Netwerkfout - probeer opnieuw.";
     foutEl.hidden = false;
   }
+}
+
+function toonRubrieken(kamer) {
+  const rub = document.querySelector("#wwso-rubriek-tabel tbody");
+  rub.innerHTML = "";
+  Object.keys(RUBRIEK_LABELS).forEach((key) => {
+    const punten = kamer.punten_per_rubriek[key];
+    if (punten === undefined) return;
+    rub.appendChild(el("tr", null,
+      "<td>" + RUBRIEK_LABELS[key] + "</td><td>" +
+      Number(punten).toLocaleString("nl-NL") + " pt</td>"));
+  });
+  rub.appendChild(el("tr", "groot",
+    "<td>Totaal (afgerond)</td><td>" + kamer.totaal_punten + " pt</td>"));
 }
 
 function toonResultaat(data) {
@@ -126,33 +213,21 @@ function toonResultaat(data) {
   const tbody = document.querySelector("#wwso-kamer-tabel tbody");
   tbody.innerHTML = "";
   data.kamers.forEach((k, n) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      "<td>Kamer " + (n + 1) + "</td>" +
-      "<td>" + k.oppervlakte_m2 + " m²</td>" +
-      "<td>" + k.totaal_punten + "</td>" +
-      "<td>" + euro(k.max_kale_huur) + "</td>";
+    const tr = el("tr", null,
+      "<td>Kamer " + (n + 1) + "</td><td>" + k.oppervlakte_m2 + " m²</td><td>" +
+      k.totaal_punten + "</td><td>" + euro(k.max_kale_huur) + "</td>");
+    tr.classList.add("wwso-kamer-rij");
+    tr.addEventListener("click", () => {
+      document.getElementById("wwso-rubriek-kamer").textContent = n + 1;
+      toonRubrieken(k);
+    });
     tbody.appendChild(tr);
   });
 
-  const rub = document.querySelector("#wwso-rubriek-tabel tbody");
-  rub.innerHTML = "";
-  const eerste = data.kamers[0];
-  if (eerste) {
-    Object.keys(RUBRIEK_LABELS).forEach((key) => {
-      const punten = eerste.punten_per_rubriek[key];
-      if (punten === undefined) return;
-      const tr = document.createElement("tr");
-      tr.innerHTML = "<td>" + RUBRIEK_LABELS[key] + "</td><td>" +
-        Number(punten).toLocaleString("nl-NL") + " pt</td>";
-      rub.appendChild(tr);
-    });
-    const totaal = document.createElement("tr");
-    totaal.className = "groot";
-    totaal.innerHTML = "<td>Totaal (afgerond)</td><td>" + eerste.totaal_punten + " pt</td>";
-    rub.appendChild(totaal);
+  if (data.kamers[0]) {
+    document.getElementById("wwso-rubriek-kamer").textContent = "1";
+    toonRubrieken(data.kamers[0]);
   }
-
   document.getElementById("wwso-resultaat").hidden = false;
 }
 
@@ -161,25 +236,38 @@ async function gebruik() {
   const btn = document.getElementById("wwso-gebruik");
   btn.disabled = true;
   try {
-    const resp = await fetch(window.__wwso.gebruikUrl, {
+    const resp = await fetch(W.gebruikUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ kale_huur_per_kamer: laatsteGemiddelde }),
     });
     const data = await resp.json();
-    if (resp.ok && data.url) {
-      window.location.href = data.url;
-    } else {
-      btn.disabled = false;
-    }
+    if (resp.ok && data.url) window.location.href = data.url;
+    else btn.disabled = false;
   } catch (e) {
     btn.disabled = false;
   }
 }
 
+// --- Init -------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  bouwKamerRijen();
-  document.getElementById("aantal-kamers").addEventListener("input", bouwKamerRijen);
+  const kamersEl = document.getElementById("kamers");
+  const aantal = Math.max(1, W.aantalKamers || 1);
+  for (let n = 0; n < aantal; n++) kamersEl.appendChild(maakKamer(W.kamerM2));
+  nummerKamers();
+
+  document.getElementById("kamer-toevoegen").addEventListener("click", () => {
+    kamersEl.appendChild(maakKamer(W.kamerM2));
+    nummerKamers();
+  });
+
+  const gedeeldKies = document.getElementById("gedeeld-kies");
+  document.getElementById("gedeeld-toevoegen").addEventListener("click", () => {
+    if (!gedeeldKies.value) return;
+    document.getElementById("gedeelde-ruimtes").appendChild(maakElement(gedeeldKies.value, true));
+    gedeeldKies.value = "";
+  });
+
   document.getElementById("wwso-bereken").addEventListener("click", bereken);
   document.getElementById("wwso-gebruik").addEventListener("click", gebruik);
 });
