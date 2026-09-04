@@ -45,6 +45,16 @@ _ADRES_RE = re.compile(
 _STRAATNR_RE = re.compile(r"^(?P<straat>.*?)\s+(?P<huisnr>\d+)\s*(?P<toev>[A-Za-z0-9]*)$")
 _PRIJS_RE = re.compile(r"(?:Vraagprijs|Koopsom)\s*:\s*€\s*(?P<prijs>[\d.]+)", re.IGNORECASE)
 _M2_RE = re.compile(r"(?P<m2>\d+)\s*m²")
+# "Aankomend aanbod"-teasers: vooraankondigingen met alleen een postcodegebied
+# (4 cijfers, bv. "Postcode: 3037"), zónder straat/huisnummer. Die kunnen geen
+# woning worden - bewust stil overslaan i.p.v. als "adres niet herkend" te melden.
+_TEASER_RE = re.compile(
+    r"aankomend aanbod|postcode:\s*\d{4}(?!\s*[A-Za-z]{2})", re.IGNORECASE
+)
+
+
+def _is_teaser_blok(blok: str) -> bool:
+    return bool(_TEASER_RE.search(blok))
 
 
 def _beste_tekst(msg: Message) -> str:
@@ -99,6 +109,8 @@ def parse_nvm_body(tekst: str) -> tuple[list[FundaListing], list[str]]:
         regels = [r.strip() for r in blok.strip().splitlines() if r.strip()]
         if not regels:
             continue
+        if _is_teaser_blok(blok):
+            continue  # "Aankomend aanbod"-teaser zonder volledig adres: stil overslaan
         parsed = _parse_adres(regels[0])
         if not parsed:
             onherkend.append(regels[0])

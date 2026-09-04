@@ -108,6 +108,33 @@ def test_lege_mail_geeft_niks():
     assert onherkend == []
 
 
+def test_aankomend_aanbod_teaser_wordt_stil_overgeslagen():
+    # "Aankomend aanbod"-teasers hebben alleen een postcodegebied, geen straat/
+    # huisnummer - die mogen geen "adres niet herkend"-waarschuwing opleveren.
+    body = """
+Match: 90%
+Aankomend aanbod
+Postcode: 3037
+"""
+    woningen, onherkend = parse_nvm_body(body)
+    assert woningen == []
+    assert onherkend == []
+
+
+def test_teaser_naast_echte_woning():
+    body = """
+Match: 90%
+Aankomend aanbodPostcode: 3037
+Match: 100%
+Westzeedijk 74 B3016 AG Rotterdam
+Vraagprijs: € 485.000,- kosten koper
+Bovenwoning | 63 m² | 3 kamers
+"""
+    woningen, onherkend = parse_nvm_body(body)
+    assert [w.object_id for w in woningen] == ["3016AG-74B"]
+    assert onherkend == []
+
+
 def test_ontdubbelt_binnen_de_mail():
     body = _MAIL + """
 Match: 100%
