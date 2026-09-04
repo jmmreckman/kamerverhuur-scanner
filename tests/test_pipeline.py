@@ -912,6 +912,9 @@ def test_run_beschikbaarheidscheck_laat_beschikbare_woning_actief(tmp_path):
     bijgewerkt = StateStore(config.state_path).get("3000AA-1")
     assert bijgewerkt.status == "actief"
     assert bijgewerkt.laatst_gezien == "2026-07-01"
+    # Bevestigd nog te koop: zowel de check-datum als de beschikbaar-datum bijgewerkt.
+    assert bijgewerkt.laatst_gecheckt == "2026-07-01"
+    assert bijgewerkt.laatst_beschikbaar == "2026-07-01"
     assert result.nieuw_afgevallen == []
     assert len(result.alle_actief) == 1
 
@@ -937,6 +940,10 @@ def test_run_beschikbaarheidscheck_laat_onduidelijk_resultaat_met_rust(tmp_path)
     # niet ophogen, anders zou een woning die écht van Funda af is nooit via de
     # normale 30-dagen-expiry verlopen.
     assert bijgewerkt.laatst_gezien == "2026-06-30"
+    # We hebben 'm wél opgevraagd (laatst_gecheckt bijgewerkt), maar niet bevestigd
+    # beschikbaar (laatst_beschikbaar blijft leeg).
+    assert bijgewerkt.laatst_gecheckt == "2026-07-01"
+    assert bijgewerkt.laatst_beschikbaar is None
     assert result.nieuw_afgevallen == []
     assert len(result.alle_actief) == 1
 

@@ -635,10 +635,17 @@ def run_beschikbaarheidscheck(config: Config, today: date | None = None) -> RunR
         if item.status != "actief":
             continue
         beschikbaar = controleer_beschikbaar(item.url)
+        item.laatst_gecheckt = today_iso  # we hébben 'm vandaag opgevraagd
         if beschikbaar is None:
+            # Kon niet vastgesteld worden (netwerkfout, blokkade, onherkende pagina):
+            # niets concluderen, maar wel de check-datum bewaren zodat op de kaart te
+            # zien is dat de laatste poging niet lukte.
+            state.upsert(item)
             continue
         item.laatst_gezien = today_iso
-        if not beschikbaar:
+        if beschikbaar:
+            item.laatst_beschikbaar = today_iso  # bevestigd nog te koop
+        else:
             item.status = "afgevallen"
             item.afvalreden = "Niet meer 'te koop' op de eigen Funda-pagina - vermoedelijk verkocht."
             result.nieuw_afgevallen.append(item)

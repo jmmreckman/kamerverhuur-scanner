@@ -94,6 +94,16 @@ class ListingState:
     # hoeveel overlappen en hoeveel maar via één van de twee binnenkomen (bron-tracking
     # om dekkingsgaten op te sporen). Leeg = van vóór deze functie (telt als onbekend).
     bronnen: list[str] = field(default_factory=list)
+    # Bijgehouden door de dagelijkse beschikbaarheid-check (pipeline.run_beschikbaarheidscheck):
+    # laatst_gecheckt = de laatste dag dat we de eigen Funda-pagina hebben opgevraagd
+    # (ongeacht de uitkomst); laatst_beschikbaar = de laatste dag dat die pagina
+    # bevestigde dat de woning nog "te koop" staat. Zo blijft een woning die gewoon
+    # lang te koop blijft staan als kans op de kaart (prune_expired spaart een recent
+    # bevestigde woning), en is op de kaart te zien hoelang hij al te koop staat en
+    # wanneer hij voor het laatst gecontroleerd is. None = nog nooit gecheckt (bv.
+    # woningen van vóór dit veld; de eerstvolgende check vult het in).
+    laatst_beschikbaar: str | None = None
+    laatst_gecheckt: str | None = None
 
     @property
     def primaire_oppervlakte(self) -> int | None:
@@ -154,8 +164,16 @@ class StateStore:
             if item.favoriet:
                 keep[object_id] = item
                 continue
-            last_seen = datetime.fromisoformat(item.laatst_gezien).date()
-            if (today - last_seen).days <= expiry_days:
+            # Een woning blijft bewaard zolang hij óf recent in een alert langskwam
+            # (laatst_gezien), óf de dagelijkse beschikbaarheid-check hem recent nog
+            # bevestigd "te koop" zag (laatst_beschikbaar). Zo verdwijnt een woning die
+            # gewoon maandenlang te koop blijft staan niet vanzelf - dat kan juist een
+            # kans zijn. Pas als beide signalen langer dan expiry_days stil staan (bv.
+            # de check kon de pagina 30 dagen niet uitlezen) valt hij alsnog weg.
+            peildatums = [datetime.fromisoformat(item.laatst_gezien).date()]
+            if item.laatst_beschikbaar:
+                peildatums.append(datetime.fromisoformat(item.laatst_beschikbaar).date())
+            if (today - max(peildatums)).days <= expiry_days:
                 keep[object_id] = item
         self._listings = keep
 

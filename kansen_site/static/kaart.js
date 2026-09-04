@@ -102,6 +102,25 @@ function dagenOpFunda(eerstGezien) {
   return dagen >= 0 ? dagen : null;
 }
 
+function datumKort(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+}
+
+// Regeltje over de dagelijkse beschikbaarheid-check: bevestigd nog te koop, of de
+// laatste controle kon de status niet lezen. Alleen relevant voor actieve woningen.
+function beschikbaarheidRegel(kans) {
+  if (kans.status && kans.status !== "actief") return "";
+  const gecheckt = datumKort(kans.laatst_gecheckt);
+  if (!gecheckt) return "";
+  if (kans.laatst_beschikbaar) {
+    return `<span style="color:#1b7a43;font-size:0.85em">✓ nog te koop &middot; gecheckt ${gecheckt}</span><br>`;
+  }
+  return `<span style="color:#8a6d00;font-size:0.85em">status niet te lezen &middot; laatste poging ${gecheckt}</span><br>`;
+}
+
 function vulWijkFilter(kansen) {
   const huidige = filterWijkEl.value;
   const wijken = [...new Set(kansen.map((k) => k.wijknaam).filter(Boolean))].sort();
@@ -170,6 +189,7 @@ function bouwPopup(kans) {
     ${c.eigenInleg !== null ? "Eigen inleg p.p. (ná verhoging): " + formatEuro(c.eigenInleg) + "<br>" : ""}
     ${c.schakelgeld !== null ? "Schakelgeld p.p. (vóór verhoging): " + formatEuro(c.schakelgeld) + "<br>" : ""}
     ${dagen !== null ? dagen + " dag(en) op Funda<br>" : ""}
+    ${beschikbaarheidRegel(kans)}
     ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
     ${kans.woz_check_nodig && kans.woz_check_url ? `<a href="${kans.woz_check_url}" target="_blank" rel="noopener">Zelf WOZ-waarde opzoeken &rarr;</a><br>` : ""}
     ${signalen ? signalen + "<br>" : ""}

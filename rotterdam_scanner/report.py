@@ -234,9 +234,11 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     verwachte eigen inleg per persoon (na ophoging van de financiering, zie hieronder) — de beste kans
     staat bovenaan. "Winst p.p./mnd" en "Eigen inleg p.p." staan op "-" zolang oppervlakte of vraagprijs
     nog onbekend zijn. "Dagen bekend" = dagen sinds dit systeem het huis voor het eerst zag in je
-    Funda-alertmail. Een huis verdwijnt vanzelf na {expiry_days} dagen als het niet eerder handmatig
-    verwijderd is — er wordt niet automatisch op "verkocht" of "onder bod" gecheckt, dat zie je zelf
-    aan hoe lang een huis al op de lijst staat.
+    Funda-alertmail. Een dagelijkse check bezoekt elke woning op de eigen Funda-pagina en haalt 'm er
+    automatisch uit zodra die "verkocht" is; een woning die gewoon te koop blijft staan blijft juist
+    staan (ook een langlopende, onverkochte woning kan een kans zijn) en verdwijnt pas na {expiry_days}
+    dagen zónder enig bevestigd te-koop-signaal (bijv. als de pagina al die tijd niet te lezen was).
+    "Onder bod" telt op Funda meestal nog als "te koop", dus zo'n woning blijft staan.
     Klik "Verwijderen" om een huis er zelf direct uit te halen (bijv. als het toch niet voldoet).
   </p>
   <table style="{_TABLE_STYLE}">

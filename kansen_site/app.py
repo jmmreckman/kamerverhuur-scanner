@@ -369,6 +369,8 @@ def _listing_naar_json(item) -> dict:
         "opmerking": item.opmerking,
         "eerst_gezien": item.eerst_gezien,
         "laatst_gezien": item.laatst_gezien,
+        "laatst_beschikbaar": item.laatst_beschikbaar,
+        "laatst_gecheckt": item.laatst_gecheckt,
         "status": item.status,
         "favoriet": item.favoriet,
         "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,

@@ -48,6 +48,23 @@ def test_prune_expired_verwijdert_oude_listings(tmp_path):
     assert store.get("recent") is not None
 
 
+def test_prune_expired_bewaart_recent_bevestigd_beschikbaar(tmp_path):
+    # Een woning die al lang niet meer in een alert langskwam (laatst_gezien oud),
+    # maar die de dagelijkse beschikbaarheid-check recent nog "te koop" zag
+    # (laatst_beschikbaar), blijft staan - een langlopende, onverkochte woning kan
+    # juist een kans zijn.
+    store = StateStore(tmp_path / "state.json")
+    item = _listing(object_id="blijft", eerst="2026-01-01", laatst="2026-01-01")
+    item.laatst_beschikbaar = "2026-07-04"
+    store.upsert(item)
+    store.upsert(_listing(object_id="oud", eerst="2026-01-01", laatst="2026-01-01"))
+
+    store.prune_expired(expiry_days=60, today=date(2026, 7, 5))
+
+    assert store.get("blijft") is not None
+    assert store.get("oud") is None
+
+
 def test_prune_expired_bewaart_favoriet_ongeacht_leeftijd(tmp_path):
     # Een favoriet die al lang niet meer in een Funda-alert is langsgekomen mag
     # nooit vanzelf worden opgeruimd (blijft zichtbaar en gemonitord op de kaart).
