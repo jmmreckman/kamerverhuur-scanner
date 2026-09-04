@@ -218,6 +218,14 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     ({len(rotterdam_actief)} Rotterdam, {len(den_haag_actief)} Den Haag),
     {len(result.nieuw_afgevallen)} vandaag afgevallen op de checks.
   </p>
+  <p style="{_SMALL_STYLE}">
+    Vandaag uit de bronnen gelezen: {result.nvm_gelezen} via NVM-mails, {result.funda_gelezen} via
+    Funda-alerts. Daarvan waren {len(result.al_bekend)} al bekend (stonden al op de lijst) en
+    {len(nieuw_actief_ids)} echt nieuw. Dat "al bekend" hoog is en "nieuw" laag is normaal: de
+    makelaarsmails sturen elke dag dezelfde matchende set opnieuw, dus alleen een woning die écht
+    nieuw op de markt komt telt als nieuwe kandidaat. Staat NVM hier structureel op 0, dan wordt de
+    bron niet gelezen — meld dat dan.
+  </p>
 
   {fouten_html}
 
@@ -379,6 +387,11 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
     rotterdam_actief = [item for item in result.alle_actief if item.stad != "den_haag"]
     den_haag_actief = [item for item in result.alle_actief if item.stad == "den_haag"]
     lines = [f"Kamerverhuur-scanner Rotterdam & Den Haag — {today.strftime('%d-%m-%Y')}", ""]
+    lines.append(
+        f"Uit de bronnen gelezen: {result.nvm_gelezen} via NVM, {result.funda_gelezen} via Funda; "
+        f"{len(result.al_bekend)} al bekend, {len(nieuw_actief_ids)} echt nieuw."
+    )
+    lines.append("")
 
     if result.fouten:
         lines.append("Let op: fouten tijdens dit run:")

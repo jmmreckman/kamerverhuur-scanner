@@ -34,6 +34,20 @@ def _listing(
     )
 
 
+def test_html_report_toont_bron_telling():
+    # Ook bij "0 nieuw" moet zichtbaar zijn dat de bronnen wél woningen leverden
+    # (die dan al bekend waren), zodat "0 nieuwe kandidaten" niet als storing oogt.
+    item = _listing("OUD-1", "Oudstraat 1, Rotterdam", "2026-06-01")
+    result = RunResult(alle_actief=[item], nieuw_actief=[], al_bekend=[item],
+                       nvm_gelezen=52, funda_gelezen=2)
+    html = build_html_report(result, date(2026, 7, 9), "scanner@example.com")
+    assert "52 via NVM-mails" in html
+    assert "Funda-alerts" in html
+    tekst = build_text_report(result, date(2026, 7, 9), "scanner@example.com")
+    assert "52 via NVM" in tekst
+    assert "2 via Funda" in tekst
+
+
 def test_html_report_adres_staat_in_eigen_link():
     # Gmail linkt platte adrestekst automatisch door naar Google Maps, en doet dat over
     # celgrenzen heen (adres + wijknaam samen), wat de tabelstructuur kapotmaakt (extra

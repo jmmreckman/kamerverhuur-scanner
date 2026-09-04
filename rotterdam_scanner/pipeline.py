@@ -40,6 +40,13 @@ class RunResult:
     al_bekend: list[ListingState] = field(default_factory=list)
     alle_actief: list[ListingState] = field(default_factory=list)
     fouten: list[str] = field(default_factory=list)
+    # Hoeveel woningen elke bron déze run aanleverde (na ontdubbeling binnen de bron,
+    # vóór ontdubbeling tegen state.json). Puur ter info in het dagrapport, zodat te
+    # zien is dat een bron wél degelijk woningen levert ook als er "0 nieuw" zijn -
+    # die zijn dan simpelweg al bekend (de makelaarsmails sturen dagelijks dezelfde
+    # matchende set opnieuw, dus na de eerste keer is bijna alles "al bekend").
+    nvm_gelezen: int = 0
+    funda_gelezen: int = 0
 
 
 def _verwerk_den_haag(
@@ -556,6 +563,8 @@ def run(config: Config, today: date | None = None) -> RunResult:
         nvm_listings = []
 
     listings = nvm_listings + funda_listings
+    result.nvm_gelezen = len(nvm_listings)
+    result.funda_gelezen = len(funda_listings)
 
     try:
         te_verwijderen_ids = fetch_verwijder_commandos(config)
