@@ -13,7 +13,7 @@ from .mailer import send_report
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .nvm_mail import haal_nvm_woningen
 from .geocode import GeocodeError, geocode_address, geocode_by_postcode
-from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied
+from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied, kaartbron_status
 from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from .investering import bereken as bereken_investering
 from .investering import bereken_met_aantal_kamers as bereken_investering_met_aantal_kamers
@@ -574,6 +574,15 @@ def run(config: Config, today: date | None = None) -> RunResult:
 
     _verwerk_listings(listings, te_verwijderen_ids, config, today, state, result)
     _controleer_favoriet_bekendmakingen(config, state, today, result)
+
+    # Transparantie over de kaartbron: als de scanner op de fallback-webmap moest
+    # terugvallen of merkte dat de gemeente een nieuw kaart-id gebruikt, melden we
+    # dat in het dagrapport (de resolutie zelf liep mee op de eerste Rotterdamse
+    # 50m/nulquotum-check hierboven).
+    kaartbron = kaartbron_status()
+    if kaartbron is not None and kaartbron.waarschuwingen:
+        result.fouten.extend(kaartbron.waarschuwingen)
+
     return result
 
 
