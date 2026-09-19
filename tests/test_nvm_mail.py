@@ -1,6 +1,6 @@
 """Tests voor de NVM-/Move.nl-mailparser (tweede bron voor kansen.steenhub.nl).
 De voorbeelden komen 1-op-1 uit een echte zoekopdracht-mail."""
-from rotterdam_scanner.nvm_mail import parse_nvm_body
+from rotterdam_scanner.nvm_mail import _sjabloon_waarschuwing, parse_nvm_body
 
 _MAIL = """Beste Jurian
 Hierbij ontvang je een overzicht ...
@@ -133,6 +133,33 @@ Bovenwoning | 63 m² | 3 kamers
     woningen, onherkend = parse_nvm_body(body)
     assert [w.object_id for w in woningen] == ["3016AG-74B"]
     assert onherkend == []
+
+
+def test_sjabloon_waarschuwing_bij_onbekend_sjabloon():
+    # Een zoekopdrachtmail zonder 'Match:'-blokken en zonder teaser -> vermoedelijk
+    # een ander Move.nl-sjabloon; die woningen zouden anders geruisloos verdwijnen.
+    tekst = "Beste Jurian,\nWestzeedijk 74 B, 3016 AG Rotterdam - 485.000\n"
+    msg = _sjabloon_waarschuwing(tekst, "Nieuw aanbod voor u", gevonden=[], onherkend=[])
+    assert msg is not None
+    assert "ander Move.nl" in msg or "sjabloon" in msg
+    assert "Nieuw aanbod voor u" in msg
+
+
+def test_sjabloon_waarschuwing_zwijgt_bij_normale_mail():
+    woningen, onherkend = parse_nvm_body(_MAIL)
+    assert _sjabloon_waarschuwing(_MAIL, "gevonden voor uw zoekopdracht", woningen, onherkend) is None
+
+
+def test_sjabloon_waarschuwing_zwijgt_bij_teaser_only():
+    body = "Match: 90%\nAankomend aanbod\nPostcode: 3037\n"
+    woningen, onherkend = parse_nvm_body(body)
+    assert woningen == [] and onherkend == []
+    # Teaser-only mail is legitiem leeg -> geen valse waarschuwing.
+    assert _sjabloon_waarschuwing(body, "onderwerp", woningen, onherkend) is None
+
+
+def test_sjabloon_waarschuwing_zwijgt_bij_lege_mail():
+    assert _sjabloon_waarschuwing("   ", "onderwerp", [], []) is None
 
 
 def test_ontdubbelt_binnen_de_mail():

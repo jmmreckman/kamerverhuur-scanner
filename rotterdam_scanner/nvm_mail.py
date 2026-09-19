@@ -25,6 +25,7 @@ import email
 import imaplib
 import re
 from datetime import datetime, timedelta
+from email.header import decode_header, make_header
 from email.message import Message
 
 from .config import Config
@@ -53,8 +54,37 @@ _TEASER_RE = re.compile(
 )
 
 
+_MATCH_BLOK_RE = re.compile(r"Match:\s*\d+%")
+
+
 def _is_teaser_blok(blok: str) -> bool:
     return bool(_TEASER_RE.search(blok))
+
+
+def _onderwerp(msg: Message) -> str:
+    ruw = msg.get("Subject", "")
+    try:
+        return str(make_header(decode_header(ruw)))
+    except Exception:  # noqa: BLE001 - een raar onderwerp mag nooit de scan breken
+        return ruw
+
+
+def _sjabloon_waarschuwing(tekst: str, onderwerp: str, gevonden: list, onherkend: list) -> str | None:
+    """Signaleer een zoekopdrachtmail die géén enkel woningblok oplevert terwijl het
+    ook geen teaser is: dan draait Move.nl waarschijnlijk op een sjabloon dat wij
+    (nog) niet parsen, en zouden die woningen anders geruisloos verdwijnen. Puur een
+    waarschuwing; er wordt niets weggegooid."""
+    if gevonden or onherkend:
+        return None
+    if not tekst.strip():
+        return None
+    if _MATCH_BLOK_RE.search(tekst) or _TEASER_RE.search(tekst):
+        return None
+    return (
+        "NVM-mail zonder herkenbare woningblokken (mogelijk een nieuw/ander Move.nl-"
+        f"sjabloon); onderwerp: {onderwerp!r}. Woningen hieruit worden NIET meegenomen "
+        "- controleer de mail."
+    )
 
 
 def _beste_tekst(msg: Message) -> str:
@@ -180,5 +210,8 @@ def haal_nvm_woningen(config: Config, lookback_days: int = 3) -> tuple[list[Fund
             waarschuwingen.extend(
                 f"NVM-mail: adres niet herkend: {regel!r}" for regel in onherkend
             )
+            sjabloon = _sjabloon_waarschuwing(tekst, _onderwerp(msg), gevonden, onherkend)
+            if sjabloon:
+                waarschuwingen.append(sjabloon)
 
     return list(woningen.values()), waarschuwingen
