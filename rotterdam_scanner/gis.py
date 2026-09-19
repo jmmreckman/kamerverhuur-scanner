@@ -13,6 +13,18 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+# rotterdam.nl geeft op een kale request zonder browser-User-Agent een 429
+# (bot-block), waardoor de landingspagina-detectie stil op de fallback terugviel.
+# Een normale User-Agent lost dat op; ArcGIS-REST heeft er geen last van.
+_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+}
+
+
 def _get_met_retry(url: str, *, params: dict | None = None, timeout: int = 20, pogingen: int = 3):
     """GET met retries + backoff. De gemeente-ArcGIS geeft onder druk read-timeouts of
     resets; zonder retry sneuvelt een adres dan onnodig op een tijdelijke fout."""
@@ -21,7 +33,7 @@ def _get_met_retry(url: str, *, params: dict | None = None, timeout: int = 20, p
         if i:
             time.sleep(2 * i)
         try:
-            resp = requests.get(url, params=params, timeout=timeout)
+            resp = requests.get(url, params=params, timeout=timeout, headers=_HTTP_HEADERS)
             resp.raise_for_status()
             return resp
         except requests.exceptions.RequestException as exc:

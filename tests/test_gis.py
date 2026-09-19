@@ -91,7 +91,7 @@ def test_dynamische_webmap_via_landingspagina():
     )
     exp_data = {"dataSources": {"ds1": {"type": "WEB_MAP", "itemId": NIEUW_WEBMAP_ID}}}
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         if url == gis.LANDINGSPAGINA_URL:
             return _html_response(landing_html)
         if url.endswith("/data"):
@@ -117,7 +117,7 @@ def test_fallback_bij_onvindbare_kaart_op_landingspagina():
     """Geen bruikbare kaartlink op de landingspagina -> terugval op de laatst
     bekende webmap, mét waarschuwing in de status (en dus in het dagrapport)."""
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         if url == gis.LANDINGSPAGINA_URL:
             return _html_response("<p>Geen kaartknop hier</p>")
         if url.endswith("/data"):
@@ -137,7 +137,7 @@ def test_fallback_bij_onvindbare_kaart_op_landingspagina():
 def test_env_override_wint_en_zonder_waarschuwing(monkeypatch):
     monkeypatch.setenv(gis.ENV_OVERRIDE, NIEUW_WEBMAP_ID)
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         # Alleen de override-webmap wordt bevraagd; landingspagina hoeft niet.
         if url.endswith("/data"):
             assert NIEUW_WEBMAP_ID in url
@@ -155,7 +155,7 @@ def test_env_override_wint_en_zonder_waarschuwing(monkeypatch):
 def test_in_nulquotum_gebied_gebruikt_juiste_laag():
     calls = []
 
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, timeout=None, headers=None):
         calls.append(url)
         if url.endswith("/data"):
             return _mock_response(WEBMAP_RESPONSE)
