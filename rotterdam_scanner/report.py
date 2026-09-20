@@ -224,8 +224,8 @@ def build_html_report(result: RunResult, today: date, scanner_email: str, expiry
     Funda-alerts. Daarvan waren {len(result.al_bekend)} al bekend (stonden al op de lijst) en
     {len(nieuw_actief_ids)} echt nieuw. Dat "al bekend" hoog is en "nieuw" laag is normaal: de
     makelaarsmails sturen elke dag dezelfde matchende set opnieuw, dus alleen een woning die écht
-    nieuw op de markt komt telt als nieuwe kandidaat. Staat NVM hier structureel op 0, dan wordt de
-    bron niet gelezen — meld dat dan.
+    nieuw op de markt komt telt als nieuwe kandidaat. Move.nl is de volledige, actuele NVM-bron;
+    staat die hier structureel op 0, dan wordt de bron niet gelezen — meld dat dan.
   </p>
 
   {fouten_html}

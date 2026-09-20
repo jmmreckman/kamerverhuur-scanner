@@ -557,12 +557,20 @@ def run(config: Config, today: date | None = None) -> RunResult:
     # storing hier mag de Funda-verwerking nooit tegenhouden. NVM eerst in de lijst,
     # Funda daarna: bij dezelfde woning (zelfde object_id) wint zo de Funda-link, en
     # beide bronnen worden geregistreerd voor de bron-tracking.
-    try:
-        nvm_listings, nvm_waarschuwingen = haal_nvm_woningen(config)
-        result.fouten.extend(nvm_waarschuwingen)
-    except Exception as exc:  # noqa: BLE001
-        result.fouten.append(f"Kon NVM-makelaarsmail niet uitlezen: {exc}")
+    # De NVM-/Move.nl-mails verstoppen de woningen sinds kort achter een inlogknop en
+    # leveren dan alleen "onbekend sjabloon"-ruis op. De Move-bron hieronder haalt
+    # datzelfde (volledige, actuele) NVM-aanbod rechtstreeks op. Dus met Move aan slaan
+    # we het mail-uitlezen over; staat Move uit, dan blijven de mails de tweede bron.
+    move_actief = bool(config.move_email and config.move_password and config.move_dossier_id)
+    if move_actief:
         nvm_listings = []
+    else:
+        try:
+            nvm_listings, nvm_waarschuwingen = haal_nvm_woningen(config)
+            result.fouten.extend(nvm_waarschuwingen)
+        except Exception as exc:  # noqa: BLE001
+            result.fouten.append(f"Kon NVM-makelaarsmail niet uitlezen: {exc}")
+            nvm_listings = []
 
     # Derde bron: het volledige Move.nl-dossier (de complete, actuele NVM-set met m²/
     # status). Ook fail-safe. Move levert bron="nvm", net als de NVM-mails, dus dubbele
