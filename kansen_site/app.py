@@ -375,9 +375,11 @@ def _listing_naar_json(item) -> dict:
         "favoriet": item.favoriet,
         "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,
         "bronnen": item.bronnen,
-        # Funda-zoeklink op adres: fallback voor woningen die (nog) alleen via de
-        # NVM-bron binnenkwamen en dus geen directe Funda-link hebben.
-        "funda_zoek_url": "https://www.funda.nl/zoeken/koop?query=" + quote_plus(item.weergavenaam or ""),
+        # Zoeklink op adres: fallback voor woningen die (nog) alleen via de NVM/Move-
+        # bron binnenkwamen en dus geen directe Funda-link hebben. Funda's eigen
+        # zoekpagina werkt slecht/blokkeert; een Google-zoekopdracht op het adres +
+        # "funda" zet de advertentie meestal bovenaan (in twee klikken bij de ad).
+        "zoek_url": "https://www.google.com/search?q=" + quote_plus(((item.weergavenaam or "") + " funda").strip()),
     }
 
 

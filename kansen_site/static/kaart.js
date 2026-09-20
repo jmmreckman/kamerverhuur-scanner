@@ -197,7 +197,7 @@ function bouwPopup(kans) {
     <a href="/woning/${encodeURIComponent(kans.object_id)}/berekening" class="reken-link">Rekenen met deze woning &rarr;</a><br>
     ${kans.url
       ? `<a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>`
-      : `<a href="${kans.funda_zoek_url}" target="_blank" rel="noopener">Zoek op Funda &rarr;</a>`}
+      : `<a href="${kans.zoek_url}" target="_blank" rel="noopener">Zoek op Google &rarr;</a>`}
   `;
 
   div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
