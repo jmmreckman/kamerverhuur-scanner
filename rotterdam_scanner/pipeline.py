@@ -12,6 +12,7 @@ from .config import Config
 from .mailer import send_report
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .nvm_mail import haal_nvm_woningen
+from .move_scrape import haal_move_woningen
 from .geocode import GeocodeError, geocode_address, geocode_by_postcode
 from .gis import binnen_50m_van_kamerverhuurvergunning, in_nulquotum_gebied, kaartbron_status
 from .investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
@@ -47,6 +48,7 @@ class RunResult:
     # matchende set opnieuw, dus na de eerste keer is bijna alles "al bekend").
     nvm_gelezen: int = 0
     funda_gelezen: int = 0
+    move_gelezen: int = 0
 
 
 def _verwerk_den_haag(
@@ -562,9 +564,23 @@ def run(config: Config, today: date | None = None) -> RunResult:
         result.fouten.append(f"Kon NVM-makelaarsmail niet uitlezen: {exc}")
         nvm_listings = []
 
-    listings = nvm_listings + funda_listings
+    # Derde bron: het volledige Move.nl-dossier (de complete, actuele NVM-set met m²/
+    # status). Ook fail-safe. Move levert bron="nvm", net als de NVM-mails, dus dubbele
+    # woningen ontdubbelen vanzelf op object_id. Alleen actief als de Move-inlog in de
+    # config staat (anders lege lijst).
+    try:
+        move_listings, move_waarschuwingen = haal_move_woningen(config)
+        result.fouten.extend(move_waarschuwingen)
+    except Exception as exc:  # noqa: BLE001
+        result.fouten.append(f"Kon Move.nl-dossier niet uitlezen: {exc}")
+        move_listings = []
+
+    # Move en NVM vóór Funda: bij dezelfde woning wint zo de Funda-link (url), terwijl
+    # beide bronnen geregistreerd worden voor de bron-tracking.
+    listings = move_listings + nvm_listings + funda_listings
     result.nvm_gelezen = len(nvm_listings)
     result.funda_gelezen = len(funda_listings)
+    result.move_gelezen = len(move_listings)
 
     try:
         te_verwijderen_ids = fetch_verwijder_commandos(config)

@@ -49,6 +49,15 @@ class Config:
     # steenhub.nl - dezelfde gebruikersnaam + wachtwoord (geverifieerd tegen de
     # werkzeug-wachtwoordhashes in dat bestand). Leeg = alleen KANSEN_APP_USERS.
     steenhub_users_file: str = ""
+    # Move.nl-inlog (NVM/Move-zoekopdracht) - de volledige, altijd actuele NVM-bron
+    # met m², type en verkoopstatus. Leeg = de Move-bron wordt overgeslagen (dan
+    # blijft de scanner op Funda + de NVM-mails draaien). Nooit in de repo zetten;
+    # als VPS-secret in de env plaatsen, net als het Gmail app-password.
+    move_email: str = ""
+    move_password: str = ""
+    # Het dossier-id (de base64-tekst in de "mijn-gevonden-woningen"-URL) OF de hele
+    # URL - uit beide leiden we het id af.
+    move_dossier_id: str = ""
 
     @property
     def imap_host(self) -> str:
@@ -101,7 +110,24 @@ def load_config(env_path: Path | None = None) -> Config:
             naam.strip() for naam in os.environ.get("KANSEN_APP_BEHEERDERS", "").split(",") if naam.strip()
         },
         steenhub_users_file=os.environ.get("STEENHUB_USERS_FILE", ""),
+        move_email=os.environ.get("MOVE_EMAIL", ""),
+        move_password=os.environ.get("MOVE_PASSWORD", ""),
+        move_dossier_id=_move_dossier_id(
+            os.environ.get("MOVE_DOSSIER_URL", "") or os.environ.get("MOVE_DOSSIER_ID", "")
+        ),
     )
+
+
+def _move_dossier_id(waarde: str) -> str:
+    """Accepteert het dossier-id zelf of de volledige 'mijn-gevonden-woningen'-URL en
+    geeft het id (de base64-tekst uit /searcher-dossier/<id>/...) terug."""
+    waarde = waarde.strip()
+    if not waarde:
+        return ""
+    if "searcher-dossier/" in waarde:
+        rest = waarde.split("searcher-dossier/", 1)[1]
+        return rest.split("/", 1)[0]
+    return waarde
 
 
 def _parse_kansen_app_users(raw: str) -> dict[str, str]:
