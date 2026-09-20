@@ -156,6 +156,45 @@ def test_parse_funda_tekstdump_meldt_postcode_zonder_herkenbaar_adres():
     assert len(fouten) == 1
 
 
+def test_parse_funda_tekstdump_herkent_toevoeging_met_spatie():
+    # Funda's gekopieerde resultatenpagina zet de toevoeging met een spatie achter
+    # het huisnummer ("Hillegondastraat 12 A") - die moet gewoon herkend worden.
+    tekst = "Hillegondastraat 12 A\n3051 PB Rotterdam\n€ 300.000 k.k.\n90 m²\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert len(listings) == 1
+    assert listings[0].object_id == "3051PB-12A"
+    assert listings[0].toevoeging == "A"
+    assert listings[0].straatnaam == "Hillegondastraat"
+    assert listings[0].huisnummer == "12"
+
+
+def test_parse_funda_tekstdump_herkent_alfanumerieke_toevoeging_met_spatie():
+    tekst = "Maaskade 99 B03\n3071 NG Rotterdam\n€ 400.000 k.k.\n120 m²\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert listings[0].object_id == "3071NG-99B03"
+    assert listings[0].toevoeging == "B03"
+
+
+def test_parse_funda_tekstdump_cijfergeleide_toevoeging_met_spatie():
+    # Ook een met cijfers beginnende toevoeging ("8 01L") moet meekomen.
+    tekst = "Nicolaas Ruyschstraat 8 01L\n3039 WR Rotterdam\n€ 275.000 k.k.\n80 m²\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert fouten == []
+    assert listings[0].object_id == "3039WR-801L"
+    assert listings[0].toevoeging == "01L"
+
+
+def test_parse_funda_tekstdump_spatie_toevoeging_slokt_geen_los_woord_op():
+    # "Sinds 3 weken" boven een postcode mag NIET als adres (huisnr 3, toev "weken")
+    # doorgaan; de toevoeging-lengtegrens houdt losse woorden buiten.
+    tekst = "Sinds 3 weken\n3051 PB Rotterdam\n€ 300.000 k.k.\n"
+    listings, fouten = parse_funda_tekstdump(tekst)
+    assert listings == []
+    assert any("geen herkenbaar adres" in f for f in fouten)
+
+
 def test_parse_bestand_herkent_tekstdump_automatisch():
     listings, fouten = parse_bestand(_VOORBEELD_KAART)
     assert len(listings) == 2

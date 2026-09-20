@@ -187,7 +187,14 @@ _POSTCODE_PLAATS_RE = re.compile(
     # herkend wordt.
     r"^(?P<postcode>\d{4}\s?[A-Z]{2})\s+(?P<plaats>[A-Za-zÀ-ÿ.'\- ]+)(?:\s*\([A-Za-z]{2,3}\))?$"
 )
-_ADRESREGEL_RE = re.compile(r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:-(?P<toevoeging>[A-Za-z0-9]+))?$")
+# De toevoeging kan met een koppelteken ("12-A") óf - zoals Funda's gekopieerde
+# resultatenpagina het rendert - met een spatie achter het huisnummer staan
+# ("Hillegondastraat 12 A", "Maaskade 99 B03", "Nicolaas Ruyschstraat 8 01L").
+# Beide separators herkennen; de toevoeging kort houden (<=4 tekens) zodat een
+# niet-adresregel als "Sinds 3 weken" niet per ongeluk als adres wordt gezien.
+_ADRESREGEL_RE = re.compile(
+    r"^(?P<straat>.+?)\s+(?P<huisnummer>\d+)(?:[-\s]+(?P<toevoeging>[A-Za-z0-9]{1,4}))?$"
+)
 _DUMP_PRIJS_RE = re.compile(r"€\s?([\d]{1,3}(?:[.,]\d{3})*)")
 # Funda toont bij een huis twee losse "X m²"-regels op de kaart: eerst de woonoppervlakte,
 # daarna de perceeloppervlakte (bij een appartement meestal maar één regel: wonen, geen
