@@ -543,6 +543,12 @@ def run(config: Config, today: date | None = None) -> RunResult:
     state = StateStore(config.state_path)
     result = RunResult()
 
+    # Move (het volledige NVM-dossier) is de hoofdbron zodra 'ie geconfigureerd is;
+    # dan is Funda "mooi meegenomen" en zijn de NVM-mails overbodig. In dat geval
+    # onderdrukken we de niet-kritische bron-ruis (Funda-links zonder herleidbaar
+    # adres, NVM-mailsjablonen) zodat de dagmail én kansen.steenhub.nl netjes blijven.
+    move_actief = bool(config.move_email and config.move_password and config.move_dossier_id)
+
     try:
         scan = fetch_recent_funda_mail_scan(config)
     except Exception as exc:  # noqa: BLE001 - we willen dit altijd rapporteren, nooit stil laten falen
@@ -550,18 +556,16 @@ def run(config: Config, today: date | None = None) -> RunResult:
         scan = None
 
     funda_listings = list(scan.listings) if scan else []
-    if scan:
+    if scan and not move_actief:
+        # Alleen als Funda de (mede)hoofdbron is melden we onparseerbare links; met
+        # Move aan is een niet-herleidbare Funda-link geen gemis (Move heeft 'm al).
         result.fouten.extend(scan.waarschuwingen)
 
-    # Tweede bron: de NVM-/Move.nl-makelaarsmails (zie nvm_mail.py). Fail-safe - een
-    # storing hier mag de Funda-verwerking nooit tegenhouden. NVM eerst in de lijst,
-    # Funda daarna: bij dezelfde woning (zelfde object_id) wint zo de Funda-link, en
-    # beide bronnen worden geregistreerd voor de bron-tracking.
-    # De NVM-/Move.nl-mails verstoppen de woningen sinds kort achter een inlogknop en
-    # leveren dan alleen "onbekend sjabloon"-ruis op. De Move-bron hieronder haalt
-    # datzelfde (volledige, actuele) NVM-aanbod rechtstreeks op. Dus met Move aan slaan
-    # we het mail-uitlezen over; staat Move uit, dan blijven de mails de tweede bron.
-    move_actief = bool(config.move_email and config.move_password and config.move_dossier_id)
+    # Tweede bron: de NVM-/Move.nl-makelaarsmails (zie nvm_mail.py). Die verstoppen de
+    # woningen sinds kort achter een inlogknop en leveren dan alleen "onbekend
+    # sjabloon"-ruis op; de Move-bron hieronder haalt datzelfde (volledige, actuele)
+    # NVM-aanbod rechtstreeks op. Dus met Move aan slaan we het mail-uitlezen over;
+    # staat Move uit, dan blijven de mails de tweede bron.
     if move_actief:
         nvm_listings = []
     else:
