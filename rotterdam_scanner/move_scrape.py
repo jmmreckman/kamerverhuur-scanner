@@ -26,11 +26,19 @@ from .funda_mail import FundaListing, _maak_object_id
 
 logger = logging.getLogger(__name__)
 
-_AUTH_URL = "https://auth.realworks.nl/auth/realms/move/protocol/openid-connect/auth"
-_TOKEN_URL = "https://auth.realworks.nl/auth/realms/move/protocol/openid-connect/token"
-_GRAPHQL_URL = "https://move.nl/graphql"
+# Belangrijk: Move draait Keycloak achter zijn eigen adres (move.nl/auth). De API
+# (api.move.nl/graphql) accepteert alleen tokens waarvan de 'iss' exact
+# https://move.nl/auth/realms/move is - een token rechtstreeks van
+# auth.realworks.nl (zelfde Keycloak, andere issuer-URL) wordt geweigerd (401).
+# Dus de héle OIDC-flow via move.nl/auth uitvoeren.
+_AUTH_URL = "https://move.nl/auth/realms/move/protocol/openid-connect/auth"
+_TOKEN_URL = "https://move.nl/auth/realms/move/protocol/openid-connect/token"
+_GRAPHQL_URL = "https://api.move.nl/graphql"
 _CLIENT_ID = "move-client"
 _REDIRECT_URI = "https://move.nl/"
+# De webapp stuurt deze header mee; we bootsen 'm na (waarde mag verouderen, de
+# gateway lijkt vooral op aanwezigheid + geldig token te letten).
+_CLIENT_VERSION = "62-8051985dc"
 _UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0 Safari/537.36"
@@ -141,7 +149,12 @@ def _code_uit_locatie(locatie: str) -> str | None:
 def _query_pagina(session: requests.Session, token: str, dossier_id: str, cursor: str | None) -> dict:
     resp = session.post(
         _GRAPHQL_URL,
-        headers={"Authorization": f"Bearer {token}"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Origin": "https://move.nl",
+            "Referer": "https://move.nl/",
+            "x-move-client-version": _CLIENT_VERSION,
+        },
         json={
             "operationName": "SearchDossierViewObjectsWithCursorQuery",
             "query": _QUERY,
