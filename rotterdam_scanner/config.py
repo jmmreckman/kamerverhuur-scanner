@@ -58,6 +58,12 @@ class Config:
     # Het dossier-id (de base64-tekst in de "mijn-gevonden-woningen"-URL) OF de hele
     # URL - uit beide leiden we het id af.
     move_dossier_id: str = ""
+    # Dagelijks de actuele Domivest-verhuurhypotheekrente uitlezen en als globale
+    # rente in het rekenmodel zetten. De juiste cel wordt gekozen op basis van de
+    # globale LTV-instelling (de "t/m X% LTV"-kolom) en deze rentevaste periode.
+    domivest_rente_auto: bool = True
+    domivest_rente_url: str = "https://domivest.com/rente"
+    domivest_rente_periode_jaren: int = 5
 
     @property
     def imap_host(self) -> str:
@@ -115,6 +121,9 @@ def load_config(env_path: Path | None = None) -> Config:
         move_dossier_id=_move_dossier_id(
             os.environ.get("MOVE_DOSSIER_URL", "") or os.environ.get("MOVE_DOSSIER_ID", "")
         ),
+        domivest_rente_auto=os.environ.get("DOMIVEST_RENTE_AUTO", "1").strip() not in ("0", "false", "False", ""),
+        domivest_rente_url=os.environ.get("DOMIVEST_RENTE_URL", "https://domivest.com/rente"),
+        domivest_rente_periode_jaren=int(os.environ.get("DOMIVEST_RENTE_PERIODE_JAREN", "5")),
     )
 
 

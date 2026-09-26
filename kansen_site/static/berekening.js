@@ -73,33 +73,9 @@ function planOpslaan() {
 
 form.addEventListener("input", planOpslaan);
 
-// BAR-rente-koppeling: een gefinancierde belegger eist bij een hogere rente een
-// hogere BAR om zijn rendement op eigen inleg gelijk te houden. Bij LTV L geldt
-// (versimpeld) rendement = (BAR - L*rente)/(1-L), dus om dat rendement constant te
-// houden schuift de BAR mee met ΔBAR = L × Δrente. Zodra de gebruiker de rente
-// aanpast, verschuiven we de BAR met dat bedrag. Handmatig de BAR overschrijven
-// mag daarna gewoon (dat zet simpelweg een nieuw startpunt).
-const renteInput = form.querySelector('[name="rente"]');
-const barInput = form.querySelector('[name="bar"]');
-const ltvInput = form.querySelector('[name="ltv"]');
-
-if (renteInput && barInput) {
-  let vorigeRente = parseFloat(renteInput.value);
-  renteInput.addEventListener("input", () => {
-    const renteNieuw = parseFloat(renteInput.value);
-    if (isNaN(renteNieuw)) return; // tijdelijk leeg veld tijdens typen: niets doen
-    const bar = parseFloat(barInput.value);
-    const ltv = ltvInput ? parseFloat(ltvInput.value) : NaN;
-    // ΔBAR = LTV × Δrente; zonder bruikbare LTV vallen we terug op 0,8 (80%).
-    const factor = isNaN(ltv) ? 0.8 : ltv / 100;
-    if (!isNaN(vorigeRente) && !isNaN(bar)) {
-      const barNieuw = Math.round((bar + factor * (renteNieuw - vorigeRente)) * 100) / 100;
-      // Programmatisch .value zetten triggert géén input-event, dus de al door de
-      // rente-wijziging geplande (debounced) opslag pakt straks de nieuwe BAR mee.
-      barInput.value = String(barNieuw);
-    }
-    vorigeRente = renteNieuw;
-  });
-}
+// (De vroegere automatische BAR-rente-koppeling is bewust verwijderd: de BAR
+// blijft nu staan op wat je zelf invult en verschuift niet meer mee als de rente
+// verandert. De rentewijziging wordt via de gewone input-listener hierboven
+// alsnog opgeslagen en doorgerekend.)
 
 renderResultaat(window.__resultaat);
