@@ -40,7 +40,8 @@ def _zet_listing(tmp_path, **overrides):
         object_id="3000AA-1", url="https://www.funda.nl/koop/rotterdam/huis-1/",
         weergavenaam="Teststraat 1, 3000AA Rotterdam", eerst_gezien="2026-07-01",
         laatst_gezien="2026-07-25", status="actief", wijknaam="Middelland",
-        lat=51.92, lon=4.45, prijs=350_000, winst_pm_pp=150.0, eigen_inleg_pp=25_000.0,
+        lat=51.92, lon=4.45, prijs=350_000, aantal_kamers_mogelijk=6,
+        winst_pm_pp=150.0, eigen_inleg_pp=25_000.0,
     )
     defaults.update(overrides)
     state = StateStore(tmp_path / "state.json")
@@ -117,33 +118,57 @@ def test_api_kansen_bevat_de_belangrijkste_velden(app_client, tmp_path):
     assert item["weergavenaam"] == "Teststraat 1, 3000AA Rotterdam"
     assert item["wijknaam"] == "Middelland"
     assert item["prijs"] == 350_000
-    assert item["winst_pm_pp"] == 150.0
-    assert item["eigen_inleg_pp"] == 25_000.0
+    # winst/inleg worden live doorgerekend met de rekentool-uitgangspunten (niet meer
+    # uit het opgeslagen veld); voor een berekenbare woning zijn ze dus een getal.
+    assert isinstance(item["winst_pm_pp"], (int, float))
+    assert isinstance(item["eigen_inleg_pp"], (int, float))
     assert item["lat"] == 51.92
     assert item["lon"] == 4.45
     assert item["eerst_gezien"] == "2026-07-01"
 
 
 def test_api_kansen_bevat_investeerder_onafhankelijke_totalen(app_client, tmp_path):
-    # winst_pm_pp/eigen_inleg_pp staan al gedeeld door 2 investeerders; de totalen
-    # (voor de investeerders-omreken op de kaart) zijn dat maal 2.
-    _zet_listing(tmp_path, winst_pm_pp=150.0, eigen_inleg_pp=25_000.0, schakelgeld_totaal=180_000.0)
+    # De totalen (aantal_investeerders = 1) waarmee de kaart naar 1/2/3 investeerders
+    # omrekent; de p.p.-velden zijn die totalen gedeeld door het standaardaantal.
+    from rotterdam_scanner.investering import AANTAL_INVESTEERDERS
+    _zet_listing(tmp_path)
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
     item = app_client.get("/api/kansen").get_json()[0]
-    assert item["winst_pm_totaal"] == 300.0
-    assert item["eigen_inleg_na_ophoging_totaal"] == 50_000.0
-    assert item["schakelgeld_totaal"] == 180_000.0
+    for key in ("winst_pm_totaal", "eigen_inleg_na_ophoging_totaal", "schakelgeld_totaal"):
+        assert isinstance(item[key], (int, float))
+    assert item["winst_pm_pp"] == pytest.approx(item["winst_pm_totaal"] / AANTAL_INVESTEERDERS)
+    assert item["eigen_inleg_pp"] == pytest.approx(item["eigen_inleg_na_ophoging_totaal"] / AANTAL_INVESTEERDERS)
 
 
 def test_api_kansen_totalen_zijn_none_zonder_cijfers(app_client, tmp_path):
-    _zet_listing(tmp_path, winst_pm_pp=None, eigen_inleg_pp=None)
+    # Zonder koopsom of aantal kamers valt er niets door te rekenen.
+    _zet_listing(tmp_path, prijs=None, aantal_kamers_mogelijk=None)
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
     item = app_client.get("/api/kansen").get_json()[0]
     assert item["winst_pm_totaal"] is None
     assert item["eigen_inleg_na_ophoging_totaal"] is None
     assert item["schakelgeld_totaal"] is None
+
+
+def test_globale_reken_instellingen_werken_door_in_api_kansen(app_client, tmp_path):
+    # De bug: globale uitgangspunten wijzigen moet doorwerken naar de lijst/kaart.
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    voor = app_client.get("/api/kansen").get_json()[0]["winst_pm_totaal"]
+
+    # Alle gedeelde uitgangspunten opslaan, met een fors hogere kale huur per kamer.
+    formulier = {
+        "bar": "7.6", "kale_huur_per_kamer": "999", "servicekosten_per_kamer": "210",
+        "vaste_kosten_per_huurder": "100", "kosten_koper_ex_ovb": "6000", "verbouwkosten": "25000",
+        "rente": "6.25", "taxatie_verhouding_voor_verhoging": "87.5", "ltv": "80",
+        "overdrachtsbelasting": "8", "aantal_investeerders": "2",
+    }
+    app_client.post("/reken-instellingen", data=formulier)
+    na = app_client.get("/api/kansen").get_json()[0]["winst_pm_totaal"]
+    assert na != voor
+    assert na > voor  # hogere kale huur -> hogere winst
 
 
 def test_ververs_zonder_login_wordt_omgeleid(app_client):

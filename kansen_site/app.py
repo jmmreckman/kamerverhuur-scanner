@@ -429,14 +429,34 @@ def _reken_uitgangspunten_dict(item, globale_defaults: dict) -> dict:
     return uitg
 
 
-def _huidige_uitgangspunten(item, config) -> dict:
+def _huidige_uitgangspunten(item, config, globale_defaults: dict | None = None) -> dict:
     """De voor déze woning geldende uitgangspunten: globale standaard + voorvulling,
-    overschreven door wat de gebruiker eerder op de rekenpagina heeft aangepast."""
-    uitg = _reken_uitgangspunten_dict(item, _effectieve_globale_defaults(config))
+    overschreven door wat de gebruiker eerder op de rekenpagina heeft aangepast.
+    `globale_defaults` kan worden meegegeven om per-item herlezen van reken_defaults.json
+    te vermijden (bv. bij de kaart-lijst met veel woningen)."""
+    if globale_defaults is None:
+        globale_defaults = _effectieve_globale_defaults(config)
+    uitg = _reken_uitgangspunten_dict(item, globale_defaults)
     for key, waarde in (item.berekening or {}).items():
         if key in uitg:
             uitg[key] = waarde
     return uitg
+
+
+def _live_totalen(item, config, globale_defaults: dict | None = None):
+    """De investeerder-onafhankelijke totalen (winst p/m, eigen inleg ná ophoging,
+    schakelgeld vóór ophoging) doorgerekend met dezelfde uitgangspunten als de
+    rekenpagina, zodat de kaart/lijst altijd overeenkomen met de rekentool - ook als
+    je de globale uitgangspunten aanpast. (None, None, None) als er geen koopsom of
+    aantal kamers is. De totalen gebruiken aantal_investeerders = 1; de kaart deelt
+    zelf door het gekozen aantal investeerders."""
+    uitg = _huidige_uitgangspunten(item, config, globale_defaults)
+    if not uitg.get("koopsom") or not uitg.get("aantal_kamers"):
+        return None, None, None
+    uitg = dict(uitg)
+    uitg["aantal_investeerders"] = 1
+    r = bereken_rekentool(RekenUitgangspunten(**uitg))
+    return r.winst_pm_pp, r.eigen_inleg_na_ophoging_pp, r.eigen_inleg_voor_ophoging_totaal
 
 
 def _velden_voor_weergave(uitg: dict, alleen_gedeeld: bool = False) -> list[dict]:
@@ -491,7 +511,10 @@ def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> boo
     return False
 
 
-def _listing_naar_json(item) -> dict:
+def _listing_naar_json(item, config, globale_defaults: dict | None = None) -> dict:
+    # Winst/inleg/schakelgeld live doorrekenen met de actuele (globale + per-woning)
+    # uitgangspunten, zodat de kaart en lijst overeenkomen met de rekentool.
+    winst_totaal, inleg_na_totaal, schakelgeld_totaal = _live_totalen(item, config, globale_defaults)
     return {
         "object_id": item.object_id,
         "url": item.url,
@@ -506,14 +529,16 @@ def _listing_naar_json(item) -> dict:
         "oppervlakte_advertentie": item.oppervlakte_advertentie,
         "aantal_kamers_mogelijk": item.aantal_kamers_mogelijk,
         "aantal_kamers_handmatig": item.aantal_kamers_handmatig,
-        "winst_pm_pp": item.winst_pm_pp,
-        "eigen_inleg_pp": item.eigen_inleg_pp,
-        # Investeerder-onafhankelijke totalen, zodat de kaart zelf kan omrekenen
-        # naar 1/2/3 investeerders (winst_pm_pp/eigen_inleg_pp staan al gedeeld
-        # door AANTAL_INVESTEERDERS; de totalen zijn dat maal het aantal).
-        "winst_pm_totaal": None if item.winst_pm_pp is None else item.winst_pm_pp * AANTAL_INVESTEERDERS,
-        "eigen_inleg_na_ophoging_totaal": None if item.eigen_inleg_pp is None else item.eigen_inleg_pp * AANTAL_INVESTEERDERS,
-        "schakelgeld_totaal": item.schakelgeld_totaal,
+        # p.p.-velden (legacy) afgeleid van de totalen bij het standaardaantal
+        # investeerders; de kaart/lijst rekenen zelf met de _totaal-velden hieronder.
+        "winst_pm_pp": None if winst_totaal is None else winst_totaal / AANTAL_INVESTEERDERS,
+        "eigen_inleg_pp": None if inleg_na_totaal is None else inleg_na_totaal / AANTAL_INVESTEERDERS,
+        # Investeerder-onafhankelijke totalen (aantal_investeerders = 1), zodat de
+        # kaart zelf kan omrekenen naar 1/2/3 investeerders. Live doorgerekend met de
+        # actuele uitgangspunten, dus altijd gelijk aan de rekentool.
+        "winst_pm_totaal": winst_totaal,
+        "eigen_inleg_na_ophoging_totaal": inleg_na_totaal,
+        "schakelgeld_totaal": schakelgeld_totaal,
         "opslag_percentage": item.opslag_percentage,
         "huurprijsopslag_signalen": item.huurprijsopslag_signalen,
         "stad": item.stad,
@@ -649,7 +674,8 @@ def create_app(config: Config | None = None) -> Flask:
             and item.lat is not None
             and item.lon is not None
         ]
-        return jsonify([_listing_naar_json(item) for item in zichtbaar])
+        globale = _effectieve_globale_defaults(config)  # één keer lezen, niet per woning
+        return jsonify([_listing_naar_json(item, config, globale) for item in zichtbaar])
 
     @app.route("/api/broninfo")
     @login_required
@@ -799,7 +825,7 @@ def create_app(config: Config | None = None) -> Flask:
 
         state.upsert(item)
         state.save()
-        return jsonify(_listing_naar_json(item))
+        return jsonify(_listing_naar_json(item, config))
 
     @app.route("/woning/<object_id>/berekening")
     @login_required
