@@ -1032,3 +1032,23 @@ def test_gebruikerspagina_zonder_login_wordt_omgeleid(app_client):
     resp = app_client.get("/gebruikers")
     assert resp.status_code == 302
     assert "/login" in resp.headers["Location"]
+
+
+# --- Rentegeschiedenis-pagina ------------------------------------------------
+
+def test_rente_historie_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/rente-historie")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_rente_historie_toont_seed_grafiekdata(app_client, tmp_path):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/rente-historie")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "80% LTV, 5 jaar vast" in body
+    # De backfill-seed moet als grafiekdata in de pagina staan (bv. nov 2023 = 6,5%).
+    assert "2023-11-01" in body
+    # reken_historie.json is aangemaakt door de backfill.
+    assert (tmp_path / "rente_historie.json").exists()

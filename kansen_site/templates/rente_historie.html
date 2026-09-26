@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rentegeschiedenis - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <style>
+    .rh-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 62rem; }
+    .rh-titel { margin: .3rem 0 0; }
+    .rh-sub { color: var(--tekst-zwak); margin: .2rem 0 1.2rem; font-size: .92rem; }
+    .rh-cijfers { display: flex; flex-wrap: wrap; gap: 1.6rem; margin: 0 0 1.1rem; }
+    .rh-cijfer .waarde { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rh-cijfer .label { font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; color: var(--tekst-zwak); }
+    .rh-cijfer .detail { font-size: .78rem; color: var(--tekst-zwak); }
+    .rh-op { color: #b3261e; } .rh-neer { color: var(--groen); }
+    .rh-kaart { background: white; border: 1px solid var(--rand); border-radius: .7rem; padding: .8rem .6rem .4rem; }
+    .rh-svg { width: 100%; height: auto; display: block; touch-action: none; }
+    .rh-svg text { fill: var(--tekst-zwak); font-size: 12px; }
+    .rh-grid { stroke: var(--rand); stroke-width: 1; }
+    .rh-lijn { fill: none; stroke: var(--groen); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .rh-dot { fill: var(--groen); }
+    .rh-marker { fill: white; stroke: var(--groen); stroke-width: 2; }
+    .rh-crosshair { stroke: var(--tekst-zwak); stroke-width: 1; stroke-dasharray: 3 3; }
+    .rh-punt-label { fill: #1c2126; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .rh-tip { position: absolute; pointer-events: none; background: #1c2126; color: white;
+      padding: .35rem .55rem; border-radius: .4rem; font-size: .8rem; white-space: nowrap;
+      transform: translate(-50%, -130%); opacity: 0; transition: opacity .08s; z-index: 5; }
+    .rh-tip .r { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rh-tabel { margin-top: 1.2rem; }
+    .rh-tabel summary { cursor: pointer; color: var(--tekst-zwak); font-size: .9rem; }
+    .rh-tabel table { border-collapse: collapse; margin-top: .6rem; font-size: .9rem; }
+    .rh-tabel th, .rh-tabel td { text-align: left; padding: .3rem .9rem .3rem 0; }
+    .rh-tabel td.r { font-variant-numeric: tabular-nums; }
+    .rh-leeg { color: var(--tekst-zwak); font-style: italic; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Rentegeschiedenis</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="rh-wrap">
+    <h2 class="rh-titel">Domivest rente &mdash; 80% LTV, 5 jaar vast</h2>
+    <p class="rh-sub">Het verloop van deze ene, vaste rente door de tijd. De grafiek groeit
+      elke dag mee zodra de rente automatisch wordt uitgelezen.</p>
+
+    {% if not punten %}
+      <p class="rh-leeg">Nog geen rentegegevens beschikbaar.</p>
+    {% else %}
+      <div class="rh-cijfers" id="rh-cijfers"></div>
+      <div class="rh-kaart" style="position: relative;">
+        <svg class="rh-svg" id="rh-svg" role="img" aria-label="Rentegeschiedenis Domivest 80% LTV 5 jaar"></svg>
+        <div class="rh-tip" id="rh-tip"></div>
+      </div>
+
+      <details class="rh-tabel">
+        <summary>Toon als tabel</summary>
+        <table>
+          <thead><tr><th>Datum</th><th>Rente</th></tr></thead>
+          <tbody id="rh-tabel-body"></tbody>
+        </table>
+      </details>
+    {% endif %}
+  </div>
+
+  <script>
+    const PUNTEN = {{ punten|tojson }};
+    if (PUNTEN && PUNTEN.length) {
+      const MAAND = ["jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"];
+      const pct = (f) => (f * 100).toFixed(2).replace(".", ",") + "%";
+      const datumKort = (iso) => { const d = new Date(iso); return MAAND[d.getMonth()] + " " + d.getFullYear(); };
+      const punten = PUNTEN.map(p => ({ t: new Date(p.datum).getTime(), r: p.rente, iso: p.datum }))
+                           .sort((a, b) => a.t - b.t);
+
+      // Kerncijfers
+      const eerste = punten[0], laatste = punten[punten.length - 1];
+      let min = punten[0], max = punten[0];
+      for (const p of punten) { if (p.r < min.r) min = p; if (p.r > max.r) max = p; }
+      const verschil = laatste.r - eerste.r;
+      const richtingKlasse = verschil > 0 ? "rh-op" : (verschil < 0 ? "rh-neer" : "");
+      const teken = verschil > 0 ? "+" : "";
+      document.getElementById("rh-cijfers").innerHTML = `
+        <div class="rh-cijfer"><div class="waarde">${pct(laatste.r)}</div><div class="label">Actueel</div>
+          <div class="detail">${datumKort(laatste.iso)}</div></div>
+        <div class="rh-cijfer"><div class="waarde ${richtingKlasse}">${teken}${(verschil*100).toFixed(2).replace(".",",")} pp</div>
+          <div class="label">Sinds start</div><div class="detail">vanaf ${datumKort(eerste.iso)}</div></div>
+        <div class="rh-cijfer"><div class="waarde">${pct(min.r)}</div><div class="label">Laagste</div>
+          <div class="detail">${datumKort(min.iso)}</div></div>
+        <div class="rh-cijfer"><div class="waarde">${pct(max.r)}</div><div class="label">Hoogste</div>
+          <div class="detail">${datumKort(max.iso)}</div></div>`;
+
+      // Tabel (nieuwste bovenaan)
+      document.getElementById("rh-tabel-body").innerHTML = punten.slice().reverse()
+        .map(p => `<tr><td>${datumKort(p.iso)}</td><td class="r">${pct(p.r)}</td></tr>`).join("");
+
+      const svg = document.getElementById("rh-svg");
+      const tip = document.getElementById("rh-tip");
+      const NS = "http://www.w3.org/2000/svg";
+      const M = { top: 18, right: 18, bottom: 34, left: 46 };
+
+      // Y-domein: afgerond op nette stappen van 0,25% rond min/max.
+      const stap = 0.0025;
+      const lo = Math.floor(min.r / stap) * stap - (max.r === min.r ? stap : 0);
+      const hi = Math.ceil(max.r / stap) * stap + (max.r === min.r ? stap : 0);
+      const tMin = eerste.t, tMax = laatste.t, tSpan = (tMax - tMin) || 1;
+
+      function tekenGrafiek() {
+        const W = svg.clientWidth || 800;
+        const H = Math.max(300, Math.min(420, Math.round(W * 0.5)));
+        svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+        svg.setAttribute("width", W); svg.setAttribute("height", H);
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        const iw = W - M.left - M.right, ih = H - M.top - M.bottom;
+        const x = (t) => M.left + ((t - tMin) / tSpan) * iw;
+        const y = (r) => M.top + (1 - (r - lo) / (hi - lo)) * ih;
+        const el = (naam, attrs, cls) => { const e = document.createElementNS(NS, naam);
+          for (const k in attrs) e.setAttribute(k, attrs[k]); if (cls) e.setAttribute("class", cls); svg.appendChild(e); return e; };
+
+        // Y-gridlines + labels (elke 0,25%)
+        for (let r = lo; r <= hi + 1e-9; r += stap) {
+          const yy = y(r);
+          el("line", { x1: M.left, y1: yy, x2: W - M.right, y2: yy }, "rh-grid");
+          const t = el("text", { x: M.left - 8, y: yy + 4, "text-anchor": "end" });
+          t.textContent = pct(r);
+        }
+        // X-labels: eerste, laatste en enkele tussenpunten (max ~6, geen overlap)
+        const stapN = Math.max(1, Math.ceil(punten.length / 6));
+        const getoond = new Set();
+        punten.forEach((p, i) => {
+          if (i % stapN === 0 || i === punten.length - 1) getoond.add(i);
+        });
+        [...getoond].forEach(i => {
+          const p = punten[i];
+          const anchor = i === 0 ? "start" : (i === punten.length - 1 ? "end" : "middle");
+          const t = el("text", { x: x(p.t), y: H - 12, "text-anchor": anchor });
+          t.textContent = datumKort(p.iso);
+        });
+
+        // Lijn
+        const d = punten.map((p, i) => (i ? "L" : "M") + x(p.t) + " " + y(p.r)).join(" ");
+        el("path", { d }, "rh-lijn");
+        // Dots
+        punten.forEach(p => el("circle", { cx: x(p.t), cy: y(p.r), r: 3 }, "rh-dot"));
+        // Min/max/laatste geaccentueerd + label
+        [[min, "min"], [max, "max"], [laatste, "laatste"]].forEach(([p, soort]) => {
+          el("circle", { cx: x(p.t), cy: y(p.r), r: 5 }, "rh-marker");
+          const boven = soort === "min" ? 18 : -10;
+          const lbl = el("text", { x: x(p.t), y: y(p.r) + boven, "text-anchor": "middle" }, "rh-punt-label");
+          lbl.textContent = pct(p.r);
+        });
+
+        // Hover
+        const cross = el("line", { x1: 0, y1: M.top, x2: 0, y2: M.top + ih }, "rh-crosshair");
+        cross.style.opacity = 0;
+        const hoverDot = el("circle", { r: 5 }, "rh-marker"); hoverDot.style.opacity = 0;
+        const vlak = el("rect", { x: M.left, y: M.top, width: iw, height: ih, fill: "transparent" });
+        function beweeg(evt) {
+          const rect = svg.getBoundingClientRect();
+          const cx = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+          const px = cx * (W / rect.width);
+          // dichtstbijzijnde punt
+          let best = punten[0], bestD = Infinity;
+          for (const p of punten) { const dd = Math.abs(x(p.t) - px); if (dd < bestD) { bestD = dd; best = p; } }
+          const bx = x(best.t), by = y(best.r);
+          cross.setAttribute("x1", bx); cross.setAttribute("x2", bx); cross.style.opacity = 1;
+          hoverDot.setAttribute("cx", bx); hoverDot.setAttribute("cy", by); hoverDot.style.opacity = 1;
+          tip.style.opacity = 1;
+          tip.style.left = (bx * (rect.width / W)) + "px";
+          tip.style.top = (by * (rect.height / H)) + "px";
+          tip.innerHTML = `${datumKort(best.iso)} &middot; <span class="r">${pct(best.r)}</span>`;
+        }
+        function verlaat() { cross.style.opacity = 0; hoverDot.style.opacity = 0; tip.style.opacity = 0; }
+        vlak.addEventListener("mousemove", beweeg);
+        vlak.addEventListener("mouseleave", verlaat);
+        vlak.addEventListener("touchstart", beweeg, { passive: true });
+        vlak.addEventListener("touchmove", beweeg, { passive: true });
+        vlak.addEventListener("touchend", verlaat);
+      }
+      tekenGrafiek();
+      let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(tekenGrafiek, 120); });
+    }
+  </script>
+</body>
+</html>

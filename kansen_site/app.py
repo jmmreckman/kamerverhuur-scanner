@@ -21,7 +21,7 @@ from werkzeug.security import check_password_hash
 
 from pathlib import Path
 
-from rotterdam_scanner import den_haag, pipeline, vergunningenindex
+from rotterdam_scanner import den_haag, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
@@ -1218,6 +1218,21 @@ def create_app(config: Config | None = None) -> Flask:
         ]
         return render_template(
             "toegangsbeheer.html", accounts=accounts, gebruiker=session["gebruiker"],
+        )
+
+    @app.route("/rente-historie")
+    @login_required
+    def rente_historie():
+        # Grafiek van de vaste Domivest-cel (80% LTV, 5 jaar vast) door de tijd heen.
+        # backfill zorgt dat de handmatig bijgehouden startpunten er staan, ook vóór
+        # de eerste dagelijkse run.
+        try:
+            rente_update.backfill_historie(config)
+        except Exception:
+            pass
+        punten = rente_update.laad_historie(config)
+        return render_template(
+            "rente_historie.html", punten=punten, gebruiker=session["gebruiker"],
         )
 
     @app.route("/gebruikers")

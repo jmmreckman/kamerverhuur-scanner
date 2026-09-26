@@ -122,3 +122,58 @@ def test_werk_rente_bij_uitgeschakeld_doet_niets(tmp_path, monkeypatch):
     monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
     assert rente_update.werk_rente_bij(_config(tmp_path, domivest_rente_auto=False)) is None
     assert not (tmp_path / "reken_defaults.json").exists()
+
+
+# --- Rentegeschiedenis -------------------------------------------------------
+
+def test_noteer_historie_voegt_punt_toe_en_dedupliceert_per_dag(tmp_path):
+    tabel = domivest_rente.parse_rentetabel(_HTML)
+    config = _config(tmp_path)
+    assert rente_update.noteer_historie(config, tabel, "2026-09-26") == pytest.approx(0.0635)
+    # Tweede run zelfde dag: overschrijft, dupliceert niet.
+    rente_update.noteer_historie(config, tabel, "2026-09-26")
+    historie = rente_update.laad_historie(config)
+    dezelfde_dag = [p for p in historie if p["datum"] == "2026-09-26"]
+    assert len(dezelfde_dag) == 1
+    assert dezelfde_dag[0]["rente"] == pytest.approx(0.0635)
+
+
+def test_noteer_historie_gebruikt_altijd_80procent_5jaar(tmp_path):
+    # Ongeacht welke LTV in het model staat, de grafiek volgt de vaste 80/5-cel.
+    tabel = domivest_rente.parse_rentetabel(_HTML)
+    rente = rente_update.noteer_historie(_config(tmp_path), tabel, "2026-09-26")
+    assert rente == pytest.approx(domivest_rente.rente_voor(tabel, 0.80, 5))
+
+
+def test_backfill_historie_voegt_seed_toe_en_is_idempotent(tmp_path):
+    config = _config(tmp_path)
+    rente_update.backfill_historie(config)
+    eerste = rente_update.laad_historie(config)
+    assert len(eerste) == len(rente_update._HISTORISCHE_SEED)
+    # nov 2023 = 6,50%
+    assert eerste[0]["datum"] == "2023-11-01"
+    assert eerste[0]["rente"] == pytest.approx(0.0650)
+    # Nogmaals draaien verandert niets (geen duplicaten).
+    rente_update.backfill_historie(config)
+    assert rente_update.laad_historie(config) == eerste
+
+
+def test_backfill_laat_bestaande_datum_ongemoeid(tmp_path):
+    config = _config(tmp_path)
+    # Bestaand punt op een seed-datum met andere waarde blijft staan.
+    (tmp_path / "rente_historie.json").write_text(
+        json.dumps([{"datum": "2023-11-01", "rente": 0.099}])
+    )
+    rente_update.backfill_historie(config)
+    historie = {p["datum"]: p["rente"] for p in rente_update.laad_historie(config)}
+    assert historie["2023-11-01"] == pytest.approx(0.099)  # niet overschreven
+
+
+def test_werk_rente_bij_met_voorgehaalde_tabel_fetcht_niet(tmp_path, monkeypatch):
+    tabel = domivest_rente.parse_rentetabel(_HTML)
+    def _mag_niet(*a, **k):
+        raise AssertionError("actuele_rente had niet aangeroepen mogen worden")
+    monkeypatch.setattr(domivest_rente, "actuele_rente", _mag_niet)
+    wijziging = rente_update.werk_rente_bij(_config(tmp_path), tabel)
+    assert wijziging is not None
+    assert wijziging.nieuwe_rente == pytest.approx(0.0635)  # 80% LTV default, 5 jaar

@@ -72,10 +72,24 @@ def _pct(fractie: float) -> str:
 
 
 def _werk_domivest_rente_bij(config: Config) -> None:
-    """Trekt de globale rente in het rekenmodel gelijk met de actuele Domivest-rente
-    en mailt bij een wijziging een korte melding (van info@steenhub.nl, mits zo
-    ingesteld via SMTP_FROM_EMAIL) naar de rapport-ontvanger(s)."""
-    wijziging = rente_update.werk_rente_bij(config)
+    """Leest de actuele Domivest-rente, noteert die in de rentegrafiek-historie (vaste
+    cel 80% LTV / 5 jaar), trekt de globale rente in het rekenmodel gelijk, en mailt
+    bij een wijziging een korte melding (van info@steenhub.nl, mits zo ingesteld via
+    SMTP_FROM_EMAIL) naar de rapport-ontvanger(s)."""
+    # Eenmalig de handmatig bijgehouden startpunten samenvoegen (idempotent).
+    rente_update.backfill_historie(config)
+
+    if not config.domivest_rente_auto:
+        return
+
+    # Eén keer ophalen, gedeeld door historie + model-update.
+    tabel = rente_update.domivest_rente.haal_rentetabel(config.domivest_rente_url)
+    if tabel is None:
+        logger.warning("Domivest-rente kon niet worden opgehaald; historie/rente ongewijzigd")
+        return
+    rente_update.noteer_historie(config, tabel, date.today().isoformat())
+
+    wijziging = rente_update.werk_rente_bij(config, tabel)
     if wijziging is None:
         return
 
