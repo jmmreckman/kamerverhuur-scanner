@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gebruikers - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <style>
+    .gb-kop { padding: 1rem 1.5rem 0; }
+    .gb-kop p { max-width: 46rem; line-height: 1.5; }
+    .gb-wrap { padding: 0 1.5rem 2.5rem; }
+    .gb-kaart { border: 1px solid rgba(128,128,128,.25); border-radius: .7rem;
+      padding: 1rem 1.15rem; margin: 1rem 0; }
+    .gb-naam { font-weight: 700; font-size: 1.05rem; }
+    .gb-badge { font-size: .72rem; padding: .1rem .45rem; border-radius: .6rem;
+      background: rgba(128,128,128,.18); margin-left: .4rem; font-weight: 400; }
+    .gb-cijfers { display: flex; flex-wrap: wrap; gap: 1.4rem; margin: .6rem 0 .9rem; }
+    .gb-cijfer .waarde { font-size: 1.25rem; font-weight: 700; }
+    .gb-cijfer .label { font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; opacity: .65; }
+    .gb-kolommen { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.1rem; }
+    .gb-kolom h4 { margin: 0 0 .35rem; font-size: .8rem; text-transform: uppercase;
+      letter-spacing: .03em; opacity: .7; }
+    .gb-lijst { list-style: none; margin: 0; padding: 0; font-size: .9rem; }
+    .gb-lijst li { display: flex; justify-content: space-between; gap: .6rem;
+      padding: .2rem 0; border-bottom: 1px solid rgba(128,128,128,.14); }
+    .gb-lijst li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gb-aantal { font-variant-numeric: tabular-nums; opacity: .8; flex: none; }
+    .gb-leeg { opacity: .55; font-style: italic; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Gebruikers</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="gb-kop">
+    <h2>Gebruikersstatistieken</h2>
+    <p class="muted">
+      Per account: hoe vaak er is ingelogd, de geschatte tijd op de site (som van de
+      pauzes korter dan 30&nbsp;min), de meest bezochte pagina&rsquo;s en de woningen die het
+      vaakst zijn bekeken en doorgerekend. Alleen zichtbaar voor beheerders.
+    </p>
+  </div>
+
+  <div class="gb-wrap">
+    {% if not gebruikers %}
+      <p class="gb-leeg">Nog geen activiteit geregistreerd.</p>
+    {% endif %}
+    {% for g in gebruikers %}
+    <section class="gb-kaart">
+      <div class="gb-naam">
+        {{ g.naam }}{% if g.beheerder %}<span class="gb-badge">beheerder</span>{% endif %}
+      </div>
+      <div class="gb-cijfers">
+        <div class="gb-cijfer"><div class="waarde">{{ g.logins }}</div><div class="label">Logins</div></div>
+        <div class="gb-cijfer"><div class="waarde">{{ g.tijd }}</div><div class="label">Tijd op site</div></div>
+        <div class="gb-cijfer"><div class="waarde">{{ g.laatste_activiteit }}</div><div class="label">Laatst actief</div></div>
+        <div class="gb-cijfer"><div class="waarde">{{ g.eerste_login }}</div><div class="label">Eerste login</div></div>
+      </div>
+      <div class="gb-kolommen">
+        <div class="gb-kolom">
+          <h4>Meest bezochte pagina&rsquo;s</h4>
+          {% if g.paginas %}
+          <ul class="gb-lijst">
+            {% for p in g.paginas %}<li><span>{{ p.label }}</span><span class="gb-aantal">{{ p.aantal }}&times;</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="gb-leeg">&mdash;</p>{% endif %}
+        </div>
+        <div class="gb-kolom">
+          <h4>Meest bekeken woningen</h4>
+          {% if g.bekeken %}
+          <ul class="gb-lijst">
+            {% for w in g.bekeken %}<li><span title="{{ w.naam }}">{{ w.naam }}</span><span class="gb-aantal">{{ w.aantal }}&times;</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="gb-leeg">&mdash;</p>{% endif %}
+        </div>
+        <div class="gb-kolom">
+          <h4>Meest doorgerekend</h4>
+          {% if g.berekend %}
+          <ul class="gb-lijst">
+            {% for w in g.berekend %}<li><span title="{{ w.naam }}">{{ w.naam }}</span><span class="gb-aantal">{{ w.aantal }}&times;</span></li>{% endfor %}
+          </ul>
+          {% else %}<p class="gb-leeg">&mdash;</p>{% endif %}
+        </div>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+</body>
+</html>

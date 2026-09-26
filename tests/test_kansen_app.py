@@ -976,3 +976,59 @@ def test_wwso_gebruik_zet_kale_huur_in_rekentool(tmp_path):
     assert resp.get_json()["ok"] is True
     item = StateStore(tmp_path / "state.json").get("3000AA-1")
     assert item.berekening["kale_huur_per_kamer"] == 512.5
+
+
+# --- Gebruikers-logboek (beheerder-only) -------------------------------------
+
+def test_login_registreert_login_in_logboek(app_client, tmp_path):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    logboek = json.loads((tmp_path / "logboek.json").read_text())
+    assert logboek["gebruikers"]["jurian"]["logins"] == 1
+    assert logboek["gebruikers"]["jurian"]["eerste_login"]
+
+
+def test_paginabezoek_en_woning_worden_geteld(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.get("/")
+    app_client.get("/woning/3000AA-1/berekening")
+    app_client.post("/woning/3000AA-1/berekening", json={"aantal_kamers": "4"})
+    rec = json.loads((tmp_path / "logboek.json").read_text())["gebruikers"]["jurian"]
+    assert rec["paginas"]["Kaart"] >= 1
+    assert rec["paginas"]["Berekening"] >= 1
+    assert rec["woningen_bekeken"]["3000AA-1"] == 1
+    assert rec["woningen_berekend"]["3000AA-1"] == 1
+
+
+def test_api_en_static_endpoints_tellen_niet_als_pagina(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.get("/api/kansen")
+    rec = json.loads((tmp_path / "logboek.json").read_text())["gebruikers"]["jurian"]
+    # /api/kansen telt niet als paginabezoek (staat niet in _PAGINA_LABELS).
+    assert "Kaart" not in rec.get("paginas", {})
+
+
+def test_gebruikerspagina_toont_activiteit_voor_beheerder(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.get("/woning/3000AA-1/berekening")
+    resp = app_client.get("/gebruikers")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "jurian" in body
+    assert "Teststraat 1, 3000AA Rotterdam" in body
+
+
+def test_gebruikerspagina_niet_bereikbaar_voor_niet_beheerder(tmp_path):
+    app = create_app(_config(tmp_path, kansen_app_beheerders={"jurian"}))
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    assert client.get("/gebruikers").status_code == 404
+
+
+def test_gebruikerspagina_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/gebruikers")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]

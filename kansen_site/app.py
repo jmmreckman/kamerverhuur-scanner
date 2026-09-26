@@ -226,6 +226,160 @@ def _registreer_geblokkeerde_poging(config, gebruiker: str, wachtwoord_klopte: b
     _schrijf_toegang(config, data)
 
 
+# --- Gebruikers-logboek (alleen zichtbaar voor beheerders) --------------------
+# Een stil logboek per account (logboek.json naast state.json): hoe vaak iemand
+# inlogt, hoeveel tijd hij op de site doorbrengt, welke pagina's hij bezoekt en
+# welke woningen hij het meest bekijkt/doorrekent. Wordt gevoed door een
+# before_request-hook (zie create_app) en is uitsluitend in te zien op de
+# beheerpagina /gebruikers. Bewust "stil": normale gebruikers merken hier niets
+# van. We bewaren alleen tellingen (geen volledige klik-geschiedenis), zodat het
+# bestand klein blijft. Schrijven gaat via een lock zodat gelijktijdige requests
+# binnen één worker elkaars telling niet overschrijven.
+_LOGBOEK_LOCK = threading.Lock()
+
+# Endpoints die als "paginabezoek" meetellen, met hun leesbare label. API-, poll-
+# en actie-endpoints staan hier bewust niet in (die zouden de telling vervuilen).
+_PAGINA_LABELS = {
+    "kaart": "Kaart",
+    "berekening": "Berekening",
+    "wwso": "WWSO-punten",
+    "data_analyse": "Data-analyse",
+    "reken_instellingen": "Reken-instellingen",
+    "handmatig_toevoegen": "Toevoegen",
+    "verwijderd": "Verwijderd",
+    "toegangsbeheer": "Toegangsbeheer",
+}
+# Endpoints die we volledig negeren (statics, polling, in/uitloggen en de
+# beheerpagina's zelf) - die zeggen niets over echt gebruik.
+_ACTIVITEIT_NEGEREN = {
+    None, "static", "login", "logout", "handmatig_status", "gebruikers",
+}
+# GET-endpoints waarbij het bekijken van een specifieke woning telt.
+_WONING_BEKEKEN_ENDPOINTS = {"berekening", "wwso"}
+# POST-endpoints waarbij een woning daadwerkelijk (opnieuw) is doorgerekend.
+_WONING_BEREKEND_ENDPOINTS = {"berekening_opslaan", "wwso_bereken"}
+# Gat tussen twee acties dat nog als "aaneengesloten bezig" telt (30 min); daarna
+# nemen we aan dat de gebruiker weg was en tellen we de pauze niet mee.
+_IDLE_DREMPEL_SECONDEN = 30 * 60
+
+
+def _logboek_pad(config) -> Path:
+    return Path(config.state_path).parent / "logboek.json"
+
+
+def _laad_logboek(config) -> dict:
+    try:
+        with open(_logboek_pad(config), encoding="utf-8") as bestand:
+            data = json.load(bestand)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data.setdefault("gebruikers", {})
+    return data
+
+
+def _schrijf_logboek(config, data: dict) -> None:
+    pad = _logboek_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    with open(pad, "w", encoding="utf-8") as bestand:
+        json.dump(data, bestand, ensure_ascii=False, indent=2)
+
+
+def _logboek_record(data: dict, gebruiker: str) -> dict:
+    return data["gebruikers"].setdefault(gebruiker, {
+        "logins": 0, "eerste_login": None, "laatste_login": None,
+        "laatste_activiteit": None, "totaal_seconden": 0,
+        "paginas": {}, "woningen_bekeken": {}, "woningen_berekend": {},
+        "_laatste_ts": None,
+    })
+
+
+def _registreer_login(config, gebruiker: str) -> None:
+    """Telt een geslaagde login. Zet _laatste_ts opnieuw, zodat de pauze sinds de
+    vorige sessie niet als 'tijd op de site' wordt meegerekend."""
+    if not gebruiker:
+        return
+    try:
+        with _LOGBOEK_LOCK:
+            data = _laad_logboek(config)
+            rec = _logboek_record(data, gebruiker)
+            nu = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            rec["logins"] = int(rec.get("logins", 0)) + 1
+            rec["eerste_login"] = rec.get("eerste_login") or nu
+            rec["laatste_login"] = nu
+            rec["laatste_activiteit"] = nu
+            rec["_laatste_ts"] = nu
+            _schrijf_logboek(config, data)
+    except Exception:
+        # Loggen mag de site nooit stukmaken.
+        pass
+
+
+def _registreer_activiteit(config, gebruiker: str, endpoint: str | None,
+                           view_args: dict | None, method: str) -> None:
+    """Werkt het stille logboek bij voor één request: tijd-op-site (som van gaten
+    onder de idle-drempel), paginatelling en per-woning bekeken/berekend."""
+    if not gebruiker or endpoint in _ACTIVITEIT_NEGEREN:
+        return
+    try:
+        with _LOGBOEK_LOCK:
+            data = _laad_logboek(config)
+            rec = _logboek_record(data, gebruiker)
+            nu = datetime.now(timezone.utc)
+
+            vorig = rec.get("_laatste_ts")
+            if vorig:
+                try:
+                    gat = (nu - datetime.fromisoformat(vorig)).total_seconds()
+                    if 0 < gat <= _IDLE_DREMPEL_SECONDEN:
+                        rec["totaal_seconden"] = int(rec.get("totaal_seconden", 0)) + int(gat)
+                except ValueError:
+                    pass
+            rec["_laatste_ts"] = nu.isoformat(timespec="seconds")
+            rec["laatste_activiteit"] = nu.isoformat(timespec="seconds")
+
+            label = _PAGINA_LABELS.get(endpoint)
+            if label:
+                paginas = rec.setdefault("paginas", {})
+                paginas[label] = int(paginas.get(label, 0)) + 1
+
+            object_id = (view_args or {}).get("object_id")
+            if object_id and method == "GET" and endpoint in _WONING_BEKEKEN_ENDPOINTS:
+                w = rec.setdefault("woningen_bekeken", {})
+                w[object_id] = int(w.get(object_id, 0)) + 1
+            if object_id and method == "POST" and endpoint in _WONING_BEREKEND_ENDPOINTS:
+                w = rec.setdefault("woningen_berekend", {})
+                w[object_id] = int(w.get(object_id, 0)) + 1
+
+            _schrijf_logboek(config, data)
+    except Exception:
+        pass
+
+
+def _format_duur(seconden) -> str:
+    try:
+        seconden = int(seconden)
+    except (TypeError, ValueError):
+        return "0 min"
+    if seconden < 60:
+        return f"{seconden} sec"
+    minuten, _ = divmod(seconden, 60)
+    uren, minuten = divmod(minuten, 60)
+    if uren:
+        return f"{uren} u {minuten} min"
+    return f"{minuten} min"
+
+
+def _format_tijdstip(iso) -> str:
+    if not iso:
+        return "—"
+    try:
+        return datetime.fromisoformat(iso).strftime("%d-%m-%Y %H:%M")
+    except (TypeError, ValueError):
+        return str(iso)
+
+
 def _laad_reken_defaults(config) -> dict:
     """Globaal ingestelde standaardwaarden (reken_defaults.json). Leeg = nog nooit
     iets globaal aangepast, dan gelden de RekenUitgangspunten-constanten."""
@@ -435,6 +589,16 @@ def create_app(config: Config | None = None) -> Flask:
 
         return wrapped
 
+    @app.before_request
+    def _log_gebruikersactiviteit():
+        # Stil logboek bijwerken voor ingelogde gebruikers (zie _registreer_activiteit).
+        # Nooit iets teruggeven: dit mag de request-afhandeling niet beïnvloeden.
+        gebruiker = session.get("gebruiker")
+        if gebruiker:
+            _registreer_activiteit(
+                config, gebruiker, request.endpoint, request.view_args, request.method,
+            )
+
     @app.route("/login", methods=["GET", "POST"])
     def login():
         fout = None
@@ -453,6 +617,7 @@ def create_app(config: Config | None = None) -> Flask:
                 return _storing_respons()
             if klopt:
                 session["gebruiker"] = gebruiker
+                _registreer_login(config, gebruiker)
                 return redirect(request.args.get("next") or url_for("kaart"))
             fout = "Onjuiste gebruikersnaam of wachtwoord."
         return render_template("login.html", fout=fout)
@@ -1053,6 +1218,49 @@ def create_app(config: Config | None = None) -> Flask:
         ]
         return render_template(
             "toegangsbeheer.html", accounts=accounts, gebruiker=session["gebruiker"],
+        )
+
+    @app.route("/gebruikers")
+    @beheerder_required
+    def gebruikers():
+        # Stil logboek per account (alleen voor beheerders): logins, tijd op de site,
+        # meest bezochte pagina's en meest bekeken/doorgerekende woningen.
+        data = _laad_logboek(config)
+        state = StateStore(config.state_path)
+
+        def _woningnaam(object_id: str) -> str:
+            item = state.get(object_id)
+            return item.weergavenaam if item is not None else object_id
+
+        def _top(teller: dict, n: int = 8) -> list[dict]:
+            gesorteerd = sorted(teller.items(), key=lambda kv: (-kv[1], kv[0]))
+            return [
+                {"naam": _woningnaam(oid), "object_id": oid, "aantal": aantal}
+                for oid, aantal in gesorteerd[:n]
+            ]
+
+        gebruikers_lijst = []
+        for naam, rec in data.get("gebruikers", {}).items():
+            paginas = sorted(
+                rec.get("paginas", {}).items(), key=lambda kv: (-kv[1], kv[0])
+            )
+            gebruikers_lijst.append({
+                "naam": naam,
+                "beheerder": naam in beheerders,
+                "logins": rec.get("logins", 0),
+                "tijd": _format_duur(rec.get("totaal_seconden", 0)),
+                "eerste_login": _format_tijdstip(rec.get("eerste_login")),
+                "laatste_activiteit": _format_tijdstip(rec.get("laatste_activiteit")),
+                "paginas": [{"label": l, "aantal": a} for l, a in paginas],
+                "bekeken": _top(rec.get("woningen_bekeken", {})),
+                "berekend": _top(rec.get("woningen_berekend", {})),
+            })
+        # Actiefste bovenaan (meeste tijd), daarna op naam.
+        gebruikers_lijst.sort(
+            key=lambda g: (-int(data["gebruikers"][g["naam"]].get("totaal_seconden", 0)), g["naam"])
+        )
+        return render_template(
+            "gebruikers.html", gebruikers=gebruikers_lijst, gebruiker=session["gebruiker"],
         )
 
     return app
