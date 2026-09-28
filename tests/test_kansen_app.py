@@ -1077,3 +1077,30 @@ def test_rente_historie_toont_seed_grafiekdata(app_client, tmp_path):
     assert "2023-11-01" in body
     # reken_historie.json is aangemaakt door de backfill.
     assert (tmp_path / "rente_historie.json").exists()
+
+
+# --- PDF-export van de rekentool ---------------------------------------------
+
+def test_berekening_pdf_zonder_login_wordt_omgeleid(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    resp = app_client.get("/woning/3000AA-1/berekening.pdf")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_berekening_pdf_onbekende_woning_geeft_404(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    assert app_client.get("/woning/bestaat-niet/berekening.pdf").status_code == 404
+
+
+def test_berekening_pdf_geeft_downloadbare_pdf(app_client, tmp_path):
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.get("/woning/3000AA-1/berekening.pdf")
+    assert resp.status_code == 200
+    assert resp.headers["Content-Type"] == "application/pdf"
+    assert "attachment" in resp.headers["Content-Disposition"]
+    assert ".pdf" in resp.headers["Content-Disposition"]
+    data = resp.get_data()
+    assert data[:5] == b"%PDF-"
+    assert len(data) > 800  # geen lege/kapotte PDF

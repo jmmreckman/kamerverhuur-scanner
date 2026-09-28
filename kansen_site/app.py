@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import hmac
 import json
+import re
 import threading
 from urllib.parse import quote_plus
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from functools import wraps
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash
 
 from pathlib import Path
@@ -876,6 +877,27 @@ def create_app(config: Config | None = None) -> Flask:
         state.save()
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
+
+    @app.route("/woning/<object_id>/berekening.pdf")
+    @login_required
+    def berekening_pdf(object_id):
+        # Downloadbare PDF met exact dezelfde uitgangspunten en resultaten als de
+        # rekenpagina (op basis van de opgeslagen waarden bij de woning).
+        state = StateStore(config.state_path)
+        item = state.get(object_id)
+        if item is None:
+            abort(404)
+        uitg = _huidige_uitgangspunten(item, config)
+        resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
+        from kansen_site import rapport_pdf  # lazy: reportlab niet nodig voor de rest van de site
+        pdf = rapport_pdf.bouw_berekening_pdf(
+            item, _velden_voor_weergave(uitg), asdict(resultaat), date.today(),
+        )
+        veilig = re.sub(r"[^A-Za-z0-9]+", "_", (item.weergavenaam or object_id)).strip("_") or "berekening"
+        return Response(
+            pdf, mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="berekening_{veilig}.pdf"'},
+        )
 
     def _woning_uit_payload(data: dict) -> Woning:
         """Bouw een Woning (WWSO-invoer) uit de JSON van het rekenscherm. De UI
