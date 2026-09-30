@@ -1136,5 +1136,5 @@ def test_mail_voorkeuren_ongeldig_adres_geeft_melding(app_client, tmp_path):
         "email": "geen-email", "mailings": ["dagelijkse_kansen"],
     })
     assert resp.status_code == 200
-    assert "geldig e-mailadres" in resp.get_data(as_text=True)
+    assert "geldige e-mailadres" in resp.get_data(as_text=True)
     assert not (tmp_path / "mail_voorkeuren.json").exists()

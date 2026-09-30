@@ -1277,8 +1277,9 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             email = request.form.get("email", "").strip()
             actief = set(request.form.getlist("mailings"))
-            if email and not mail_voorkeuren.geldig_email(email):
-                flash("Vul een geldig e-mailadres in (of laat het leeg om geen mail te ontvangen).")
+            if email and not mail_voorkeuren.emails_geldig(email):
+                flash("Vul geldige e-mailadres(sen) in, meerdere gescheiden door een komma "
+                      "(of laat het leeg om geen mail te ontvangen).")
             else:
                 mail_voorkeuren.zet_voorkeuren(config, gebruiker, email, actief)
                 flash("Mailvoorkeuren opgeslagen.")

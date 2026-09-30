@@ -32,6 +32,18 @@ def geldig_email(waarde: str) -> bool:
     return bool(_EMAIL_RE.match((waarde or "").strip()))
 
 
+def split_emails(waarde: str) -> list[str]:
+    """Splitst een veld met één of meer adressen (komma- of puntkomma-gescheiden) in
+    losse, opgeschoonde adressen."""
+    return [deel.strip() for deel in re.split(r"[,;]", waarde or "") if deel.strip()]
+
+
+def emails_geldig(waarde: str) -> bool:
+    """True als het veld leeg is óf elk opgegeven adres een geldig e-mailadres is."""
+    delen = split_emails(waarde)
+    return all(geldig_email(deel) for deel in delen)
+
+
 def _pad(config: Config) -> Path:
     return Path(config.state_path).parent / "mail_voorkeuren.json"
 
@@ -82,11 +94,10 @@ def ontvangers_voor(config: Config, mailing_key: str) -> list[str]:
     if not gebruikers:
         # Nog niemand ingesteld: gebruik de oude env-lijst (dedupe, behoud volgorde).
         return list(dict.fromkeys(config.report_to))
-    ontvangers = [
-        prefs["email"].strip()
-        for prefs in gebruikers.values()
-        if isinstance(prefs, dict)
-        and prefs.get(mailing_key)
-        and geldig_email(prefs.get("email", ""))
-    ]
+    ontvangers = []
+    for prefs in gebruikers.values():
+        if not (isinstance(prefs, dict) and prefs.get(mailing_key)):
+            continue
+        # Eén account kan meerdere adressen hebben (komma-/puntkomma-gescheiden).
+        ontvangers.extend(adres for adres in split_emails(prefs.get("email", "")) if geldig_email(adres))
     return sorted(set(ontvangers))

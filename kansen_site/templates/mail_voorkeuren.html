@@ -43,9 +43,10 @@
     {% endwith %}
 
     <form method="post">
-      <label class="mv-veld" for="mv-email">Jouw e-mailadres</label>
+      <label class="mv-veld" for="mv-email">Jouw e-mailadres(sen)</label>
       <input class="mv-email" type="email" id="mv-email" name="email" value="{{ email }}"
-             placeholder="naam@voorbeeld.nl" autocomplete="email">
+             placeholder="naam@voorbeeld.nl, ander@voorbeeld.nl" autocomplete="email" multiple>
+      <p class="uitleg" style="margin:.35rem 0 0; font-size:.85rem;">Meerdere adressen? Scheid ze met een komma.</p>
 
       <ul class="mv-mailings">
         {% for m in mailings %}
