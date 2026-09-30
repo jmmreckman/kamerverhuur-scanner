@@ -22,7 +22,7 @@ from werkzeug.security import check_password_hash
 
 from pathlib import Path
 
-from rotterdam_scanner import den_haag, pipeline, rente_update, vergunningenindex
+from rotterdam_scanner import den_haag, mail_voorkeuren, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
@@ -1266,6 +1266,35 @@ def create_app(config: Config | None = None) -> Flask:
         ]
         return render_template(
             "toegangsbeheer.html", accounts=accounts, gebruiker=session["gebruiker"],
+        )
+
+    @app.route("/mail-voorkeuren", methods=["GET", "POST"])
+    @login_required
+    def mail_voorkeuren_pagina():
+        # Per account: eigen mailadres + per mailing aan/uit. Bepaalt wie welke mail
+        # ontvangt (i.p.v. de vaste REPORT_TO-lijst uit de env).
+        gebruiker = session["gebruiker"]
+        if request.method == "POST":
+            email = request.form.get("email", "").strip()
+            actief = set(request.form.getlist("mailings"))
+            if email and not mail_voorkeuren.geldig_email(email):
+                flash("Vul een geldig e-mailadres in (of laat het leeg om geen mail te ontvangen).")
+            else:
+                mail_voorkeuren.zet_voorkeuren(config, gebruiker, email, actief)
+                flash("Mailvoorkeuren opgeslagen.")
+                return redirect(url_for("mail_voorkeuren_pagina"))
+            # bij fout: toon de ingevulde waarden terug
+            huidig = {"email": email, **{k: (k in actief) for k in mail_voorkeuren.MAILING_KEYS}}
+        else:
+            huidig = mail_voorkeuren.voorkeuren_voor(config, gebruiker)
+
+        mailings = [
+            {"key": k, "naam": naam, "uitleg": uitleg, "aan": bool(huidig.get(k))}
+            for k, naam, uitleg in mail_voorkeuren.MAILINGS
+        ]
+        return render_template(
+            "mail_voorkeuren.html", email=huidig.get("email", ""), mailings=mailings,
+            gebruiker=gebruiker,
         )
 
     @app.route("/rente-historie")

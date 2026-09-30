@@ -1104,3 +1104,37 @@ def test_berekening_pdf_geeft_downloadbare_pdf(app_client, tmp_path):
     data = resp.get_data()
     assert data[:5] == b"%PDF-"
     assert len(data) > 800  # geen lege/kapotte PDF
+
+
+# --- Mail-voorkeuren pagina ---------------------------------------------------
+
+def test_mail_voorkeuren_zonder_login_wordt_omgeleid(app_client):
+    resp = app_client.get("/mail-voorkeuren")
+    assert resp.status_code == 302
+    assert "/login" in resp.headers["Location"]
+
+
+def test_mail_voorkeuren_opslaan_en_terugzien(app_client, tmp_path):
+    from rotterdam_scanner import mail_voorkeuren as mv
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/mail-voorkeuren", data={
+        "email": "jurian@example.com", "mailings": ["dagelijkse_kansen"],
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    from rotterdam_scanner.config import Config
+    cfg = _config(tmp_path)
+    assert mv.ontvangers_voor(cfg, "dagelijkse_kansen") == ["jurian@example.com"]
+    assert mv.ontvangers_voor(cfg, "rente_updates") == []  # niet aangevinkt
+    # pagina toont het opgeslagen adres terug
+    body = app_client.get("/mail-voorkeuren").get_data(as_text=True)
+    assert "jurian@example.com" in body
+
+
+def test_mail_voorkeuren_ongeldig_adres_geeft_melding(app_client, tmp_path):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    resp = app_client.post("/mail-voorkeuren", data={
+        "email": "geen-email", "mailings": ["dagelijkse_kansen"],
+    })
+    assert resp.status_code == 200
+    assert "geldig e-mailadres" in resp.get_data(as_text=True)
+    assert not (tmp_path / "mail_voorkeuren.json").exists()

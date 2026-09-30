@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mail-voorkeuren - Kansen</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <style>
+    .mv-wrap { padding: 1rem 1.5rem 2.5rem; max-width: 44rem; }
+    .mv-wrap p.uitleg { color: var(--tekst-zwak); line-height: 1.5; max-width: 40rem; }
+    .mv-veld { display: block; margin: 1.2rem 0 .3rem; font-weight: 600; }
+    .mv-email { width: 100%; max-width: 26rem; padding: .55rem .7rem; font-size: 1rem;
+      border: 1px solid var(--rand); border-radius: .5rem; }
+    .mv-mailings { list-style: none; padding: 0; margin: 1.4rem 0; }
+    .mv-mailing { border: 1px solid var(--rand); border-radius: .6rem; padding: .8rem 1rem;
+      margin-bottom: .7rem; display: flex; gap: .75rem; align-items: flex-start; }
+    .mv-mailing input { margin-top: .2rem; width: 1.15rem; height: 1.15rem; flex: none; }
+    .mv-mailing .naam { font-weight: 600; }
+    .mv-mailing .uitleg { color: var(--tekst-zwak); font-size: .9rem; margin-top: .15rem; }
+    .mv-acties { margin-top: 1.4rem; display: flex; gap: .8rem; align-items: center; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1><a href="{{ url_for('kaart') }}">Kansen</a> / Mail-voorkeuren</h1>
+    <div class="topbar-acties">
+      <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
+      <span class="muted">{{ gebruiker }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button type="submit" class="link-knop">Uitloggen</button></form>
+    </div>
+  </header>
+
+  <div class="mv-wrap">
+    <h2>Mail-voorkeuren</h2>
+    <p class="uitleg">
+      Stel hier je eigen e-mailadres in en kies welke mails je wilt ontvangen. Dit geldt
+      alleen voor jouw account &mdash; elk account stelt dit zelf in. Laat je het mailadres
+      leeg, dan ontvang je geen mail.
+    </p>
+
+    {% with berichten = get_flashed_messages() %}
+      {% if berichten %}<div class="reken-flash">{% for b in berichten %}<p>{{ b }}</p>{% endfor %}</div>{% endif %}
+    {% endwith %}
+
+    <form method="post">
+      <label class="mv-veld" for="mv-email">Jouw e-mailadres</label>
+      <input class="mv-email" type="email" id="mv-email" name="email" value="{{ email }}"
+             placeholder="naam@voorbeeld.nl" autocomplete="email">
+
+      <ul class="mv-mailings">
+        {% for m in mailings %}
+        <li class="mv-mailing">
+          <input type="checkbox" id="mailing-{{ m.key }}" name="mailings" value="{{ m.key }}"
+                 {% if m.aan %}checked{% endif %}>
+          <label for="mailing-{{ m.key }}">
+            <span class="naam">{{ m.naam }}</span>
+            <div class="uitleg">{{ m.uitleg }}</div>
+          </label>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <div class="mv-acties">
+        <button type="submit" class="reken-knop-primair">Opslaan</button>
+        <a href="{{ url_for('kaart') }}" class="link-knop">Annuleren</a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

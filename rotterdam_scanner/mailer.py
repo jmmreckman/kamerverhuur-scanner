@@ -39,5 +39,7 @@ def send_mail(config: Config, subject: str, html_body: str, text_body: str,
             smtp.sendmail(from_email, to, msg.as_string())
 
 
-def send_report(config: Config, subject: str, html_body: str, text_body: str) -> None:
-    send_mail(config, subject, html_body, text_body, recipients=config.report_to)
+def send_report(config: Config, subject: str, html_body: str, text_body: str,
+                recipients: list[str] | None = None) -> None:
+    send_mail(config, subject, html_body, text_body,
+              recipients=recipients if recipients is not None else config.report_to)

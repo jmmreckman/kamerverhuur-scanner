@@ -6,7 +6,7 @@ from datetime import date
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from rotterdam_scanner import pipeline, report, rente_update
+from rotterdam_scanner import mail_voorkeuren, pipeline, report, rente_update
 from rotterdam_scanner.config import Config
 from rotterdam_scanner.config import load_config
 from rotterdam_scanner.mailer import send_mail, send_report
@@ -39,15 +39,18 @@ def main() -> int:
     for fout in result.fouten:
         logger.warning(fout)
 
-    subject = f"Kamerverhuur-scanner Rotterdam — {len(result.alle_actief)} openstaande kansen ({today.strftime('%d-%m-%Y')})"
-    html_body = report.build_html_report(result, today, config.gmail_address, config.listing_expiry_days)
-    text_body = report.build_text_report(result, today, config.gmail_address)
-
-    try:
-        send_report(config, subject, html_body, text_body)
-    except Exception:
-        logger.exception("Versturen van het rapport is mislukt")
-        return 1
+    ontvangers = mail_voorkeuren.ontvangers_voor(config, "dagelijkse_kansen")
+    if not ontvangers:
+        logger.info("Dagrapport: niemand heeft 'dagelijkse kansen' aan staan; niet verstuurd.")
+    else:
+        subject = f"Kamerverhuur-scanner Rotterdam — {len(result.alle_actief)} openstaande kansen ({today.strftime('%d-%m-%Y')})"
+        html_body = report.build_html_report(result, today, config.gmail_address, config.listing_expiry_days)
+        text_body = report.build_text_report(result, today, config.gmail_address)
+        try:
+            send_report(config, subject, html_body, text_body, recipients=ontvangers)
+        except Exception:
+            logger.exception("Versturen van het rapport is mislukt")
+            return 1
 
     # Actuele Domivest-rente ophalen en (bij wijziging) de globale rente in het
     # rekenmodel bijwerken + een melding mailen. Fail-safe: mag de dagelijkse run
@@ -101,6 +104,11 @@ def _werk_domivest_rente_bij(config: Config) -> None:
 
     logger.info("Domivest-rente %s: %s -> %s (%s, %s)", richting, oud, nieuw, ltv_tekst, periode_tekst)
 
+    ontvangers = mail_voorkeuren.ontvangers_voor(config, "rente_updates")
+    if not ontvangers:
+        logger.info("Rentemelding: niemand heeft 'rentewijzigingen' aan staan; niet verstuurd.")
+        return
+
     subject = f"Rente aangepast: {oud} -> {nieuw} (Domivest {ltv_tekst}, {periode_tekst})"
     text_body = (
         f"De verhuurhypotheekrente van Domivest is {richting}.\n\n"
@@ -119,7 +127,7 @@ def _werk_domivest_rente_bij(config: Config) -> None:
         f'<p>Bron: <a href="{config.domivest_rente_url}">{config.domivest_rente_url}</a></p>'
     )
     try:
-        send_mail(config, subject, html_body, text_body)
+        send_mail(config, subject, html_body, text_body, recipients=ontvangers)
     except Exception:
         logger.exception("Versturen van de rente-melding is mislukt")
 
