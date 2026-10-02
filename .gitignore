@@ -18,3 +18,6 @@ gegenereerde_advertenties/
 # deployment (VPS) - secrets en per-pand data, nooit committen
 deploy/*.env
 deploy/data/
+
+# lokale runtime-data (logs, state_dir met o.a. tekenportaal-uploads) - nooit committen
+data/
