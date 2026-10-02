@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Mail bevestiging{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Mail bevestiging</h1>
+</div>
+
+<div class="card">
+  <form method="post" onsubmit="return confirm('Deze bevestigingsmail nu versturen?');">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
+    </label>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

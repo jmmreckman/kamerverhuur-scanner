@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_kamers, icon_euro %}
+{% block title %}Kies een pand{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Kies een pand</h1>
+</div>
+
+{% if panden %}
+<div class="grid">
+  {% for pand in panden %}
+  {% set tegelkleur = (pand.kleur|hexkleur) if current_user.kleurenherkenning else '' %}
+  <a class="card kamer-tile {{ 'pand-getint' if tegelkleur }}" href="{{ url_for('dashboard', pand_slug=pand.slug) }}"
+     {% if tegelkleur %}style="--tegel-kleur: {{ tegelkleur }}"{% endif %}>
+    <div class="stat-icon" style="margin-bottom:0.6rem">{{ icon_kamers() }}</div>
+    <h2>{{ pand.naam }}</h2>
+  </a>
+  {% endfor %}
+</div>
+
+<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-top:1.5rem; max-width:320px">
+  <div class="stat-icon">{{ icon_euro() }}</div>
+  <div>
+    <div class="stat-value">Totaal overzicht</div>
+    <div class="stat-label">winst &amp; betalingen alle panden</div>
+  </div>
+</a>
+{% else %}
+<div class="card">
+  <p>Je hebt nog geen toegang tot een pand. Vraag de beheerder om je toegang te geven.</p>
+</div>
+{% endif %}
+{% endblock %}

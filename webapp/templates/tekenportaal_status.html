@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Status &mdash; {{ meta.titel }}{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+  <div>
+    <h1>{{ meta.titel }}</h1>
+    <p class="muted">
+      {% if meta.status == 'afgerond' %}Volledig ondertekend en opgeslagen in de Drive-map &ldquo;Steenhub getekende documenten&rdquo;.
+      {% else %}Wacht op handtekeningen. Elke ondertekenaar heeft z&rsquo;n eigen tekenlink ontvangen.{% endif %}
+    </p>
+  </div>
+  <div style="display:flex; gap:0.6rem;">
+    {% if meta.status == 'afgerond' %}<a class="btn" href="{{ url_for('tekenportaal_pdf', doc_id=meta.doc_id) }}">Download getekend</a>{% endif %}
+    <a class="btn btn-secondary" href="{{ url_for('tekenportaal_overzicht') }}">Terug</a>
+  </div>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden;">
+  <table class="tabel" style="width:100%; border-collapse:collapse;">
+    <thead><tr>
+      <th style="text-align:left; padding:0.7rem 0.9rem;">Ondertekenaar</th>
+      <th style="text-align:left; padding:0.7rem 0.9rem;">Status</th>
+      <th style="text-align:left; padding:0.7rem 0.9rem;">Tekenlink</th>
+    </tr></thead>
+    <tbody>
+      {% for o in meta.ondertekenaars %}
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:0.7rem 0.9rem;"><strong>{{ o.naam or o.email }}</strong><br><span class="muted" style="font-size:0.85em;">{{ o.email }}</span></td>
+        <td style="padding:0.7rem 0.9rem;">
+          {% if o.ondertekend_op %}
+            <span style="color:#1b7a43;">✓ getekend</span><br>
+            <span class="muted" style="font-size:0.8em;">{{ (o.ondertekend_op or '')[:16] | replace('T',' ') }}{% if o.ip_adres %} &middot; IP {{ o.ip_adres }}{% endif %}</span>
+          {% else %}<span style="color:#8a6d00;">nog niet getekend</span>{% endif %}
+        </td>
+        <td style="padding:0.7rem 0.9rem;">
+          {% if o.ondertekend_op %}<span class="muted">&mdash;</span>
+          {% else %}
+          <input type="text" readonly onclick="this.select()" style="width:100%; max-width:22rem; font-size:0.8em;"
+                 value="{{ url_for('document_tekenen', token=o.token, _external=True) }}">
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

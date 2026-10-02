@@ -1,0 +1,651 @@
+"""Voert een betaalcontrole uit voor één pand: sheet lezen, bunq-betalingen
+ophalen, matchen, en (tenzij dry-run) de sheet + geschiedenis bijwerken en
+het resultaat cachen voor de website."""
+from __future__ import annotations
+
+import calendar
+import dataclasses
+import logging
+from datetime import date, datetime, timedelta
+
+from decimal import Decimal
+
+from . import mail_voorkeuren, state, winst
+from .bunq_client import BunqClient
+from .config import Config
+from .mailer import MailError, verstuur_email
+from .matcher import (
+    _INSTAPMAAND_TOLERANTIE_PERCENTAGE,
+    _matches_los,
+    _matches_sterk,
+    _verwerk_maand,
+    match_tenants_to_payments,
+    openstaand_tekort_uit_geschiedenis,
+)
+from .models import Pand, Payment, Status, Tenant, TenantResult
+from .sheet_client import SheetClient
+
+logger = logging.getLogger(__name__)
+
+_MAAND_NAMEN_NL = [
+    "januari", "februari", "maart", "april", "mei", "juni",
+    "juli", "augustus", "september", "oktober", "november", "december",
+]
+_ALLES_BETAALD_KAMER_SLEUTEL = "__alle_kamers__"
+_ALLES_BETAALD_SOORT = "alles-betaald"
+_MAAND_NAAM_NAAR_NUMMER = {naam: i + 1 for i, naam in enumerate(_MAAND_NAMEN_NL)}
+
+# Harde grens voor welke kalendermaand een betaling telt: 1e t/m 17e van de
+# maand = die maand zelf, 18e t/m einde van de maand = de maand erna (bv. een
+# huurder die halverwege de maand al vooruitbetaalt voor de volgende maand).
+# Vervangt het vroegere losse "vooruitbetaling_dagen"-giswerk, dat structureel
+# vroeg/laat betalende huurders soms als "te veel"/"niet ontvangen" door
+# elkaar liet zien in de betaalgeschiedenis.
+_EFFECTIEVE_MAAND_GRENSDAG = 17
+
+
+def _effectieve_maand(datum: date) -> tuple[int, int]:
+    if datum.day <= _EFFECTIEVE_MAAND_GRENSDAG:
+        return (datum.year, datum.month)
+    if datum.month == 12:
+        return (datum.year + 1, 1)
+    return (datum.year, datum.month + 1)
+
+
+def _vorige_maand(jaar: int, maand: int) -> tuple[int, int]:
+    return (jaar - 1, 12) if maand == 1 else (jaar, maand - 1)
+
+
+def _effectieve_maand_voor_instap(datum: date, instap_start: date | None) -> tuple[int, int]:
+    """Zelfde 17e-grens als _effectieve_maand(), behalve voor een betaling die
+    in dezelfde kalendermaand valt als een instap-startdatum (of de
+    kalendermaand daar vlak vóór): die telt gewoon voor díe kalendermaand
+    zelf, ongeacht de dag van zowel de betaling áls de startdatum. De
+    17e-grens is bedoeld voor een bestaande huurder die vroeg vooruitbetaalt
+    voor volgende maand - dat gaat niet op rond iemands eigen instap:
+    - Een betaling die pas laat in de instapmaand zelf binnenkomt (bv. een
+      trage internationale overschrijving, of gewoon een paar dagen na de
+      daadwerkelijke intrekdatum) is per definitie nog steeds de
+      instapbetaling van díe maand, nooit een vooruitbetaling voor de maand
+      erna.
+    - Een betaling die laat in de maand vlak vóór de instapmaand binnenkomt
+      (bv. het betaalverzoek dat al bij het tekenen is verstuurd, weken
+      voordat de huurder er daadwerkelijk intrekt) is - net zo min - een
+      vooruitbetaling voor de instapmaand zelf: _verwacht_bedrag_voor_maand()
+      verwacht het instapbedrag namelijk al onvoorwaardelijk in die maand
+      ervóór, ongeacht op welke dag het binnenkomt. Zonder deze uitzondering
+      zou de gewone 17e-regel zo'n late (maar wel al vóór instap verwachte)
+      betaling juist een maand te ver doorschuiven, naar de instapmaand zelf
+      - waar 'm dan niets meer te matchen valt, want het volledige
+      instapbedrag stond daar al (mogelijk) als 0 verwacht zodra het in de
+      maand ervóór is ontvangen.
+
+    Zonder deze uitzonderingen verdween zo'n (te) laat betaalde
+    instapbetaling structureel uit beeld: te laat voor de bedoelde maand,
+    maar de andere maand verwacht een heel ander bedrag (zie
+    _verwacht_bedrag_voor_maand), dus geen van beide maanden zou 'm ooit
+    herkennen.
+
+    Bewust `is None`-vriendelijk aan de aanroepkant (zie run_check(): per
+    (huurder, betaling)-paar bepaald, niet globaal per betaling) - alleen zo
+    blijft dit ondubbelzinnig voor élke latere controle-maand hetzelfde
+    resultaat geven (dus nooit twee keer meegeteld, zie run_check())."""
+    if instap_start:
+        instap_maand = (instap_start.year, instap_start.month)
+        betaal_maand = (datum.year, datum.month)
+        if betaal_maand in (instap_maand, _vorige_maand(*instap_maand)):
+            return betaal_maand
+    return _effectieve_maand(datum)
+
+
+def _maand_sleutel_naar_string(sleutel: tuple[int, int]) -> str:
+    """(jaar, maand) -> 'jjjj-mm', het formaat waarin de Historie-sheet en
+    de rest van de matchlogica een kalendermaand als tekst opslaan."""
+    jaar, maand = sleutel
+    return f"{jaar}-{maand:02d}"
+
+
+def _zoek_vanaf_voor_maand(vandaag: date) -> date:
+    """Startpunt van de bunq-zoekopdracht voor de controle van `vandaag`s
+    maand: de 18e van de vorige maand, want vanaf die dag tellen betalingen
+    al voor de huidige maand (zie _effectieve_maand)."""
+    vorig_jaar, vorige_maand = _vorige_maand(vandaag.year, vandaag.month)
+    return date(vorig_jaar, vorige_maand, _EFFECTIEVE_MAAND_GRENSDAG + 1)
+
+
+def _parse_datum_dmy(tekst: str) -> date | None:
+    """Parseert een vrije-tekst datum zoals opgeslagen in kolom 'Contract
+    startdatum'. Bedoeld formaat is dd-mm-jjjj, maar wie rechtstreeks in de
+    Google Sheet typt houdt zich daar niet altijd aan - vandaar ook
+    dd/mm/jjjj, dd.mm.jjjj, het ISO-formaat jjjj-mm-dd (met of zonder
+    tijdstempel, zoals Google Sheets een datumcel soms opslaat) en losse
+    Nederlandse tekst als "1 juli 2026". Geeft None terug als de tekst geen
+    (herkenbare) datum is."""
+    tekst = tekst.strip()
+    for formaat in (
+        "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%Y-%m-%d",
+        "%d-%m-%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(tekst, formaat).date()
+        except ValueError:
+            continue
+    delen = tekst.lower().split()
+    if len(delen) == 3:
+        dag_tekst, maandnaam, jaar_tekst = delen
+        maandnr = _MAAND_NAAM_NAAR_NUMMER.get(maandnaam)
+        if maandnr and dag_tekst.isdigit() and jaar_tekst.isdigit():
+            try:
+                return date(int(jaar_tekst), maandnr, int(dag_tekst))
+            except ValueError:
+                return None
+    return None
+
+
+def _tenant_startdatum(tenant: Tenant) -> date | None:
+    """De ingelezen 'Contract startdatum' van deze huurder, of None als die
+    leeg of niet (herkenbaar) is."""
+    return _parse_datum_dmy(tenant.contract_startdatum) if tenant.contract_startdatum else None
+
+
+def _pro_rata_huur(verwacht_bedrag: Decimal, start: date) -> Decimal:
+    """Huur voor de instapmaand naar rato van het aantal dagen dat de
+    huurder daadwerkelijk in die maand huurt (vanaf de startdatum, die dag
+    meegeteld). Bij een start op de 1e is dit gewoon de volle maandhuur."""
+    dagen_in_maand = calendar.monthrange(start.year, start.month)[1]
+    resterende_dagen = dagen_in_maand - start.day + 1
+    return (verwacht_bedrag * resterende_dagen / dagen_in_maand).quantize(Decimal("0.01"))
+
+
+def _instapbedrag(tenant: Tenant, start: date) -> Decimal:
+    return _pro_rata_huur(tenant.verwacht_bedrag, start) + (tenant.borg_bedrag or Decimal("0"))
+
+
+def _instapbetaling_al_ontvangen(
+    geschiedenis: list, voor_maand: str, instapbedrag: Decimal, tolerantie: Decimal
+) -> bool:
+    """True als er al een eerdere Historie-maand is (vóór `voor_maand`)
+    waarin het volledige instapbedrag (pro-rata huur + borg) al ontvangen is
+    - dit gebeurt zodra een huurder vooruitbetaalt bij het ondertekenen van
+    het contract, vaak (een deel van) een kalendermaand vóór de daadwerkelijke
+    ingangsdatum (het betaalverzoek wordt al bij het tekenen verstuurd, zie
+    webapp/ondertekenen.py: bouw_betaal_en_tekenmail). Zonder deze check zou
+    de instapmaand zelf het instapbedrag nog een keer verwachten, terwijl dat
+    - in de maand ervóór - al binnen is."""
+    return any(
+        regel.maand < voor_maand and regel.ontvangen_bedrag >= instapbedrag - tolerantie
+        for regel in geschiedenis
+    )
+
+
+def _instap_al_gedekt_door_eerdere_betaling(
+    tenant: Tenant, betaling: Payment, alle_payments: list[Payment],
+    instap_start: date, tolerantie: Decimal,
+) -> bool:
+    """True als een eerdere betaling van deze huurder (in de instapmaand of de
+    maand daar vlak vóór) het instapbedrag al dekt. Dan is `betaling` zelf geen
+    (late) instapbetaling meer, maar een gewone vooruitbetaling voor de volgende
+    maand - die moet dus de normale 17e-regel volgen i.p.v. aan de instapmaand
+    vastgeplakt te worden. Dit voorkomt dat een huurder die vlak na zijn instap
+    alvast de volgende maand betaalt, in de instapmaand als "te veel ontvangen"
+    verschijnt terwijl die betaling gewoon voor de maand erna bedoeld is.
+
+    Optellend (niet één losse betaling die het hele bedrag dekt), zodat een in
+    delen betaalde instap (bv. borg en huur apart) ook meetelt."""
+    instapbedrag = _instapbedrag(tenant, instap_start)
+    instap_maand = (instap_start.year, instap_start.month)
+    venster = (instap_maand, _vorige_maand(*instap_maand))
+    eerder_totaal = sum(
+        (p.bedrag for p in alle_payments
+         if (p.datum.year, p.datum.month) in venster
+         and p.datum < betaling.datum
+         and (_matches_sterk(tenant, p) or _matches_los(tenant, p))),
+        Decimal("0"),
+    )
+    return eerder_totaal >= instapbedrag - tolerantie
+
+
+def _verwacht_bedrag_voor_maand(
+    tenant: Tenant, maand_sleutel: tuple[int, int], instapbetaling_al_ontvangen: bool = False,
+) -> Decimal:
+    """Voor de kalendermaand waarin de huurder is ingestapt (kolom 'Contract
+    startdatum') is het redelijkerwijs te verwachten bedrag de pro-rata huur
+    over de resterende dagen van die maand, plus de waarborgsom (kolom
+    'Borg') - huurders betalen die vaak in één keer samen met (een deel van)
+    de eerste huur, en dat mag niet als "te veel ontvangen" verschijnen.
+
+    Datzelfde instapbedrag geldt óók al voor de kalendermaand vlak vóór de
+    ingangsdatum: het betaalverzoek wordt namelijk al bij het ondertekenen
+    verstuurd, vaak (ruim) voordat de huurder er daadwerkelijk intrekt. Is
+    dat bedrag in die maand ervoor al (volledig) ontvangen
+    (`instapbetaling_al_ontvangen`), dan verwacht de instapmaand zelf niets
+    extra's meer - anders zou hetzelfde bedrag twee keer verwacht worden.
+
+    Voor elke andere maand blijft het gewoon de volle maandhuur."""
+    start = _tenant_startdatum(tenant)
+    if not start:
+        return tenant.verwacht_bedrag
+    start_sleutel = (start.year, start.month)
+    if maand_sleutel == start_sleutel:
+        return Decimal("0") if instapbetaling_al_ontvangen else _instapbedrag(tenant, start)
+    if maand_sleutel == _vorige_maand(*start_sleutel):
+        return _instapbedrag(tenant, start)
+    return tenant.verwacht_bedrag
+
+
+def run_check(
+    config: Config, pand: Pand, dry_run: bool = False, vandaag: date | None = None
+) -> tuple[list[Tenant], list[TenantResult], list[Payment]]:
+    vandaag = vandaag or date.today()
+    huidige_maand_sleutel = (vandaag.year, vandaag.month)
+    zoek_vanaf = _zoek_vanaf_voor_maand(vandaag)
+
+    logger.info("[%s] Kamers ophalen uit Google Sheet...", pand.slug)
+    sheet = SheetClient(config, pand)
+    tenants = sheet.get_tenants()
+    logger.info("[%s] %d kamers met huurder gevonden", pand.slug, len(tenants))
+
+    # Eén keer per kamer opgehaald, hergebruikt voor zowel het openstaand-
+    # tekort hieronder als de instapbetaling-check verderop.
+    geschiedenis_per_kamer = {t.kamer: sheet.get_geschiedenis(t.kamer) for t in tenants}
+    huidige_maand_string = _maand_sleutel_naar_string(huidige_maand_sleutel)
+
+    # Voor een huurder die deze maand instapt (of net daarvóór, als het
+    # instapbedrag al vooruitbetaald is bij het tekenen) geldt tijdelijk een
+    # aangepast verwacht bedrag (pro-rata huur + borg) i.p.v. de volle
+    # maandhuur - zie _verwacht_bedrag_voor_maand(). Dit raakt alleen de
+    # matching/status van déze controle, niet de "Totale huur"-kolom in de
+    # sheet zelf (die wordt door write_results() niet aangepast).
+    tenants_voor_match = []
+    for t in tenants:
+        start = _tenant_startdatum(t)
+        instapbetaling_al_ontvangen = False
+        if start and (start.year, start.month) == huidige_maand_sleutel:
+            instapbetaling_al_ontvangen = _instapbetaling_al_ontvangen(
+                geschiedenis_per_kamer[t.kamer], huidige_maand_string,
+                _instapbedrag(t, start), config.bedrag_tolerantie,
+            )
+        tenants_voor_match.append(dataclasses.replace(
+            t, verwacht_bedrag=_verwacht_bedrag_voor_maand(t, huidige_maand_sleutel, instapbetaling_al_ontvangen)
+        ))
+    instapmaand_kamers = {
+        t.kamer for t in tenants
+        if (start := _tenant_startdatum(t))
+        and huidige_maand_sleutel in ((start.year, start.month), _vorige_maand(start.year, start.month))
+    }
+
+    # Een eventuele nog openstaande achterstand van eerdere maand(en) - zodat
+    # een inhaalbetaling deze maand die eerst aflost i.p.v. als 'te veel
+    # ontvangen' te tellen (zie openstaand_tekort_uit_geschiedenis()).
+    openstaand_tekort = {
+        t.kamer: openstaand_tekort_uit_geschiedenis(geschiedenis_per_kamer[t.kamer], huidige_maand_string)
+        for t in tenants
+    }
+
+    logger.info("[%s] Betalingen ophalen via bunq sinds %s...", pand.slug, zoek_vanaf)
+    bunq = BunqClient(config)
+    alle_payments = bunq.get_incoming_payments(pand, since=zoek_vanaf)
+    logger.info("[%s] %d inkomende betalingen in totaal opgehaald via bunq sinds %s", pand.slug, len(alle_payments), zoek_vanaf)
+    # Op DEBUG (niet INFO) - handig bij het uitpluizen van een specifieke
+    # betaling, maar te veel ruis om standaard elke controle te loggen.
+    for p in alle_payments:
+        logger.debug(
+            "[%s]   bunq-betaling: %s | %s | %s | %.40s",
+            pand.slug, p.datum, p.bedrag, p.tegenpartij_naam, p.omschrijving,
+        )
+    # Betalingen die (per de 17e-grens) eigenlijk voor een andere maand
+    # tellen (bv. al vroeg vooruitbetaald voor volgende maand) horen niet bij
+    # déze controle - die komen vanzelf mee bij de controle van die maand.
+    # De 17e-grens geldt per (huurder, betaling)-paar i.p.v. globaal per
+    # betaling (zie _effectieve_maand_voor_instap): zo geldt de uitzondering
+    # voor een late instapdatum alleen voor de betaling(en) die ook echt bij
+    # díe huurder horen. Een betaling die bij geen enkele huurder past (dus
+    # sowieso als "niet-gekoppeld" getoond wordt) valt terug op de gewone,
+    # tenant-onafhankelijke 17e-regel - anders zou zo'n betaling stilzwijgend
+    # uit de "niet-gekoppeld"-lijst verdwijnen i.p.v. daar zichtbaar te blijven.
+    #
+    # Zoekt eerst een sterke match (IBAN/letterlijk zoekwoord) en pas als die
+    # er geen oplevert een zwakke (losse naamdelen) - dezelfde volgorde als
+    # match_tenants_to_payments() zelf. Zonder die volgorde kon een zwakke,
+    # onterechte match op een héél andere (instap-)huurder een betaling al
+    # hier uit de maand-lijst filteren, vóórdat de eigenlijke matching er
+    # zelfs naar keek - de betaling verdween dan spoorloos: niet toegekend,
+    # maar ook niet zichtbaar bij "niet-gekoppeld".
+    #
+    # De instap-uitzondering geldt alleen als déze controlemaand ook
+    # daadwerkelijk de instapmaand (of de maand ervóór) van de gematchte
+    # huurder ís (zie instapmaand_kamers hierboven - dezelfde grens als voor
+    # de ruimere tolerantie). Een eerdere versie liet 'm gelden zodra er
+    # ooit een 'Contract startdatum' was ingevuld die toevallig in de
+    # kalendermaand van de betaling viel - dat bleef voor altijd actief, ook
+    # ver na de instap: een allang gevestigde huurder kreeg dan een heel
+    # gewone, iets te late vooruitbetaling voor de huidige maand alsnog aan
+    # die allang afgehandelde instapmaand vastgeplakt, en de betaling
+    # verdween zo spoorloos (niet toegekend, niet zichtbaar bij "niet-
+    # gekoppeld"). Een latere poging om dit via de geschiedenis
+    # (_instapbetaling_al_ontvangen) te herkennen bleek in de praktijk niet
+    # betrouwbaar - borg en (pro-rata) huur komen niet altijd in dezelfde
+    # kalendermaand binnen, waardoor geen los maandtotaal ooit het volledige
+    # instapbedrag laat zien, ook niet als de huurder allang gewoon
+    # maandelijks betaalt. Buiten het instap(-vorige)maandvenster geldt
+    # daarom gewoon weer de normale 17e-regel, zoals voor elke andere
+    # huurder - dit kan in theorie een heel late (ná de 17e) instapbetaling
+    # nog eens laten meetellen bij de eerstvolgende maand als die ook zonder
+    # tussentijdse controle wordt gecheckt, maar dat is zichtbaar (een
+    # onverwacht "Te veel ontvangen") en dus veel minder schadelijk dan een
+    # betaling die spoorloos verdwijnt.
+    origineel_per_kamer = {t.kamer: t for t in tenants}
+
+    def _hoort_bij_deze_maand(betaling: Payment) -> bool:
+        gematchte_huurder = (
+            next((t for t in tenants_voor_match if _matches_sterk(t, betaling)), None)
+            or next((t for t in tenants_voor_match if _matches_los(t, betaling)), None)
+        )
+        instap_start = (
+            _tenant_startdatum(gematchte_huurder)
+            if gematchte_huurder and gematchte_huurder.kamer in instapmaand_kamers
+            else None
+        )
+        # De instap-uitzondering (die een betaling aan de instapmaand vastplakt)
+        # geldt alleen zolang het instapbedrag nog niet gedekt is. Is dat via
+        # een eerdere betaling al binnen, dan is déze betaling een gewone
+        # vooruitbetaling voor de volgende maand en volgt hij weer de normale
+        # 17e-regel - anders zou een vlak na de instap alvast betaalde volgende
+        # maand ten onrechte als "te veel ontvangen" in de instapmaand landen.
+        if instap_start and _instap_al_gedekt_door_eerdere_betaling(
+            origineel_per_kamer[gematchte_huurder.kamer], betaling, alle_payments,
+            instap_start, config.bedrag_tolerantie,
+        ):
+            instap_start = None
+        return _effectieve_maand_voor_instap(betaling.datum, instap_start) == huidige_maand_sleutel
+
+    payments = [p for p in alle_payments if _hoort_bij_deze_maand(p)]
+    logger.info("[%s] %d inkomende betalingen gevonden deze maand", pand.slug, len(payments))
+
+    results, unmatched = match_tenants_to_payments(
+        tenants_voor_match, payments, config.bedrag_tolerantie, instapmaand_kamers, openstaand_tekort
+    )
+
+    if not dry_run:
+        maand = vandaag.strftime("%Y-%m")
+        sheet.write_results(results)
+        try:
+            sheet.upsert_history(results, maand)
+        except Exception:
+            # De actuele status (hierboven, en state.save() hieronder) is al
+            # opgeslagen - een hapering bij het wegschrijven van de Historie-
+            # sheet mag de rest van de controle niet laten mislukken. De
+            # kamerpagina vult de lopende maand zo nodig zelf aan vanuit de
+            # state-cache (zie webapp/reliability.py:voeg_actuele_maand_toe).
+            logger.exception("[%s] Bijwerken van de Historie-sheet voor %s is mislukt.", pand.slug, maand)
+        state.save(pand.slug, results, len(unmatched), config.state_dir, unmatched_payments=unmatched)
+        logger.info("[%s] Sheet en geschiedenis bijgewerkt.", pand.slug)
+        _meld_indien_alles_betaald(config, pand, results, maand)
+
+    return tenants, results, unmatched
+
+
+def verwachte_huurinkomsten_specificatie(tenants: list[Tenant]) -> list[winst.Inkomst]:
+    """Specificatie (1 regel per bewoonde kamer) van de NOMINALE/verwachte
+    maandhuur (kale huur + servicekosten, Tenant.verwacht_bedrag) voor de
+    winstberekening (zie webapp/app.py: winstberekening() en
+    scripts/winst_snapshot.py) - dus wat een pand in principe elke maand
+    oplevert als alles normaal betaald wordt, NIET wat er deze specifieke
+    maand daadwerkelijk is binnengekomen (dat kan vertekend zijn door een
+    ingelopen achterstand, een instapmaand met extra borg, een net te laat
+    betaalde maand, etc. - de betaalcontrole/Betalingen-pagina blijft de plek
+    om dát te volgen). Leegstaande kamers (geen huurder) tellen niet mee."""
+    return [
+        winst.Inkomst(kamer=t.kamer, naam=t.naam, verwacht_bedrag=t.verwacht_bedrag)
+        for t in tenants if t.naam
+    ]
+
+
+def bereken_winstoverzicht(
+    config: Config, pand: Pand, inkomsten_specificatie: list[winst.Inkomst]
+) -> winst.Winstoverzicht:
+    """Haalt de uitgaande bunq-transacties van de rekening van dit pand op
+    (zie winst.SCAN_TERUGBLIK_DAGEN) om terugkerende vaste lasten te
+    herkennen, en zet dat samen met `inkomsten_specificatie` (zie
+    verwachte_huurinkomsten_specificatie()) om in een compleet winstoverzicht.
+    Tegenpartijen die de beheerder zelf definitief genegeerd heeft (zie
+    state.negeer_last(), bv. een overboeking naar zichzelf) tellen nooit mee,
+    ongeacht het herkenningspatroon. Kan BunqClientError laten doorstromen
+    (net als run_check()) als de bunq-koppeling niet werkt."""
+    bunq = BunqClient(config)
+    sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
+    uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
+    genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
+    lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
+    return winst.bereken_winst(
+        inkomsten_specificatie, lasten, pand.onderhoud_reserve_per_maand,
+        energiekosten=pand.energiekosten_per_maand, belasting=pand.belasting_per_maand,
+    )
+
+
+def _meld_indien_alles_betaald(config: Config, pand: Pand, results: list[TenantResult], maand: str) -> None:
+    """Stuurt eenmalig per pand per maand een kennisgeving naar de
+    beheerder(s) zodra de huur van alle kamers binnen is - handig omdat de
+    dagelijkse automatische controle (zie scripts/dagelijkse_controle.py)
+    niemand actief in de gaten houdt."""
+    if not results or not all(r.status == Status.BETAALD for r in results):
+        return
+    if state.email_verzonden_op(pand.slug, _ALLES_BETAALD_KAMER_SLEUTEL, _ALLES_BETAALD_SOORT, maand, config.state_dir):
+        return  # deze maand al eerder gemeld
+
+    basis = list(dict.fromkeys(config.email_bcc + pand.extra_bcc))
+    users = mail_voorkeuren.laad_users(config.users_file)
+    ontvangers = mail_voorkeuren.ontvangers(users, pand.slug, "betalingsstatus", basis)
+    if not ontvangers:
+        logger.info(
+            "[%s] Geen EMAIL_BCC/extra_bcc-adressen ingesteld - 'alles betaald'-melding overgeslagen.", pand.slug
+        )
+        return
+
+    jaar, maandnr = maand.split("-")
+    maandtekst = f"{_MAAND_NAMEN_NL[int(maandnr) - 1]} {jaar}"
+    onderwerp = f"Alle huur ontvangen - {pand.naam} - {maandtekst}"
+    tekst = (
+        f"Beste beheerder,\n\n"
+        f"De huur van alle kamers van {pand.naam} is voor {maandtekst} volledig ontvangen.\n\n"
+        f"Geen verdere actie nodig.\n\n"
+        f"- Steenhub (automatisch bericht)"
+    )
+    try:
+        verstuur_email(config, ", ".join(ontvangers), onderwerp, tekst)
+    except MailError:
+        logger.exception("[%s] Versturen van 'alles betaald'-melding is mislukt.", pand.slug)
+        return
+    state.markeer_email_verzonden(pand.slug, _ALLES_BETAALD_KAMER_SLEUTEL, _ALLES_BETAALD_SOORT, maand, config.state_dir)
+
+
+def _voorgaande_maanden(vandaag: date, aantal: int) -> list[tuple[int, int]]:
+    """Geeft `aantal` kalendermaanden vóór (dus exclusief) de maand van
+    `vandaag` terug, oudste eerst. De huidige maand wordt bewust overgeslagen -
+    die wordt al door run_check() bijgehouden."""
+    maanden = []
+    jaar, maand = vandaag.year, vandaag.month
+    for _ in range(aantal):
+        maand -= 1
+        if maand == 0:
+            maand, jaar = 12, jaar - 1
+        maanden.append((jaar, maand))
+    maanden.reverse()
+    return maanden
+
+
+def _verdeel_over_maanden(
+    verwacht_bedrag: Decimal,
+    betalingen: list[Payment],
+    maanden: list[tuple[int, int]],
+    tolerantie: Decimal,
+    verwacht_per_maand: dict[tuple[int, int], Decimal] | None = None,
+) -> dict[str, tuple[Decimal, Status, date | None, Decimal]]:
+    """Bepaalt per maand het ontvangen bedrag/status op basis van de
+    'effectieve maand' van elke betaling (zie _effectieve_maand: 1e t/m 17e
+    telt voor die maand, 18e t/m einde van de maand voor de maand erna) - een
+    vaste regel in plaats van per-kalendermaand giswerk, zodat een huurder
+    die structureel vroeg/laat betaalt niet als "te veel"/"niet ontvangen"
+    door elkaar heen wordt weergegeven.
+
+    `verwacht_per_maand` overschrijft `verwacht_bedrag` voor specifieke
+    maanden (gebruikt voor de instapmaand: pro-rata huur + borg, zie
+    _verwacht_bedrag_voor_maand()) - het teruggegeven bedrag komt terug als
+    4e element van de tuple, zodat de Historie-sheet ook voor die maand een
+    kloppend "Verwacht bedrag" laat zien in plaats van de volle maandhuur.
+    Voor zo'n maand geldt bovendien een ruimere tolerantie van 10% i.p.v. de
+    normale tolerantie in centen, want de pro-rata berekening wijkt vaker een
+    paar euro af door afrondingsverschillen (bv. een dag verschil in de
+    ingangsdatum) dan een normale volle-maand huur.
+
+    Geen cumulatieve verrekening van structurele huurverhogingen over de
+    hele periode (elke maand blijft vergeleken worden met het HUIDIGE
+    verwachte bedrag - de sheet houdt geen historische huurbedragen bij).
+    Een overschot in een maand lost wél eerst een nog openstaande achterstand
+    van eerdere maand(en) af, vóórdat de rest als 'te veel ontvangen' voor
+    die maand zelf telt (zie _verwerk_maand()) - zo laat een latere
+    inhaalbetaling niet zowel de gemiste maand als de betaalmaand ten
+    onrechte als fout zien."""
+    per_maand: dict[tuple[int, int], tuple[Decimal, date | None]] = {sleutel: (Decimal("0"), None) for sleutel in maanden}
+    for p in betalingen:
+        sleutel = _effectieve_maand(p.datum)
+        if sleutel not in per_maand:
+            continue  # buiten de teruggezochte periode (bv. voor de eerstvolgende maand)
+        bedrag, laatste_datum = per_maand[sleutel]
+        nieuwe_datum = max(laatste_datum, p.datum) if laatste_datum else p.datum
+        per_maand[sleutel] = (bedrag + p.bedrag, nieuwe_datum)
+
+    resultaat: dict[str, tuple[Decimal, Status, date | None, Decimal]] = {}
+    lopend_tekort = Decimal("0")
+    for sleutel in maanden:
+        ontvangen, laatste_datum = per_maand[sleutel]
+        is_instapmaand = sleutel in (verwacht_per_maand or {})
+        verwacht_deze_maand = (verwacht_per_maand or {}).get(sleutel, verwacht_bedrag)
+        maand_key = _maand_sleutel_naar_string(sleutel)
+        percentage = _INSTAPMAAND_TOLERANTIE_PERCENTAGE if is_instapmaand else Decimal("0")
+        status, lopend_tekort = _verwerk_maand(ontvangen, verwacht_deze_maand, tolerantie, percentage, lopend_tekort)
+        resultaat[maand_key] = (ontvangen, status, laatste_datum, verwacht_deze_maand)
+
+    return resultaat
+
+
+def _maanden_vanaf(start_maand: tuple[int, int], vandaag: date) -> list[tuple[int, int]]:
+    """Alle kalendermaanden vanaf (en met) `start_maand` t/m de maand vóór
+    `vandaag` (die wordt al door run_check() bijgehouden), oudste eerst.
+    Lege lijst als de huurder deze maand (of later) is/gaat instappen."""
+    maanden = []
+    jaar, maand = start_maand
+    while (jaar, maand) < (vandaag.year, vandaag.month):
+        maanden.append((jaar, maand))
+        maand += 1
+        if maand == 13:
+            maand, jaar = 1, jaar + 1
+    return maanden
+
+
+def backfill_geschiedenis(
+    config: Config, pand: Pand, aantal_maanden: int = 12, vandaag: date | None = None
+) -> int:
+    """Vult de betaalgeschiedenis (Historie-tabblad) aan op basis van de
+    HUIDIGE huurderslijst uit de sheet. Voor een huurder met een bekende
+    'Contract startdatum' wordt teruggezocht vanaf díe instapmaand (dus niet
+    standaard 'aantal_maanden' terug) - zo verschijnen er geen "niet
+    ontvangen"-maanden van vóórdat de huurder er woonde. Voor een huurder
+    zonder bekende startdatum blijft de standaard 'aantal_maanden' terug
+    gelden. In de instapmaand zelf wordt bovendien rekening gehouden met de
+    pro-rata huur (bij een start halverwege de maand) plus een eventuele
+    waarborgsom (kolom 'Borg'), zodat die maand niet als "te veel ontvangen"
+    verschijnt. Raakt de Huurders-tab (status/ontvangen/laatst gecontroleerd)
+    niet aan, alleen de Historie-tab. Geeft het aantal bijgewerkte
+    (kamer-onafhankelijke) kalendermaanden terug."""
+    vandaag = vandaag or date.today()
+    standaard_maanden = _voorgaande_maanden(vandaag, aantal_maanden)
+
+    sheet = SheetClient(config, pand)
+    verwijderd = sheet.dedupliceer_geschiedenis()
+    if verwijderd:
+        logger.info("[%s] %d dubbele historieregel(s) opgeschoond.", pand.slug, verwijderd)
+    tenants = sheet.get_tenants()
+
+    maanden_per_kamer: dict[str, list[tuple[int, int]]] = {}
+    start_per_kamer: dict[str, date] = {}
+    for tenant in tenants:
+        start = _tenant_startdatum(tenant)
+        if start:
+            start_per_kamer[tenant.kamer] = start
+            maanden_per_kamer[tenant.kamer] = _maanden_vanaf((start.year, start.month), vandaag)
+            # Ruimt regels op die een eerdere run (vóórdat de startdatum kon
+            # worden gelezen, bv. een toen nog onherkend datumformaat) al
+            # verkeerd had teruggerekend tot vóór de werkelijke instapmaand.
+            start_maand_sleutel = _maand_sleutel_naar_string((start.year, start.month))
+            opgeschoond = sheet.verwijder_geschiedenis_voor_instapdatum(tenant.kamer, tenant.naam, start_maand_sleutel)
+            if opgeschoond:
+                logger.info(
+                    "[%s] %d historieregel(s) van vóór de instapdatum van %s (kamer %s) opgeschoond.",
+                    pand.slug, opgeschoond, tenant.naam, tenant.kamer,
+                )
+        else:
+            maanden_per_kamer[tenant.kamer] = standaard_maanden
+
+    alle_maanden = sorted(set().union(*maanden_per_kamer.values())) if maanden_per_kamer else []
+    if not alle_maanden:
+        return 0
+
+    oudste_jaar, oudste_maand = alle_maanden[0]
+    # Ook een vroege betaling vlak vóór de oudste teruggezochte maand kan al
+    # voor die maand tellen (zie _effectieve_maand) - zoek daarom vanaf de
+    # 18e van de maand ervoor.
+    vorig_jaar, vorige_maand = _vorige_maand(oudste_jaar, oudste_maand)
+    zoek_vanaf = date(vorig_jaar, vorige_maand, _EFFECTIEVE_MAAND_GRENSDAG + 1)
+    nieuwste_jaar, nieuwste_maand = alle_maanden[-1]
+    zoek_tot = date(nieuwste_jaar, nieuwste_maand, calendar.monthrange(nieuwste_jaar, nieuwste_maand)[1])
+
+    logger.info("[%s] Geschiedenis aanvullen sinds %s...", pand.slug, zoek_vanaf)
+    bunq = BunqClient(config)
+    alle_betalingen = bunq.get_incoming_payments(pand, since=zoek_vanaf)
+    # betalingen van de huidige maand (die run_check() al afhandelt) horen niet mee te tellen
+    betalingen_in_venster = [p for p in alle_betalingen if p.datum <= zoek_tot]
+
+    resultaten, _unmatched = match_tenants_to_payments(tenants, betalingen_in_venster, config.bedrag_tolerantie)
+
+    per_maand: dict[str, list[TenantResult]] = {_maand_sleutel_naar_string(m): [] for m in alle_maanden}
+    for resultaat in resultaten:
+        tenant = resultaat.tenant
+        tenant_maanden = maanden_per_kamer.get(tenant.kamer, standaard_maanden)
+        if not tenant_maanden:
+            continue  # bv. deze maand pas ingestapt - nog niets om aan te vullen
+
+        overrides: dict[tuple[int, int], Decimal] = {}
+        start = start_per_kamer.get(tenant.kamer)
+        if start and (start.year, start.month) in tenant_maanden:
+            overrides[(start.year, start.month)] = _verwacht_bedrag_voor_maand(tenant, (start.year, start.month))
+
+        verdeling = _verdeel_over_maanden(
+            tenant.verwacht_bedrag, resultaat.gematchte_betalingen, tenant_maanden, config.bedrag_tolerantie, overrides,
+        )
+        for maand_key, (ontvangen, status, betaaldatum, verwacht_deze_maand) in verdeling.items():
+            tenant_voor_regel = (
+                tenant if verwacht_deze_maand == tenant.verwacht_bedrag
+                else dataclasses.replace(tenant, verwacht_bedrag=verwacht_deze_maand)
+            )
+            gematchte_betalingen = (
+                [Payment(
+                    bedrag=ontvangen, valuta="EUR", tegenpartij_naam=tenant.naam,
+                    tegenpartij_iban=tenant.iban, omschrijving="", datum=betaaldatum,
+                )]
+                if betaaldatum
+                else []
+            )
+            per_maand.setdefault(maand_key, []).append(
+                TenantResult(
+                    tenant=tenant_voor_regel, ontvangen_bedrag=ontvangen, status=status,
+                    gematchte_betalingen=gematchte_betalingen,
+                )
+            )
+
+    for maand_key, tenant_resultaten in per_maand.items():
+        if tenant_resultaten:
+            sheet.upsert_history(tenant_resultaten, maand_key)
+
+    logger.info("[%s] Geschiedenis aangevuld voor %d maand(en).", pand.slug, len(alle_maanden))
+    return len(alle_maanden)

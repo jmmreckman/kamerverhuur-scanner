@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rental Contract - Room {{ kamer }} - {{ pand.naam }}</title>
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; max-width: 750px; margin: 2rem auto; line-height: 1.45; color: #111; font-size: 13px; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
+  h2 { font-size: 1.05rem; margin-top: 1.3rem; margin-bottom: 0.3rem; }
+  p { margin: 0.35rem 0; }
+  ul { margin: 0.35rem 0; padding-left: 1.2rem; }
+  li { margin: 0.15rem 0; }
+  table.partijen { width: 100%; border-collapse: collapse; margin: 0.8rem 0 1.2rem; }
+  table.partijen td { vertical-align: top; padding: 0 1.5rem 0 0; }
+  table.handtekeningen { width: 100%; border-collapse: collapse; margin-top: 2.5rem; }
+  table.handtekeningen td { padding: 2.2rem 1rem 0.3rem 0; border-top: 1px solid #111; }
+  table.handtekeningen td.spacer { border-top: none; padding: 0; }
+  .print-knop { margin-bottom: 1.5rem; }
+  @media print { .print-knop { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="print-knop">
+  <button onclick="window.print()">Print / opslaan als PDF</button>
+  {% if pdf_url %}<a href="{{ pdf_url }}">Download als PDF</a>{% endif %}
+</div>
+
+<h1>TEMPORARY RENTAL CONTRACT FOR A ROOM</h1>
+
+<p><strong>BETWEEN THE UNDERSIGNED:</strong></p>
+<table class="partijen">
+  <tr>
+    {% for verhuurder in pand.verhuurders %}
+    <td>
+      <strong>Landlord{% if pand.verhuurders|length > 1 %} {{ loop.index }}{% endif %}:</strong><br>
+      Name: {{ verhuurder.naam }}<br>
+      Address: {{ verhuurder.adres or "[address]" }}
+    </td>
+    {% else %}
+    <td><strong>Landlord:</strong><br>Name: [fill in via "Panden beheren"]<br>Address: [fill in]</td>
+    {% endfor %}
+  </tr>
+</table>
+
+<p>
+  <strong>Tenant:</strong><br>
+  Name: {{ huurder_naam }}<br>
+  Date of birth: {{ geboortedatum or "[fill in]" }}<br>
+  Place / Land of birth: {{ geboorteplaats or "[fill in]" }}<br>
+  Student number: {{ studentnummer or "[fill in]" }}<br>
+  Study program: {{ studierichting or "[fill in]" }}
+</p>
+
+{% if borgsteller_naam %}
+<p>
+  <strong>Guarantor:</strong><br>
+  Name: {{ borgsteller_naam }}<br>
+  Relation to tenant: {{ borgsteller_relatie or "[fill in]" }}<br>
+  The guarantor declares joint liability for the financial obligations of the tenant, as specified in
+  Article 12 - Guarantee.
+</p>
+{% endif %}
+
+<!-- ARTIKELEN:START -->
+<h2>Article 1 - Rented Property</h2>
+<p>The room "{{ kamer }}"{% if kamer_omschrijving %}, {{ kamer_omschrijving }},{% endif %} located at
+   {{ pand.naam }}{% if pand.postcode or pand.plaats %}, {{ pand.postcode }} {{ pand.plaats }}{% endif %},
+   the Netherlands ("Rented Property").</p>
+<p><strong>Shared spaces:</strong> {{ pand.gedeelde_ruimtes or "[fill in shared facilities, e.g. kitchen, bathroom(s), garden, bicycle shed, laundry place]" }} are common areas.</p>
+{% if pand.bijzondere_bepalingen %}
+<p><strong>Additional property-specific provisions:</strong></p>
+<ul>
+  {% for regel in pand.bijzondere_bepalingen.splitlines() %}
+    {% if regel.strip() %}<li>{{ regel.strip() }}</li>{% endif %}
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2>Article 2 - Duration of the Rental Agreement</h2>
+<p>The rental agreement starts on <strong>{{ ingangsdatum }}</strong>{% if einddatum %}, and ends on
+   <strong>{{ einddatum }}</strong>. Both parties explicitly declare that this is a temporary contract
+   and will not be automatically extended.{% else %} for an indefinite period.{% endif %}</p>
+{% if einddatum %}
+<p><strong>Termination confirmation:</strong> The landlord will inform the tenant in writing by no
+   later than 1 - 3 months before the end date that the agreement will definitively end on
+   {{ einddatum }}. If the tenant does not vacate the premises voluntarily after this date, they will
+   be unlawfully occupying the property, and the landlord may take legal action. Extension of the
+   agreement is not possible.</p>
+{% endif %}
+<p><strong>Dissolutive Condition (Permit):</strong> This agreement is entered into under the express
+   condition that the landlord holds a valid room-rental permit (kamerverhuurvergunning). In the
+   event that this permit is revoked or denied by the municipality due to local objections or policy
+   changes, this rental agreement will be dissolved (ontbonden) by operation of law without any
+   compensation being due to the tenant.</p>
+<p><strong>Early termination:</strong> The tenant may terminate the agreement early with a written
+   notice period of one full calendar month.</p>
+<p><strong>Landlord Termination:</strong> The landlord may only terminate the agreement in the
+   following cases:</p>
+<ul>
+  <li>Rent arrears exceeding 4 weeks.</li>
+  <li>Serious violation of the rental agreement (e.g., subletting or severe damage to the property).</li>
+  <li>Violation of the House Rules and Conduct as specified in Article 9 (Zero Tolerance Policy).</li>
+</ul>
+<p>The landlord must comply with Dutch rental law when terminating the agreement.</p>
+
+<h2>Article 3 - Student Obligation</h2>
+<p>The tenant must be a student at the start and throughout the entire rental period. The landlord
+   has the right to request proof of enrollment annually. The tenant must provide valid proof of
+   enrollment by email to the landlord within three months of the request. If the tenant discontinues
+   their studies, they must inform the landlord immediately. If the tenant fails to provide proof of
+   enrollment, the landlord has the right to terminate the agreement with one month's notice. This
+   student clause does not affect the temporary nature of the tenancy agreement as referred to in
+   Article 7:271 paragraph 1 of the Dutch Civil Code.</p>
+
+<h2>Article 4 - Rent and Costs</h2>
+<p>
+  Monthly base rent: EUR {{ kale_huurprijs or "[fill in]" }}<br>
+  Advance payment for service costs: EUR {{ servicekosten or "[fill in]" }}<br>
+  <strong>Total monthly rent: EUR {{ huurprijs }}</strong>
+</p>
+<p>Service charges may include, among others: gas, water, and electricity (shared, not individually
+   metered); maintenance and cleaning of shared spaces and installations; heating system
+   maintenance; mechanical ventilation maintenance; cleaning of shared sanitary facilities; use of
+   furniture/appliances; shared use of washing machine and dryer; use/maintenance of movable items
+   (fire extinguishers/cameras); central internet and TV; lighting of common areas; waste disposal;
+   window cleaning; administration costs (max 5%).</p>
+<p><strong>Rent increase:</strong> The rent may be increased annually in accordance with the legally
+   permitted indexation.</p>
+<p><strong>Payment method:</strong> Rent must be paid monthly before the 1st day of the month to:
+   IBAN: {{ pand.bunq_rekening_iban }}, Account holder: {{ pand.rekeninghouder_naam or "[fill in]" }}.</p>
+
+<h2>Article 5 - Payment Terms &amp; Consequences of Late Payment</h2>
+<p>If the rent is more than 7 days late, the tenant will receive a written warning. If the rent remains
+   unpaid for more than 4 weeks, the landlord may initiate legal eviction proceedings under Article
+   7:231 of the Dutch Civil Code. The landlord may not unilaterally terminate the agreement without
+   legal action.</p>
+
+<h2>Article 6 - Deposit</h2>
+<p>{% if borg %}Upon signing, the tenant must pay a security deposit of EUR {{ borg }}.{% else %}[Fill
+   in the security deposit amount, or state that no deposit applies.]{% endif %} The deposit will be
+   refunded within one month after the end of the rental agreement, provided there are no rent
+   arrears or damages. The deposit will only be refunded after proof of deregistration from this
+   address or proof of registration at a new address is provided.</p>
+
+<h2>Article 7 - Service Charges &amp; Annual Settlement</h2>
+<p><strong>Annual settlement:</strong> If actual service charges are lower than the advance payment,
+   the tenant will receive a refund. If costs are higher, the tenant may owe an additional amount.
+   Service charges are divided equally among the {{ aantal_bewoners }} tenant{% if aantal_bewoners != 1 %}s{% endif %}
+   at the address, regardless of individual usage.</p>
+
+<h2>Article 8 - Municipal Taxes</h2>
+<p>The tenant is personally responsible for their share of municipal tax assessments (user's share).
+   This may require the tenant to advance the payment and settle with the other tenants. The
+   landlord is not responsible for the payment, coordination, or settlement of these taxes. The
+   owner's share (OZB) remains the responsibility of the landlord.</p>
+
+<h2>Article 9 - Use, House Rules and Conduct</h2>
+<ul>
+  <li><strong>Subletting:</strong> Strictly prohibited.</li>
+  <li><strong>Common Areas:</strong> No personal items or belongings may be stored in shared hallways or common areas.</li>
+  <li><strong>Nuisance:</strong> No nuisance to the neighborhood (noise, littering, etc.).</li>
+  <li><strong>Visitors:</strong> Receiving visitors/guests for longer than 2 days is not permitted without permission of the landlord.</li>
+  <li><strong>Quiet Hours:</strong> Strict quiet hours apply in the house and neighborhood from 22:00 to 06:00 hours.</li>
+  <li><strong>Substances:</strong> Smoking and the use/possession of drugs are entirely prohibited inside and outside the building. Excessive alcohol consumption is not allowed.</li>
+  <li><strong>Zero Tolerance:</strong> The landlord maintains a zero-tolerance policy. Any violation of these rules constitutes a material breach and grounded reason to initiate immediate dissolution (ontbinding) of the contract.</li>
+</ul>
+
+<h2>Article 10 - Maintenance and Handover</h2>
+<p>The tenant must keep the room clean and in good condition. Upon termination, the room must be
+   handed over in its original state and cleaned thoroughly. Any belongings left behind will be
+   removed at the tenant's expense. Shared areas must be kept clean by mutual agreement.</p>
+
+<h2>Article 11 - Applicable Law</h2>
+<p>This contract is governed by Dutch law. If any provision is declared invalid, the remaining
+   provisions remain in full force and effect.</p>
+
+<h2>Article 12 - Guarantee</h2>
+<p>{% if borgsteller_naam %}The guarantor declares himself/herself as guarantor for all financial
+   obligations (rent, arrears, and damages as specified in Article 13). The guarantor is jointly and
+   severally liable (hoofdelijk aansprakelijk). The guarantee remains valid until all obligations are
+   fulfilled and final inspection is approved.{% else %}Not applicable - no guarantor was provided for
+   this tenant.{% endif %}</p>
+
+<h2>Article 13 - Maintenance and Repairs</h2>
+<p><strong>Maintenance by the tenant:</strong> responsible for keeping the room/shared spaces clean;
+   unclogging drains (kitchen/bath/shower) caused by grease, food, or hair; replacing batteries in
+   smart radiator thermostats and smoke detectors; preventing moisture and mold via adequate
+   ventilation/heating; replacing bulbs and fuses.</p>
+<p><strong>Maintenance by the landlord:</strong> responsible for structural issues (leaks/heating) and
+   shared equipment repair (fridge/washer/dishwasher).</p>
+<p><strong>Reporting:</strong> defects must be reported timely. Damage caused by negligence or
+   failure to ventilate will be charged to the tenant.</p>
+
+<h2>Article 14 - Landlord's Access to the Property</h2>
+<p>The landlord has the right to enter for maintenance, inspections, or viewings with an appointment
+   made at least 24 hours in advance, except in emergencies.</p>
+
+<h2>Article 15 - Insurance</h2>
+<p>The tenant is responsible for contents insurance. The landlord holds building and liability
+   insurance.</p>
+
+<h2>Article 16 - Information Disclosure (Wet goed verhuurderschap)</h2>
+<p>In accordance with the Dutch "Wet goed verhuurderschap", the landlord provides the following
+   information to the tenant:</p>
+<ul>
+  <li><strong>Rights and Obligations:</strong> the tenant has the right to a rental price that is not
+      higher than permitted by the WWS (housing valuation system) and the right to protection
+      against intimidation.</li>
+  <li><strong>Point Rating (WWS):</strong> the landlord has provided the tenant with a copy of the WWS
+      point rating for the rented property as an annex to this contract.</li>
+  <li><strong>Deposit Policy:</strong> the security deposit (Art. 6) will be returned within 14 days
+      after the end of the tenancy, or within 30 days if there are outstanding costs or damages.</li>
+  <li><strong>Service Charges:</strong> a transparent annual settlement of service charges (Art. 7)
+      will be provided, based on actual costs without profit for the landlord.</li>
+  <li><strong>Municipality Reporting Point (Meldpunt):</strong> if the tenant experiences undesirable
+      behavior or issues related to "good landlordship", the tenant can report this to the
+      Municipality{% if pand.plaats %} of {{ pand.plaats }}{% endif %}{% if pand.gemeente_meldpunt %}
+      via: {{ pand.gemeente_meldpunt }}{% else %} ([fill in the municipal reporting point]){% endif %}.</li>
+  <li><strong>Contact for Issues:</strong> for any questions or repairs, the tenant must contact the
+      landlord via the contact details listed at the top of this agreement.</li>
+</ul>
+
+{% if bijzonderheden %}
+<h2>Additional Agreements</h2>
+<p>{{ bijzonderheden }}</p>
+{% endif %}
+<!-- ARTIKELEN:EINDE -->
+
+<h2>Signatures</h2>
+<!-- HANDTEKENINGEN:START -->
+<table class="handtekeningen">
+  {% for verhuurder in pand.verhuurders %}
+  <tr><td>{{ verhuurder.naam }} (landlord)</td></tr>
+  <tr><td class="spacer">&nbsp;</td></tr>
+  {% else %}
+  <tr><td>Landlord</td></tr>
+  <tr><td class="spacer">&nbsp;</td></tr>
+  {% endfor %}
+  <tr><td>{{ huurder_naam }} (tenant)</td></tr>
+  {% if borgsteller_naam %}
+  <tr><td class="spacer">&nbsp;</td></tr>
+  <tr><td>{{ borgsteller_naam }} (guarantor)</td></tr>
+  {% endif %}
+</table>
+<!-- HANDTEKENINGEN:EINDE -->
+
+<p style="margin-top:2rem"><em>Annex 1: Housing Valuation System (WWS) Point Rating - attach separately.</em></p>
+
+</body>
+</html>

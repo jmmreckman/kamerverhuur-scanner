@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Geen toegang{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Geen toegang</h1>
+</div>
+<div class="card">
+  <p>Je hebt geen toegang tot <strong>{{ pand.naam }}</strong>.</p>
+  <p class="muted">Vraag de beheerder om je toegang tot dit pand te geven.</p>
+  <a class="btn" href="{{ url_for('start') }}">Terug naar mijn panden</a>
+</div>
+{% endblock %}

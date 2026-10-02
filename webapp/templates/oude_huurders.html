@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Oude huurders - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Oude huurders</h1>
+  <p class="muted">Alle ooit vertrokken huurders van dit pand, blijvend bewaard - klik op een naam voor hun
+     contactgegevens en betaalgeschiedenis van toen.</p>
+</div>
+
+<p style="margin: -0.75rem 0 1.5rem">
+  <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Terug naar Huurders</a>
+</p>
+
+<div class="card">
+  {% if oude_huurders %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Kamer</th><th>Naam</th><th>Mail</th><th>Telefoonnummer</th><th>Contract einddatum</th><th>Vertrokken op</th></tr>
+    {% for v in oude_huurders %}
+    <tr>
+      <td>{{ v.kamer }}</td>
+      <td><a href="{{ url_for('oude_huurder_detail', pand_slug=huidig_pand.slug, row_index=v.row_index) }}">{{ v.naam }}</a></td>
+      <td>{% if v.email %}<a href="mailto:{{ v.email }}">{{ v.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if v.telefoonnummer %}<a href="tel:{{ v.telefoonnummer }}">{{ v.telefoonnummer }}</a>{% else %}-{% endif %}</td>
+      <td>{{ v.contract_einddatum or "-" }}</td>
+      <td>{{ v.vertrokken_op.strftime("%d-%m-%Y") }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen oude huurders - deze lijst vult zich vanzelf zodra een kamer een andere
+     huurder krijgt.</p>
+  {% endif %}
+</div>
+{% endblock %}

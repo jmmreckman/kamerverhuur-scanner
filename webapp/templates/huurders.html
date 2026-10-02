@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Huurders - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Huurders</h1>
+  <p class="muted">Wijzigingen worden direct in de sheet opgeslagen</p>
+</div>
+<p style="margin: -0.75rem 0 1.5rem; display:flex; gap:0.6rem">
+  <a class="btn" href="{{ url_for('huishouden_mailen', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Mail het hele huishouden</a>
+  <a class="btn btn-secondary" href="{{ url_for('oude_huurders', pand_slug=huidig_pand.slug) }}">Oude huurders</a>
+</p>
+
+<div class="card">
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Kamer</th><th>Naam</th><th>Mail</th><th>Telefoonnummer</th><th>Totale huur</th><th>Contract einddatum</th><th></th></tr>
+    {% for k in kamers %}
+    <tr>
+      <td><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.kamer }}</a></td>
+      <td>{% if k.naam %}<a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">{{ k.naam }}</a>{% else %}(leegstaand){% endif %}</td>
+      <td>{% if k.email %}<a href="mailto:{{ k.email }}">{{ k.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if k.telefoonnummer %}<a href="tel:{{ k.telefoonnummer }}">{{ k.telefoonnummer }}</a>{% else %}-{% endif %}</td>
+      <td>{{ k.verwacht_bedrag|eur }}</td>
+      <td>{{ k.contract_einddatum or "-" }}</td>
+      <td><a href="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Bewerken</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+
+{% if vertrokken_huurders %}
+<div class="card">
+  <h2 class="muted">Voormalige huurders (recent vertrokken)</h2>
+  <p class="muted">Blijft hier nog tot 1 maand na de contract-einddatum staan, daarna verdwijnt dit
+     vanzelf. Contactgegevens blijven bruikbaar (bv. mailen/bellen) als er nog iets af te handelen is.</p>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Kamer</th><th>Naam</th><th>Mail</th><th>Telefoonnummer</th><th>Contract einddatum</th><th>Vertrokken op</th></tr>
+    {% for v in vertrokken_huurders %}
+    <tr style="color: var(--muted)">
+      <td>{{ v.kamer }}</td>
+      <td>{{ v.naam }} <span class="pil pil-neutral">voormalig</span></td>
+      <td>{% if v.email %}<a href="mailto:{{ v.email }}">{{ v.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if v.telefoonnummer %}<a href="tel:{{ v.telefoonnummer }}">{{ v.telefoonnummer }}</a>{% else %}-{% endif %}</td>
+      <td>{{ v.contract_einddatum or "-" }}</td>
+      <td>{{ v.vertrokken_op.strftime("%d-%m-%Y") }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

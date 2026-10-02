@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Concept bewerken - {{ bestandsnaam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Concept-huurcontract bewerken</h1>
+  <p class="muted">{{ bestandsnaam }} - past het concept aan, de Huurders-sheet wordt hierbij niet
+     bijgewerkt (dat gebeurt pas bij "Verzoek tot tekenen").</p>
+</div>
+
+<div class="card">
+  <form method="post">
+    <h2>Huurder</h2>
+    <label>Naam huurder
+      <input type="text" name="huurder_naam" value="{{ metadata.huurder_naam or '' }}" required>
+    </label>
+    <label>Geboortedatum
+      <input type="text" name="geboortedatum" placeholder="dd-mm-jjjj" value="{{ metadata.geboortedatum or '' }}">
+    </label>
+    <label>Geboorteplaats / land
+      <input type="text" name="geboorteplaats" placeholder="bv. Tatabánya, Hongarije" value="{{ metadata.geboorteplaats or '' }}">
+    </label>
+    <label>Studentnummer
+      <input type="text" name="studentnummer" value="{{ metadata.studentnummer or '' }}">
+    </label>
+    <label>Studierichting
+      <input type="text" name="studierichting" value="{{ metadata.studierichting or '' }}">
+    </label>
+    <label>E-mailadres huurder (voor het versturen van het concept-contract)
+      <input type="email" name="email" value="{{ metadata.email or '' }}" multiple>
+    </label>
+
+    <h2>Borgsteller (optioneel)</h2>
+    <label>Naam borgsteller
+      <input type="text" name="borgsteller_naam" value="{{ metadata.borgsteller_naam or '' }}">
+    </label>
+    <label>Relatie tot huurder
+      <input type="text" name="borgsteller_relatie" placeholder="bv. Vader" value="{{ metadata.borgsteller_relatie or '' }}">
+    </label>
+    <label>E-mailadres borgsteller (voor het verzoek tot ondertekenen, alleen nodig als er een borgsteller is)
+      <input type="email" name="borgsteller_email" value="{{ metadata.borgsteller_email or '' }}" multiple>
+    </label>
+
+    <h2>Kamer en huurprijs</h2>
+    <label>Kamer
+      <input type="text" name="kamer" value="{{ metadata.kamer or '' }}" required>
+    </label>
+    <label>Omschrijving van de kamer (zoals in het contract, bv. "ground floor garden side with own kitchen")
+      <input type="text" name="kamer_omschrijving" value="{{ metadata.kamer_omschrijving or '' }}">
+    </label>
+    <label>Kale huurprijs per maand (EUR)
+      <input type="text" name="kale_huurprijs" value="{{ metadata.kale_huurprijs or '' }}">
+    </label>
+    <label>Servicekosten per maand (EUR)
+      <input type="text" name="servicekosten" value="{{ metadata.servicekosten or '' }}">
+    </label>
+    <label>Totale huur per maand (EUR)
+      <input type="text" name="huurprijs" value="{{ metadata.huurprijs or '' }}" required>
+    </label>
+    <label>Waarborgsom (EUR)
+      <input type="text" name="borg" value="{{ metadata.borg or '' }}">
+    </label>
+    <label>Aantal bewoners waarover de servicekosten verdeeld worden
+      <input type="number" name="aantal_bewoners" min="1" value="{{ metadata.aantal_bewoners or 1 }}">
+    </label>
+
+    <h2>Duur</h2>
+    <label>Ingangsdatum
+      <input type="date" name="ingangsdatum" value="{{ metadata.ingangsdatum_iso or '' }}" required>
+    </label>
+    <label>Einddatum (leeg = onbepaalde tijd)
+      <input type="date" name="einddatum" value="{{ metadata.einddatum_iso or '' }}">
+    </label>
+
+    <h2>Overig</h2>
+    <label>Bijzonderheden
+      <textarea name="bijzonderheden" placeholder="Eventuele aanvullende afspraken">{{ metadata.bijzonderheden or '' }}</textarea>
+    </label>
+
+    <button class="btn" type="submit">Concept bijwerken</button>
+    <a class="btn btn-secondary" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+  </form>
+</div>
+{% endblock %}

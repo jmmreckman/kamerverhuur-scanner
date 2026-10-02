@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_betalingen, icon_inbox, icon_alert, icon_check %}
+{% block title %}Betalingen - {{ huidig_pand.naam }}{% endblock %}
+
+{% macro email_knop(kamer_naam, soort, label, icon_html) %}
+  {% set verzonden_op = verzonden.get((kamer_naam, soort)) %}
+  <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap">
+    <a class="btn btn-secondary btn-xs" href="{{ url_for('kamer_email', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam, soort=soort) }}">{{ icon_html }} {{ label }}</a>
+    {% if verzonden_op %}
+      <span class="pil status-betaald" style="font-size:0.7rem" title="Verzonden op {{ verzonden_op }}">{{ icon_check() }} Verzonden</span>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro actie_knoppen(kamer_naam, status, email) %}
+  {% if status != "Betaald" %}
+    {% if email %}
+      <div style="display:flex; flex-direction:column; gap:0.35rem">
+        {{ email_knop(kamer_naam, 'herinnering', 'Stuur herinnering', icon_inbox()) }}
+        {{ email_knop(kamer_naam, 'ingebrekestelling', 'Stuur ingebrekestelling', icon_alert()) }}
+      </div>
+    {% else %}
+      <span class="muted" style="font-size:0.8rem">Geen e-mailadres bekend</span>
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Betalingen controleren</h1>
+</div>
+
+{% if oud_huurder_signalen %}
+<div class="card oud-huurder-waarschuwing">
+  <p class="oud-huurder-kop"><span class="oud-huurder-icoon">{{ icon_alert() }}</span> Mogelijke betaling van een oud-huurder</p>
+  <p class="muted" style="margin: 0.15rem 0 0; font-size: 0.85rem;">
+    Deze niet-gekoppelde betaling(en) lijken op de naam van een vertrokken huurder &mdash;
+    waarschijnlijk een vergeten automatische overschrijving. Controleer en zet zo nodig stop / stort terug.
+  </p>
+  <ul style="margin: 0.4rem 0 0; padding-left: 1.2rem; font-size: 0.9rem;">
+    {% for s in oud_huurder_signalen %}
+    <li style="margin-bottom: 0.2rem;">
+      <strong>{{ s.tegenpartij_naam }}</strong> &middot; {{ s.bedrag|eur }} op {{ s.datum }} &mdash;
+      lijkt op oud-huurder
+      {% if s.row_index %}<a href="{{ url_for('oude_huurder_detail', pand_slug=huidig_pand.slug, row_index=s.row_index) }}">{{ s.oud_naam }}</a>{% else %}{{ s.oud_naam }}{% endif %}
+      (voorheen kamer {{ s.kamer }})
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if net_gecontroleerd %}
+<div class="card">
+  <h2>Resultaat van deze controle</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr></thead>
+    <tbody>
+    {% for r in net_gecontroleerd["results"] %}
+    <tr>
+      <td data-label="Kamer">{{ r.tenant.kamer }}</td>
+      <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r.tenant.kamer) }}">{{ r.tenant.naam }}</a></td>
+      <td data-label="Verwacht">{{ r.tenant.verwacht_bedrag|eur }}</td>
+      <td data-label="Ontvangen">{{ r.ontvangen_bedrag|eur }}</td>
+      <td data-label="Status"><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span></td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if net_gecontroleerd["unmatched"] %}
+  <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
+    <tbody>
+    {% for p in net_gecontroleerd["unmatched"] %}
+    {% set oud = herken_oud_huurder(p.tegenpartij_naam, p.omschrijving) %}
+    <tr>
+      <td data-label="Datum">{{ p.datum.strftime("%d-%m-%Y") }}</td>
+      <td data-label="Van">{{ p.tegenpartij_naam }}
+        {% if oud %}<span class="pil" style="background: var(--warn-soft); color: var(--warn);" title="Lijkt op oud-huurder {{ oud.naam }} (kamer {{ oud.kamer }})">{{ icon_alert() }} oud-huurder?</span>{% endif %}
+      </td>
+      <td data-label="Bedrag">{{ p.bedrag|eur }}</td>
+      <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p.omschrijving }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% elif cache %}
+<div class="card">
+  <h2>Laatste controle</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Kamer</th><th>Huurder</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Actie</th></tr></thead>
+    <tbody>
+    {% for r in cache["resultaten"] %}
+    <tr>
+      <td data-label="Kamer">{{ r["kamer"] }}</td>
+      <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r["naam"] }}</a></td>
+      <td data-label="Verwacht">{{ r["verwacht_bedrag"]|eur }}</td>
+      <td data-label="Ontvangen">{{ r["ontvangen_bedrag"]|eur }}</td>
+      <td data-label="Status"><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if cache["niet_gekoppelde_betalingen_lijst"] %}
+  <h2>Niet-gekoppelde inkomende betalingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Datum</th><th>Van</th><th>Bedrag</th><th>Omschrijving</th></tr></thead>
+    <tbody>
+    {% for p in cache["niet_gekoppelde_betalingen_lijst"] %}
+    {% set oud = herken_oud_huurder(p["tegenpartij_naam"], p["omschrijving"]) %}
+    <tr>
+      <td data-label="Datum">{{ p["datum"] }}</td>
+      <td data-label="Van">{{ p["tegenpartij_naam"] }}
+        {% if oud %}<span class="pil" style="background: var(--warn-soft); color: var(--warn);" title="Lijkt op oud-huurder {{ oud.naam }} (kamer {{ oud.kamer }})">{{ icon_alert() }} oud-huurder?</span>{% endif %}
+      </td>
+      <td data-label="Bedrag">{{ p["bedrag"]|eur }}</td>
+      <td data-label="Omschrijving" class="tabel-cel-stapel">{{ p["omschrijving"] }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <p>Haalt de inkomende betalingen van deze maand op via bunq, koppelt ze aan de huurders
+     en werkt de sheet + geschiedenis bij. Dit kan een paar seconden duren.</p>
+  <form method="post">
+    <button class="btn" type="submit">{{ icon_betalingen() }} Nu controleren</button>
+  </form>
+</div>
+
+<div class="card">
+  <p>Vult de betaalgeschiedenis (voor de betrouwbaarheidsscore per kamer) aan met de 12
+     maanden vóór deze maand, op basis van de huidige huurderslijst. Kamers die pas kort
+     verhuurd zijn kunnen voor oudere maanden leeg blijven - dat kan niet worden opgehaald.</p>
+  <form method="post" action="{{ url_for('geschiedenis_aanvullen', pand_slug=huidig_pand.slug) }}">
+    <button class="btn btn-secondary" type="submit">{{ icon_betalingen() }} Betaalgeschiedenis aanvullen (12 maanden terug)</button>
+  </form>
+</div>
+{% endblock %}
