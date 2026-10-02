@@ -10,26 +10,27 @@
   .tp-page { position:relative; width:100%; max-width:800px; box-shadow:var(--shadow); line-height:0; }
   .tp-page img { width:100%; height:auto; display:block; border:1px solid var(--border); }
   .tp-page.plaatsen { cursor:crosshair; }
-  .tp-veld { position:absolute; box-sizing:border-box; border-radius:4px; display:flex; flex-direction:column;
-    overflow:hidden; cursor:move; touch-action:none; }
+  .tp-veld { position:absolute; box-sizing:border-box; border-radius:4px; }
   .tp-veld.handtekening { border:2px dashed #1b7a43; background:rgba(27,122,67,0.12); }
   .tp-veld.tekst { border:2px dashed #1d6fb8; background:rgba(29,111,184,0.10); }
-  .tp-veld-top { display:flex; justify-content:space-between; align-items:center; color:#fff;
-    font-size:0.62rem; padding:0 0.2rem; line-height:1.4; }
-  .tp-veld.handtekening .tp-veld-top { background:#1b7a43; }
-  .tp-veld.tekst .tp-veld-top { background:#1d6fb8; }
-  .tp-veld-x { cursor:pointer; font-weight:bold; padding:0 0.2rem; }
-  .tp-veld input { width:100%; border:0; font-size:0.66rem; padding:0.1rem 0.2rem; background:rgba(255,255,255,0.92); }
-  .tp-veld .tp-veld-label { font-size:0.58rem; text-align:center; margin-top:auto; padding-bottom:0.1rem; }
-  .tp-veld.handtekening .tp-veld-label { color:#1b7a43; }
-  .tp-veld.tekst .tp-veld-label { color:#1d6fb8; }
+  /* Het invoerveld vult de hele box, zodat je overal in de box kunt tikken om te
+     typen (belangrijk op mobiel). Slepen en verwijderen via de hoekknopjes. */
+  .tp-veld input { position:absolute; inset:0; width:100%; height:100%; box-sizing:border-box;
+    border:0; background:rgba(255,255,255,0.9); font-size:0.8rem; padding:0.1rem 1.25rem; text-align:center; }
+  .tp-greep, .tp-veld-x { position:absolute; top:0; z-index:2; width:1.15rem; height:1.15rem;
+    display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#fff;
+    line-height:1; user-select:none; }
+  .tp-greep { left:0; cursor:move; touch-action:none; }
+  .tp-veld-x { right:0; font-weight:bold; cursor:pointer; }
+  .tp-veld.handtekening .tp-greep, .tp-veld.handtekening .tp-veld-x { background:#1b7a43; }
+  .tp-veld.tekst .tp-greep, .tp-veld.tekst .tp-veld-x { background:#1d6fb8; }
 </style>
 
 <div class="page-header">
   <h1>Velden plaatsen</h1>
-  <p class="muted">{{ meta.titel }} &mdash; kies een veldsoort en klik op de PDF om 'm te plaatsen (slepen om te verschuiven).
-    <strong style="color:#1b7a43;">Handtekeningveld</strong>: koppel een mailadres, daar tekent die persoon.
-    <strong style="color:#1d6fb8;">Tekstveld</strong>: typ zelf de tekst die op de PDF komt (bijv. plaats, BSN, datum).</p>
+  <p class="muted">{{ meta.titel }} &mdash; kies een veldsoort en tik op de PDF om 'm te plaatsen. Tik daarna in het veld om te typen; versleep met het greepje (⠿) linksboven, verwijderen met de × rechtsboven.
+    <strong style="color:#1b7a43;">Handtekeningveld</strong>: vul een mailadres in, daar tekent die persoon.
+    <strong style="color:#1d6fb8;">Tekstveld</strong>: typ zelf de tekst (bijv. plaats, BSN, datum).</p>
 </div>
 
 <form method="post" id="tp-form">
@@ -57,7 +58,7 @@
 
 <script>
 (function () {
-  var STD = { handtekening: { b: 0.26, h: 0.07 }, tekst: { b: 0.26, h: 0.035 } };
+  var STD = { handtekening: { b: 0.26, h: 0.07 }, tekst: { b: 0.26, h: 0.05 } };
   var velden = {{ meta.velden | tojson }};
   var plaatsSoort = null;
   var form = document.getElementById("tp-form");
@@ -69,6 +70,7 @@
 
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   function soortVan(veld) { return veld.type === "tekst" ? "tekst" : "handtekening"; }
+  function esc(s) { return (s || "").replace(/"/g, "&quot;"); }
 
   function render() {
     pages.forEach(function (p) {
@@ -84,32 +86,31 @@
       box.style.top = (veld.y * 100) + "%";
       box.style.width = (veld.breedte * 100) + "%";
       box.style.height = (veld.hoogte * 100) + "%";
-      if (soort === "tekst") {
-        box.innerHTML =
-          '<div class="tp-veld-top"><span>Tekst</span><span class="tp-veld-x" title="Verwijderen">&times;</span></div>' +
-          '<input type="text" placeholder="typ hier (bijv. Haarlem)" value="' + (veld.tekst || "").replace(/"/g, "&quot;") + '">';
-        box.querySelector("input").addEventListener("input", function (e) { velden[index].tekst = e.target.value; });
-      } else {
-        box.innerHTML =
-          '<div class="tp-veld-top"><span>Handtekening</span><span class="tp-veld-x" title="Verwijderen">&times;</span></div>' +
-          '<input type="email" placeholder="mailadres" value="' + (veld.email || "").replace(/"/g, "&quot;") + '">' +
-          '<div class="tp-veld-label">tekent hier</div>';
-        box.querySelector("input").addEventListener("input", function (e) { velden[index].email = e.target.value.trim(); });
-      }
-      box.querySelector("input").addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+      var invoer = soort === "tekst"
+        ? '<input type="text" placeholder="typ hier (bijv. Haarlem)" value="' + esc(veld.tekst) + '">'
+        : '<input type="email" placeholder="mailadres (tekent hier)" value="' + esc(veld.email) + '">';
+      box.innerHTML =
+        '<span class="tp-greep" title="Versleep">&#9776;</span>' +
+        '<span class="tp-veld-x" title="Verwijderen">&times;</span>' + invoer;
+
+      var input = box.querySelector("input");
+      input.addEventListener("input", function (e) {
+        if (soort === "tekst") { velden[index].tekst = e.target.value; }
+        else { velden[index].email = e.target.value.trim(); }
+      });
       box.querySelector(".tp-veld-x").addEventListener("click", function (e) {
         e.stopPropagation(); velden.splice(index, 1); render();
       });
-      maakSleepbaar(box, page, index);
+      maakSleepbaar(box.querySelector(".tp-greep"), box, page, index);
       page.appendChild(box);
     });
     teller.textContent = velden.length + " veld(en) geplaatst";
   }
 
-  function maakSleepbaar(box, page, index) {
-    box.addEventListener("pointerdown", function (e) {
-      if (e.target.tagName === "INPUT" || e.target.classList.contains("tp-veld-x")) return;
+  function maakSleepbaar(greep, box, page, index) {
+    greep.addEventListener("pointerdown", function (e) {
       e.preventDefault();
+      e.stopPropagation();
       var rect = page.getBoundingClientRect();
       var startX = e.clientX, startY = e.clientY;
       var begin = { x: velden[index].x, y: velden[index].y };
@@ -129,8 +130,8 @@
 
   function zetModus(soort) {
     plaatsSoort = (plaatsSoort === soort) ? null : soort;
-    knopH.textContent = plaatsSoort === "handtekening" ? "✓ Klik op de PDF…" : "➕ Handtekeningveld";
-    knopT.textContent = plaatsSoort === "tekst" ? "✓ Klik op de PDF…" : "➕ Tekstveld";
+    knopH.textContent = plaatsSoort === "handtekening" ? "✓ Tik op de PDF…" : "➕ Handtekeningveld";
+    knopT.textContent = plaatsSoort === "tekst" ? "✓ Tik op de PDF…" : "➕ Tekstveld";
     pages.forEach(function (p) { p.classList.toggle("plaatsen", plaatsSoort !== null); });
   }
   knopH.addEventListener("click", function () { zetModus("handtekening"); });
@@ -153,6 +154,11 @@
         email: plaatsSoort === "handtekening" ? standaardEmail.value.trim() : "",
         tekst: ""
       });
+      // na het plaatsen uit de plaatsmodus, zodat je meteen in het veld kunt typen
+      plaatsSoort = null;
+      knopH.textContent = "➕ Handtekeningveld";
+      knopT.textContent = "➕ Tekstveld";
+      pages.forEach(function (p) { p.classList.remove("plaatsen"); });
       render();
     });
   });
