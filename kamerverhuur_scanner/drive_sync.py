@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 HUIDIGE_HUURDERS = "Huidige huurders"
 OUDE_HUURDERS = "Oude huurders"
 
+# Losse map (niet pand-gebonden) voor zelf getekende documenten via het
+# tekenportaal - staat naast de "Steenhub <pandnaam>"-mappen onder RCLONE_REMOTE.
+GETEKENDE_DOCUMENTEN_MAP = "Steenhub getekende documenten"
+
 _TIMEOUT_SECONDEN = 120
 
 
@@ -117,6 +121,26 @@ def hernoem_huurder_map(config: Config, pand: Pand, oude_naam: str, nieuwe_naam:
     if van is None or naar is None:
         return False
     return _run("move", van, naar, "--delete-empty-src-dirs")
+
+
+def upload_getekend_document(config: Config, bestandsnaam: str, inhoud: bytes) -> bool:
+    """Uploadt (of overschrijft) een volledig getekend document naar de losse
+    Drive-map "Steenhub getekende documenten" (onder RCLONE_REMOTE, dus naast de
+    pandmappen). Best-effort, net als de rest: faalt stil als er geen Drive-
+    koppeling is of rclone niet beschikbaar is - het bestand blijft dan gewoon
+    lokaal op de VPS staan."""
+    if not config.rclone_remote:
+        return False
+    pad = f"{config.rclone_remote.rstrip('/')}/{GETEKENDE_DOCUMENTEN_MAP}/{bestandsnaam}"
+    try:
+        subprocess.run(
+            ["rclone", "rcat", pad],
+            input=inhoud, check=True, capture_output=True, timeout=_TIMEOUT_SECONDEN,
+        )
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.warning("Drive-upload van getekend document '%s' mislukt: %s", bestandsnaam, exc)
+        return False
 
 
 def _run(*args: str) -> bool:

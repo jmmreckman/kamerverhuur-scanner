@@ -22,8 +22,6 @@ zodat de publieke /tekenen/<token>-pagina die in één keer kan opzoeken zonder
 alle panden te hoeven doorzoeken."""
 from __future__ import annotations
 
-import base64
-import binascii
 import calendar
 import html
 import json
@@ -36,32 +34,10 @@ from kamerverhuur_scanner.models import Pand
 from kamerverhuur_scanner.utils import format_bedrag_nl
 
 from . import contracts
+from .handtekening import handtekening_base64_uit_data_url  # noqa: F401 (her-export)
 from .reminders import AFZENDER_NAAM
 
 _ROLNAMEN_EN = {"huurder": "tenant", "verhuurder": "landlord", "borgsteller": "guarantor"}
-
-_HANDTEKENING_DATA_URL_PREFIX = "data:image/png;base64,"
-# Ruim voldoende voor een getekende handtekening op een canvas van
-# realistische afmetingen (ter vergelijking: een 600x180px PNG met een
-# handtekening erop is doorgaans een paar KB) - voorkomt dat iemand een
-# absurd grote afbeelding als "handtekening" post.
-_MAX_HANDTEKENING_BYTES = 300_000
-
-
-def handtekening_base64_uit_data_url(data_url: str) -> str | None:
-    """Valideert en normaliseert een canvas-handtekening (data-URL, zie
-    tekenen.html) tot de kale base64-payload voor opslag. Geeft None terug
-    bij een ontbrekende, ongeldige of te grote afbeelding."""
-    if not data_url or not data_url.startswith(_HANDTEKENING_DATA_URL_PREFIX):
-        return None
-    payload = data_url[len(_HANDTEKENING_DATA_URL_PREFIX):]
-    try:
-        ruwe_bytes = base64.b64decode(payload, validate=True)
-    except (ValueError, binascii.Error):
-        return None
-    if not ruwe_bytes or len(ruwe_bytes) > _MAX_HANDTEKENING_BYTES:
-        return None
-    return payload
 
 
 def _ronde_pad(pand_slug: str, bestandsnaam: str, state_dir: str) -> Path:

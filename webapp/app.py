@@ -8,6 +8,7 @@ Starten (productie): zie README (gunicorn + webapp.app:create_app()).
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import mimetypes
 import re
@@ -39,7 +40,7 @@ from kamerverhuur_scanner.runner import (
 from kamerverhuur_scanner.sheet_client import SheetClient
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen, wwso
+from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen, tekenportaal, wwso
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
@@ -2548,6 +2549,220 @@ def create_app(config: Config | None = None) -> Flask:
         return Response(
             pdf, mimetype="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{pdf_bestandsnaam}"'},
+        )
+
+    # ---------------------------------------------------------------- Tekenportaal
+    # Los (niet pand-gebonden) ondertekenportaal: zelf een PDF uploaden, zelf de
+    # handtekeningplekken aanwijzen en per plek een mailadres koppelen. Getekende
+    # documenten gaan naar de Drive-map "Steenhub getekende documenten". Staat los
+    # van de pand-specifieke huurcontract-ondertekening hierboven.
+
+    def _verstuur_tekenportaal_verzoeken(meta: dict) -> int:
+        verstuurd = 0
+        for o in meta["ondertekenaars"]:
+            if not o["email"]:
+                continue
+            teken_url = url_for("document_tekenen", token=o["token"], _external=True)
+            onderwerp = f"Tekenverzoek: {meta['titel']}"
+            tekst = (
+                f"Beste {o['naam'] or ''},\n\n"
+                f'Je wordt gevraagd om het document "{meta["titel"]}" digitaal te ondertekenen.\n\n'
+                f"Open deze link om het document te bekijken en te tekenen:\n{teken_url}\n\n"
+                f"Met vriendelijke groet,\nSteenhub"
+            )
+            try:
+                verstuur_email(config, o["email"], onderwerp, tekst, bcc=config.email_bcc)
+                verstuurd += 1
+            except MailError:
+                app.logger.exception("Tekenverzoek naar %s is mislukt.", o["email"])
+        return verstuurd
+
+    def _rond_document_tekenen_af(doc_id: str) -> None:
+        """Zodra iedereen getekend heeft: getekende PDF maken (handtekeningen op
+        hun plek + ondertekeningsverklaring), naar Drive wegschrijven en als
+        bijlage naar alle partijen mailen."""
+        meta = tekenportaal.lees_meta(config.state_dir, doc_id)
+        if meta is None or meta["status"] == "afgerond" or not tekenportaal.alles_getekend(meta):
+            return
+        try:
+            bestandsnaam, pdf = tekenportaal.genereer_getekend_pdf(config.state_dir, doc_id)
+        except Exception:
+            app.logger.exception("Genereren van het getekende document %s is mislukt.", doc_id)
+            return
+        drive_sync.upload_getekend_document(config, bestandsnaam, pdf)
+        meta = tekenportaal.lees_meta(config.state_dir, doc_id)
+        for o in meta["ondertekenaars"]:
+            if not o["email"]:
+                continue
+            onderwerp = f"Getekend document: {meta['titel']}"
+            tekst = (
+                f"Beste {o['getekende_naam'] or o['naam'] or ''},\n\n"
+                f'Hierbij het volledig ondertekende document "{meta["titel"]}" - alle partijen hebben nu getekend.\n\n'
+                f"Met vriendelijke groet,\nSteenhub"
+            )
+            try:
+                verstuur_email(
+                    config, o["email"], onderwerp, tekst, bcc=config.email_bcc,
+                    bijlagen=[(bestandsnaam, "application/pdf", pdf)],
+                )
+            except MailError:
+                app.logger.exception("Mail met getekend document naar %s is mislukt.", o["email"])
+
+    @app.route("/documenten-tekenen")
+    @login_required
+    def tekenportaal_overzicht():
+        return render_template(
+            "tekenportaal_overzicht.html", documenten=tekenportaal.lijst_documenten(config.state_dir)
+        )
+
+    @app.route("/documenten-tekenen/nieuw", methods=["GET", "POST"])
+    @login_required
+    def tekenportaal_nieuw():
+        if request.method == "POST":
+            bestand = request.files.get("pdf")
+            titel = request.form.get("titel", "").strip()
+            if bestand is None or not bestand.filename:
+                flash("Kies een PDF-bestand.")
+                return redirect(url_for("tekenportaal_nieuw"))
+            try:
+                meta = tekenportaal.maak_document(
+                    config.state_dir, titel, bestand.read(), bestand.filename, current_user.id
+                )
+            except ValueError as exc:
+                flash(str(exc))
+                return redirect(url_for("tekenportaal_nieuw"))
+            flash("Document geüpload. Plaats nu de handtekeningvelden.")
+            return redirect(url_for("tekenportaal_velden", doc_id=meta["doc_id"]))
+        return render_template("tekenportaal_nieuw.html")
+
+    @app.route("/documenten-tekenen/<doc_id>/velden", methods=["GET", "POST"])
+    @login_required
+    def tekenportaal_velden(doc_id: str):
+        meta = tekenportaal.lees_meta(config.state_dir, doc_id)
+        if meta is None:
+            abort(404)
+        if meta["status"] != "concept":
+            flash("Dit document is al verstuurd; de velden kunnen niet meer gewijzigd worden.")
+            return redirect(url_for("tekenportaal_status", doc_id=doc_id))
+        if request.method == "POST":
+            try:
+                velden = json.loads(request.form.get("velden_json", "[]"))
+                tekenportaal.zet_velden(config.state_dir, doc_id, velden)
+            except json.JSONDecodeError:
+                flash("Ongeldige veldgegevens.")
+                return redirect(url_for("tekenportaal_velden", doc_id=doc_id))
+            except ValueError as exc:
+                flash(str(exc))
+                return redirect(url_for("tekenportaal_velden", doc_id=doc_id))
+            if request.form.get("actie") == "versturen":
+                meta = tekenportaal.bereid_verzending_voor(config.state_dir, doc_id)
+                aantal = _verstuur_tekenportaal_verzoeken(meta)
+                flash(f"Tekenverzoeken verstuurd naar {aantal} ondertekenaar(s).")
+                return redirect(url_for("tekenportaal_status", doc_id=doc_id))
+            flash("Velden opgeslagen.")
+            return redirect(url_for("tekenportaal_velden", doc_id=doc_id))
+        return render_template(
+            "tekenportaal_velden.html", meta=meta,
+            pagina_aantal=tekenportaal.pagina_aantal(config.state_dir, doc_id),
+        )
+
+    @app.route("/documenten-tekenen/<doc_id>")
+    @login_required
+    def tekenportaal_status(doc_id: str):
+        meta = tekenportaal.lees_meta(config.state_dir, doc_id)
+        if meta is None:
+            abort(404)
+        if meta["status"] == "concept":
+            return redirect(url_for("tekenportaal_velden", doc_id=doc_id))
+        return render_template("tekenportaal_status.html", meta=meta)
+
+    @app.route("/documenten-tekenen/<doc_id>/pagina/<int:pagina>.png")
+    @login_required
+    def tekenportaal_pagina(doc_id: str, pagina: int):
+        if tekenportaal.lees_meta(config.state_dir, doc_id) is None:
+            abort(404)
+        try:
+            png = tekenportaal.render_pagina_png(config.state_dir, doc_id, pagina)
+        except (ValueError, FileNotFoundError):
+            abort(404)
+        return Response(png, mimetype="image/png")
+
+    @app.route("/documenten-tekenen/<doc_id>/pdf")
+    @login_required
+    def tekenportaal_pdf(doc_id: str):
+        meta = tekenportaal.lees_meta(config.state_dir, doc_id)
+        if meta is None:
+            abort(404)
+        pdf = tekenportaal.lees_getekend_pdf(config.state_dir, doc_id)
+        if pdf is None:
+            abort(404)
+        return Response(
+            pdf, mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{meta["getekend_bestandsnaam"]}"'},
+        )
+
+    # --- Publieke ondertekenpagina voor het tekenportaal (token, geen login) ---
+
+    @app.route("/document-tekenen/<token>", methods=["GET", "POST"])
+    def document_tekenen(token: str):
+        gevonden = tekenportaal.zoek_via_token(config.state_dir, token)
+        if gevonden is None:
+            abort(404)
+        meta, ondertekenaar = gevonden
+        if ondertekenaar["ondertekend_op"]:
+            return render_template("document_getekend.html", meta=meta, ondertekenaar=ondertekenaar)
+        velden = tekenportaal.velden_voor_email(meta, ondertekenaar["email"])
+        pagina_aantal = tekenportaal.pagina_aantal(config.state_dir, meta["doc_id"])
+        if request.method == "POST":
+            getekende_naam = request.form.get("getekende_naam", "").strip()
+            akkoord = request.form.get("akkoord") == "on"
+            handtekening = tekenportaal.handtekening_base64_uit_data_url(
+                request.form.get("handtekening_data_url", "")
+            )
+            if not getekende_naam or not akkoord or not handtekening:
+                flash("Vul je naam in, teken je handtekening en vink het vakje aan om te ondertekenen.")
+                return render_template(
+                    "document_tekenen.html", meta=meta, ondertekenaar=ondertekenaar,
+                    velden=velden, pagina_aantal=pagina_aantal,
+                )
+            tekenportaal.markeer_getekend(
+                config.state_dir, meta["doc_id"], ondertekenaar["email"],
+                request.remote_addr or "", request.user_agent.string or "", getekende_naam, handtekening,
+            )
+            if tekenportaal.alles_getekend(tekenportaal.lees_meta(config.state_dir, meta["doc_id"])):
+                _rond_document_tekenen_af(meta["doc_id"])
+            meta = tekenportaal.lees_meta(config.state_dir, meta["doc_id"])
+            bijgewerkt = next(o for o in meta["ondertekenaars"] if o["token"] == token)
+            return render_template("document_getekend.html", meta=meta, ondertekenaar=bijgewerkt)
+        return render_template(
+            "document_tekenen.html", meta=meta, ondertekenaar=ondertekenaar,
+            velden=velden, pagina_aantal=pagina_aantal,
+        )
+
+    @app.route("/document-tekenen/<token>/pagina/<int:pagina>.png")
+    def document_tekenen_pagina(token: str, pagina: int):
+        gevonden = tekenportaal.zoek_via_token(config.state_dir, token)
+        if gevonden is None:
+            abort(404)
+        meta, _ = gevonden
+        try:
+            png = tekenportaal.render_pagina_png(config.state_dir, meta["doc_id"], pagina)
+        except (ValueError, FileNotFoundError):
+            abort(404)
+        return Response(png, mimetype="image/png")
+
+    @app.route("/document-tekenen/<token>/pdf")
+    def document_tekenen_pdf(token: str):
+        gevonden = tekenportaal.zoek_via_token(config.state_dir, token)
+        if gevonden is None:
+            abort(404)
+        meta, _ = gevonden
+        pdf = tekenportaal.lees_origineel_pdf(config.state_dir, meta["doc_id"])
+        if pdf is None:
+            abort(404)
+        return Response(
+            pdf, mimetype="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{meta["origineel_bestandsnaam"]}"'},
         )
 
     # --- Documenten (dezelfde automatisch aangemaakte "Steenhub <pandnaam>"-
