@@ -1,4 +1,6 @@
 """Tests voor de per-account mailvoorkeuren (rotterdam_scanner/mail_voorkeuren.py)."""
+from unittest.mock import patch
+
 import pytest
 
 from rotterdam_scanner import mail_voorkeuren as mv
@@ -84,3 +86,38 @@ def test_ongeldig_adres_in_lijst_valt_weg_maar_geldige_blijven(tmp_path):
     cfg = _config(tmp_path)
     mv.zet_voorkeuren(cfg, "jurian", "a@x.nl, kapot", {"dagelijkse_kansen"})
     assert mv.ontvangers_voor(cfg, "dagelijkse_kansen") == ["a@x.nl"]
+
+
+def test_bevestiging_stuurt_naar_opgegeven_adressen_met_actieve_mailings(tmp_path):
+    cfg = _config(tmp_path)
+    with patch("rotterdam_scanner.mailer.send_mail") as send_mail:
+        adressen = mv.stuur_voorkeur_bevestiging(
+            cfg, "a@x.nl, b@y.nl", {"dagelijkse_kansen"}, nieuw=True)
+
+    assert adressen == ["a@x.nl", "b@y.nl"]
+    send_mail.assert_called_once()
+    args, kwargs = send_mail.call_args
+    assert kwargs["recipients"] == ["a@x.nl", "b@y.nl"]
+    html_body = args[2]
+    # Naam van de ingeschakelde mailing staat in de bevestiging, de uitgeschakelde niet.
+    assert "Dagelijkse kansen" in html_body
+    assert "Rentewijzigingen" not in html_body
+    assert "toegevoegd" in html_body  # nieuw=True -> "toegevoegd"-tekst
+
+
+def test_bevestiging_meldt_geen_mailings_als_alles_uit(tmp_path):
+    cfg = _config(tmp_path)
+    with patch("rotterdam_scanner.mailer.send_mail") as send_mail:
+        mv.stuur_voorkeur_bevestiging(cfg, "a@x.nl", set(), nieuw=False)
+
+    html_body = send_mail.call_args[0][2]
+    assert "geen mailings" in html_body
+    assert "bijgewerkt" in html_body  # nieuw=False -> "bijgewerkt"-tekst
+
+
+def test_bevestiging_stuurt_niets_zonder_geldig_adres(tmp_path):
+    cfg = _config(tmp_path)
+    with patch("rotterdam_scanner.mailer.send_mail") as send_mail:
+        assert mv.stuur_voorkeur_bevestiging(cfg, "", {"dagelijkse_kansen"}) == []
+        assert mv.stuur_voorkeur_bevestiging(cfg, "kapot", {"dagelijkse_kansen"}) == []
+    send_mail.assert_not_called()

@@ -1281,7 +1281,16 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Vul geldige e-mailadres(sen) in, meerdere gescheiden door een komma "
                       "(of laat het leeg om geen mail te ontvangen).")
             else:
+                oud = mail_voorkeuren.voorkeuren_voor(config, gebruiker)
+                was_nieuw = not oud.get("email")
                 mail_voorkeuren.zet_voorkeuren(config, gebruiker, email, actief)
+                try:
+                    # Bevestigingsmail naar de gebruiker; mag het opslaan nooit laten
+                    # mislukken, dus fouten (bv. SMTP down) bewust negeren.
+                    mail_voorkeuren.stuur_voorkeur_bevestiging(
+                        config, email, actief, nieuw=was_nieuw)
+                except Exception:
+                    pass
                 flash("Mailvoorkeuren opgeslagen.")
                 return redirect(url_for("mail_voorkeuren_pagina"))
             # bij fout: toon de ingevulde waarden terug

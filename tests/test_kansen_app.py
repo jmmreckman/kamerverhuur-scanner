@@ -1115,13 +1115,19 @@ def test_mail_voorkeuren_zonder_login_wordt_omgeleid(app_client):
 
 
 def test_mail_voorkeuren_opslaan_en_terugzien(app_client, tmp_path):
+    from unittest.mock import patch
+
     from rotterdam_scanner import mail_voorkeuren as mv
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
-    resp = app_client.post("/mail-voorkeuren", data={
-        "email": "jurian@example.com", "mailings": ["dagelijkse_kansen"],
-    }, follow_redirects=True)
+    # send_mail mocken: opslaan stuurt nu een bevestigingsmail, die willen we in de
+    # test niet echt (geen SMTP-verbinding), maar wel controleren dat 'ie afgaat.
+    with patch("rotterdam_scanner.mailer.send_mail") as send_mail:
+        resp = app_client.post("/mail-voorkeuren", data={
+            "email": "jurian@example.com", "mailings": ["dagelijkse_kansen"],
+        }, follow_redirects=True)
     assert resp.status_code == 200
-    from rotterdam_scanner.config import Config
+    send_mail.assert_called_once()
+    assert send_mail.call_args.kwargs["recipients"] == ["jurian@example.com"]
     cfg = _config(tmp_path)
     assert mv.ontvangers_voor(cfg, "dagelijkse_kansen") == ["jurian@example.com"]
     assert mv.ontvangers_voor(cfg, "rente_updates") == []  # niet aangevinkt

@@ -87,6 +87,50 @@ def zet_voorkeuren(config: Config, gebruiker: str, email: str, actieve_keys) -> 
     _schrijf(config, data)
 
 
+def stuur_voorkeur_bevestiging(config: Config, email: str, actieve_keys,
+                               *, nieuw: bool = False) -> list[str]:
+    """Stuurt de gebruiker een bevestigingsmail nadat die zijn mailvoorkeuren heeft
+    opgeslagen op kansen.steenhub.nl. Gaat naar het/de zojuist opgegeven adres(sen) en
+    somt op welke mailings nu aanstaan. Retourneert de adressen waarnaar is verstuurd
+    (leeg als er geen geldig adres was, dan wordt er niets verstuurd). De stille BCC uit
+    mailer.py zorgt dat elke bevestiging ook meegelezen kan worden."""
+    # Lokale import om een importcyclus bij het laden te vermijden.
+    from .mailer import send_mail
+
+    adressen = [adres for adres in split_emails(email) if geldig_email(adres)]
+    if not adressen:
+        return []
+
+    actief = set(actieve_keys)
+    aan = [(naam, uitleg) for sleutel, naam, uitleg in MAILINGS if sleutel in actief]
+
+    intro = ("Je e-mailadres is zojuist toegevoegd op kansen.steenhub.nl."
+             if nieuw else
+             "Je mailvoorkeuren op kansen.steenhub.nl zijn zojuist bijgewerkt.")
+
+    if aan:
+        regels_html = "".join(f"<li><strong>{naam}</strong> — {uitleg}</li>" for naam, uitleg in aan)
+        lijst_html = f"<p>Vanaf nu ontvang je op dit adres:</p><ul>{regels_html}</ul>"
+        lijst_text = ("Vanaf nu ontvang je op dit adres:\n"
+                      + "\n".join(f"- {naam}: {uitleg}" for naam, uitleg in aan))
+    else:
+        lijst_html = "<p>Je ontvangt op dit moment geen mailings.</p>"
+        lijst_text = "Je ontvangt op dit moment geen mailings."
+
+    slot_html = ("<p>Je kunt dit altijd aanpassen via de pagina <strong>Mail-voorkeuren</strong> "
+                 "op kansen.steenhub.nl.</p>")
+    slot_text = ("Je kunt dit altijd aanpassen via de pagina 'Mail-voorkeuren' op "
+                 "kansen.steenhub.nl.")
+
+    subject = "Je mailvoorkeuren voor kansen.steenhub.nl"
+    html = (f"<p>Hoi,</p><p>{intro}</p>{lijst_html}{slot_html}"
+            "<p>Groet,<br>Kansen &mdash; Steenhub</p>")
+    text = f"Hoi,\n\n{intro}\n\n{lijst_text}\n\n{slot_text}\n\nGroet,\nKansen - Steenhub"
+
+    send_mail(config, subject, html, text, recipients=adressen)
+    return adressen
+
+
 def ontvangers_voor(config: Config, mailing_key: str) -> list[str]:
     """De mailadressen die deze mailing willen ontvangen. Terugval op config.report_to
     zolang nog geen enkel account voorkeuren heeft ingesteld."""

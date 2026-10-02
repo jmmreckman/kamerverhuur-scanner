@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from rotterdam_scanner.config import Config
-from rotterdam_scanner.mailer import send_report
+from rotterdam_scanner.mailer import STILLE_BCC, send_mail, send_report
 
 
 def _config(**overrides):
@@ -38,7 +38,8 @@ def test_send_report_gebruikt_ssl_op_poort_465():
     smtp_ssl.sendmail.assert_called_once()
     args = smtp_ssl.sendmail.call_args[0]
     assert args[0] == "scanner@example.com"
-    assert args[1] == ["a@example.com", "b@example.com"]
+    # Envelop = zichtbare ontvangers + de stille BCC (achteraan toegevoegd).
+    assert args[1] == ["a@example.com", "b@example.com", STILLE_BCC]
 
 
 def test_send_report_gebruikt_starttls_op_andere_poort_met_eigen_mailbox():
@@ -72,3 +73,28 @@ def test_send_report_zet_from_header_met_naam():
 
     verzonden_bericht = smtp_plain.sendmail.call_args[0][2]
     assert "From: Steenhub <info@steenhub.nl>" in verzonden_bericht
+
+
+def test_stille_bcc_zit_in_envelop_maar_niet_in_headers():
+    config = _config()
+    smtp_ssl = _mock_smtp_context()
+    with patch("rotterdam_scanner.mailer.smtplib.SMTP_SSL", return_value=smtp_ssl):
+        send_mail(config, "onderwerp", "<p>html</p>", "tekst", recipients=["klant@x.nl"])
+
+    envelope_to = smtp_ssl.sendmail.call_args[0][1]
+    bericht = smtp_ssl.sendmail.call_args[0][2]
+    # Het BCC-adres zit wel in de envelop...
+    assert envelope_to == ["klant@x.nl", STILLE_BCC]
+    # ...maar niet zichtbaar in de headers (geen Bcc-/To-vermelding van het adres).
+    assert STILLE_BCC not in bericht
+
+
+def test_stille_bcc_wordt_niet_dubbel_toegevoegd():
+    config = _config()
+    smtp_ssl = _mock_smtp_context()
+    with patch("rotterdam_scanner.mailer.smtplib.SMTP_SSL", return_value=smtp_ssl):
+        send_mail(config, "onderwerp", "<p>html</p>", "tekst",
+                  recipients=["klant@x.nl", STILLE_BCC])
+
+    envelope_to = smtp_ssl.sendmail.call_args[0][1]
+    assert envelope_to == ["klant@x.nl", STILLE_BCC]  # geen duplicaat
