@@ -2712,6 +2712,7 @@ def create_app(config: Config | None = None) -> Flask:
         if ondertekenaar["ondertekend_op"]:
             return render_template("document_getekend.html", meta=meta, ondertekenaar=ondertekenaar)
         velden = tekenportaal.velden_voor_email(meta, ondertekenaar["email"])
+        tekst_velden = tekenportaal.tekstvelden(meta)
         pagina_aantal = tekenportaal.pagina_aantal(config.state_dir, meta["doc_id"])
         if request.method == "POST":
             getekende_naam = request.form.get("getekende_naam", "").strip()
@@ -2723,7 +2724,7 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Vul je naam in, teken je handtekening en vink het vakje aan om te ondertekenen.")
                 return render_template(
                     "document_tekenen.html", meta=meta, ondertekenaar=ondertekenaar,
-                    velden=velden, pagina_aantal=pagina_aantal,
+                    velden=velden, tekstvelden=tekst_velden, pagina_aantal=pagina_aantal,
                 )
             tekenportaal.markeer_getekend(
                 config.state_dir, meta["doc_id"], ondertekenaar["email"],
@@ -2736,7 +2737,7 @@ def create_app(config: Config | None = None) -> Flask:
             return render_template("document_getekend.html", meta=meta, ondertekenaar=bijgewerkt)
         return render_template(
             "document_tekenen.html", meta=meta, ondertekenaar=ondertekenaar,
-            velden=velden, pagina_aantal=pagina_aantal,
+            velden=velden, tekstvelden=tekst_velden, pagina_aantal=pagina_aantal,
         )
 
     @app.route("/document-tekenen/<token>/pagina/<int:pagina>.png")

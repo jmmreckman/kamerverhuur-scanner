@@ -180,11 +180,18 @@ def _clamp(waarde: float, onder: float = 0.0, boven: float = 1.0) -> float:
     return max(onder, min(boven, f))
 
 
+def is_tekstveld(veld: dict) -> bool:
+    return veld.get("type") == "tekst"
+
+
 def zet_velden(state_dir: str, doc_id: str, velden: list[dict]) -> dict:
-    """Vervangt de handtekeningvelden van een document (alleen toegestaan zolang
-    het nog 'concept' is, dus voor het versturen). Elk veld: pagina (int), x, y,
-    breedte, hoogte (genormaliseerd 0..1) en een geldig mailadres (+ optioneel
-    naam)."""
+    """Vervangt de velden van een document (alleen toegestaan zolang het nog
+    'concept' is, dus voor het versturen). Twee soorten:
+    - type 'handtekening': een geldig mailadres (+ optioneel naam); daar tekent
+      de gekoppelde ondertekenaar.
+    - type 'tekst': een door jou ingevulde tekst (plaats, BSN, datum, ...) die
+      bij het afronden op de PDF wordt gezet.
+    Elk veld heeft pagina (int) en x, y, breedte, hoogte (genormaliseerd 0..1)."""
     meta = lees_meta(state_dir, doc_id)
     if meta is None:
         raise ValueError("Document niet gevonden.")
@@ -194,27 +201,43 @@ def zet_velden(state_dir: str, doc_id: str, velden: list[dict]) -> dict:
     aantal_paginas = pagina_aantal(state_dir, doc_id)
     schoon: list[dict] = []
     for rauw in velden:
-        email = (rauw.get("email") or "").strip()
-        if not geldig_email(email):
-            raise ValueError(f"Ongeldig mailadres bij een veld: {email or '(leeg)'}")
+        soort = (rauw.get("type") or "handtekening").strip()
+        if soort not in ("handtekening", "tekst"):
+            soort = "handtekening"
         try:
             pagina = int(rauw.get("pagina", 0))
         except (TypeError, ValueError):
             pagina = 0
         if pagina < 0 or pagina >= aantal_paginas:
             raise ValueError("Een veld verwijst naar een niet-bestaande pagina.")
-        schoon.append({
+
+        veld = {
             "veld_id": secrets.token_hex(6),
+            "type": soort,
             "pagina": pagina,
             "x": _clamp(rauw.get("x", 0)),
             "y": _clamp(rauw.get("y", 0)),
             "breedte": _clamp(rauw.get("breedte", STD_BREEDTE), 0.02, 1.0),
-            "hoogte": _clamp(rauw.get("hoogte", STD_HOOGTE), 0.02, 1.0),
-            "email": email,
-            "naam": (rauw.get("naam") or "").strip(),
-        })
+            "hoogte": _clamp(rauw.get("hoogte", STD_HOOGTE), 0.015, 1.0),
+            "email": "",
+            "naam": "",
+            "tekst": "",
+        }
+        if soort == "tekst":
+            tekst = (rauw.get("tekst") or "").strip()
+            if not tekst:
+                raise ValueError("Een tekstveld is leeg - vul tekst in of verwijder het veld.")
+            veld["tekst"] = tekst
+        else:
+            email = (rauw.get("email") or "").strip()
+            if not geldig_email(email):
+                raise ValueError(f"Ongeldig mailadres bij een handtekeningveld: {email or '(leeg)'}")
+            veld["email"] = email
+            veld["naam"] = (rauw.get("naam") or "").strip()
+        schoon.append(veld)
+
     if not schoon:
-        raise ValueError("Plaats minstens één handtekeningveld voordat je verstuurt.")
+        raise ValueError("Plaats minstens één veld voordat je opslaat.")
 
     meta["velden"] = schoon
     _schrijf_meta(state_dir, meta)
@@ -222,10 +245,12 @@ def zet_velden(state_dir: str, doc_id: str, velden: list[dict]) -> dict:
 
 
 def unieke_ondertekenaars(meta: dict) -> list[dict]:
-    """De unieke mailadressen uit de velden, met (eerste niet-lege) naam -
-    in volgorde van voorkomen."""
+    """De unieke mailadressen uit de handtekeningvelden, met (eerste niet-lege)
+    naam - in volgorde van voorkomen. Tekstvelden tellen niet mee."""
     gezien: dict[str, str] = {}
     for veld in meta.get("velden", []):
+        if is_tekstveld(veld):
+            continue
         email = veld["email"]
         if email not in gezien:
             gezien[email] = veld.get("naam", "")
@@ -261,8 +286,8 @@ def bereid_verzending_voor(state_dir: str, doc_id: str) -> dict:
         raise ValueError("Document niet gevonden.")
     if meta["status"] != "concept":
         return meta
-    if not meta.get("velden"):
-        raise ValueError("Plaats eerst minstens één handtekeningveld.")
+    if not any(not is_tekstveld(v) for v in meta.get("velden", [])):
+        raise ValueError("Plaats eerst minstens één handtekeningveld (alleen tekstvelden kan niet verstuurd worden).")
 
     ondertekenaars = []
     index = _lees_tokens(state_dir)
@@ -303,7 +328,11 @@ def zoek_via_token(state_dir: str, token: str) -> tuple[dict, dict] | None:
 
 
 def velden_voor_email(meta: dict, email: str) -> list[dict]:
-    return [v for v in meta.get("velden", []) if v["email"] == email]
+    return [v for v in meta.get("velden", []) if not is_tekstveld(v) and v["email"] == email]
+
+
+def tekstvelden(meta: dict) -> list[dict]:
+    return [v for v in meta.get("velden", []) if is_tekstveld(v)]
 
 
 def markeer_getekend(state_dir: str, doc_id: str, email: str, ip_adres: str,
@@ -362,15 +391,8 @@ def genereer_getekend_pdf(state_dir: str, doc_id: str) -> tuple[str, bytes]:
         raise ValueError("Nog niet iedereen heeft getekend.")
 
     with fitz.open(_origineel_pad(state_dir, doc_id)) as doc:
-        # 1) handtekeningen op hun aangewezen plek stempelen
+        # 1) velden op hun aangewezen plek op de PDF zetten
         for veld in meta["velden"]:
-            ondertekenaar = _ondertekenaar_voor_email(meta, veld["email"])
-            if not ondertekenaar or not ondertekenaar.get("handtekening_png_base64"):
-                continue
-            try:
-                png = base64.b64decode(ondertekenaar["handtekening_png_base64"])
-            except Exception:
-                continue
             page = doc[veld["pagina"]]
             pr = page.rect
             rect = fitz.Rect(
@@ -379,6 +401,22 @@ def genereer_getekend_pdf(state_dir: str, doc_id: str) -> tuple[str, bytes]:
                 pr.x0 + (veld["x"] + veld["breedte"]) * pr.width,
                 pr.y0 + (veld["y"] + veld["hoogte"]) * pr.height,
             )
+            if is_tekstveld(veld):
+                # Ingevulde tekst (plaats, BSN, datum, ...) - lettergrootte schaalt
+                # mee met de veldhoogte, met een redelijke onder-/bovengrens.
+                fontsize = max(7.0, min(13.0, rect.height * 0.62))
+                page.insert_textbox(
+                    rect, veld.get("tekst", ""), fontsize=fontsize, fontname="helv",
+                    color=(0, 0, 0), align=0,
+                )
+                continue
+            ondertekenaar = _ondertekenaar_voor_email(meta, veld["email"])
+            if not ondertekenaar or not ondertekenaar.get("handtekening_png_base64"):
+                continue
+            try:
+                png = base64.b64decode(ondertekenaar["handtekening_png_base64"])
+            except Exception:
+                continue
             page.insert_image(rect, stream=png, keep_proportion=True, overlay=True)
             # kleine, zakelijke onderschrift-regel onder de handtekening
             naam = ondertekenaar.get("getekende_naam") or ondertekenaar.get("naam") or veld["email"]

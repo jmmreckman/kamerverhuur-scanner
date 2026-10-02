@@ -181,6 +181,47 @@ def test_zoek_via_onbekende_token(tmp_path):
     assert tp.zoek_via_token(str(tmp_path), "bestaat-niet") is None
 
 
+def test_tekstveld_moet_tekst_hebben(tmp_path):
+    meta = tp.maak_document(str(tmp_path), "T", _mini_pdf(1), "c.pdf", "jurian")
+    with pytest.raises(ValueError):
+        tp.zet_velden(str(tmp_path), meta["doc_id"], [{"type": "tekst", "pagina": 0, "x": 0.1, "y": 0.1}])
+
+
+def test_alleen_tekstvelden_kan_niet_verstuurd_worden(tmp_path):
+    meta = tp.maak_document(str(tmp_path), "T", _mini_pdf(1), "c.pdf", "jurian")
+    tp.zet_velden(str(tmp_path), meta["doc_id"], [
+        {"type": "tekst", "pagina": 0, "x": 0.1, "y": 0.1, "tekst": "Haarlem"},
+    ])
+    with pytest.raises(ValueError):
+        tp.bereid_verzending_voor(str(tmp_path), meta["doc_id"])
+
+
+def test_tekstveld_telt_niet_als_ondertekenaar(tmp_path):
+    meta = tp.maak_document(str(tmp_path), "T", _mini_pdf(1), "c.pdf", "jurian")
+    meta = tp.zet_velden(str(tmp_path), meta["doc_id"], [
+        {"type": "handtekening", "pagina": 0, "x": 0.1, "y": 0.8, "email": "a@x.nl", "naam": "Alice"},
+        {"type": "tekst", "pagina": 0, "x": 0.1, "y": 0.1, "tekst": "Haarlem"},
+    ])
+    assert [o["email"] for o in tp.unieke_ondertekenaars(meta)] == ["a@x.nl"]
+    assert len(tp.tekstvelden(meta)) == 1
+
+
+def test_tekstveld_wordt_op_pdf_gestempeld(tmp_path):
+    sd = str(tmp_path)
+    meta = tp.maak_document(sd, "Contract", _mini_pdf(1), "c.pdf", "jurian")
+    tp.zet_velden(sd, meta["doc_id"], [
+        {"type": "handtekening", "pagina": 0, "x": 0.1, "y": 0.8, "email": "a@x.nl", "naam": "Alice"},
+        {"type": "tekst", "pagina": 0, "x": 0.1, "y": 0.2, "breedte": 0.3, "hoogte": 0.04, "tekst": "Haarlem"},
+    ])
+    meta = tp.bereid_verzending_voor(sd, meta["doc_id"])
+    tp.markeer_getekend(sd, meta["doc_id"], "a@x.nl", "1.2.3.4", "UA", "Alice Jansen", _mini_handtekening_payload())
+    _naam, out = tp.genereer_getekend_pdf(sd, meta["doc_id"])
+    chk = fitz.open(stream=out, filetype="pdf")
+    pagina0_tekst = chk[0].get_text()
+    chk.close()
+    assert "Haarlem" in pagina0_tekst  # ingevulde tekst staat op de originele pagina
+
+
 def test_drive_upload_zonder_remote_faalt_stil():
     cfg = SimpleNamespace(rclone_remote=None)
     assert drive_sync.upload_getekend_document(cfg, "x.pdf", b"data") is False

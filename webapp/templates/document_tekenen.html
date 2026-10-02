@@ -7,6 +7,8 @@
   .dt-veld { position:absolute; box-sizing:border-box; border:2px dashed #1b7a43;
     background:rgba(27,122,67,0.12); border-radius:4px; display:flex; align-items:center;
     justify-content:center; color:#1b7a43; font-size:0.62rem; text-align:center; }
+  .dt-tekst { position:absolute; box-sizing:border-box; display:flex; align-items:center;
+    color:#111; font-size:0.8rem; overflow:hidden; padding:0 2px; line-height:1.1; }
 </style>
 
 <div class="page-header">
@@ -23,6 +25,9 @@
     <img src="{{ url_for('document_tekenen_pagina', token=ondertekenaar.token, pagina=i) }}" alt="Pagina {{ i + 1 }}" loading="lazy">
     {% for v in velden if v.pagina == i %}
     <div class="dt-veld" style="left:{{ v.x * 100 }}%; top:{{ v.y * 100 }}%; width:{{ v.breedte * 100 }}%; height:{{ v.hoogte * 100 }}%;">jouw handtekening</div>
+    {% endfor %}
+    {% for v in tekstvelden if v.pagina == i %}
+    <div class="dt-tekst" style="left:{{ v.x * 100 }}%; top:{{ v.y * 100 }}%; width:{{ v.breedte * 100 }}%; height:{{ v.hoogte * 100 }}%;">{{ v.tekst }}</div>
     {% endfor %}
   </div>
   {% endfor %}
