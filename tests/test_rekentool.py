@@ -51,6 +51,25 @@ def test_azaleastraat_aan_te_tonen_middelen():
     assert round(r.aan_te_tonen_middelen, 2) == 159_680.63
 
 
+def test_azaleastraat_icr():
+    # ICR = kale huur / rente (zelfde periode).
+    #  voor ophoging: (3.360/3) lage huur / (248.500 * 0,059/12) rente voor = 1.120 / 1.221,79 = 0,92
+    #  na ophoging:   3.360 volle huur / (424.421,05 * 0,059/12) rente na   = 3.360 / 2.086,74 = 1,61
+    r = bereken_rekentool(AZALEASTRAAT)
+    assert round(r.icr_voor_ophoging, 2) == 0.92
+    assert round(r.icr_na_ophoging, 2) == 1.61
+    # De norm is 1,25: vóór ophoging zit je eronder (krap), ná ophoging erboven.
+    assert r.icr_voor_ophoging < 1.25
+    assert r.icr_na_ophoging > 1.25
+
+
+def test_icr_none_bij_lening_nul():
+    # Guard: geen deling door nul als er geen lening (en dus geen rente) is.
+    r = bereken_rekentool(RekenUitgangspunten(koopsom=0, aantal_kamers=0, bar=0.076))
+    assert r.icr_voor_ophoging is None
+    assert r.icr_na_ophoging is None
+
+
 def test_aan_te_tonen_negeert_verbouwkosten_maar_opname_niet():
     # De verbouwkosten lopen via het bouwdepot: ze veranderen "aan te tonen middelen"
     # NIET, maar verlagen wel de opname liquiditeit na verbouwing met hetzelfde bedrag.

@@ -94,6 +94,11 @@
 }
 .reken-uitkomst tr.groot td:last-child { color: var(--groen); }
 
+/* ICR-regels: groen boven de norm (1,25), rood eronder. De kleur overschrijft
+   zo nodig de standaard groene 'groot'-kleur hierboven. */
+.reken-uitkomst td.icr-goed { color: #1b7a43; font-weight: 700; }
+.reken-uitkomst td.icr-slecht { color: #c0392b; font-weight: 700; }
+
 /* --- Globale reken-instellingen-pagina --- */
 .reken-instellingen {
   max-width: 520px;

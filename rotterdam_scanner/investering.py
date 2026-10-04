@@ -40,6 +40,13 @@ M2_PER_STUDENTENKAMER = 18
 # kamers - die zijn dan immers navenant ruimer (en dus meer waard) dan een standaard
 # 18m2-studentenkamer, dus puur op het aantal kamers rekenen onderschat de huurwaarde.
 KAMERVERLIES_COMPENSATIE = 0.5
+# Interest Coverage Ratio (huur / rente). Boven deze norm vindt de geldverstrekker
+# de rentelasten comfortabel gedekt door de huur; eronder wordt het krap.
+ICR_NORM = 1.25
+# Vóór de kamerverhuurvergunning staat het pand nog als gewone woning te huur en
+# ligt de huur een stuk lager. Als vuistregel rekenen we die lage huur op een deel
+# van de uiteindelijke kamerhuur (zo toont de ICR vóór ophoging het zwaarste moment).
+ICR_HUUR_VOOR_FRACTIE = 1 / 3
 
 
 @dataclass(frozen=True)
@@ -188,6 +195,9 @@ class RekenResultaat:
     in_te_brengen_bij_passeren: float          # koopsom + OVB + k.k. - wat bij de notaris wordt uitgekeerd
     opname_liquiditeit_na_verbouwing: float    # bouwdepot - verbouwkosten (komt na verbouwing als cash terug)
     aan_te_tonen_middelen: float               # totaal aan eigen middelen dat je moet aantonen
+    # Interest Coverage Ratio (huur / rente); None als er geen rente is (lening 0)
+    icr_voor_ophoging: float | None            # lage huur (deel van kamerhuur) / rente op lening vóór verhoging
+    icr_na_ophoging: float | None              # volledige kamerhuur / rente op lening ná verhoging
     # Belangrijke resultaten
     winst_pm_pp: float
     eigen_inleg_voor_ophoging_totaal: float
@@ -240,6 +250,20 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
         in_te_brengen_bij_passeren + financieringslasten_verbouwing + leegstand_3mnd
     )
 
+    # --- Interest Coverage Ratio (ICR = huur / rente) -------------------------
+    # Twee momenten: vóór de vergunning (lage woninghuur op de kleinere lening) en
+    # ná ophoging (volledige kamerhuur op de volledige lening). We rekenen met de
+    # kale huur, net als de geldverstrekker. Boven ICR_NORM (1,25) zijn de
+    # rentelasten comfortabel gedekt.
+    rente_pm_voor_verhoging = leenbaar_voor_verhoging * u.rente / 12
+    huur_voor_ophoging = kale_huur_pm * ICR_HUUR_VOOR_FRACTIE
+    icr_voor_ophoging = (
+        huur_voor_ophoging / rente_pm_voor_verhoging if rente_pm_voor_verhoging else None
+    )
+    icr_na_ophoging = (
+        kale_huur_pm / rente_pm_na_verhoging if rente_pm_na_verhoging else None
+    )
+
     n = u.aantal_investeerders or 1
     winst_pm_pp = (kale_huur_pm + service_in_pm - vast_uit_pm - rente_pm_na_verhoging) / n
     eigen_inleg_na_ophoging_pp = (totale_zelf_in_te_leggen - verhoogbaar_met) / n
@@ -263,6 +287,8 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
         in_te_brengen_bij_passeren=in_te_brengen_bij_passeren,
         opname_liquiditeit_na_verbouwing=opname_liquiditeit_na_verbouwing,
         aan_te_tonen_middelen=aan_te_tonen_middelen,
+        icr_voor_ophoging=icr_voor_ophoging,
+        icr_na_ophoging=icr_na_ophoging,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_voor_ophoging_totaal=totale_zelf_in_te_leggen,
         eigen_inleg_na_ophoging_pp=eigen_inleg_na_ophoging_pp,

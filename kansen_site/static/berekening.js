@@ -27,10 +27,30 @@ function formatRendement(fractie) {
   }) + "%";
 }
 
+// ICR-norm: moet gelijk blijven aan ICR_NORM in rotterdam_scanner/investering.py.
+const ICR_NORM = 1.25;
+
+function formatIcr(waarde) {
+  if (waarde === null || waarde === undefined) return "—";
+  return waarde.toLocaleString("nl-NL", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) + "×";
+}
+
 function renderResultaat(res) {
   for (const cel of document.querySelectorAll("[data-veld]")) {
     const veld = cel.dataset.veld;
-    cel.textContent = veld === "rendement" ? formatRendement(res[veld]) : formatEuro(res[veld]);
+    if (veld.startsWith("icr_")) {
+      const waarde = res[veld];
+      cel.textContent = formatIcr(waarde);
+      cel.classList.remove("icr-goed", "icr-slecht");
+      if (waarde !== null && waarde !== undefined) {
+        cel.classList.add(waarde >= ICR_NORM ? "icr-goed" : "icr-slecht");
+      }
+    } else {
+      cel.textContent = veld === "rendement" ? formatRendement(res[veld]) : formatEuro(res[veld]);
+    }
   }
 }
 

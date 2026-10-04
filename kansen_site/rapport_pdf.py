@@ -19,12 +19,22 @@ from reportlab.platypus import (
 )
 
 _GROEN = colors.HexColor("#1b7a43")
+_ROOD = colors.HexColor("#c0392b")
 _GRIJS = colors.HexColor("#66707a")
 _RAND = colors.HexColor("#d8dde3")
 _ACHTERGROND = colors.HexColor("#f2f6f3")
 
+# Moet gelijk blijven aan ICR_NORM in rotterdam_scanner/investering.py.
+_ICR_NORM = 1.25
+
 # Welke resultaatvelden zijn een percentage (rest is euro).
 _RESULTAAT_PROCENT = {"rendement"}
+
+
+def _icr(waarde) -> str:
+    if waarde is None:
+        return "—"
+    return f"{waarde:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".") + "×"
 
 
 def _euro(bedrag) -> str:
@@ -51,7 +61,7 @@ def _veld_waarde(veld: dict) -> str:
     return str(int(waarde)) if isinstance(waarde, float) and waarde.is_integer() else str(waarde)
 
 
-def _tabel(rijen, kolombreedtes, accent_rijen=()) -> Table:
+def _tabel(rijen, kolombreedtes, accent_rijen=(), waarde_kleuren=None) -> Table:
     tabel = Table(rijen, colWidths=kolombreedtes, hAlign="LEFT")
     stijl = [
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
@@ -71,6 +81,10 @@ def _tabel(rijen, kolombreedtes, accent_rijen=()) -> Table:
         stijl.append(("BACKGROUND", (0, r), (-1, r), _ACHTERGROND))
         stijl.append(("FONTNAME", (0, r), (-1, r), "Helvetica-Bold"))
         stijl.append(("TEXTCOLOR", (1, r), (1, r), _GROEN))
+    # Specifieke kleuren voor de waardekolom (bv. groen/rood voor de ICR-regels).
+    for r, kleur in (waarde_kleuren or {}).items():
+        stijl.append(("FONTNAME", (1, r), (1, r), "Helvetica-Bold"))
+        stijl.append(("TEXTCOLOR", (1, r), (1, r), kleur))
     tabel.setStyle(TableStyle(stijl))
     return tabel
 
@@ -146,7 +160,19 @@ def bouw_berekening_pdf(item, velden: list[dict], resultaat: dict, vandaag: date
         ("Aan te tonen eigen middelen", "aan_te_tonen_middelen"),
     ]
     rijen = [[label, _euro(resultaat.get(key))] for label, key in berekend]
-    elementen.append(_tabel(rijen, kolommen))
+    # ICR-regels onderaan, met een euro-waarde los: groen vanaf de norm, anders rood.
+    icr_rijen = [
+        ("ICR vóór ophoging (lage huur)", "icr_voor_ophoging"),
+        ("ICR ná ophoging (volle huur)", "icr_na_ophoging"),
+    ]
+    waarde_kleuren = {}
+    for label, key in icr_rijen:
+        waarde = resultaat.get(key)
+        waarde_kleuren[len(rijen)] = (
+            _GROEN if (waarde is not None and waarde >= _ICR_NORM) else _ROOD
+        )
+        rijen.append([label, _icr(waarde)])
+    elementen.append(_tabel(rijen, kolommen, waarde_kleuren=waarde_kleuren))
 
     elementen.append(Paragraph(
         f"Gegenereerd op {vandaag.strftime('%d-%m-%Y')} via kansen.steenhub.nl. "
