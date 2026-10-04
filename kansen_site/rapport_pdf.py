@@ -140,6 +140,10 @@ def bouw_berekening_pdf(item, velden: list[dict], resultaat: dict, vandaag: date
         ("3 maanden rente leegstand", "leegstand_3mnd"),
         ("Totale zelf in te leggen kosten", "totale_zelf_in_te_leggen"),
         ("Ná vergunning verhoogbaar met", "verhoogbaar_met"),
+        ("Financieringslasten tijdens verbouwing", "financieringslasten_verbouwing"),
+        ("In te brengen bij passeren", "in_te_brengen_bij_passeren"),
+        ("Opname liquiditeit na verbouwing", "opname_liquiditeit_na_verbouwing"),
+        ("Aan te tonen eigen middelen", "aan_te_tonen_middelen"),
     ]
     rijen = [[label, _euro(resultaat.get(key))] for label, key in berekend]
     elementen.append(_tabel(rijen, kolommen))

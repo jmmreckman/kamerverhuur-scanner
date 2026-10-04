@@ -26,6 +26,12 @@ RENTE = 0.058
 TAXATIE_VERHOUDING_VOOR_VERHOGING = 0.875
 LTV = 0.8
 AANTAL_INVESTEERDERS = 2
+# Rente-dragende periodes vóór er huur binnenkomt (vast, niet instelbaar in de
+# rekentool). Tijdens de verbouwing betaal je rente over de volle lening; daarna
+# nog een paar maanden leegstand tot de kamers verhuurd zijn. Zo berekent ook de
+# financieringsopzet van de hypotheekadviseur de "aan te tonen eigen middelen".
+VERBOUWING_RENTE_MAANDEN = 6
+LEEGSTAND_RENTE_MAANDEN = 3
 M2_PER_STUDENTENKAMER = 18
 # Als het handmatig ingevoerde aantal kamers lager is dan wat de 18m2-vuistregel op
 # basis van de oppervlakte zou geven (bv. omdat de plattegrond/raamindeling minder
@@ -176,6 +182,12 @@ class RekenResultaat:
     leegstand_3mnd: float
     totale_zelf_in_te_leggen: float
     verhoogbaar_met: float
+    # Financieringsopzet-stijl (zoals de hypotheekadviseur rekent) - leidt naar het
+    # bedrag aan eigen middelen dat je moet kunnen aantonen:
+    financieringslasten_verbouwing: float      # rente over de volle lening tijdens de verbouwing
+    in_te_brengen_bij_passeren: float          # koopsom + OVB + k.k. - wat bij de notaris wordt uitgekeerd
+    opname_liquiditeit_na_verbouwing: float    # bouwdepot - verbouwkosten (komt na verbouwing als cash terug)
+    aan_te_tonen_middelen: float               # totaal aan eigen middelen dat je moet aantonen
     # Belangrijke resultaten
     winst_pm_pp: float
     eigen_inleg_voor_ophoging_totaal: float
@@ -198,7 +210,7 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
 
     zelf_in_te_leggen_bij_aankoop = u.koopsom - leenbaar_voor_verhoging
     rente_pm_na_verhoging = leenbaar_na_verhoging * u.rente / 12
-    leegstand_3mnd = 3 * rente_pm_na_verhoging
+    leegstand_3mnd = LEEGSTAND_RENTE_MAANDEN * rente_pm_na_verhoging
 
     totale_zelf_in_te_leggen = (
         zelf_in_te_leggen_bij_aankoop
@@ -206,6 +218,26 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
         + u.kosten_koper_ex_ovb
         + u.verbouwkosten
         + leegstand_3mnd
+    )
+
+    # --- Financieringsopzet-stijl: "aan te tonen eigen middelen" --------------
+    # Zo rekent de hypotheekadviseur (zie financieringsopzet Menkemaborgstraat):
+    #  - Bij de notaris wordt leenbaar_voor_verhoging uitgekeerd; jij legt het
+    #    verschil met koopsom + overdrachtsbelasting + kosten koper zelf in.
+    #  - De verbouwing wordt uit het bouwdepot betaald (dus NIET uit eigen geld),
+    #    maar tijdens de verbouwing betaal je wel rente over de volle lening, en
+    #    daarna nog de eerste maanden leegstand - die rente moet je zelf meebrengen.
+    #  - Overdrachtsbelasting en rente zitten hier via de losse invoervelden in,
+    #    dus een lager OVB-tarief of een andere rente werkt automatisch door.
+    # De verbouwkosten zelf tellen hier bewust NIET mee (bouwdepot), in
+    # tegenstelling tot 'totale_zelf_in_te_leggen' hierboven.
+    financieringslasten_verbouwing = VERBOUWING_RENTE_MAANDEN * rente_pm_na_verhoging
+    in_te_brengen_bij_passeren = (
+        u.koopsom + overdrachtsbelasting_eur + u.kosten_koper_ex_ovb - leenbaar_voor_verhoging
+    )
+    opname_liquiditeit_na_verbouwing = verhoogbaar_met - u.verbouwkosten
+    aan_te_tonen_middelen = (
+        in_te_brengen_bij_passeren + financieringslasten_verbouwing + leegstand_3mnd
     )
 
     n = u.aantal_investeerders or 1
@@ -227,6 +259,10 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
         leegstand_3mnd=leegstand_3mnd,
         totale_zelf_in_te_leggen=totale_zelf_in_te_leggen,
         verhoogbaar_met=verhoogbaar_met,
+        financieringslasten_verbouwing=financieringslasten_verbouwing,
+        in_te_brengen_bij_passeren=in_te_brengen_bij_passeren,
+        opname_liquiditeit_na_verbouwing=opname_liquiditeit_na_verbouwing,
+        aan_te_tonen_middelen=aan_te_tonen_middelen,
         winst_pm_pp=winst_pm_pp,
         eigen_inleg_voor_ophoging_totaal=totale_zelf_in_te_leggen,
         eigen_inleg_na_ophoging_pp=eigen_inleg_na_ophoging_pp,

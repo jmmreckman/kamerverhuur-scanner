@@ -38,6 +38,28 @@ def test_azaleastraat_berekende_uitgangspunten():
     assert round(r.verhoogbaar_met, 2) == 175_921.05
 
 
+def test_azaleastraat_aan_te_tonen_middelen():
+    # Financieringsopzet-stijl (zoals de hypotheekadviseur rekent). Handmatig:
+    #  in te brengen bij passeren = 355.000 + 28.400 (OVB) + 6.000 (k.k.) - 248.500 = 140.900
+    #  financieringslasten verbouwing = 6 x 2.086,74 = 12.520,42
+    #  opname liquiditeit na verbouwing = 175.921,05 (verhoogbaar) - 25.000 (verbouw) = 150.921,05
+    #  aan te tonen = 140.900 + 12.520,42 + 6.260,21 (3 mnd leegstand) = 159.680,63
+    r = bereken_rekentool(AZALEASTRAAT)
+    assert round(r.in_te_brengen_bij_passeren, 2) == 140_900.00
+    assert round(r.financieringslasten_verbouwing, 2) == 12_520.42
+    assert round(r.opname_liquiditeit_na_verbouwing, 2) == 150_921.05
+    assert round(r.aan_te_tonen_middelen, 2) == 159_680.63
+
+
+def test_aan_te_tonen_negeert_verbouwkosten_maar_opname_niet():
+    # De verbouwkosten lopen via het bouwdepot: ze veranderen "aan te tonen middelen"
+    # NIET, maar verlagen wel de opname liquiditeit na verbouwing met hetzelfde bedrag.
+    laag = bereken_rekentool(RekenUitgangspunten(koopsom=355_000, aantal_kamers=6, verbouwkosten=25_000))
+    hoog = bereken_rekentool(RekenUitgangspunten(koopsom=355_000, aantal_kamers=6, verbouwkosten=60_000))
+    assert round(laag.aan_te_tonen_middelen, 2) == round(hoog.aan_te_tonen_middelen, 2)
+    assert round(laag.opname_liquiditeit_na_verbouwing - hoog.opname_liquiditeit_na_verbouwing, 2) == 35_000.00
+
+
 def test_azaleastraat_belangrijke_resultaten():
     r = bereken_rekentool(AZALEASTRAAT)
     assert round(r.winst_pm_pp, 2) == 1_086.63
