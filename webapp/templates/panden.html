@@ -27,6 +27,10 @@
       <td>{{ pand.bunq_rekening_iban }}</td>
       <td>
         <a href="{{ url_for('pand_bewerken', slug=pand.slug) }}">Bewerken</a>
+        <form method="post" action="{{ url_for('pand_sheet_structuur', slug=pand.slug) }}" style="display:inline"
+              onsubmit="return confirm('Tabbladen + kopjes opbouwen/herstellen in de sheet van \'{{ pand.naam }}\'? Bestaande, kloppende tabbladen blijven ongemoeid.')">
+          <button class="btn-link" type="submit">Tabbladen opbouwen</button>
+        </form>
         <form method="post" action="{{ url_for('pand_verwijderen', slug=pand.slug) }}" style="display:inline"
               onsubmit="return confirm('Pand \'{{ pand.naam }}\' verwijderen? Dit verwijdert alleen de koppeling in deze site, niet de sheet/Drive-data zelf.')">
           <button class="btn-link-danger" type="submit">Verwijderen</button>

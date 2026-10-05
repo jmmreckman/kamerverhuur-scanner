@@ -64,9 +64,11 @@ archiveer_vertrokken_huurder()/get_recent_vertrokken_huurders() hieronder.
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import gspread
 
@@ -178,6 +180,124 @@ _BEZICHTIGINGEN_HEADER = [
 
 _VERTROKKEN_HEADER = ["Kamer", "Naam", "Mail", "Telefoonnummer", "Contract einddatum", "Vertrokken op"]
 
+# Volledige koprij van het hoofdtabblad (kolom A t/m AD), in dezelfde volgorde als de
+# COL_*-constanten hierboven. De code leest/schrijft op kolompositie (niet op
+# kopteksttekst), dus deze labels zijn puur voor de leesbaarheid in de sheet - maar
+# ze moeten wel in aantal en volgorde met de COL_*-indeling overeenkomen. Wordt
+# gebruikt om bij een nieuw pand automatisch de juiste koprij neer te zetten.
+HUURDERS_HEADER = [
+    "Kamer", "Huurder", "Kale huurprijs", "Servicekosten", "Totale huur",
+    "Contract einddatum", "Opmerking", "IBAN", "Zoekwoord", "Status",
+    "Ontvangen bedrag", "Laatst gecontroleerd", "Beschikbaar",
+    "Advertentie omschrijving", "Advertentie map-ID", "Mail", "Telefoonnummer",
+    "Geboortedatum", "Geboorteplaats", "Studentnummer", "Studierichting",
+    "Borgsteller naam", "Borgsteller relatie", "Contract startdatum", "Borg",
+    "Advertentie prijs", "Advertentie oppervlakte", "Advertentie beschikbaar per",
+    "Advertentie beschikbaar tot", "Advertentie borg",
+]
+# Veiligheidsnet: de koprij moet precies even lang zijn als de kolomindeling (A t/m AD).
+assert len(HUURDERS_HEADER) == COL_ADVERTENTIE_BORG, "HUURDERS_HEADER loopt niet in de pas met de COL_*-indeling"
+
+# Standaardnamen die Google aan het eerste (lege) tabblad van een nieuwe sheet geeft -
+# die hernoemen we naar het hoofdtabblad i.p.v. er een los leeg "Blad1" naast te laten.
+_STANDAARD_TABBLADNAMEN = ("Blad1", "Sheet1")
+
+
+_SHEET_ID_IN_URL = re.compile(r"/spreadsheets/d/([a-zA-Z0-9_-]+)")
+
+
+def sheet_id_uit_invoer(waarde: str) -> str:
+    """Haalt het Google Sheet-ID uit wat de gebruiker invult: of 'm nou de kale ID
+    plakt, of de hele deel-URL (https://docs.google.com/spreadsheets/d/<ID>/edit...).
+    Zo hoeft 'ie niet zelf het ID uit de link te vissen."""
+    waarde = (waarde or "").strip()
+    match = _SHEET_ID_IN_URL.search(waarde)
+    return match.group(1) if match else waarde
+
+
+def service_account_email(config: Config) -> str | None:
+    """Het e-mailadres van het service account (client_email uit het JSON-bestand) -
+    dat is het adres waarmee de gebruiker een nieuwe sheet moet delen zodat de app
+    'm mag lezen/schrijven. None als het bestand niet leesbaar is."""
+    try:
+        data = json.loads(Path(config.google_service_account_file).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    adres = data.get("client_email")
+    return str(adres) if adres else None
+
+
+def _kopregel_is_leeg(ws) -> bool:
+    return not any(any(str(cel).strip() for cel in rij) for rij in ws.get_all_values())
+
+
+def _kopregel_klopt(ws, header: list[str]) -> bool:
+    rijen = ws.get_all_values()
+    eerste = rijen[0] if rijen else []
+    return [str(cel).strip() for cel in eerste[:len(header)]] == header
+
+
+def _zet_kopregel(ws, header: list[str]) -> None:
+    laatste = gspread.utils.rowcol_to_a1(1, len(header))  # bv. "AD1"
+    ws.batch_update([{"range": f"A1:{laatste}", "values": [header]}], value_input_option="RAW")
+
+
+def bouw_sheet_structuur(spreadsheet, pand: Pand) -> dict:
+    """Zorgt dat `spreadsheet` alle tabbladen met de juiste koprijen heeft voor dit
+    pand: het hoofdtabblad (Huurders, kolom A t/m AD) plus Historie, Aanmeldingen,
+    Bezichtigingen en Vertrokken. Idempotent - bestaande tabbladen met een kloppende
+    koprij blijven ongemoeid; een verkeerde/ontbrekende koprij wordt (her)gezet.
+
+    Werkt op een gspread-achtig spreadsheet-object (worksheets()/worksheet()/
+    add_worksheet()), zodat het los van een echte verbinding te testen is. Geeft een
+    overzicht terug van wat er is aangemaakt/aangepast/ongewijzigd gebleven."""
+    tabs = [
+        (pand.google_sheet_worksheet, HUURDERS_HEADER),
+        (pand.history_worksheet, _HISTORIE_HEADER),
+        (pand.aanmeldingen_worksheet, _AANMELDINGEN_HEADER),
+        (pand.bezichtigingen_worksheet, _BEZICHTIGINGEN_HEADER),
+        (pand.vertrokken_worksheet, _VERTROKKEN_HEADER),
+    ]
+    op_titel = {ws.title: ws for ws in spreadsheet.worksheets()}
+    resultaat = {"aangemaakt": [], "kopregel_gezet": [], "ongewijzigd": []}
+    verwerkt: set[str] = set()
+
+    # Een gloednieuwe sheet heeft één leeg standaardtabblad ("Blad1"/"Sheet1"). Als het
+    # hoofdtabblad nog niet bestaat, hernoemen we dat lege standaardtabblad ernaartoe
+    # (i.p.v. er een nieuw tabblad naast te zetten en een verweesd leeg "Blad1" te
+    # laten staan) en zetten we er meteen de koprij op.
+    hoofd = pand.google_sheet_worksheet
+    if hoofd not in op_titel:
+        for standaard in _STANDAARD_TABBLADNAMEN:
+            ws = op_titel.get(standaard)
+            if ws is not None and _kopregel_is_leeg(ws):
+                ws.update_title(hoofd)
+                if getattr(ws, "col_count", len(HUURDERS_HEADER)) < len(HUURDERS_HEADER):
+                    ws.resize(cols=len(HUURDERS_HEADER))
+                _zet_kopregel(ws, HUURDERS_HEADER)
+                op_titel[hoofd] = ws
+                del op_titel[standaard]
+                resultaat["aangemaakt"].append(hoofd)
+                verwerkt.add(hoofd)
+                break
+
+    for titel, header in tabs:
+        if titel in verwerkt:
+            continue
+        ws = op_titel.get(titel)
+        if ws is None:
+            ws = spreadsheet.add_worksheet(title=titel, rows=1000, cols=max(len(header), 26))
+            _zet_kopregel(ws, header)
+            resultaat["aangemaakt"].append(titel)
+        elif _kopregel_klopt(ws, header):
+            resultaat["ongewijzigd"].append(titel)
+        else:
+            if getattr(ws, "col_count", len(header)) < len(header):
+                ws.resize(cols=len(header))
+            _zet_kopregel(ws, header)
+            resultaat["kopregel_gezet"].append(titel)
+    return resultaat
+
 
 def _optioneel(waarde: str) -> str | None:
     return waarde.strip() or None
@@ -211,6 +331,17 @@ class SheetClient:
         gc = gspread.service_account(filename=config.google_service_account_file)
         self._spreadsheet = gc.open_by_key(pand.google_sheet_id)
         self._worksheet = self._spreadsheet.worksheet(pand.google_sheet_worksheet)
+
+    @classmethod
+    def bouw_structuur(cls, config: Config, pand: Pand) -> dict:
+        """Opent de (door de gebruiker aangemaakte en met het service account gedeelde)
+        sheet van dit pand en bouwt alle tabbladen + koprijen op (zie
+        bouw_sheet_structuur). Opzettelijk een classmethod: hoeft geen bestaand
+        hoofdtabblad te hebben (dat maakt deze functie juist aan), dus __init__ -
+        dat meteen het hoofdtabblad opent - zou hier nog niet werken."""
+        gc = gspread.service_account(filename=config.google_service_account_file)
+        spreadsheet = gc.open_by_key(pand.google_sheet_id)
+        return bouw_sheet_structuur(spreadsheet, pand)
 
     def get_kamers(self) -> list[Tenant]:
         """Geeft alle kamers terug, inclusief leegstaande (lege huurder, wel een kamernaam)."""

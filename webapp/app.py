@@ -37,7 +37,7 @@ from kamerverhuur_scanner.runner import (
     run_check,
     verwachte_huurinkomsten_specificatie,
 )
-from kamerverhuur_scanner.sheet_client import SheetClient
+from kamerverhuur_scanner.sheet_client import SheetClient, service_account_email, sheet_id_uit_invoer
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen, tekenportaal, wwso
@@ -426,7 +426,7 @@ def create_app(config: Config | None = None) -> Flask:
             verhuurders.append({"naam": naam.strip(), "adres": adres.strip()})
         return {
             "naam": form.get("naam", "").strip(),
-            "google_sheet_id": form.get("google_sheet_id", "").strip(),
+            "google_sheet_id": sheet_id_uit_invoer(form.get("google_sheet_id", "")),
             "google_sheet_worksheet": form.get("google_sheet_worksheet", "").strip() or "Huurders",
             "history_worksheet": form.get("history_worksheet", "").strip() or "Historie",
             "aanmeldingen_worksheet": form.get("aanmeldingen_worksheet", "").strip() or "Aanmeldingen",
@@ -457,6 +457,36 @@ def create_app(config: Config | None = None) -> Flask:
     def panden_overzicht():
         return render_template("panden.html", panden=_properties())
 
+    def _bouw_sheet_structuur_veilig(slug: str) -> None:
+        """Bouwt de tabbladen + koprijen op in de (al met het service account gedeelde)
+        sheet van dit pand, en flasht het resultaat of een begrijpelijke fout. Best-
+        effort: een mislukte opbouw (bv. sheet nog niet gedeeld) laat het aanmaken/
+        bewerken van het pand zelf niet mislukken - de gebruiker krijgt dan alleen de
+        uitleg hoe 'ie het alsnog goed zet."""
+        pand = find_pand(_properties(), slug)
+        if pand is None:
+            return
+        try:
+            r = SheetClient.bouw_structuur(config, pand)
+        except Exception:  # noqa: BLE001 - externe Google-fouten zijn divers; altijd nette uitleg tonen
+            logging.exception("Sheet-structuur opbouwen mislukt voor pand %s", slug)
+            adres = service_account_email(config)
+            deel_met = f" met {adres}" if adres else " met het service-account-adres"
+            flash(
+                "Kon de sheet niet openen om de tabbladen aan te maken. Controleer het "
+                f"Google Sheet-ID/de link, en deel de sheet{deel_met} met bewerkrechten. "
+                "Daarna kun je bij het pand op 'Tabbladen opbouwen' klikken.",
+            )
+            return
+        deel = []
+        if r["aangemaakt"]:
+            deel.append("aangemaakt: " + ", ".join(r["aangemaakt"]))
+        if r["kopregel_gezet"]:
+            deel.append("kopregel hersteld: " + ", ".join(r["kopregel_gezet"]))
+        if r["ongewijzigd"]:
+            deel.append("al in orde: " + ", ".join(r["ongewijzigd"]))
+        flash("Tabbladen/kopjes bijgewerkt — " + "; ".join(deel) + ".")
+
     @app.route("/beheer/panden/nieuw", methods=["GET", "POST"])
     @login_required
     @admin_required
@@ -474,8 +504,10 @@ def create_app(config: Config | None = None) -> Flask:
             else:
                 zet_pand(config.properties_file, slug, gegevens)
                 flash(f"Pand '{gegevens['naam']}' aangemaakt.")
+                if request.form.get("sheet_structuur") == "on":
+                    _bouw_sheet_structuur_veilig(slug)
                 return redirect(url_for("panden_overzicht"))
-        return render_template("pand_form.html", pand=None, slug=None)
+        return render_template("pand_form.html", pand=None, slug=None, service_account_adres=service_account_email(config))
 
     @app.route("/beheer/panden/<slug>/bewerken", methods=["GET", "POST"])
     @login_required
@@ -491,8 +523,21 @@ def create_app(config: Config | None = None) -> Flask:
             else:
                 zet_pand(config.properties_file, slug, gegevens)
                 flash(f"Pand '{gegevens['naam']}' bijgewerkt.")
+                if request.form.get("sheet_structuur") == "on":
+                    _bouw_sheet_structuur_veilig(slug)
                 return redirect(url_for("panden_overzicht"))
-        return render_template("pand_form.html", pand=pand, slug=slug)
+        return render_template("pand_form.html", pand=pand, slug=slug, service_account_adres=service_account_email(config))
+
+    @app.route("/beheer/panden/<slug>/sheet-structuur", methods=["POST"])
+    @login_required
+    @admin_required
+    def pand_sheet_structuur(slug: str):
+        """Bouwt (of herstelt) de tabbladen + koprijen in de sheet van een bestaand
+        pand - idempotent, dus ook handig als er later een tabblad/kopje mist."""
+        if find_pand(_properties(), slug) is None:
+            abort(404, f"Pand '{slug}' bestaat niet.")
+        _bouw_sheet_structuur_veilig(slug)
+        return redirect(url_for("panden_overzicht"))
 
     @app.route("/beheer/panden/<slug>/verwijderen", methods=["POST"])
     @login_required
