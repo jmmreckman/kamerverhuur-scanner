@@ -67,6 +67,32 @@ def _historie_pad(config: Config) -> Path:
     return Path(config.state_path).parent / "rente_historie.json"
 
 
+def _rente_state_pad(config: Config) -> Path:
+    # Eigen, door de machine bijgehouden "bron van waarheid" voor de laatst gelezen
+    # Domivest-rente. Bewust GESCHEIDEN van reken_defaults.json (dat is het door de
+    # gebruiker bewerkbare renteveld): zo verstoren handmatige renteaanpassingen de
+    # vergelijking nooit en komt er alleen een melding als de rente op de Domivest-site
+    # zelf echt verandert.
+    return Path(config.state_path).parent / "domivest_rente_state.json"
+
+
+def laad_rente_state(config: Config) -> dict:
+    """De laatst gelezen Domivest-rente met de cel waarvoor die gold:
+    {"rente": <fractie>, "ltv": <fractie>, "periode": <int|str>}. Leeg als er nog
+    niets is vastgelegd (bv. eerste run)."""
+    try:
+        data = json.loads(_rente_state_pad(config).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _schrijf_rente_state(config: Config, state: dict) -> None:
+    pad = _rente_state_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    pad.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def laad_historie(config: Config) -> list[dict]:
     """De opgeslagen tijdreeks [{"datum": "YYYY-MM-DD", "rente": <fractie>}, ...],
     oplopend op datum. Leeg als er nog niets is genoteerd."""
@@ -141,11 +167,16 @@ def _schrijf_defaults(config: Config, defaults: dict) -> None:
 
 
 def werk_rente_bij(config: Config, tabel: dict | None = None) -> RenteWijziging | None:
-    """Zet de globale rente in het rekenmodel gelijk aan de actuele Domivest-rente voor
-    de ingestelde LTV-klasse + rentevaste periode, als die is veranderd. Met een al
-    opgehaalde `tabel` wordt niet opnieuw gefetcht (zo delen historie + model-update
-    één ophaalactie). Geeft de wijziging terug (voor de e-mailmelding) of None als er
-    niets veranderde of de rente niet kon worden opgehaald."""
+    """Vergelijkt de actuele Domivest-rente met de laatst door ons vastgelegde
+    Domivest-rente (een eigen "bron van waarheid", los van het door de gebruiker
+    bewerkbare renteveld). Alleen als de rente op de Domivest-site zélf verandert,
+    schrijven we die weg naar het rekenmodel én melden we de wijziging. Handmatige
+    renteaanpassingen van de gebruiker worden bewust genegeerd en lossen nooit een
+    melding of overschrijving uit.
+
+    Met een al opgehaalde `tabel` wordt niet opnieuw gefetcht (zo delen historie +
+    model-update één ophaalactie). Geeft de wijziging terug (voor de e-mailmelding) of
+    None als er niets veranderde of de rente niet kon worden opgehaald."""
     if not config.domivest_rente_auto:
         return None
 
@@ -157,28 +188,46 @@ def werk_rente_bij(config: Config, tabel: dict | None = None) -> RenteWijziging 
         ltv = float(ltv)
     except (TypeError, ValueError):
         ltv = basis.ltv
+    periode = config.domivest_rente_periode_jaren
 
     if tabel is None:
-        nieuwe = domivest_rente.actuele_rente(
-            ltv, config.domivest_rente_periode_jaren, config.domivest_rente_url,
-        )
+        nieuwe = domivest_rente.actuele_rente(ltv, periode, config.domivest_rente_url)
     else:
-        nieuwe = domivest_rente.rente_voor(tabel, ltv, config.domivest_rente_periode_jaren)
+        nieuwe = domivest_rente.rente_voor(tabel, ltv, periode)
     if nieuwe is None:
         return None
 
-    oude = defaults.get("rente", basis.rente)
+    # De laatst vastgelegde Domivest-rente, en de cel (LTV + periode) waarvoor die gold.
+    state = laad_rente_state(config)
+    vorige = state.get("rente")
     try:
-        oude = float(oude)
+        vorige = float(vorige) if vorige is not None else None
     except (TypeError, ValueError):
-        oude = basis.rente
+        vorige = None
+    zelfde_cel = (
+        vorige is not None
+        and state.get("periode") == periode
+        and isinstance(state.get("ltv"), (int, float))
+        and abs(float(state["ltv"]) - ltv) < 1e-9
+    )
 
-    if abs(nieuwe - oude) < 1e-9:
+    # Bron van waarheid altijd bijwerken naar de huidige Domivest-waarde/cel.
+    _schrijf_rente_state(config, {"rente": nieuwe, "ltv": ltv, "periode": periode})
+
+    # Eerste keer vastleggen, of een andere LTV/periode-cel (bv. de gebruiker zette de
+    # LTV anders): alleen baselinen. Geen melding en het handmatige renteveld blijft
+    # staan - dit is immers geen échte Domivest-wijziging.
+    if not zelfde_cel:
         return None
 
+    # Zelfde cel, maar de Domivest-rente is niet veranderd: niets doen. (Ook als de
+    # gebruiker zijn eigen renteveld intussen heeft verschoven - dat negeren we.)
+    if abs(nieuwe - vorige) < 1e-9:
+        return None
+
+    # De Domivest-rente is écht veranderd: wegschrijven naar het rekenmodel + melden.
     defaults["rente"] = nieuwe
     _schrijf_defaults(config, defaults)
     return RenteWijziging(
-        oude_rente=oude, nieuwe_rente=nieuwe, ltv=ltv,
-        periode_jaren=config.domivest_rente_periode_jaren,
+        oude_rente=vorige, nieuwe_rente=nieuwe, ltv=ltv, periode_jaren=periode,
     )

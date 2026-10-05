@@ -73,17 +73,63 @@ def _config(tmp_path, **overrides):
     return Config(**defaults)
 
 
+def _seed_rente_state(tmp_path, rente, ltv=0.8, periode=5):
+    """Legt een eerdere Domivest-rente vast, zodat een volgende run een echte
+    wijziging kan detecteren (i.p.v. alleen te baselinen)."""
+    (tmp_path / "domivest_rente_state.json").write_text(
+        json.dumps({"rente": rente, "ltv": ltv, "periode": periode})
+    )
+
+
+def test_eerste_run_baselinet_zonder_melding_of_overschrijving(tmp_path, monkeypatch):
+    # Eerste run (nog geen bron-van-waarheid): alleen vastleggen. Geen melding, en het
+    # handmatige renteveld blijft staan - dit is immers nog geen échte wijziging.
+    (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.058}))
+    monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
+    assert rente_update.werk_rente_bij(_config(tmp_path)) is None
+    # Renteveld onaangeroerd...
+    assert json.loads((tmp_path / "reken_defaults.json").read_text())["rente"] == pytest.approx(0.058)
+    # ...maar de bron van waarheid staat nu op de Domivest-waarde.
+    assert rente_update.laad_rente_state(_config(tmp_path))["rente"] == pytest.approx(0.0635)
+
+
 def test_werk_rente_bij_schrijft_nieuwe_rente_en_meldt_wijziging(tmp_path, monkeypatch):
+    _seed_rente_state(tmp_path, 0.0620)  # vorige Domivest-rente
     monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
     config = _config(tmp_path)
     wijziging = rente_update.werk_rente_bij(config)
     assert wijziging is not None
+    assert wijziging.oude_rente == pytest.approx(0.0620)
     assert wijziging.nieuwe_rente == pytest.approx(0.0635)
     opgeslagen = json.loads((tmp_path / "reken_defaults.json").read_text())
     assert opgeslagen["rente"] == pytest.approx(0.0635)
+    # Bron van waarheid is meegeschoven.
+    assert rente_update.laad_rente_state(config)["rente"] == pytest.approx(0.0635)
+
+
+def test_handmatige_renteaanpassing_lost_geen_melding_of_overschrijving_uit(tmp_path, monkeypatch):
+    # De kern van de bugfix: Domivest staat al op 6,35%, de gebruiker heeft zijn eigen
+    # renteveld handmatig op 6,40% gezet (om door te rekenen). De volgende ochtend haalt
+    # de job 6,35% op - ongewijzigd. Dan: GEEN melding en het handmatige veld blijft 6,40%.
+    _seed_rente_state(tmp_path, 0.0635)
+    (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.0640, "bar": 0.076}))
+    monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
+    assert rente_update.werk_rente_bij(_config(tmp_path)) is None
+    opgeslagen = json.loads((tmp_path / "reken_defaults.json").read_text())
+    assert opgeslagen["rente"] == pytest.approx(0.0640)  # handmatige waarde niet verstoord
+
+
+def test_melding_komt_maar_een_keer_na_een_wijziging(tmp_path, monkeypatch):
+    # Na een echte wijziging mag een volgende run met dezelfde rente niet opnieuw melden.
+    _seed_rente_state(tmp_path, 0.0620)
+    monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
+    config = _config(tmp_path)
+    assert rente_update.werk_rente_bij(config) is not None  # eerste keer: melding
+    assert rente_update.werk_rente_bij(config) is None       # tweede keer: stil
 
 
 def test_werk_rente_bij_laat_bar_en_overige_velden_staan(tmp_path, monkeypatch):
+    _seed_rente_state(tmp_path, 0.058)
     (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.058, "bar": 0.076, "ltv": 0.8}))
     monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
     rente_update.werk_rente_bij(_config(tmp_path))
@@ -104,13 +150,27 @@ def test_werk_rente_bij_gebruikt_ltv_klasse_uit_defaults(tmp_path, monkeypatch):
     assert gezien["ltv"] == pytest.approx(0.50)
 
 
+def test_andere_ltv_cel_baselinet_opnieuw_zonder_melding(tmp_path, monkeypatch):
+    # Bron van waarheid stond op de 80%-cel; de gebruiker zet de LTV op 50%. De 50%-cel
+    # is een andere rente, maar dat is geen Domivest-wijziging - dus alleen baselinen.
+    _seed_rente_state(tmp_path, 0.0635, ltv=0.8, periode=5)
+    (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.0635, "ltv": 0.50}))
+    monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0605)
+    assert rente_update.werk_rente_bij(_config(tmp_path)) is None
+    state = rente_update.laad_rente_state(_config(tmp_path))
+    assert state["rente"] == pytest.approx(0.0605)
+    assert state["ltv"] == pytest.approx(0.50)
+
+
 def test_werk_rente_bij_geen_wijziging_geeft_none(tmp_path, monkeypatch):
+    _seed_rente_state(tmp_path, 0.0635)
     (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.0635}))
     monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: 0.0635)
     assert rente_update.werk_rente_bij(_config(tmp_path)) is None
 
 
 def test_werk_rente_bij_ophaalfout_verandert_niets(tmp_path, monkeypatch):
+    _seed_rente_state(tmp_path, 0.058)
     (tmp_path / "reken_defaults.json").write_text(json.dumps({"rente": 0.058}))
     monkeypatch.setattr(domivest_rente, "actuele_rente", lambda *a, **k: None)
     assert rente_update.werk_rente_bij(_config(tmp_path)) is None
@@ -170,6 +230,7 @@ def test_backfill_laat_bestaande_datum_ongemoeid(tmp_path):
 
 
 def test_werk_rente_bij_met_voorgehaalde_tabel_fetcht_niet(tmp_path, monkeypatch):
+    _seed_rente_state(tmp_path, 0.0620)  # vorige Domivest-rente, zodat 6,35% een wijziging is
     tabel = domivest_rente.parse_rentetabel(_HTML)
     def _mag_niet(*a, **k):
         raise AssertionError("actuele_rente had niet aangeroepen mogen worden")
