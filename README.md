@@ -850,31 +850,65 @@ cp properties.json.example properties.json
 ### Nieuw pand toevoegen via de site ("Panden beheren")
 
 Beheerders met toegang tot alle panden zien een **"Panden"**-knop in de
-navigatie. Daar kun je een nieuw pand toevoegen (naam, Google Sheet ID,
-tabbladnamen, optioneel een Drive-map-ID, en het bunq-IBAN), bewerken, of
+navigatie. Daar kun je een nieuw pand toevoegen (naam, Google Sheet ID of -link,
+tabbladnamen, en het bunq-IBAN), bewerken, of
 verwijderen. Wijzigingen gelden meteen, geen herstart nodig - net als bij
 Gebruikers. Onderaan het bewerkformulier staan ook de contractgegevens van dat
 pand (verhuurder(s), postcode/plaats, naam rekeninghouder, gedeelde ruimtes,
 bijzondere bepalingen, gemeentelijk meldpunt) - zie "Huurcontracten
 genereren" hierboven.
 
-Dat scheelt SSH/JSON-bewerken, maar de "echte wereld"-voorbereiding blijft
-hetzelfde als bij het eerste pand:
+Dat scheelt SSH/JSON-bewerken. De voorbereiding is nu grotendeels
+geautomatiseerd - je hoeft de tabbladen en kolomkoppen **niet meer handmatig**
+aan te maken:
 
-1. Maak (of hergebruik) een Google Sheet met de juiste kolomkoppen (zie
-   hierboven) voor het nieuwe pand, en deel 'm met het `client_email`-adres
-   uit je `google-service-account.json` (Stap 2) - hetzelfde service-account
-   werkt voor alle panden, je hoeft niks opnieuw aan te maken in Google Cloud.
-2. Optioneel: maak een Drive-map voor documenten/aanbod-foto's van dat pand,
-   en deel die ook met hetzelfde `client_email`-adres.
-3. bunq: als de rekening van het nieuwe pand **onder dezelfde bunq-login**
-   valt als je bestaande panden (meestal het geval - één bunq-profiel met
-   meerdere rekeningen), is er **geen nieuwe API key** nodig. Zoek gewoon het
-   IBAN van de juiste rekening op in de bunq-app en vul dat in. Alleen als het
-   een compleet aparte bunq-zakelijke login/profiel is, is een nieuwe
-   `setup_bunq.py`-koppeling nodig.
-4. Vul daarna het formulier op "Panden > Nieuw pand" in met de slug, naam,
-   sheet ID, en IBAN.
+1. **Maak een lege Google Sheet** aan (File -> New). Je hoeft er zelf niets in
+   te zetten.
+2. **Deel 'm met bewerkrechten** met het `client_email`-adres uit je
+   `google-service-account.json` (Stap 2). Dat adres staat ook boven aan het
+   "Nieuw pand"-formulier, zodat je het niet hoeft op te zoeken. Hetzelfde
+   service-account werkt voor alle panden - niks opnieuw aanmaken in Google
+   Cloud.
+3. Op **"Panden > Nieuw pand"**: vul slug, naam en het bunq-IBAN in, en **plak
+   de link of het ID** van de lege sheet (de hele
+   `https://docs.google.com/spreadsheets/d/<ID>/edit`-link mag - het ID wordt
+   er automatisch uit gehaald, zie `sheet_id_uit_invoer`). Laat het vinkje
+   **"Tabbladen + kopjes automatisch opbouwen"** aan staan.
+4. Bij opslaan bouwt de app dan zelf alle tabbladen met de juiste koprijen op:
+   **Huurders** (hoofdtabblad, kolom A t/m AD - zie "Verwachte kolomindeling"
+   hierboven), **Historie**, **Aanmeldingen**, **Bezichtigingen** en
+   **Vertrokken**. Een leeg standaardtabblad ("Blad1"/"Sheet1") wordt daarbij
+   hernoemd naar Huurders i.p.v. ernaast te blijven staan. Zie
+   `kamerverhuur_scanner/sheet_client.py` -> `bouw_sheet_structuur()` /
+   `SheetClient.bouw_structuur()`.
+
+Waarom half-automatisch (jij maakt de lege sheet, de app vult 'm)? Het service
+account heeft **0 GB eigen Drive-opslag** en kan dus zelf geen sheet bezitten
+(zie ook `drive_sync.py`: daarom lopen documenten/contracten via rclone en niet
+via het service account). De sheet moet daarom onder je eigen Drive ontstaan;
+de app regelt vervolgens alleen nog de structuur erin.
+
+**Idempotent / repareren:** op het pandenoverzicht staat per pand een knop
+**"Tabbladen opbouwen"** (en op het bewerkformulier hetzelfde vinkje). Die kun
+je altijd veilig opnieuw draaien - bestaande, kloppende tabbladen blijven
+ongemoeid, alleen ontbrekende tabbladen of een foute/lege koprij worden
+(her)gezet. Handig als er later een tabblad of kopje mist.
+
+Lukt het openen niet (sheet nog niet gedeeld, of verkeerd ID/link), dan zegt de
+site dat met de uitleg "deel de sheet met `<service-account-adres>` en klik dan
+op 'Tabbladen opbouwen'" - er gaat niets stuk, het pand zelf is dan wel al
+opgeslagen.
+
+Overige voorbereiding, ongewijzigd:
+
+- **Drive-map**: hoef je **niet** zelf te maken - de "Steenhub <pandnaam>"-map
+  ontstaat vanzelf via rclone zodra er een contract getekend of document
+  aangeleverd wordt (zie "Drive-koppeling voor contracten").
+- **bunq**: valt de rekening van het nieuwe pand **onder dezelfde bunq-login**
+  als je bestaande panden (meestal zo - één bunq-profiel met meerdere
+  rekeningen), dan is er **geen nieuwe API key** nodig. Zoek het IBAN van de
+  juiste rekening op in de bunq-app en vul dat in. Alleen bij een compleet
+  aparte bunq-login is een nieuwe `setup_bunq.py`-koppeling nodig.
 
 Toegang geven aan gebruikers (bijv. alleen jijzelf, niet Justin, voor een
 pand dat volledig van jou is) regel je zoals gewoonlijk via "Gebruikers".
