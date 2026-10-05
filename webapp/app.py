@@ -330,7 +330,21 @@ def create_app(config: Config | None = None) -> Flask:
         eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         if len(eigen_panden) == 1:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
+        volgorde = state.laad_pand_volgorde(current_user.id, config.state_dir)
+        eigen_panden = state.sorteer_op_volgorde(eigen_panden, volgorde)
         return render_template("pand_kiezer.html", panden=eigen_panden)
+
+    @app.route("/pand-volgorde", methods=["POST"])
+    @login_required
+    def pand_volgorde_opslaan():
+        """Bewaart de door de gebruiker versleepte volgorde van de pandtegels
+        (zie pand_kiezer.html). Alleen slugs waartoe de gebruiker toegang heeft
+        worden bewaard; onbekende slugs worden genegeerd."""
+        gevraagd = (request.get_json(silent=True) or {}).get("volgorde", [])
+        toegestaan = [p.slug for p in _properties() if current_user.heeft_toegang(p.slug)]
+        schoon = [s for s in gevraagd if s in toegestaan]
+        state.bewaar_pand_volgorde(current_user.id, schoon, config.state_dir)
+        return {"ok": True}
 
     # --- Gebruikersbeheer (alleen voor beheerders met toegang tot alle panden) ---
 

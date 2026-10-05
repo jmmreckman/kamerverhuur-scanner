@@ -247,3 +247,48 @@ def laad_genegeerde_lasten(pand_slug: str, state_dir: str = ".") -> dict[str, st
     if not p.exists():
         return {}
     return json.loads(p.read_text())
+
+
+def _pand_volgorde_bestandsnaam(state_dir: str = ".") -> Path:
+    # Eén bestand voor alle gebruikers: {username: [slug, slug, ...]}. De
+    # pandkiezer toont de panden van een gebruiker in deze zelfgekozen volgorde
+    # (zie webapp/app.py: start() en pand_volgorde_opslaan()).
+    return Path(state_dir) / "pand_volgorde.json"
+
+
+def _laad_pand_volgorde_alles(state_dir: str = ".") -> dict:
+    p = _pand_volgorde_bestandsnaam(state_dir)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text())
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def laad_pand_volgorde(username: str, state_dir: str = ".") -> list[str]:
+    """De zelfgekozen volgorde van pand-slugs voor deze gebruiker, of [] als er
+    nog niets bewaard is."""
+    volgorde = _laad_pand_volgorde_alles(state_dir).get(username, [])
+    return [str(s) for s in volgorde] if isinstance(volgorde, list) else []
+
+
+def bewaar_pand_volgorde(username: str, slugs: list[str], state_dir: str = ".") -> None:
+    """Slaat de volgorde van pand-slugs op voor deze gebruiker."""
+    p = _pand_volgorde_bestandsnaam(state_dir)
+    data = _laad_pand_volgorde_alles(state_dir)
+    data[username] = [str(s) for s in slugs]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def sorteer_op_volgorde(panden: list, volgorde: list[str], sleutel=lambda p: p.slug) -> list:
+    """Sorteert `panden` volgens de opgeslagen `volgorde` van slugs. Panden die
+    (nog) niet in de volgorde staan - bv. een net toegevoegd pand - komen achteraan,
+    in hun oorspronkelijke onderlinge volgorde. Zo blijft de lijst stabiel, ook als er
+    later een pand bij komt of af gaat."""
+    rang = {slug: i for i, slug in enumerate(volgorde)}
+    # Stabiele sort: onbekende slugs krijgen een index voorbij het einde, en
+    # behouden onderling hun huidige volgorde (sorted is stabiel in Python).
+    return sorted(panden, key=lambda p: rang.get(sleutel(p), len(rang) + 1))
