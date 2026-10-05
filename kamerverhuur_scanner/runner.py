@@ -237,6 +237,16 @@ def run_check(
     config: Config, pand: Pand, dry_run: bool = False, vandaag: date | None = None
 ) -> tuple[list[Tenant], list[TenantResult], list[Payment]]:
     vandaag = vandaag or date.today()
+    # Een pand met een niet-bunq rekening (bv. een gezamenlijke Rabo-rekening) kan
+    # niet via de bunq-API worden uitgelezen. Meteen een duidelijke fout i.p.v. straks
+    # een vage "geen bunq-rekening gevonden" diep in de betaling-ophaalstap. De
+    # aanroepers (webapp, dagelijkse controle) slaan zulke panden bij voorkeur al
+    # over (zie pand.heeft_bunq_rekening) voordat ze hier komen.
+    if not pand.heeft_bunq_rekening:
+        raise BunqClientError(
+            f"Pand '{pand.naam}' heeft geen bunq-rekening (IBAN '{pand.bunq_rekening_iban}'), "
+            "dus de betalingen kunnen niet automatisch worden uitgelezen."
+        )
     huidige_maand_sleutel = (vandaag.year, vandaag.month)
     zoek_vanaf = _zoek_vanaf_voor_maand(vandaag)
 
@@ -411,12 +421,20 @@ def bereken_winstoverzicht(
     Tegenpartijen die de beheerder zelf definitief genegeerd heeft (zie
     state.negeer_last(), bv. een overboeking naar zichzelf) tellen nooit mee,
     ongeacht het herkenningspatroon. Kan BunqClientError laten doorstromen
-    (net als run_check()) als de bunq-koppeling niet werkt."""
-    bunq = BunqClient(config)
-    sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
-    uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
-    genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
-    lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
+    (net als run_check()) als de bunq-koppeling niet werkt.
+
+    Voor een pand zonder bunq-rekening (bv. een Rabo-rekening) wordt de automatische
+    lastenscan overgeslagen: het winstoverzicht is er dan nog steeds, maar met alleen de
+    handmatig ingevulde vaste lasten (onderhoud/energie/belasting) - zo geeft de
+    winstpagina geen fout voor zo'n pand."""
+    if pand.heeft_bunq_rekening:
+        bunq = BunqClient(config)
+        sinds = date.today() - timedelta(days=winst.SCAN_TERUGBLIK_DAGEN)
+        uitgaven = bunq.get_outgoing_payments(pand, since=sinds)
+        genegeerd = set(state.laad_genegeerde_lasten(pand.slug, config.state_dir))
+        lasten = winst.herken_terugkerende_lasten(uitgaven, genegeerd)
+    else:
+        lasten = []
     return winst.bereken_winst(
         inkomsten_specificatie, lasten, pand.onderhoud_reserve_per_maand,
         energiekosten=pand.energiekosten_per_maand, belasting=pand.belasting_per_maand,

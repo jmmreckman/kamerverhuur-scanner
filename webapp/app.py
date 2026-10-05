@@ -700,6 +700,8 @@ def create_app(config: Config | None = None) -> Flask:
         maand_sleutel = volgende.strftime("%Y-%m")
         fouten: list[str] = []
         for pand in panden:
+            if not pand.heeft_bunq_rekening:
+                continue  # geen bunq-rekening -> niet automatisch uit te lezen, stil overslaan
             try:
                 _tenants, results, _unmatched = run_check(config, pand, dry_run=True, vandaag=volgende)
             except Exception as exc:  # noqa: BLE001 - één pand mag de rest niet breken
@@ -1092,6 +1094,13 @@ def create_app(config: Config | None = None) -> Flask:
     def betalingen(pand_slug: str):
         net_gecontroleerd = None
         if request.method == "POST":
+            if not g.pand.heeft_bunq_rekening:
+                flash(
+                    "Dit pand heeft geen bunq-rekening gekoppeld (het IBAN is geen bunq-rekening), "
+                    "dus de betalingen kunnen niet automatisch worden uitgelezen. Je kunt de "
+                    "huurdersgegevens wel gewoon beheren."
+                )
+                return redirect(url_for("betalingen", pand_slug=pand_slug))
             _tenants, results, unmatched = run_check(config, g.pand, dry_run=False)
             net_gecontroleerd = {"results": results, "unmatched": unmatched}
         sheet = SheetClient(config, g.pand)
@@ -1148,11 +1157,15 @@ def create_app(config: Config | None = None) -> Flask:
             verzonden=verzonden,
             herken_oud_huurder=_oud_huurder,
             oud_huurder_signalen=oud_huurder_signalen,
+            heeft_bunq_rekening=g.pand.heeft_bunq_rekening,
         )
 
     @app.route("/pand/<pand_slug>/betalingen/geschiedenis-aanvullen", methods=["POST"])
     @login_required
     def geschiedenis_aanvullen(pand_slug: str):
+        if not g.pand.heeft_bunq_rekening:
+            flash("Dit pand heeft geen bunq-rekening; de betaalgeschiedenis kan niet automatisch worden aangevuld.")
+            return redirect(url_for("betalingen", pand_slug=pand_slug))
         aantal = backfill_geschiedenis(config, g.pand)
         flash(
             f"Betaalgeschiedenis aangevuld voor in totaal {aantal} maand(en) - per kamer vanaf de "

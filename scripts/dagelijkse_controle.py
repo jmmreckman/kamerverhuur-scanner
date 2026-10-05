@@ -46,6 +46,9 @@ def _draai_alle_panden(config: Config) -> None:
         logger.error("Kon panden niet laden: %s", exc)
         return
     for pand in panden:
+        if not pand.heeft_bunq_rekening:
+            logger.info("[%s] Overgeslagen: geen bunq-rekening, betalingen worden niet automatisch uitgelezen.", pand.slug)
+            continue
         try:
             logger.info("[%s] Automatische controle starten...", pand.slug)
             run_check(config, pand, dry_run=False)

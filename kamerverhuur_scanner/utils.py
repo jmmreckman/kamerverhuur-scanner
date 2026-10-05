@@ -8,6 +8,17 @@ from zoneinfo import ZoneInfo
 _AMSTERDAM = ZoneInfo("Europe/Amsterdam")
 
 
+def is_bunq_iban(iban: str | None) -> bool:
+    """True als dit IBAN een bunq-rekening is, en de betalingen er dus automatisch
+    uitgelezen kunnen worden. Een Nederlands IBAN heeft op positie 5 t/m 8 de
+    bankcode; bij bunq is dat 'BUNQ' (bv. NL12BUNQ2012345678). Rekeningen bij een
+    andere bank (bv. 'RABO') kunnen niet via de bunq-API worden gelezen - dan moet de
+    app de automatische betaalcontrole netjes overslaan i.p.v. een fout te geven.
+    Leeg/onherkenbaar IBAN -> False (voor de zekerheid behandelen als 'niet uitleesbaar')."""
+    genormaliseerd = (iban or "").replace(" ", "").upper()
+    return len(genormaliseerd) >= 8 and genormaliseerd[4:8] == "BUNQ"
+
+
 def nu_amsterdam() -> datetime:
     """Huidige tijd in de Nederlandse tijdzone (Europe/Amsterdam, dus mét
     zomer-/wintertijd). De server/container draait op UTC; zonder dit lopen alle

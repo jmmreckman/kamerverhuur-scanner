@@ -138,6 +138,14 @@
 </div>
 {% endif %}
 
+{% if not heeft_bunq_rekening %}
+<div class="warning-box">
+  <p><strong>Automatisch uitlezen niet beschikbaar voor dit pand.</strong> Het gekoppelde IBAN
+     is geen bunq-rekening (bijvoorbeeld een gezamenlijke Rabo-rekening), en alleen bunq-rekeningen
+     kunnen via de API worden uitgelezen. De betalingen moet je voor dit pand dus handmatig
+     bijhouden; de huurdersgegevens, contracten en documenten werken gewoon.</p>
+</div>
+{% else %}
 <div class="card">
   <p>Haalt de inkomende betalingen van deze maand op via bunq, koppelt ze aan de huurders
      en werkt de sheet + geschiedenis bij. Dit kan een paar seconden duren.</p>
@@ -154,4 +162,5 @@
     <button class="btn btn-secondary" type="submit">{{ icon_betalingen() }} Betaalgeschiedenis aanvullen (12 maanden terug)</button>
   </form>
 </div>
+{% endif %}
 {% endblock %}

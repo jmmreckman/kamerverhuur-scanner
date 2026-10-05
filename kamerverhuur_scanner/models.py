@@ -6,6 +6,8 @@ from datetime import date
 from decimal import Decimal
 from enum import Enum
 
+from .utils import is_bunq_iban
+
 
 class Status(str, Enum):
     BETAALD = "Betaald"
@@ -167,6 +169,14 @@ class Pand:
     # hebben staan: dan kleurt de site-accent (navigatie, knoppen, pandkiezer)
     # mee in deze kleur op de pagina's van dit pand. Zie webapp/templates/base.html.
     kleur: str = ""
+
+    @property
+    def heeft_bunq_rekening(self) -> bool:
+        """True als de rekening van dit pand een bunq-IBAN is en de betalingen dus
+        automatisch uitgelezen kunnen worden. Bij een IBAN van een andere bank (bv. een
+        gezamenlijke Rabo-rekening) slaat de app de automatische betaalcontrole/
+        lastenscan over i.p.v. een fout te geven - zie is_bunq_iban()."""
+        return is_bunq_iban(self.bunq_rekening_iban)
 
 
 @dataclass(frozen=True)

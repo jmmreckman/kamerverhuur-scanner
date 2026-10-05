@@ -55,9 +55,14 @@
       Tabbladen + kopjes automatisch opbouwen in deze sheet bij opslaan
       {% if pand %}(opnieuw uitvoeren is veilig — bestaande, kloppende tabbladen blijven ongemoeid){% endif %}
     </label>
-    <label>bunq IBAN van de rekening waar de huur van dit pand op binnenkomt
+    <label>IBAN van de rekening waar de huur van dit pand op binnenkomt
       <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>
     </label>
+    <p class="muted" style="margin-top:0.25rem">Alleen een <strong>bunq</strong>-IBAN kan automatisch worden
+       uitgelezen (de "Nu controleren"-knop en de automatische lastenscan). Vul je hier een rekening bij een
+       andere bank in (bv. een gezamenlijke Rabo-rekening), dan slaat de app de automatische betaalcontrole
+       netjes over — de huurders, contracten en documenten van het pand werken gewoon; de betalingen houd je
+       dan handmatig bij.</p>
     <label>Extra BCC bij herinnering/ingebrekestelling-mails van dit pand (optioneel, komma-gescheiden -
       bv. een mede-eigenaar van alleen dit pand). Je eigen adres uit EMAIL_BCC in .env gaat sowieso
       altijd mee, voor alle panden.
