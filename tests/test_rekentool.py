@@ -57,6 +57,7 @@ def test_azaleastraat_icr():
     #   1.760 huur / (248.500 × 0,059/12 = 1.221,79) rente voor = 1,44
     # Ná ophoging: 3.360 volle kamerhuur / (424.421,05 × 0,059/12 = 2.086,74) rente na = 1,61
     r = bereken_rekentool(dataclasses.replace(AZALEASTRAAT, oppervlakte_m2=100))
+    assert round(r.wwsz_huur_gezin, 2) == 1760.00   # 100 m² × €17,60 = WWSZ-gezinshuur
     assert round(r.icr_voor_ophoging, 2) == 1.44
     assert round(r.icr_na_ophoging, 2) == 1.61
 

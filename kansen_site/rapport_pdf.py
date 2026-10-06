@@ -132,7 +132,6 @@ def bouw_berekening_pdf(item, velden: list[dict], resultaat: dict, vandaag: date
         ("Winst per maand p.p.", "winst_pm_pp"),
         ("Eigen inleg vóór ophoging (totaal)", "eigen_inleg_voor_ophoging_totaal"),
         ("Eigen inleg ná ophoging (p.p.)", "eigen_inleg_na_ophoging_pp"),
-        ("Rendement op echte eigen inleg", "rendement"),
     ]
     rijen = [[label, _procent_fractie(resultaat.get(key)) if key in _RESULTAAT_PROCENT else _euro(resultaat.get(key))]
              for label, key in belangrijk]
@@ -143,7 +142,8 @@ def bouw_berekening_pdf(item, velden: list[dict], resultaat: dict, vandaag: date
     berekend = [
         ("Taxatie vóór vergunning", "taxatie_voor_vergunning"),
         ("Taxatie ná vergunning", "taxatie_na_vergunning"),
-        ("Kale huur per maand", "kale_huur_pm"),
+        ("Kale WWSO huur kamerverhuur", "kale_huur_pm"),
+        ("Kale WWSZ huur aan gezin", "wwsz_huur_gezin"),
         ("Service IN per maand", "service_in_pm"),
         ("Vast UIT per maand", "vast_uit_pm"),
         ("Overdrachtsbelasting", "overdrachtsbelasting_eur"),

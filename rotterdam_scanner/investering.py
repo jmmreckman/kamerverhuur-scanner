@@ -182,7 +182,8 @@ class RekenUitgangspunten:
 @dataclass(frozen=True)
 class RekenResultaat:
     # Berekende uitgangspunten (tussenstappen)
-    kale_huur_pm: float
+    kale_huur_pm: float                        # kale WWSO-huur bij kamerverhuur (alle kamers samen)
+    wwsz_huur_gezin: float                     # kale WWSZ-huur als zelfstandige woning aan een gezin (€/m² × advertentie-m²)
     service_in_pm: float
     vast_uit_pm: float
     overdrachtsbelasting_eur: float
@@ -280,6 +281,7 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
 
     return RekenResultaat(
         kale_huur_pm=kale_huur_pm,
+        wwsz_huur_gezin=huur_voor_ophoging,
         service_in_pm=service_in_pm,
         vast_uit_pm=vast_uit_pm,
         overdrachtsbelasting_eur=overdrachtsbelasting_eur,
