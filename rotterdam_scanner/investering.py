@@ -43,10 +43,11 @@ KAMERVERLIES_COMPENSATIE = 0.5
 # Interest Coverage Ratio (huur / rente). Boven deze norm vindt de geldverstrekker
 # de rentelasten comfortabel gedekt door de huur; eronder wordt het krap.
 ICR_NORM = 1.25
-# Vóór de kamerverhuurvergunning staat het pand nog als gewone woning te huur en
-# ligt de huur een stuk lager. Als vuistregel rekenen we die lage huur op een deel
-# van de uiteindelijke kamerhuur (zo toont de ICR vóór ophoging het zwaarste moment).
-ICR_HUUR_VOOR_FRACTIE = 1 / 3
+# Vóór de kamerverhuurvergunning staat het pand nog als gewone woning te huur. We
+# schatten die woninghuur op een vaste, veilige standaard per vierkante meter maal de
+# oppervlakte uit de advertentie (niet de BAG-oppervlakte) - zo is de ICR vóór ophoging
+# onderbouwd op de werkelijke m² i.p.v. een ruwe fractie van de kamerhuur.
+HUUR_PER_M2_VOOR_OPHOGING = 17.60
 
 
 @dataclass(frozen=True)
@@ -171,6 +172,11 @@ class RekenUitgangspunten:
     rente: float = RENTE
     taxatie_verhouding_voor_verhoging: float = TAXATIE_VERHOUDING_VOOR_VERHOGING
     ltv: float = LTV
+    # Woonoppervlak (m²) uit de advertentie, gebruikt voor de ICR vóór ophoging
+    # (woninghuur = HUUR_PER_M2_VOOR_OPHOGING × oppervlakte). 0 = onbekend → ICR vóór
+    # wordt dan niet berekend. Geen door de gebruiker bewerkbaar rekenveld; komt uit de
+    # woning zelf (zie kansen_site/app.py: _huidige_uitgangspunten).
+    oppervlakte_m2: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -196,7 +202,7 @@ class RekenResultaat:
     opname_liquiditeit_na_verbouwing: float    # bouwdepot - verbouwkosten (komt na verbouwing als cash terug)
     aan_te_tonen_middelen: float               # totaal aan eigen middelen dat je moet aantonen
     # Interest Coverage Ratio (huur / rente); None als er geen rente is (lening 0)
-    icr_voor_ophoging: float | None            # lage huur (deel van kamerhuur) / rente op lening vóór verhoging
+    icr_voor_ophoging: float | None            # woninghuur (€/m² × advertentie-m²) / rente op lening vóór verhoging
     icr_na_ophoging: float | None              # volledige kamerhuur / rente op lening ná verhoging
     # Belangrijke resultaten
     winst_pm_pp: float
@@ -251,14 +257,17 @@ def bereken_rekentool(u: RekenUitgangspunten) -> RekenResultaat:
     )
 
     # --- Interest Coverage Ratio (ICR = huur / rente) -------------------------
-    # Twee momenten: vóór de vergunning (lage woninghuur op de kleinere lening) en
-    # ná ophoging (volledige kamerhuur op de volledige lening). We rekenen met de
-    # kale huur, net als de geldverstrekker. Boven ICR_NORM (1,25) zijn de
-    # rentelasten comfortabel gedekt.
+    # Twee momenten: vóór de vergunning (woninghuur op de kleinere lening) en ná
+    # ophoging (volledige kamerhuur op de volledige lening). We rekenen met de kale
+    # huur, net als de geldverstrekker. Boven ICR_NORM (1,25) zijn de rentelasten
+    # comfortabel gedekt. De woninghuur vóór ophoging schatten we op een vaste
+    # standaard per m² (HUUR_PER_M2_VOOR_OPHOGING) maal de advertentie-oppervlakte;
+    # zonder bekende oppervlakte is de ICR vóór ophoging niet te bepalen (None).
     rente_pm_voor_verhoging = leenbaar_voor_verhoging * u.rente / 12
-    huur_voor_ophoging = kale_huur_pm * ICR_HUUR_VOOR_FRACTIE
+    huur_voor_ophoging = u.oppervlakte_m2 * HUUR_PER_M2_VOOR_OPHOGING
     icr_voor_ophoging = (
-        huur_voor_ophoging / rente_pm_voor_verhoging if rente_pm_voor_verhoging else None
+        huur_voor_ophoging / rente_pm_voor_verhoging
+        if (rente_pm_voor_verhoging and u.oppervlakte_m2) else None
     )
     icr_na_ophoging = (
         kale_huur_pm / rente_pm_na_verhoging if rente_pm_na_verhoging else None

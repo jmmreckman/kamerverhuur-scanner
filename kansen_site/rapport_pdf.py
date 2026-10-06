@@ -162,7 +162,7 @@ def bouw_berekening_pdf(item, velden: list[dict], resultaat: dict, vandaag: date
     rijen = [[label, _euro(resultaat.get(key))] for label, key in berekend]
     # ICR-regels onderaan, met een euro-waarde los: groen vanaf de norm, anders rood.
     icr_rijen = [
-        ("ICR vóór ophoging (lage huur)", "icr_voor_ophoging"),
+        ("ICR vóór ophoging (woninghuur)", "icr_voor_ophoging"),
         ("ICR ná ophoging (volle huur)", "icr_na_ophoging"),
     ]
     waarde_kleuren = {}

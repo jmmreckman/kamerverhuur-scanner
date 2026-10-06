@@ -441,6 +441,10 @@ def _huidige_uitgangspunten(item, config, globale_defaults: dict | None = None) 
     for key, waarde in (item.berekening or {}).items():
         if key in uitg:
             uitg[key] = waarde
+    # De oppervlakte voor de ICR vóór ophoging komt uit de woning zelf (advertentie-m²,
+    # niet de BAG-oppervlakte) - geen bewerkbaar rekenveld. Na de overrides gezet zodat
+    # 'ie altijd de actuele advertentie-m² weergeeft en niet een oude opgeslagen waarde.
+    uitg["oppervlakte_m2"] = float(item.oppervlakte_advertentie or item.primaire_oppervlakte or 0)
     return uitg
 
 

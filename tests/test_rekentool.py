@@ -52,20 +52,26 @@ def test_azaleastraat_aan_te_tonen_middelen():
 
 
 def test_azaleastraat_icr():
-    # ICR = kale huur / rente (zelfde periode).
-    #  voor ophoging: (3.360/3) lage huur / (248.500 * 0,059/12) rente voor = 1.120 / 1.221,79 = 0,92
-    #  na ophoging:   3.360 volle huur / (424.421,05 * 0,059/12) rente na   = 3.360 / 2.086,74 = 1,61
-    r = bereken_rekentool(AZALEASTRAAT)
-    assert round(r.icr_voor_ophoging, 2) == 0.92
+    import dataclasses
+    # Vóór ophoging: woninghuur = 17,60/m² × oppervlakte (advertentie). Bij 100 m²:
+    #   1.760 huur / (248.500 × 0,059/12 = 1.221,79) rente voor = 1,44
+    # Ná ophoging: 3.360 volle kamerhuur / (424.421,05 × 0,059/12 = 2.086,74) rente na = 1,61
+    r = bereken_rekentool(dataclasses.replace(AZALEASTRAAT, oppervlakte_m2=100))
+    assert round(r.icr_voor_ophoging, 2) == 1.44
     assert round(r.icr_na_ophoging, 2) == 1.61
-    # De norm is 1,25: vóór ophoging zit je eronder (krap), ná ophoging erboven.
-    assert r.icr_voor_ophoging < 1.25
-    assert r.icr_na_ophoging > 1.25
+
+
+def test_icr_voor_none_zonder_oppervlakte():
+    # Zonder bekende oppervlakte (default 0) is de ICR vóór ophoging niet te bepalen;
+    # de ICR ná ophoging (op de kamerhuur) wel.
+    r = bereken_rekentool(AZALEASTRAAT)
+    assert r.icr_voor_ophoging is None
+    assert round(r.icr_na_ophoging, 2) == 1.61
 
 
 def test_icr_none_bij_lening_nul():
     # Guard: geen deling door nul als er geen lening (en dus geen rente) is.
-    r = bereken_rekentool(RekenUitgangspunten(koopsom=0, aantal_kamers=0, bar=0.076))
+    r = bereken_rekentool(RekenUitgangspunten(koopsom=0, aantal_kamers=0, bar=0.076, oppervlakte_m2=100))
     assert r.icr_voor_ophoging is None
     assert r.icr_na_ophoging is None
 
