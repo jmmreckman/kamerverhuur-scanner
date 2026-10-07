@@ -23,5 +23,11 @@ jobs:
             git checkout claude/student-housing-rent-tracker-u2fb2f
             git reset --hard origin/claude/student-housing-rent-tracker-u2fb2f
             cd deploy
-            docker compose up -d --build
+            # Alleen de steenhub-services (webapp + bijbehorende cron-containers)
+            # bouwen en herstarten - NIET alle apps tegelijk. "up -d --build" zonder
+            # service-lijst herbouwde voorheen elke app (gewicht, kansen, scanners,
+            # caddy) parallel, wat het geheugen op de 2 GB-VPS opvrat en de server
+            # platlegde. Met cache (geen --no-cache) zijn dit lichte builds.
+            docker compose build app dagelijkse-check winst-snapshot
+            docker compose up -d app dagelijkse-check winst-snapshot
           '
