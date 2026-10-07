@@ -36,7 +36,7 @@ jobs:
             } > docker-compose.override.yml
             trap "rm -f docker-compose.override.yml" EXIT
             n=0
-            until docker compose -f docker-compose.yml -f docker-compose.override.yml build --no-cache fundazoeker kansen beschikbaarheid-check vergunningen-index; do
+            until docker compose -f docker-compose.yml -f docker-compose.override.yml build fundazoeker kansen beschikbaarheid-check vergunningen-index; do
               n=$((n+1))
               if [ "$n" -ge 3 ]; then echo "Build bleef falen na $n pogingen." >&2; exit 1; fi
               echo "Build-poging $n mislukt; 20s wachten en opnieuw..." >&2
