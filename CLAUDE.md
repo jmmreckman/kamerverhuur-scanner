@@ -53,11 +53,51 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 ## 3. Deploy & build
 
 - Push naar een deploy-branch → **GitHub Actions** (`.github/workflows/deploy.yml`)
-  rolt automatisch uit naar het bijbehorende subdomein.
+  SSH't naar de VPS en rolt via `docker compose` uit naar het bijbehorende subdomein.
 - De Dockerfile installeert `requirements.txt`. Nieuwe runtime-dependency → in
   `requirements.txt` zetten.
-- Hosting: eigen VPS (Docker Compose + Caddy). Secrets staan als VPS-env
-  (`fundazoeker.env` / `app.env`), **nooit in git**.
+- Secrets staan als VPS-env (`fundazoeker.env` / `app.env`) en als **GitHub Actions
+  secrets** (`DEPLOY_SSH_KEY` / `DEPLOY_HOST` / `DEPLOY_USER`), **nooit in git**.
+
+### Hosting / server (feiten)
+- **Provider: STRATO** — pakket **"STRATO VPS Linux S (a12.nl)"**, contract **10011227**.
+  Draait fysiek op IONOS-infra (zelfde moederbedrijf; een IP-whois toont daarom
+  "IONOS SE", niet Strato — geen tegenstrijdigheid).
+- **SSH:** `ssh root@85.215.78.192` (Ubuntu 24.04). Dit IP is ook gewoon het publieke
+  A-record van steenhub.nl, dus geen geheim; de **sleutel/wachtwoorden horen NIET in
+  git** (zie boven).
+- **Specs: 2 vCPU, 2 GB RAM, 90 GB schijf — klein.** Steady-state draait er ~1,2 GB
+  RAM aan containers (webapp, gewicht, kansen, 3 scanners, caddy). Krap maar werkt.
+- **Swap:** er staat sinds okt 2026 een **4 GB swapfile** (`/swapfile`,
+  `vm.swappiness=10`) als vangnet tegen OOM tijdens builds. Blijft staan via
+  `/etc/fstab`.
+- **Beheer/reboot:** via **strato.nl → Login (Kundenlogin) → pakket "STRATO VPS
+  Linux S" → Overzicht → Serverdetails**. Knoppen: *Opnieuw opstarten*, *Stoppen*,
+  *VNC-console*, *Reddingssysteem*. **NOOIT "Opnieuw installeren"** — dat wist de
+  hele server.
+
+### Build-regels — NIET te snel/te zwaar bouwen (les okt 2026)
+> Op deze 2 GB-box kan een te zware of parallelle build het geheugen opvreten →
+> hele VPS onbereikbaar (óók SSH), site geeft "connection timed out", terwijl
+> Strato nog "Draait" toont (OS hangt door OOM).
+- **Niet meerdere deploys kort achter elkaar pushen.** Elke push = een build op de
+  VPS; overlappende builds stapelen op. Push **één branch tegelijk en wacht tot de
+  Actions-run groen is** voor de volgende.
+- **Geen `--no-cache`** en **niet álle services tegelijk** herbouwen. Per push alleen
+  de services van de app die je uitrolt, mét laag-cache:
+  - **steenhub-deploy:** git pull op VPS, dan `docker compose build app
+    dagelijkse-check winst-snapshot` + `up -d` van diezelfde drie (ze delen één image).
+  - **kansen-deploy:** bouwt `fundazoeker kansen beschikbaarheid-check
+    vergunningen-index` vanaf een remote git-context (kortlevende `GITHUB_TOKEN` via
+    tijdelijke `docker-compose.override.yml`), mét cache.
+- **Herstel bij een platte VPS:** SSH én site timen out = OS hangt (meestal OOM).
+  Fix = **harde reboot via het Strato-paneel** (buiten SSH om). Containers staan op
+  `restart: unless-stopped`, dus ze komen vanzelf terug op de laatst-gebouwde images
+  (de vorige werkende versie). Een mislukte/halve deploy raakt de draaiende containers
+  niet — die blijven de oude, werkende images draaien tot een build+`up -d` slaagt.
+- **Toekomst-optie (bij vaak deployen):** images in GitHub Actions bouwen en de VPS
+  alleen `docker compose pull` + `up -d` laten doen → de VPS compileert dan nooit meer
+  iets. RAM naar 4 GB is comfort, geen noodzaak.
 
 ---
 
