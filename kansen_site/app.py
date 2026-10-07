@@ -18,9 +18,12 @@ from datetime import date, datetime, timezone
 from functools import wraps
 
 from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
-from werkzeug.security import check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from pathlib import Path
+
+from .throttle import LoginThrottle
 
 from rotterdam_scanner import den_haag, mail_voorkeuren, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.config import Config, load_config
@@ -498,6 +501,11 @@ def _steenhub_login_beschikbaar(config: Config) -> bool:
     return any(isinstance(a, dict) and a.get("wachtwoord_hash") for a in users.values())
 
 
+# Een geldige (maar betekenisloze) hash; hiertegen checken we bij een onbekende
+# steenhub-gebruiker, zodat zo'n poging evenveel tijd kost als bij een bestaande.
+_DUMMY_HASH = generate_password_hash("dummy")
+
+
 def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> bool:
     # 1) Eigen KANSEN_APP_USERS (los wachtwoord per gebruiker uit de env).
     verwacht = config.kansen_app_users.get(gebruiker)
@@ -511,8 +519,14 @@ def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> boo
     # kansen-container te herstarten.
     if config.steenhub_users_file:
         account = _laad_steenhub_users(config.steenhub_users_file).get(gebruiker)
-        if isinstance(account, dict) and account.get("wachtwoord_hash"):
-            return check_password_hash(account["wachtwoord_hash"], wachtwoord)
+        hash_waarde = account["wachtwoord_hash"] if (
+            isinstance(account, dict) and account.get("wachtwoord_hash")
+        ) else _DUMMY_HASH
+        # Altijd een hash-check doen (ook tegen de dummy-hash bij een onbekende
+        # gebruiker), zodat de reactietijd niet verraadt of de gebruikersnaam
+        # bestaat (timing-enumeratie).
+        geldig = check_password_hash(hash_waarde, wachtwoord)
+        return bool(isinstance(account, dict) and account.get("wachtwoord_hash") and geldig)
     return False
 
 
@@ -569,6 +583,12 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None) -> di
 
 def create_app(config: Config | None = None) -> Flask:
     app = Flask(__name__)
+    # Achter Caddy (reverse proxy) staat request.remote_addr anders op het interne
+    # Docker-IP van Caddy i.p.v. het echte bezoekers-IP, en is request.is_secure
+    # altijd False (Caddy termineert https en praat http naar binnen). x_for=1 /
+    # x_proto=1 vertrouwt precies één hop, zodat het echte IP (inlog-throttle,
+    # logboek) en het echte schema (Secure-cookie, HSTS) kloppen.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     if config is None:
         config = load_config()
@@ -584,6 +604,34 @@ def create_app(config: Config | None = None) -> Flask:
         raise SystemExit("KANSEN_APP_SECRET_KEY ontbreekt - vul een willekeurige, geheime waarde in.")
 
     app.secret_key = config.kansen_app_secret_key
+
+    # Veilige sessiecookie-instellingen (onzichtbaar voor de gebruiker).
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
+
+    # Inlog-throttle per client-IP (losse, testbare logica in throttle.py).
+    inlog_throttle = LoginThrottle()
+
+    @app.before_request
+    def _cookie_secure_bij_https():
+        # SECURE (cookie alleen over https) per request op basis van het echte
+        # schema: aan achter Caddy (https via X-Forwarded-Proto), uit bij http
+        # (tests/lokaal) zodat de werkzeug-testclient de cookie niet wegfiltert.
+        app.config["SESSION_COOKIE_SECURE"] = request.is_secure
+
+    @app.after_request
+    def _beveiligingsheaders(response: Response) -> Response:
+        """Standaard beveiligingsheaders; onzichtbaar voor de gebruiker."""
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     # Wie het toegangsbeheer mag bedienen. KANSEN_APP_BEHEERDERS (env) heeft
     # voorrang; anders de eigen env-accounts (KANSEN_APP_USERS) plus de vaste
@@ -633,6 +681,10 @@ def create_app(config: Config | None = None) -> Flask:
     def login():
         fout = None
         if request.method == "POST":
+            ip = request.remote_addr or "onbekend"
+            if inlog_throttle.geblokkeerd(ip):
+                fout = "Te veel mislukte inlogpogingen. Wacht een paar minuten en probeer het opnieuw."
+                return render_template("login.html", fout=fout), 429
             gebruiker = request.form.get("gebruiker", "").strip()
             wachtwoord = request.form.get("wachtwoord", "")
             klopt = _kloppend_wachtwoord(config, gebruiker, wachtwoord)
@@ -646,9 +698,11 @@ def create_app(config: Config | None = None) -> Flask:
                 )
                 return _storing_respons()
             if klopt:
+                inlog_throttle.wis(ip)
                 session["gebruiker"] = gebruiker
                 _registreer_login(config, gebruiker)
                 return redirect(request.args.get("next") or url_for("kaart"))
+            inlog_throttle.registreer_mislukt(ip)
             fout = "Onjuiste gebruikersnaam of wachtwoord."
         return render_template("login.html", fout=fout)
 

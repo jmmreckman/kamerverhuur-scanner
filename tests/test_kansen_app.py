@@ -599,6 +599,36 @@ def test_start_zonder_enige_inlogbron_weigert(tmp_path):
         create_app(_config(tmp_path, kansen_app_users={}, steenhub_users_file=""))
 
 
+def test_onbekende_steenhub_gebruiker_doet_toch_een_hashcheck(tmp_path, monkeypatch):
+    """Timing-enumeratie-bescherming: ook voor een onbekende steenhub-gebruiker
+    wordt een wachtwoord-hash vergeleken (tegen de dummy-hash)."""
+    import kansen_site.app as appmodule
+    from rotterdam_scanner.config import Config
+
+    aangeroepen: list[str] = []
+    echt = appmodule.check_password_hash
+    monkeypatch.setattr(
+        appmodule, "check_password_hash",
+        lambda h, w: (aangeroepen.append(h), echt(h, w))[1],
+    )
+    config = _config(tmp_path, kansen_app_users={}, steenhub_users_file=_steenhub_users_file(tmp_path))
+    assert appmodule._kloppend_wachtwoord(config, "bestaat-niet", "wat-dan-ook") is False
+    assert len(aangeroepen) == 1
+
+
+def test_login_wordt_geblokkeerd_na_te_veel_mislukte_pogingen(tmp_path):
+    client = _client_met_steenhub(tmp_path)
+    # standaard 8 toegestane pogingen; de 9e moet 429 geven
+    for _ in range(8):
+        r = client.post("/login", data={"gebruiker": "marit", "wachtwoord": "fout"})
+        assert r.status_code == 200
+    geblokkeerd = client.post("/login", data={"gebruiker": "marit", "wachtwoord": "fout"})
+    assert geblokkeerd.status_code == 429
+    # een juist wachtwoord wordt nu ook geweigerd zolang de rem actief is
+    nog_steeds = client.post("/login", data={"gebruiker": "marit", "wachtwoord": "steenhub-geheim"})
+    assert nog_steeds.status_code == 429
+
+
 # --- Favoriet + bekendmakingen-check ---
 
 
