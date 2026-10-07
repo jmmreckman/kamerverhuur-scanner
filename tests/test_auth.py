@@ -22,6 +22,24 @@ def test_verify_login_klopt_alleen_met_juist_wachtwoord():
     assert not verify_login(users, "onbekend", "geheim123")
 
 
+def test_verify_login_checkt_ook_bij_onbekende_gebruiker_een_hash(monkeypatch):
+    """Timing-enumeratie-bescherming: ook voor een niet-bestaande gebruiker
+    moet er een wachtwoord-check gebeuren (tegen de dummy-hash), zodat de
+    reactietijd niet verraadt of een gebruikersnaam bestaat."""
+    import webapp.auth as auth
+
+    aangeroepen: list[str] = []
+    echt = auth.check_password_hash
+
+    def tel_mee(hash_waarde, wachtwoord):
+        aangeroepen.append(hash_waarde)
+        return echt(hash_waarde, wachtwoord)
+
+    monkeypatch.setattr(auth, "check_password_hash", tel_mee)
+    assert not verify_login({}, "onbekend", "geheim123")
+    assert len(aangeroepen) == 1  # er is daadwerkelijk een hash vergeleken
+
+
 def test_user_uit_gegevens_leest_toegang_correct():
     gegevens = {"wachtwoord_hash": "x", "alle_panden": False, "panden": ["mahoniestraat", "pand2"]}
     user = user_uit_gegevens("justin", gegevens)

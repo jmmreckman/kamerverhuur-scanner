@@ -85,9 +85,18 @@ def zet_gebruiker(
     return users
 
 
+# Een geldige (maar betekenisloze) hash van het woord "dummy". Hiertegen checken
+# we het wachtwoord als de gebruikersnaam niet bestaat, zodat een inlogpoging voor
+# een bestaande en een niet-bestaande gebruiker evenveel tijd kost. Zonder dit
+# verraadt de reactietijd of een gebruikersnaam bestaat (timing-enumeratie).
+_DUMMY_HASH = generate_password_hash("dummy")
+
+
 def verify_login(users: dict, username: str, password: str) -> bool:
     gebruiker = users.get(username)
-    return bool(gebruiker and check_password_hash(gebruiker["wachtwoord_hash"], password))
+    wachtwoord_hash = gebruiker["wachtwoord_hash"] if gebruiker else _DUMMY_HASH
+    geldig = check_password_hash(wachtwoord_hash, password)
+    return bool(gebruiker and geldig)
 
 
 def user_uit_gegevens(username: str, gebruiker: dict) -> User:

@@ -46,12 +46,24 @@ from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
 from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
 from .reminders import bouw_herinnering, bouw_ingebrekestelling
+from .throttle import LoginThrottle
 
 load_dotenv()
 
 # De "hoofdgebruiker": alleen dit account ziet de knop + pagina met het
 # login-logboek van testaccounts (zie test_account_logboek()).
 HOOFDGEBRUIKER = "jmmreckman"
+
+# Inlog-throttling (brute-force-rem): de pure teller-logica staat los-testbaar
+# in webapp/throttle.py. Hier één gedeelde instantie voor de login-route.
+_login_throttle = LoginThrottle()
+
+
+def _client_ip() -> str:
+    """Het echte bezoekers-IP. ProxyFix (x_for=1) heeft request.remote_addr al
+    op de eerste X-Forwarded-For-waarde gezet; dit is dus het IP van de bezoeker
+    en niet dat van Caddy."""
+    return request.remote_addr or "onbekend"
 
 # Zonder dit staat het root-logniveau standaard op WARNING, waardoor alle
 # logger.info()-regels in kamerverhuur_scanner (bv. run_check() tijdens "Nu
@@ -89,6 +101,31 @@ def create_app(config: Config | None = None) -> Flask:
             return []
 
     app.secret_key = config.flask_secret_key
+
+    # Veilige sessiecookie-instellingen. SECURE zorgt dat de cookie alleen over
+    # https meegaat (de site draait achter Caddy met gedwongen https); HTTPONLY
+    # houdt 'm buiten bereik van JavaScript; SAMESITE=Lax beschermt tegen de
+    # meeste CSRF (een POST vanaf een andere site stuurt de sessiecookie niet
+    # mee) zonder dat gewone navigatie/links breken. Onder tests (werkzeug-
+    # testclient op http) zou SECURE de cookie wegfilteren, daarom dan uit.
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=not app.testing,
+    )
+
+    @app.after_request
+    def _beveiligingsheaders(response: Response) -> Response:
+        """Een paar standaard beveiligingsheaders die de browser aanzetten.
+        Onzichtbaar voor de gebruiker; breekt niets aan de werking."""
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     @app.template_filter("eur")
     def eur(value) -> str:
@@ -273,12 +310,18 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if request.method == "POST":
+            ip = _client_ip()
+            if _login_throttle.geblokkeerd(ip):
+                flash("Te veel mislukte inlogpogingen. Wacht een paar minuten en probeer het opnieuw.")
+                return render_template("login.html"), 429
             username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
             users = load_users(config.users_file)
             if verify_login(users, username, password):
+                _login_throttle.wis(ip)
                 login_user(user_uit_gegevens(username, users[username]))
                 return redirect(url_for("start"))
+            _login_throttle.registreer_mislukt(ip)
             flash("Onjuiste gebruikersnaam of wachtwoord.")
         return render_template("login.html")
 
