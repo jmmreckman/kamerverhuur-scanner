@@ -102,17 +102,23 @@ def create_app(config: Config | None = None) -> Flask:
 
     app.secret_key = config.flask_secret_key
 
-    # Veilige sessiecookie-instellingen. SECURE zorgt dat de cookie alleen over
-    # https meegaat (de site draait achter Caddy met gedwongen https); HTTPONLY
-    # houdt 'm buiten bereik van JavaScript; SAMESITE=Lax beschermt tegen de
-    # meeste CSRF (een POST vanaf een andere site stuurt de sessiecookie niet
-    # mee) zonder dat gewone navigatie/links breken. Onder tests (werkzeug-
-    # testclient op http) zou SECURE de cookie wegfilteren, daarom dan uit.
+    # Veilige sessiecookie-instellingen. HTTPONLY houdt de cookie buiten bereik
+    # van JavaScript; SAMESITE=Lax beschermt tegen de meeste CSRF (een POST vanaf
+    # een andere site stuurt de sessiecookie niet mee) zonder dat gewone
+    # navigatie/links breken.
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=not app.testing,
     )
+
+    @app.before_request
+    def _cookie_secure_bij_https():
+        # SECURE (cookie alleen over https) zetten we per request op basis van of
+        # de verbinding echt https is. In productie staat de site achter Caddy met
+        # gedwongen https (ProxyFix leidt dit af uit X-Forwarded-Proto), dus dan
+        # krijgt de sessiecookie de Secure-vlag. Onder tests/lokaal (http) blijft
+        # 'ie uit, zodat de werkzeug-testclient de cookie niet wegfiltert.
+        app.config["SESSION_COOKIE_SECURE"] = request.is_secure
 
     @app.after_request
     def _beveiligingsheaders(response: Response) -> Response:
