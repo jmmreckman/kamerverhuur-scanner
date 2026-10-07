@@ -12,6 +12,7 @@ import hmac
 import json
 import re
 import threading
+import uuid
 from urllib.parse import quote_plus
 from dataclasses import asdict
 from datetime import date, datetime, timezone
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from .throttle import LoginThrottle
 
-from rotterdam_scanner import den_haag, mail_voorkeuren, pipeline, rente_update, vergunningenindex
+from rotterdam_scanner import den_haag, geocode, mail_voorkeuren, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
@@ -819,6 +820,70 @@ def create_app(config: Config | None = None) -> Flask:
             "compleet": index.meta.get("volledige_enumeratie_gedaan", False)
             and not index.onverwerkt(),
         })
+
+    # --- Test-adressen (handmatig, voor het testen van de 50m-afstandseis) ---
+    # Een los adres (niet per se te koop) op de kaart met een groene 50m-cirkel
+    # eromheen, om te zien wat binnen de kamerverhuurvergunning-afstand valt. Alleen
+    # voor beheerders; opgeslagen als simpele JSON naast de state (gedeeld, want het
+    # is een persoonlijk hulpmiddel van de eigenaar - geen kansen-/vergunningdata).
+    def _test_adressen_pad() -> Path:
+        return Path(config.state_path).parent / "test_adressen.json"
+
+    def _laad_test_adressen() -> list:
+        pad = _test_adressen_pad()
+        if not pad.exists():
+            return []
+        try:
+            data = json.loads(pad.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        return data if isinstance(data, list) else []
+
+    def _schrijf_test_adressen(lijst: list) -> None:
+        _test_adressen_pad().write_text(
+            json.dumps(lijst, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    @app.route("/api/test-adressen")
+    @beheerder_required
+    def api_test_adressen():
+        return jsonify({"adressen": _laad_test_adressen()})
+
+    @app.route("/api/test-adressen", methods=["POST"])
+    @beheerder_required
+    def api_test_adres_toevoegen():
+        data = request.get_json(silent=True) or {}
+        adres = (data.get("adres") or "").strip()
+        if not adres:
+            return jsonify({"fout": "Geen adres opgegeven."}), 400
+        try:
+            resultaat = geocode.geocode_vrij_landelijk(adres)
+        except geocode.GeocodeError:
+            return jsonify({"fout": f"Adres niet gevonden: '{adres}'. Vul het volledig in (bv. 'Pompstraat 42, Rotterdam')."}), 400
+        except Exception:
+            return jsonify({"fout": "Adres opzoeken mislukt (PDOK niet bereikbaar). Probeer het nog eens."}), 502
+        if resultaat.lat is None or resultaat.lon is None:
+            return jsonify({"fout": "Geen coördinaat gevonden voor dit adres."}), 400
+        nieuw = {
+            "id": resultaat.adresseerbaarobject_id or resultaat.nummeraanduiding_id or uuid.uuid4().hex[:8],
+            "weergavenaam": resultaat.weergavenaam,
+            "lat": resultaat.lat,
+            "lon": resultaat.lon,
+            "toegevoegd": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        lijst = _laad_test_adressen()
+        if not any(a.get("id") == nieuw["id"] for a in lijst):
+            lijst.append(nieuw)
+            _schrijf_test_adressen(lijst)
+        return jsonify({"adres": nieuw})
+
+    @app.route("/api/test-adressen/<adres_id>/verwijderen", methods=["POST"])
+    @beheerder_required
+    def api_test_adres_verwijderen(adres_id):
+        lijst = _laad_test_adressen()
+        overig = [a for a in lijst if a.get("id") != adres_id]
+        _schrijf_test_adressen(overig)
+        return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
 
     @app.route("/data-analyse")
     @login_required

@@ -159,6 +159,16 @@ def geocode_address(straat: str, huisnummer: str, woonplaats: str = "Rotterdam")
     return _doc_naar_resultaat(doc, query)
 
 
+def geocode_vrij_landelijk(adres: str) -> GeocodeResult:
+    """Geocodeert een vrije adrestekst zonder woonplaats-filter (heel Nederland).
+    Voor het handmatig toevoegen van een willekeurig test-adres op de kaart (zie de
+    "test 50m adres toevoegen"-functie) - de gebruiker kan zelf de plaats in de tekst
+    zetten (bv. 'Pompstraat 42, Rotterdam'). PDOK pakt de beste match (rows=1); een
+    niet-adresachtige tekst levert netjes een GeocodeError op i.p.v. een gok."""
+    doc = _zoek_pdok_adres(adres, [])
+    return _doc_naar_resultaat(doc, adres)
+
+
 def geocode_vrij(adres: str, woonplaats: str = "Rotterdam") -> GeocodeResult:
     """Geocodeert een vrije adrestekst (straat + huisnummer als één string, bv.
     'C.P.Tielestraat 30B') binnen een woonplaats. Gebruikt voor adressen die niet

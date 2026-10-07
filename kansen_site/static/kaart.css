@@ -237,6 +237,46 @@ body {
   font-size: 0.95em;
 }
 
+/* "Test 50m adres toevoegen" - handmatig een groene 50m-cirkel op de kaart. */
+.test-adres-blok {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--rand);
+}
+.test-adres-blok > label { font-size: 0.85em; font-weight: 600; }
+.test-adres-rij { display: flex; gap: 0.4rem; }
+.test-adres-rij input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  font-size: 0.95em;
+}
+.test-adres-rij button {
+  white-space: nowrap;
+  background: var(--groen);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0 0.7rem;
+  cursor: pointer;
+}
+.test-adres-rij button:hover { opacity: 0.9; }
+.test-adres-rij button:disabled { opacity: 0.5; cursor: default; }
+.test-badge {
+  display: inline-block;
+  background: #dcfce7;
+  color: #15803d;
+  border-radius: 4px;
+  padding: 0 0.4rem;
+  font-size: 0.75em;
+  margin-left: 0.3rem;
+  vertical-align: middle;
+}
+
 .kaart { flex: 1; }
 
 .lijst {

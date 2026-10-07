@@ -1174,3 +1174,84 @@ def test_mail_voorkeuren_ongeldig_adres_geeft_melding(app_client, tmp_path):
     assert resp.status_code == 200
     assert "geldige e-mailadres" in resp.get_data(as_text=True)
     assert not (tmp_path / "mail_voorkeuren.json").exists()
+
+
+# --- Test-adressen (handmatige 50m-cirkels) ---
+
+from rotterdam_scanner.geocode import GeocodeError, GeocodeResult
+
+
+def _fake_geocode_result(lat=51.9, lon=4.47, naam="Pompstraat 42, 3081 Rotterdam", obj_id="OBJ123"):
+    return GeocodeResult(
+        weergavenaam=naam, straatnaam="Pompstraat", huisnummer="42", postcode="3081XX",
+        woonplaats="Rotterdam", rotterdam_wijk="Oud-Charlois", cbs_wijknaam="Charlois",
+        rd_x=92000.0, rd_y=437000.0, lon=lon, lat=lat,
+        nummeraanduiding_id="NUM1", adresseerbaarobject_id=obj_id,
+    )
+
+
+def _login_jurian(app_client):
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+
+def test_test_adres_toevoegen_en_ophalen(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+    monkeypatch.setattr(appmodule.geocode, "geocode_vrij_landelijk", lambda a: _fake_geocode_result())
+    _login_jurian(app_client)
+
+    resp = app_client.post("/api/test-adressen", json={"adres": "Pompstraat 42, Rotterdam"})
+    assert resp.status_code == 200
+    adres = resp.get_json()["adres"]
+    assert adres["lat"] == 51.9 and adres["lon"] == 4.47
+    assert adres["id"] == "OBJ123"
+    assert "Pompstraat 42" in adres["weergavenaam"]
+
+    lijst = app_client.get("/api/test-adressen").get_json()["adressen"]
+    assert len(lijst) == 1 and lijst[0]["id"] == "OBJ123"
+
+
+def test_test_adres_dubbel_toevoegen_blijft_een(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+    monkeypatch.setattr(appmodule.geocode, "geocode_vrij_landelijk", lambda a: _fake_geocode_result())
+    _login_jurian(app_client)
+    app_client.post("/api/test-adressen", json={"adres": "Pompstraat 42"})
+    app_client.post("/api/test-adressen", json={"adres": "Pompstraat 42"})
+    lijst = app_client.get("/api/test-adressen").get_json()["adressen"]
+    assert len(lijst) == 1
+
+
+def test_test_adres_verwijderen(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+    monkeypatch.setattr(appmodule.geocode, "geocode_vrij_landelijk", lambda a: _fake_geocode_result())
+    _login_jurian(app_client)
+    app_client.post("/api/test-adressen", json={"adres": "Pompstraat 42"})
+
+    resp = app_client.post("/api/test-adressen/OBJ123/verwijderen")
+    assert resp.status_code == 200 and resp.get_json()["verwijderd"] == 1
+    assert app_client.get("/api/test-adressen").get_json()["adressen"] == []
+
+
+def test_test_adres_zonder_adres_geeft_400(app_client):
+    _login_jurian(app_client)
+    resp = app_client.post("/api/test-adressen", json={"adres": "   "})
+    assert resp.status_code == 400
+
+
+def test_test_adres_onvindbaar_geeft_400(app_client, monkeypatch):
+    import kansen_site.app as appmodule
+
+    def _faalt(adres):
+        raise GeocodeError("niets gevonden")
+
+    monkeypatch.setattr(appmodule.geocode, "geocode_vrij_landelijk", _faalt)
+    _login_jurian(app_client)
+    resp = app_client.post("/api/test-adressen", json={"adres": "qzxwv nonsens"})
+    assert resp.status_code == 400
+    assert "fout" in resp.get_json()
+
+
+def test_test_adres_zonder_login_geweigerd(app_client):
+    # beheerder_required wikkelt login_required: zonder login een redirect naar /login.
+    resp = app_client.get("/api/test-adressen")
+    assert resp.status_code in (301, 302)
+    assert "/login" in resp.headers.get("Location", "")

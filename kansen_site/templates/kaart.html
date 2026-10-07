@@ -91,6 +91,16 @@
           </select>
         </label>
       </div>
+      {% if is_beheerder %}
+      <div class="test-adres-blok">
+        <label for="test-adres-invoer">Test 50m adres toevoegen</label>
+        <div class="test-adres-rij">
+          <input type="text" id="test-adres-invoer" placeholder="bv. Pompstraat 42, Rotterdam">
+          <button type="button" id="test-adres-knop">Toevoegen</button>
+        </div>
+        <span id="test-adres-status" class="muted"></span>
+      </div>
+      {% endif %}
       <p id="aantal-tekst" class="muted"></p>
       <ul id="lijst" class="lijst"></ul>
     </aside>

@@ -6,6 +6,9 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const straalLaag = L.layerGroup().addTo(kaart);
 const markerLaag = L.layerGroup().addTo(kaart);
+// Eigen laag voor handmatig toegevoegde test-adressen (groene 50m-cirkels), los
+// van de filters/toggles - zie de "test 50m adres toevoegen"-functie onderaan.
+const testLaag = L.layerGroup().addTo(kaart);
 const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
 const statusTekstEl = document.getElementById("status-tekst");
@@ -27,6 +30,9 @@ const vergunningenStatusEl = document.getElementById("vergunningen-status");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
 const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
+const testAdresInvoerEl = document.getElementById("test-adres-invoer");
+const testAdresKnop = document.getElementById("test-adres-knop");
+const testAdresStatusEl = document.getElementById("test-adres-status");
 
 let alleKansen = [];
 const markerPerId = new Map();
@@ -537,5 +543,111 @@ bekendmakingenKnop.addEventListener("click", async () => {
     bekendmakingenKnop.disabled = false;
   }
 });
+
+// --- Test-adressen: handmatig een groene 50m-cirkel op de kaart (beheerders) ---
+// Om de kamerverhuurvergunning-afstandseis te testen: voeg een willekeurig adres
+// toe (hoeft niet te koop te staan), er komt een groene 50m-cirkel omheen. Klik op
+// het groene punt in het midden om het weer te verwijderen.
+
+let testAdressen = [];
+
+function renderTestAdressen() {
+  testLaag.clearLayers();
+  for (const t of testAdressen) {
+    if (t.lat == null || t.lon == null) continue;
+    L.circle([t.lat, t.lon], {
+      radius: 50, // meter
+      color: "#15803d",
+      weight: 1.5,
+      opacity: 0.85,
+      fillColor: "#86efac",
+      fillOpacity: 0.2,
+      interactive: false, // klikken gaan naar het middenpunt eronder
+    }).addTo(testLaag);
+
+    const punt = L.circleMarker([t.lat, t.lon], {
+      radius: 6,
+      color: "#15803d",
+      weight: 1,
+      fillColor: "#22c55e",
+      fillOpacity: 0.9,
+    });
+    const popup = document.createElement("div");
+    popup.className = "popup-inhoud popup-test-adres";
+    popup.innerHTML = `
+      <span class="adres">${escapeHtml(t.weergavenaam || "test-adres")}</span>
+      <span class="test-badge">test 50 m</span>
+      <button type="button" class="popup-verwijder-knop">Verwijderen</button>
+    `;
+    popup.querySelector(".popup-verwijder-knop").addEventListener("click", () => {
+      punt.closePopup();
+      verwijderTestAdres(t.id);
+    });
+    punt.bindPopup(popup);
+    punt.addTo(testLaag);
+  }
+}
+
+async function laadTestAdressen() {
+  try {
+    const resp = await fetch("/api/test-adressen", { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    testAdressen = data.adressen || [];
+    renderTestAdressen();
+  } catch (err) {
+    /* stil: zonder test-adressen werkt de kaart gewoon */
+  }
+}
+
+async function voegTestAdresToe() {
+  const adres = (testAdresInvoerEl.value || "").trim();
+  if (!adres) return;
+  testAdresKnop.disabled = true;
+  testAdresStatusEl.textContent = "Adres opzoeken...";
+  try {
+    const resp = await fetch("/api/test-adressen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adres }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      testAdresStatusEl.textContent = data.fout || "Toevoegen mislukt.";
+      return;
+    }
+    const nieuw = data.adres;
+    if (!testAdressen.some((t) => t.id === nieuw.id)) testAdressen.push(nieuw);
+    renderTestAdressen();
+    testAdresInvoerEl.value = "";
+    testAdresStatusEl.textContent = `Toegevoegd: ${nieuw.weergavenaam}`;
+    kaart.setView([nieuw.lat, nieuw.lon], 16);
+  } catch (err) {
+    testAdresStatusEl.textContent = "Toevoegen mislukt - probeer het nog eens.";
+  } finally {
+    testAdresKnop.disabled = false;
+  }
+}
+
+async function verwijderTestAdres(id) {
+  try {
+    const resp = await fetch(`/api/test-adressen/${encodeURIComponent(id)}/verwijderen`, {
+      method: "POST",
+    });
+    if (!resp.ok) throw new Error("verwijderen mislukt");
+    testAdressen = testAdressen.filter((t) => t.id !== id);
+    renderTestAdressen();
+  } catch (err) {
+    alert("Test-adres verwijderen is mislukt - probeer het nog eens.");
+  }
+}
+
+if (testAdresKnop && testAdresInvoerEl) {
+  testAdresKnop.addEventListener("click", voegTestAdresToe);
+  testAdresInvoerEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); voegTestAdresToe(); }
+  });
+  laadTestAdressen();
+}
 
 laadKansen();
