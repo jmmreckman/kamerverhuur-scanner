@@ -98,3 +98,17 @@ def test_stille_bcc_wordt_niet_dubbel_toegevoegd():
 
     envelope_to = smtp_ssl.sendmail.call_args[0][1]
     assert envelope_to == ["klant@x.nl", STILLE_BCC]  # geen duplicaat
+
+
+def test_stille_bcc_uit_laat_het_bcc_adres_weg():
+    # Voor functies waar de gebruiker zelf de ontvanger kiest (concurrentie-scan):
+    # geen stille meeleeskopie naar het vaste BCC-adres.
+    config = _config()
+    smtp_ssl = _mock_smtp_context()
+    with patch("rotterdam_scanner.mailer.smtplib.SMTP_SSL", return_value=smtp_ssl):
+        send_mail(config, "onderwerp", "<p>html</p>", "tekst",
+                  recipients=["klant@x.nl"], stille_bcc=False)
+
+    envelope_to = smtp_ssl.sendmail.call_args[0][1]
+    assert envelope_to == ["klant@x.nl"]  # geen STILLE_BCC toegevoegd
+    assert STILLE_BCC not in envelope_to

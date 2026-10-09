@@ -36,6 +36,7 @@ const testAdresStatusEl = document.getElementById("test-adres-status");
 const opkoopScanInvoerEl = document.getElementById("opkoop-scan-invoer");
 const opkoopScanKnop = document.getElementById("opkoop-scan-knop");
 const opkoopScanStatusEl = document.getElementById("opkoop-scan-status");
+const opkoopScanOntvangersEl = document.getElementById("opkoop-scan-ontvangers");
 
 let alleKansen = [];
 const markerPerId = new Map();
@@ -659,13 +660,14 @@ if (testAdresKnop && testAdresInvoerEl) {
 async function startOpkoopScan() {
   const adres = (opkoopScanInvoerEl.value || "").trim();
   if (!adres) return;
+  const ontvangers = opkoopScanOntvangersEl ? (opkoopScanOntvangersEl.value || "").trim() : "";
   opkoopScanKnop.disabled = true;
   opkoopScanStatusEl.textContent = "Scan starten...";
   try {
     const resp = await fetch("/opkoop-scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adres }),
+      body: JSON.stringify({ adres, ontvangers }),
     });
     const data = await resp.json();
     if (!resp.ok) {

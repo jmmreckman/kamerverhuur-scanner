@@ -182,6 +182,14 @@ class NabijAdres:
     weergavenaam: str
     afstand_m: float
     nummeraanduiding_id: str
+    # Extra velden voor de opkoopbescherming-/concurrentie-scan: het
+    # adresseerbaarobject_id voor de BAG-oppervlakte, de RD-coördinaat voor de
+    # ArcGIS-checks (50m-norm/nulquotum), en de buurtnaam voor de opkoop-wijkcheck.
+    # Default leeg/None zodat bestaande aanroepen/mocks zonder deze velden blijven werken.
+    adresseerbaarobject_id: str = ""
+    rd_x: float | None = None
+    rd_y: float | None = None
+    buurtnaam: str = ""
 
 
 def adressen_binnen_straal(lat: float, lon: float, straal_m: float = 50.0,
@@ -202,7 +210,9 @@ def adressen_binnen_straal(lat: float, lon: float, straal_m: float = 50.0,
             PDOK_REVERSE_URL,
             params={
                 "lat": lat, "lon": lon, "rows": rows, "start": start,
-                "type": "adres", "fl": "weergavenaam,afstand,nummeraanduiding_id",
+                "type": "adres",
+                "fl": ("weergavenaam,afstand,nummeraanduiding_id,"
+                       "adresseerbaarobject_id,centroide_rd,buurtnaam"),
             },
             timeout=15,
         )
@@ -220,10 +230,15 @@ def adressen_binnen_straal(lat: float, lon: float, straal_m: float = 50.0,
             nid = d.get("nummeraanduiding_id")
             if nid is None:
                 continue
+            rd_match = _RD_POINT_RE.match(d.get("centroide_rd", "") or "")
             uit.append(NabijAdres(
                 weergavenaam=d.get("weergavenaam", ""),
                 afstand_m=float(afstand),
                 nummeraanduiding_id=str(nid),
+                adresseerbaarobject_id=str(d.get("adresseerbaarobject_id", "") or ""),
+                rd_x=float(rd_match.group(1)) if rd_match else None,
+                rd_y=float(rd_match.group(2)) if rd_match else None,
+                buurtnaam=d.get("buurtnaam", "") or "",
             ))
         if buiten_straal or len(docs) < rows:
             break

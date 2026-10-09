@@ -1,129 +1,190 @@
-"""Opkoopbescherming-scan: tel binnen een 50 m-straal rond een adres hoeveel
-woningen een WOZ-waarde bóven de opkoopbescherming-grens hebben en hoeveel eronder.
+"""Concurrentie-scan rond een adres: hoeveel woningen binnen 50 m zouden - volgens de
+regels - theoretisch nog in aanmerking komen voor een kamerverhuurvergunning (4+).
 
-Doel: inschatten hoeveel concurrentie er is voor mogelijke (kamerverhuur-)vergunning-
-aanvragen. Woningen met een WOZ onder de grens vallen onder opkoopbescherming
-(zelfbewoningsplicht - lastiger als belegging op te pakken); woningen boven de grens
-zijn vrij verhandelbaar en dus eerder potentiële concurrentie.
+Een trechter die buuradressen stap voor stap uitsluit:
 
-Databronnen:
-- adressen binnen de straal: PDOK locatieserver (reverse) - zie geocode.adressen_binnen_straal.
-- WOZ-waarde per adres: de publieke LV-WOZ achter het WOZ-waardeloket
-  (api.kadaster.nl/lvwoz/...). Alleen individuele raadplegingen, met een korte pauze
-  tussen de calls zodat we de dienst netjes belasten.
+1. Alle adressen binnen een straal van 50 m (PDOK reverse, gepagineerd).
+2. Opkoopbescherming: zit het centrum in een beschermde wijk? Zo ja, dan vallen de
+   adressen met een WOZ-waarde op/onder de grens af (zelfbewoningsplicht - lastig als
+   belegging op te pakken). Zo nee, dan valt hierop niets af.
+3. 50 m-norm: adressen binnen 50 m van een al verleende kamerverhuurvergunning vallen af
+   (officiele Rotterdamse kaartlaag, die de 50 m-zones al bevat).
+4. Overgebleven = de reële concurrentiepool. Daarop nog twee VERMELDINGEN (géén harde
+   uitsluiting): de BAG-oppervlakte (< ~72 m² = krap voor 4 bewoners à 18 m², maar na
+   een dakkapel kan het alsnog), en of de woning de afgelopen 12 maanden te koop stond
+   (voor zover bekend in ons eigen listings-archief).
+
+Wat NIET kan: lopende, nog niet verwerkte vergunningaanvragen opsporen. Rotterdam
+publiceert kamerverhuur-aanvragen niet (alleen de uiteindelijke beslissing), dus de
+~14 weken tussen aanvraag en besluit is een blinde vlek die geen publieke bron dicht.
 """
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
-import requests
-
+from . import bag, gis, opkoop, woz
 from . import geocode
 
-WOZ_API = "https://api.kadaster.nl/lvwoz/wozwaardeloket-api/v1"
+# Minimale gebruiksoppervlakte voor 4 bewoners: 4 × 18 m² (norm 18 m²/persoon).
+# Alleen ter vermelding - niet om hard uit te sluiten (na een dakkapel/aanbouw kan een
+# krap pand alsnog aan de maat komen).
+GRENS_M2_4KAMERS = 72
 
 
-def woz_waarde(nummeraanduiding_id: str, *, timeout: int = 8) -> int | None:
-    """Meest recente vastgestelde WOZ-waarde (in hele euro's) voor een
-    nummeraanduiding, of None als er geen waarde te vinden is (bv. een niet-woning,
-    of een tijdelijke fout bij de WOZ-dienst)."""
-    url = f"{WOZ_API}/wozwaarde/nummeraanduiding/{nummeraanduiding_id}"
+def _veilige_woz(nummeraanduiding_id: str) -> int | None:
+    """Meest recente WOZ-waarde, of None bij geen waarde/storing (nooit een exception
+    naar buiten - één hapering mag de hele scan niet laten klappen)."""
     try:
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json()
-    except (requests.exceptions.RequestException, ValueError):
+        w = woz.meest_recente_woz_waarde(nummeraanduiding_id)
+        return w.bedrag if w else None
+    except Exception:
         return None
-    waarden = data.get("wozWaarden") or []
-    recent = max(waarden, key=lambda w: w.get("peildatum", ""), default=None)
-    if not recent:
-        return None
-    waarde = recent.get("vastgesteldeWaarde")
+
+
+def _veilige_bag_oppervlakte(adresseerbaarobject_id: str) -> int | None:
     try:
-        return int(waarde) if waarde is not None else None
-    except (TypeError, ValueError):
+        g = bag.fetch_bag_gegevens(adresseerbaarobject_id)
+        return g.oppervlakte if g else None
+    except Exception:
+        return None
+
+
+def _veilig_binnen_50m(rd_x: float | None, rd_y: float | None) -> bool | None:
+    """True/False, of None als het niet te bepalen was (geen coördinaat of ArcGIS-
+    storing). None telt niet als 'valt af' - we sluiten nooit uit op onzekerheid."""
+    if rd_x is None or rd_y is None:
+        return None
+    try:
+        return gis.binnen_50m_van_kamerverhuurvergunning(rd_x, rd_y)
+    except Exception:
         return None
 
 
 @dataclass
-class AdresResultaat:
+class AdresRij:
     weergavenaam: str
     afstand_m: float
-    woz: int | None  # None = geen WOZ gevonden (onbekend)
+    nummeraanduiding_id: str
+    adresseerbaarobject_id: str
+    rd_x: float | None
+    rd_y: float | None
+    woz: int | None = None
+    bag_m2: int | None = None
+    binnen_50m: bool | None = None
+    te_koop_laatst: str | None = None       # ISO-datum, als binnen 12 mnd te koop gezien
+    reden_afgevallen: str | None = None      # None = nog in de pool
 
 
 @dataclass
 class ScanResultaat:
     centrum_adres: str
     straal_m: float
-    grens: int
-    adressen: list[AdresResultaat] = field(default_factory=list)
-    # True als de scan vroegtijdig is afgebroken omdat de WOZ-dienst vanaf het begin
-    # onbereikbaar bleek (zie de circuit-breaker in scan()). De adreslijst is dan
-    # onvolledig en er zijn geen WOZ-waarden; de mail meldt dit expliciet.
+    grens: int                 # WOZ-grens opkoopbescherming
+    m2_grens: int
+    buurtnaam: str
+    in_opkoopwijk: bool
+    rijen: list[AdresRij] = field(default_factory=list)
     woz_onbereikbaar: bool = False
+    gis_onbereikbaar: bool = False
+    archief_doorzocht: bool = False
+
+    # --- trechter-stappen ---
+    @property
+    def afgevallen_opkoop(self) -> list[AdresRij]:
+        return [r for r in self.rijen if r.reden_afgevallen and "opkoop" in r.reden_afgevallen]
 
     @property
-    def met_woz(self) -> list[AdresResultaat]:
-        return [a for a in self.adressen if a.woz is not None]
+    def afgevallen_50m(self) -> list[AdresRij]:
+        return [r for r in self.rijen if r.reden_afgevallen and "50 m" in r.reden_afgevallen]
 
     @property
-    def boven(self) -> list[AdresResultaat]:
-        return [a for a in self.adressen if a.woz is not None and a.woz > self.grens]
+    def pool(self) -> list[AdresRij]:
+        """De overgebleven adressen: niet uitgesloten door opkoop of de 50 m-norm."""
+        return [r for r in self.rijen if r.reden_afgevallen is None]
+
+    # --- vermeldingen op de pool (sluiten niet uit) ---
+    @property
+    def pool_te_klein(self) -> list[AdresRij]:
+        return [r for r in self.pool if r.bag_m2 is not None and r.bag_m2 < self.m2_grens]
 
     @property
-    def onder(self) -> list[AdresResultaat]:
-        return [a for a in self.adressen if a.woz is not None and a.woz <= self.grens]
-
-    @property
-    def onbekend(self) -> list[AdresResultaat]:
-        return [a for a in self.adressen if a.woz is None]
-
-    @property
-    def pct_boven(self) -> float:
-        n = len(self.met_woz)
-        return round(100 * len(self.boven) / n, 1) if n else 0.0
-
-    @property
-    def pct_onder(self) -> float:
-        n = len(self.met_woz)
-        return round(100 * len(self.onder) / n, 1) if n else 0.0
+    def pool_te_koop_geweest(self) -> list[AdresRij]:
+        return [r for r in self.pool if r.te_koop_laatst]
 
 
 def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
-         straal_m: float = 50.0, pauze_s: float = 0.15,
-         woz_func=woz_waarde, adres_func=None,
-         afbreek_na_fouten: int = 8) -> ScanResultaat:
-    """Voert de scan uit: adressen binnen de straal ophalen en per adres de WOZ.
-    `woz_func`/`adres_func` zijn injecteerbaar zodat de logica los te testen is
-    zonder echte PDOK/WOZ-calls.
+         straal_m: float = 50.0, m2_grens: int = GRENS_M2_4KAMERS, pauze_s: float = 0.1,
+         adres_func=None, woz_func=_veilige_woz, bag_func=_veilige_bag_oppervlakte,
+         vergunning_func=_veilig_binnen_50m, beschermde_wijk_func=None,
+         te_koop_func=None, vandaag: date | None = None) -> ScanResultaat:
+    """Voert de trechter uit. Alle externe afhankelijkheden zijn injecteerbaar zodat de
+    logica los te testen is zonder echte PDOK/WOZ/BAG/ArcGIS-calls.
 
-    Circuit-breaker: als de eerste `afbreek_na_fouten` adressen op rij géén WOZ
-    opleveren én er tot dan toe nog geen enkele waarde is gevonden, dan is de
-    WOZ-dienst hoogstwaarschijnlijk onbereikbaar vanaf de server (of blokkeert
-    'ie het server-IP). We breken dan af i.p.v. honderden keren in een time-out
-    te lopen - zo komt er snel een duidelijke mail i.p.v. minutenlange stilte.
-    Losse Nones (bv. een niet-woning) breken de scan niet af zodra er al minstens
-    één echte waarde is gevonden."""
+    `te_koop_func(weergavenaam, grens_datum_iso) -> str | None` geeft de laatste
+    te-koop-datum terug als het adres sinds grens_datum te koop stond, anders None.
+    None (de default) betekent: #5 overslaan (archief nog niet beschikbaar)."""
     adres_func = adres_func or geocode.adressen_binnen_straal
+    beschermde_wijk_func = beschermde_wijk_func or opkoop.is_beschermde_wijk
+    vandaag = vandaag or date.today()
+
     nabij = adres_func(lat, lon, straal_m)
-    resultaat = ScanResultaat(centrum_adres=centrum_adres, straal_m=straal_m, grens=grens)
-    opeenvolgende_fouten = 0
-    for i, a in enumerate(nabij):
-        if i and pauze_s:
-            time.sleep(pauze_s)  # beleefd tegen de WOZ-dienst
-        woz = woz_func(a.nummeraanduiding_id)
-        resultaat.adressen.append(
-            AdresResultaat(weergavenaam=a.weergavenaam, afstand_m=a.afstand_m, woz=woz)
+    rijen = [
+        AdresRij(
+            weergavenaam=a.weergavenaam, afstand_m=a.afstand_m,
+            nummeraanduiding_id=a.nummeraanduiding_id,
+            adresseerbaarobject_id=getattr(a, "adresseerbaarobject_id", "") or "",
+            rd_x=getattr(a, "rd_x", None), rd_y=getattr(a, "rd_y", None),
         )
-        if woz is None:
-            opeenvolgende_fouten += 1
-            if not resultaat.met_woz and opeenvolgende_fouten >= afbreek_na_fouten:
-                resultaat.woz_onbereikbaar = True
-                break
-        else:
-            opeenvolgende_fouten = 0
+        for a in nabij
+    ]
+    buurtnaam = getattr(nabij[0], "buurtnaam", "") if nabij else ""
+    in_opkoopwijk = beschermde_wijk_func(buurtnaam)
+
+    resultaat = ScanResultaat(
+        centrum_adres=centrum_adres, straal_m=straal_m, grens=grens, m2_grens=m2_grens,
+        buurtnaam=buurtnaam, in_opkoopwijk=in_opkoopwijk, rijen=rijen,
+        archief_doorzocht=te_koop_func is not None,
+    )
+
+    # Stap 2 - opkoopbescherming (alleen zinvol in een beschermde wijk).
+    if in_opkoopwijk:
+        geen_enkele_woz = True
+        for i, r in enumerate(rijen):
+            if i and pauze_s:
+                time.sleep(pauze_s)
+            r.woz = woz_func(r.nummeraanduiding_id)
+            if r.woz is not None:
+                geen_enkele_woz = False
+                if r.woz <= grens:
+                    r.reden_afgevallen = "opkoopbescherming (WOZ ≤ grens)"
+        if geen_enkele_woz and rijen:
+            resultaat.woz_onbereikbaar = True
+
+    # Stap 3 - 50 m-norm, op de overlevers van stap 2.
+    overlevers = [r for r in rijen if r.reden_afgevallen is None]
+    gis_fouten = 0
+    for i, r in enumerate(overlevers):
+        if i and pauze_s:
+            time.sleep(pauze_s)
+        r.binnen_50m = vergunning_func(r.rd_x, r.rd_y)
+        if r.binnen_50m is True:
+            r.reden_afgevallen = "binnen 50 m van bestaande vergunning"
+        elif r.binnen_50m is None:
+            gis_fouten += 1
+    if overlevers and gis_fouten == len(overlevers):
+        resultaat.gis_onbereikbaar = True
+
+    # Stap 4 - vermeldingen op de pool (geen uitsluiting): BAG-m² + te-koop-geweest.
+    grens_datum = (vandaag - timedelta(days=365)).isoformat()
+    for i, r in enumerate(resultaat.pool):
+        if i and pauze_s:
+            time.sleep(pauze_s)
+        r.bag_m2 = bag_func(r.adresseerbaarobject_id)
+        if te_koop_func is not None:
+            r.te_koop_laatst = te_koop_func(r.weergavenaam, grens_datum)
+
     return resultaat
 
 
@@ -133,84 +194,166 @@ def _eur(bedrag: int | None) -> str:
     return "€" + format(bedrag, ",d").replace(",", ".")
 
 
-def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
-    """Geeft (onderwerp, html_body, text_body) voor de resultaatmail."""
-    grens = _eur(r.grens)
-    if r.woz_onbereikbaar:
-        onderwerp = f"Opkoopbescherming-scan {r.centrum_adres}: WOZ-dienst niet bereikbaar"
-        waarschuwing_txt = (
-            "LET OP: de WOZ-dienst (WOZ-waardeloket) gaf vanaf het begin geen enkele "
-            "waarde terug - waarschijnlijk tijdelijk onbereikbaar of niet benaderbaar "
-            "vanaf de server. De scan is daarom vroegtijdig afgebroken; onderstaande "
-            "lijst is onvolledig en bevat geen WOZ-waarden. Probeer het later opnieuw.\n"
-        )
-        waarschuwing_html = (
-            "<p style='color:#b00;font-weight:bold'>LET OP: de WOZ-dienst gaf vanaf het "
-            "begin geen enkele waarde terug - waarschijnlijk tijdelijk onbereikbaar of "
-            "niet benaderbaar vanaf de server. De scan is vroegtijdig afgebroken; de "
-            "lijst hieronder is onvolledig en bevat geen WOZ-waarden. Probeer het later "
-            "opnieuw.</p>"
-        )
-    else:
-        onderwerp = (
-            f"Opkoopbescherming-scan {r.centrum_adres}: "
-            f"{len(r.boven)} boven / {len(r.onder)} onder grens ({r.pct_boven}% boven)"
-        )
-        waarschuwing_txt = ""
-        waarschuwing_html = ""
+def _m2(waarde: int | None) -> str:
+    return f"{waarde} m²" if waarde is not None else "onbekend"
 
-    def _lijst_txt(titel, items):
-        regels = [f"{titel} ({len(items)}):"]
-        for a in sorted(items, key=lambda x: x.afstand_m):
-            regels.append(f"  - {a.weergavenaam} | {a.afstand_m:.0f} m | WOZ {_eur(a.woz)}")
+
+def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
+    """Geeft (onderwerp, html_body, text_body) voor de trechter-resultaatmail."""
+    pool = r.pool
+    onderwerp = (
+        f"Concurrentie-scan {r.centrum_adres}: "
+        f"{len(pool)} mogelijke adressen binnen {r.straal_m:.0f} m"
+    )
+
+    waarschuwingen = []
+    if r.woz_onbereikbaar:
+        waarschuwingen.append(
+            "De WOZ-dienst gaf geen enkele waarde terug (tijdelijk onbereikbaar). "
+            "De opkoopbescherming-stap kon daardoor niet betrouwbaar draaien."
+        )
+    if r.gis_onbereikbaar:
+        waarschuwingen.append(
+            "De Rotterdamse vergunningenkaart (ArcGIS) was niet bereikbaar. "
+            "De 50 m-norm-stap kon daardoor niet draaien."
+        )
+
+    opkoop_regel = (
+        f"In opkoopbescherming-wijk '{r.buurtnaam}': {len(r.afgevallen_opkoop)} adres(sen) "
+        f"vallen af (WOZ ≤ {_eur(r.grens)})."
+        if r.in_opkoopwijk else
+        f"Niet in een opkoopbescherming-wijk ('{r.buurtnaam}') - hierop valt niets af."
+    )
+
+    # ---------- tekstversie ----------
+    def _lijst_txt(titel, rijen, met_woz=False, met_m2=False, met_tekoop=False):
+        regels = [f"{titel} ({len(rijen)}):"]
+        for a in sorted(rijen, key=lambda x: x.afstand_m):
+            extra = []
+            if met_woz:
+                extra.append(f"WOZ {_eur(a.woz)}")
+            if met_m2:
+                extra.append(f"BAG {_m2(a.bag_m2)}")
+            if met_tekoop and a.te_koop_laatst:
+                extra.append(f"te koop gezien t/m {a.te_koop_laatst}")
+            staart = (" | " + " | ".join(extra)) if extra else ""
+            regels.append(f"  - {a.weergavenaam} | {a.afstand_m:.0f} m{staart}")
         return "\n".join(regels)
 
-    text = "\n".join([
-        f"Opkoopbescherming-scan rond: {r.centrum_adres}",
-        f"Straal: {r.straal_m:.0f} m | Grens: {grens}",
+    text_delen = [
+        f"Concurrentie-scan rond: {r.centrum_adres}",
+        f"Straal: {r.straal_m:.0f} m | WOZ-grens opkoop: {_eur(r.grens)} | "
+        f"m²-grens 4 kamers: {r.m2_grens} m²",
         "",
-        *( [waarschuwing_txt] if waarschuwing_txt else [] ),
-        f"Adressen binnen de straal: {len(r.adressen)} "
-        f"(met WOZ-waarde: {len(r.met_woz)}, onbekend: {len(r.onbekend)})",
-        f"BOVEN de grens (vrij verhandelbaar, potentiële concurrentie): "
-        f"{len(r.boven)}  ({r.pct_boven}% van de adressen met WOZ)",
-        f"ONDER de grens (opkoopbescherming, zelfbewoningsplicht): "
-        f"{len(r.onder)}  ({r.pct_onder}%)",
+    ]
+    if waarschuwingen:
+        text_delen.append("LET OP:")
+        text_delen.extend(f"- {w}" for w in waarschuwingen)
+        text_delen.append("")
+    text_delen += [
+        "TRECHTER",
+        f"1. Adressen binnen {r.straal_m:.0f} m: {len(r.rijen)}",
+        f"2. {opkoop_regel}",
+        f"3. 50 m-norm: {len(r.afgevallen_50m)} adres(sen) vallen af "
+        f"(binnen 50 m van een bestaande vergunning).",
+        f"=> Overgebleven pool: {len(pool)} adres(sen) waar theoretisch nog een "
+        f"4+-aanvraag op zou kunnen liggen.",
         "",
-        _lijst_txt("BOVEN de grens", r.boven),
+        _lijst_txt("POOL (overgebleven)", pool, met_woz=r.in_opkoopwijk, met_m2=True,
+                   met_tekoop=r.archief_doorzocht),
         "",
-        _lijst_txt("ONDER de grens", r.onder),
-        "",
-        _lijst_txt("WOZ onbekend (niet meegeteld in de percentages)", r.onbekend),
-        "",
-        "Bron: adressen via PDOK, WOZ-waarden via het WOZ-waardeloket (LV-WOZ).",
-    ])
-
-    def _lijst_html(titel, items):
-        rijen = "".join(
-            f"<tr><td>{a.weergavenaam}</td><td style='text-align:right'>{a.afstand_m:.0f} m</td>"
-            f"<td style='text-align:right'>{_eur(a.woz)}</td></tr>"
-            for a in sorted(items, key=lambda x: x.afstand_m)
+        "VERMELDINGEN op de pool (sluiten NIET uit):",
+        f"- Krap voor 4 kamers (BAG < {r.m2_grens} m²): {len(r.pool_te_klein)} "
+        "(let op: na een dakkapel/aanbouw kan dit alsnog veranderen).",
+    ]
+    if r.archief_doorzocht:
+        text_delen.append(
+            f"- Afgelopen 12 mnd te koop geweest (voor zover in ons archief): "
+            f"{len(r.pool_te_koop_geweest)}."
         )
-        return (f"<h3>{titel} ({len(items)})</h3>"
-                f"<table cellpadding='4' style='border-collapse:collapse'>{rijen}</table>")
+    else:
+        text_delen.append(
+            "- Te-koop-geweest: archief wordt nog opgebouwd, dus deze keer niet meegenomen."
+        )
+    text_delen += [
+        "",
+        _lijst_txt("Afgevallen - opkoopbescherming", r.afgevallen_opkoop, met_woz=True),
+        "",
+        _lijst_txt("Afgevallen - binnen 50 m van bestaande vergunning", r.afgevallen_50m),
+        "",
+        "Kanttekening: lopende, nog niet verwerkte vergunningaanvragen (doorlooptijd "
+        "~14 weken) zijn niet zichtbaar - Rotterdam publiceert kamerverhuur-aanvragen "
+        "niet, alleen de uiteindelijke beslissing.",
+        "",
+        "Bron: adressen/coördinaten via PDOK, WOZ via het WOZ-waardeloket, oppervlakte "
+        "via BAG, 50 m-norm via de officiele Rotterdamse vergunningenkaart.",
+    ]
+    text = "\n".join(text_delen)
 
-    html = "".join([
-        f"<h2>Opkoopbescherming-scan rond {r.centrum_adres}</h2>",
-        f"<p>Straal: {r.straal_m:.0f} m &middot; Grens: {grens}</p>",
-        waarschuwing_html,
+    # ---------- htmlversie ----------
+    def _lijst_html(titel, rijen, met_woz=False, met_m2=False, met_tekoop=False):
+        koppen = ["Adres", "Afstand"]
+        if met_woz:
+            koppen.append("WOZ")
+        if met_m2:
+            koppen.append("BAG m²")
+        if met_tekoop:
+            koppen.append("Te koop gezien")
+        thead = "".join(f"<th style='text-align:left'>{k}</th>" for k in koppen)
+        rows = ""
+        for a in sorted(rijen, key=lambda x: x.afstand_m):
+            cellen = [a.weergavenaam, f"{a.afstand_m:.0f} m"]
+            if met_woz:
+                cellen.append(_eur(a.woz))
+            if met_m2:
+                cellen.append(_m2(a.bag_m2))
+            if met_tekoop:
+                cellen.append(a.te_koop_laatst or "-")
+            rows += "<tr>" + "".join(f"<td>{c}</td>" for c in cellen) + "</tr>"
+        return (f"<h3>{titel} ({len(rijen)})</h3>"
+                f"<table cellpadding='4' style='border-collapse:collapse'>"
+                f"<tr>{thead}</tr>{rows}</table>")
+
+    html_delen = [f"<h2>Concurrentie-scan rond {r.centrum_adres}</h2>",
+                  f"<p>Straal: {r.straal_m:.0f} m &middot; WOZ-grens opkoop: {_eur(r.grens)} "
+                  f"&middot; m²-grens 4 kamers: {r.m2_grens} m²</p>"]
+    if waarschuwingen:
+        html_delen.append("<p style='color:#b00'><b>Let op:</b><br>"
+                          + "<br>".join(waarschuwingen) + "</p>")
+    html_delen += [
+        "<ol>",
+        f"<li>Adressen binnen {r.straal_m:.0f} m: <b>{len(r.rijen)}</b></li>",
+        f"<li>{opkoop_regel}</li>",
+        f"<li>50 m-norm: <b>{len(r.afgevallen_50m)}</b> adres(sen) vallen af "
+        "(binnen 50 m van een bestaande vergunning).</li>",
+        "</ol>",
+        f"<p><b>Overgebleven pool: {len(pool)}</b> adres(sen) waar theoretisch nog een "
+        "4+-aanvraag op zou kunnen liggen.</p>",
         "<ul>",
-        f"<li>Adressen binnen de straal: <b>{len(r.adressen)}</b> "
-        f"(met WOZ: {len(r.met_woz)}, onbekend: {len(r.onbekend)})</li>",
-        f"<li><b>Boven</b> de grens (vrij verhandelbaar, potentiële concurrentie): "
-        f"<b>{len(r.boven)}</b> ({r.pct_boven}%)</li>",
-        f"<li><b>Onder</b> de grens (opkoopbescherming): <b>{len(r.onder)}</b> ({r.pct_onder}%)</li>",
+        f"<li>Krap voor 4 kamers (BAG &lt; {r.m2_grens} m²): <b>{len(r.pool_te_klein)}</b> "
+        "<i>(niet uitgesloten - na een dakkapel/aanbouw kan dit veranderen)</i></li>",
+    ]
+    if r.archief_doorzocht:
+        html_delen.append(
+            f"<li>Afgelopen 12 mnd te koop geweest (voor zover in ons archief): "
+            f"<b>{len(r.pool_te_koop_geweest)}</b></li>"
+        )
+    else:
+        html_delen.append(
+            "<li>Te-koop-geweest: archief wordt nog opgebouwd, deze keer niet meegenomen.</li>"
+        )
+    html_delen += [
         "</ul>",
-        _lijst_html("Boven de grens", r.boven),
-        _lijst_html("Onder de grens", r.onder),
-        _lijst_html("WOZ onbekend", r.onbekend),
-        "<p style='color:#888;font-size:.85em'>Bron: adressen via PDOK, "
-        "WOZ-waarden via het WOZ-waardeloket (LV-WOZ).</p>",
-    ])
+        _lijst_html("Pool (overgebleven)", pool, met_woz=r.in_opkoopwijk, met_m2=True,
+                    met_tekoop=r.archief_doorzocht),
+        _lijst_html("Afgevallen - opkoopbescherming", r.afgevallen_opkoop, met_woz=True),
+        _lijst_html("Afgevallen - binnen 50 m van bestaande vergunning", r.afgevallen_50m),
+        "<p style='color:#888;font-size:.85em'>Kanttekening: lopende, nog niet verwerkte "
+        "aanvragen (doorlooptijd ~14 weken) zijn niet zichtbaar - Rotterdam publiceert "
+        "kamerverhuur-aanvragen niet, alleen de beslissing.<br>"
+        "Bron: PDOK (adressen/coördinaten), WOZ-waardeloket, BAG (oppervlakte), "
+        "officiele Rotterdamse vergunningenkaart (50 m-norm).</p>",
+    ]
+    html = "".join(html_delen)
 
     return onderwerp, html, text

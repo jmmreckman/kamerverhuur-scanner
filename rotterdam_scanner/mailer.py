@@ -13,11 +13,13 @@ STILLE_BCC = "jmmreckman@gmail.com"
 
 
 def send_mail(config: Config, subject: str, html_body: str, text_body: str,
-              recipients: list[str] | None = None) -> None:
+              recipients: list[str] | None = None, stille_bcc: bool = True) -> None:
     """Verstuurt een e-mail via de (optioneel eigen) SMTP-instellingen. Afzender is
     config.effective_from_header (bv. info@steenhub.nl als SMTP_FROM_EMAIL is gezet);
-    ontvangers zijn standaard config.report_to. Elk bericht krijgt daarnaast een stille
-    BCC naar STILLE_BCC mee (alleen in de envelop, niet in de headers)."""
+    ontvangers zijn standaard config.report_to. Elk bericht krijgt standaard een stille
+    BCC naar STILLE_BCC mee (alleen in de envelop, niet in de headers). Zet
+    stille_bcc=False voor functies waar de gebruiker zelf de ontvanger(s) kiest en er
+    geen meeleeskopie gewenst is (bv. de handmatige concurrentie-scan)."""
     to = recipients if recipients is not None else config.report_to
 
     msg = MIMEMultipart("alternative")
@@ -27,11 +29,12 @@ def send_mail(config: Config, subject: str, html_body: str, text_body: str,
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    # Envelop-ontvangers = zichtbare ontvangers + het stille BCC-adres. Het BCC-adres
-    # komt NIET in msg (geen "Bcc"-header), alleen in de sendmail-envelop, zodat het
-    # echt verborgen blijft. Dedupe zodat wie al ontvanger is geen dubbele mail krijgt.
+    # Envelop-ontvangers = zichtbare ontvangers + (optioneel) het stille BCC-adres. Het
+    # BCC-adres komt NIET in msg (geen "Bcc"-header), alleen in de sendmail-envelop,
+    # zodat het echt verborgen blijft. Dedupe zodat wie al ontvanger is geen dubbele
+    # mail krijgt.
     envelope_to = list(to)
-    if STILLE_BCC and STILLE_BCC not in envelope_to:
+    if stille_bcc and STILLE_BCC and STILLE_BCC not in envelope_to:
         envelope_to.append(STILLE_BCC)
 
     username = config.effective_smtp_username

@@ -135,7 +135,25 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - `kansen_site/app.py`, `kansen_site/templates/berekening.html`,
   `kansen_site/static/berekening.js/.css`, `kansen_site/rapport_pdf.py` (PDF-export).
 - `rotterdam_scanner/mailer.py` — uitgaande mail; **stille BCC** naar
-  `jmmreckman@gmail.com` (in SMTP-envelope, niet in headers).
+  `jmmreckman@gmail.com` (in SMTP-envelope, niet in headers). `send_mail(...,
+  stille_bcc=False)` laat die BCC weg — gebruikt door de concurrentie-scan, waar de
+  gebruiker zelf de ontvanger(s) kiest.
+- `rotterdam_scanner/opkoop_scan.py` — **concurrentie-scan** op de kaart (beheerder):
+  trechter binnen 50 m rond een adres → 1) alle adressen (PDOK reverse, gepagineerd,
+  rows max 100) 2) opkoopbescherming (WOZ per adres, alleen in een beschermde wijk)
+  3) 50 m-norm (`gis.binnen_50m_van_kamerverhuurvergunning`) 4) vermelding (géén harde
+  uitsluiting): BAG-oppervlakte <72 m² + te-koop-geweest (uit het archief). Mailt het
+  resultaat naar een zelf op te geven ontvanger-veld (komma = meerdere). Route
+  `POST /opkoop-scan`. **Beperking:** lopende/onverwerkte kamerverhuur-*aanvragen* zijn
+  niet te zien — Rotterdam publiceert alleen de beslissing, niet de aanvraag.
+- `rotterdam_scanner/archief.py` — **blijvend listings-archief**
+  (`listings_archief.json`, naast `state.json`). **Bewaart ÁLLE ooit geziene listings
+  voor altijd en wordt elke scan-run aangevuld — NOOIT prunen/leegmaken.** `StateStore`
+  ruimt listings na ~30 dagen op (schone kaart); dit archief juist niet, zodat je
+  woningen altijd kunt terugzoeken (bv. "stond dit adres ooit te koop?", of in de
+  toekomst terugkerende woningen). Gevuld in `pipeline._vul_archief_aan` vóór
+  `prune_expired`; gelezen door de concurrentie-scan. Geen terugwerkende kracht
+  (woningen die vóór de invoering al geprund waren, zijn weg).
 
 ---
 

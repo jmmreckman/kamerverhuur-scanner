@@ -101,12 +101,13 @@
         <span id="test-adres-status" class="muted"></span>
       </div>
       <div class="test-adres-blok">
-        <label for="opkoop-scan-invoer">Scan opkoopbescherming grens</label>
+        <label for="opkoop-scan-invoer">Concurrentie-scan (50 m)</label>
         <div class="test-adres-rij">
           <input type="text" id="opkoop-scan-invoer" placeholder="bv. Pompstraat 42, Rotterdam">
           <button type="button" id="opkoop-scan-knop">Scan</button>
         </div>
-        <span id="opkoop-scan-status" class="muted">Scant alle adressen binnen 50 m en mailt hoeveel WOZ boven/onder de grens zit.</span>
+        <input type="text" id="opkoop-scan-ontvangers" placeholder="mailen naar… (komma = meerdere)" value="jmmreckman@gmail.com" style="margin-top:.35rem;width:100%;box-sizing:border-box;">
+        <span id="opkoop-scan-status" class="muted">Trechtert alle adressen binnen 50 m (opkoopbescherming → 50 m-norm → pool) en mailt het resultaat.</span>
       </div>
       {% endif %}
       <p id="aantal-tekst" class="muted"></p>

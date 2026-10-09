@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from . import bekendmakingen, den_haag
+from .archief import ListingArchief, archief_pad_voor
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
@@ -22,6 +23,18 @@ from .monumenten import bepaal_huurprijsopslag, hoogste_opslagpercentage
 from .opkoop import check_opkoopbescherming
 from .state import ListingState, StateStore
 from .woz import meest_recente_woz_waarde
+
+
+def _vul_archief_aan(config: Config, state: StateStore, today: date | None) -> None:
+    """Leg alle huidige listings vast in het blijvende archief (archief.py) vóórdat
+    prune_expired ze eventueel opruimt. Het archief is aanvullend, geen kritiek pad:
+    faalt het (bv. schijf vol), dan loggen we het en loopt de scan gewoon door."""
+    try:
+        archief = ListingArchief(archief_pad_voor(config.state_path))
+        archief.vul_aan(state.all(), today=today)
+        archief.save()
+    except Exception:
+        logging.getLogger(__name__).exception("Bijwerken listings-archief mislukt")
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +542,7 @@ def _verwerk_listings(
     _backvul_investeringscijfers(state)
     _backvul_coordinaten(state)
     _backvul_opkoopbescherming(state, config, today_iso, result)
+    _vul_archief_aan(config, state, today)
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 
@@ -697,6 +711,7 @@ def run_beschikbaarheidscheck(config: Config, today: date | None = None) -> RunR
             result.nieuw_afgevallen.append(item)
         state.upsert(item)
 
+    _vul_archief_aan(config, state, today)
     state.prune_expired(config.listing_expiry_days, today=today)
     state.save()
 

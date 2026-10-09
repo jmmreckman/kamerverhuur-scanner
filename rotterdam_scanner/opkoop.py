@@ -38,6 +38,13 @@ _BESCHERMDE_WIJKEN_GENORMALISEERD = {_normaliseer(w) for w in BESCHERMDE_WIJKEN}
 WOZ_WAARDELOKET_URL = "https://www.wozwaardeloket.nl/"
 
 
+def is_beschermde_wijk(wijknaam: str) -> bool:
+    """True als de (buurt)naam een opkoopbescherming-wijk is. Koppeltekens en spaties
+    worden gelijkgesteld, zodat zowel Rotterdam's schrijfwijze ("Oud-Charlois") als die
+    van PDOK/CBS ("Oud Charlois") matcht."""
+    return _normaliseer(wijknaam or "") in _BESCHERMDE_WIJKEN_GENORMALISEERD
+
+
 @dataclass(frozen=True)
 class OpkoopResultaat:
     in_beschermde_wijk: bool

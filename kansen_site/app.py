@@ -26,10 +26,14 @@ from pathlib import Path
 
 from .throttle import LoginThrottle
 
-from rotterdam_scanner import den_haag, geocode, mail_voorkeuren, opkoop_scan, pipeline, rente_update, vergunningenindex
+from rotterdam_scanner import archief, den_haag, geocode, mail_voorkeuren, opkoop_scan, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.mailer import send_mail
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
+
+# Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
+# volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
@@ -886,11 +890,13 @@ def create_app(config: Config | None = None) -> Flask:
         _schrijf_test_adressen(overig)
         return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
 
-    # --- Opkoopbescherming-scan (50m-straal rond een adres, WOZ boven/onder grens) ---
-    # Telt binnen 50 m hoeveel woningen een WOZ boven/onder de opkoopbescherming-grens
-    # hebben (= inschatting concurrentie voor mogelijke vergunningaanvragen). De scan
-    # duurt even (WOZ per adres opvragen), dus draait op de achtergrond en mailt het
-    # resultaat. Beheerder-only.
+    # --- Concurrentie-scan (trechter binnen 50 m rond een adres) ---
+    # Telt hoeveel woningen binnen 50 m - volgens de regels - theoretisch nog in
+    # aanmerking komen voor een 4+-kamerverhuurvergunning: adressen ophalen,
+    # opkoopbescherming (WOZ), 50 m-norm (officiele kaart), en als vermelding de
+    # BAG-oppervlakte + of ze recent te koop stonden (eigen archief). De scan duurt
+    # even (veel losse API-calls), draait op de achtergrond en mailt het resultaat naar
+    # de opgegeven ontvanger(s). Beheerder-only.
     @app.route("/opkoop-scan", methods=["POST"])
     @beheerder_required
     def opkoop_scan_starten():
@@ -898,6 +904,21 @@ def create_app(config: Config | None = None) -> Flask:
         adres = (data.get("adres") or "").strip()
         if not adres:
             return jsonify({"fout": "Geen adres opgegeven."}), 400
+
+        # Ontvanger(s): komma-gescheiden, zelf te kiezen (geen vaste BCC meer). Leeg
+        # veld valt terug op het geconfigureerde report-adres.
+        ontvangers_ruw = (data.get("ontvangers") or "").strip()
+        if ontvangers_ruw:
+            kandidaten = [a.strip() for a in ontvangers_ruw.split(",") if a.strip()]
+            ontvangers = [a for a in kandidaten if _EMAIL_RE.match(a)]
+            ongeldig = [a for a in kandidaten if not _EMAIL_RE.match(a)]
+            if ongeldig:
+                return jsonify({"fout": "Ongeldig e-mailadres: " + ", ".join(ongeldig)}), 400
+        else:
+            ontvangers = list(config.report_to)
+        if not ontvangers:
+            return jsonify({"fout": "Geen (geldig) ontvanger-adres opgegeven."}), 400
+
         try:
             res = geocode.geocode_vrij_landelijk(adres)
         except geocode.GeocodeError:
@@ -909,41 +930,61 @@ def create_app(config: Config | None = None) -> Flask:
 
         grens = int(config.opkoopbescherming_woz_grens)
         centrum, lat, lon = res.weergavenaam, res.lat, res.lon
-        ontvanger = "jmmreckman@gmail.com"
+
+        # #5: matchen tegen het blijvende listings-archief (te-koop-geweest). Lukt het
+        # laden niet, of is het archief nog leeg, dan draait de scan gewoon zonder #5.
+        te_koop_func = None
+        try:
+            arch = archief.ListingArchief(archief.archief_pad_voor(config.state_path))
+            if len(arch):
+                index = arch.index_op_adres()
+
+                def te_koop_func(weergavenaam, grens_datum):  # noqa: E731 - kleine closure
+                    rec = index.get(archief.normaliseer_adres(weergavenaam))
+                    if rec is None:
+                        return None
+                    peil = rec.laatste_peildatum()
+                    return peil if peil >= grens_datum else None
+        except Exception:
+            app.logger.exception("Kon listings-archief niet laden voor de concurrentie-scan")
+
+        def _foutmail(exc):
+            try:
+                send_mail(
+                    config,
+                    f"Concurrentie-scan MISLUKT voor {centrum}",
+                    f"<p>De scan voor <b>{centrum}</b> is vastgelopen met een fout:</p>"
+                    f"<pre>{type(exc).__name__}: {exc}</pre>"
+                    "<p>Probeer het later opnieuw; blijft het misgaan, dan is er iets mis "
+                    "met PDOK, de WOZ-dienst, BAG, de vergunningenkaart of de mailverzending.</p>",
+                    f"De scan voor {centrum} is vastgelopen met een fout:\n\n"
+                    f"{type(exc).__name__}: {exc}\n\n"
+                    "Probeer het later opnieuw.",
+                    recipients=ontvangers, stille_bcc=False,
+                )
+            except Exception:
+                app.logger.exception("Kon ook de foutmail niet versturen voor %s", centrum)
 
         def _werk():
             try:
-                resultaat = opkoop_scan.scan(lat, lon, grens, centrum)
+                resultaat = opkoop_scan.scan(lat, lon, grens, centrum, te_koop_func=te_koop_func)
                 onderwerp, html_body, text_body = opkoop_scan.bouw_mail(resultaat)
-                send_mail(config, onderwerp, html_body, text_body, recipients=[ontvanger])
-                app.logger.info("Opkoop-scan %s: %d adressen, %d boven / %d onder grens "
-                                "(woz_onbereikbaar=%s); mail naar %s", centrum,
-                                len(resultaat.adressen), len(resultaat.boven),
-                                len(resultaat.onder), resultaat.woz_onbereikbaar, ontvanger)
+                send_mail(config, onderwerp, html_body, text_body,
+                          recipients=ontvangers, stille_bcc=False)
+                app.logger.info("Concurrentie-scan %s: %d adressen -> pool %d "
+                                "(woz_onbereikbaar=%s, gis_onbereikbaar=%s); mail naar %s",
+                                centrum, len(resultaat.rijen), len(resultaat.pool),
+                                resultaat.woz_onbereikbaar, resultaat.gis_onbereikbaar,
+                                ", ".join(ontvangers))
             except Exception as exc:
-                # Nooit stil falen: ook bij een fout krijgt de gebruiker een mail, zodat
-                # 'ie niet eindeloos op een resultaat zit te wachten dat nooit komt.
-                app.logger.exception("Opkoop-scan mislukt voor %s", centrum)
-                try:
-                    send_mail(
-                        config,
-                        f"Opkoopbescherming-scan MISLUKT voor {centrum}",
-                        f"<p>De scan voor <b>{centrum}</b> is vastgelopen met een fout:</p>"
-                        f"<pre>{type(exc).__name__}: {exc}</pre>"
-                        "<p>Probeer het later opnieuw; blijft het misgaan, dan is er iets "
-                        "mis met PDOK, de WOZ-dienst of de mailverzending op de server.</p>",
-                        f"De scan voor {centrum} is vastgelopen met een fout:\n\n"
-                        f"{type(exc).__name__}: {exc}\n\n"
-                        "Probeer het later opnieuw; blijft het misgaan, dan is er iets mis "
-                        "met PDOK, de WOZ-dienst of de mailverzending op de server.",
-                        recipients=[ontvanger],
-                    )
-                except Exception:
-                    app.logger.exception("Kon ook de foutmail niet versturen voor %s", centrum)
+                # Nooit stil falen: ook bij een fout krijgt de gebruiker een mail.
+                app.logger.exception("Concurrentie-scan mislukt voor %s", centrum)
+                _foutmail(exc)
 
         threading.Thread(target=_werk, daemon=True).start()
         return jsonify({"ok": True,
-                        "melding": f"Scan gestart voor {centrum} (50 m-straal). Het resultaat wordt gemaild naar {ontvanger}."})
+                        "melding": f"Scan gestart voor {centrum} (50 m-straal). "
+                                   f"Het resultaat wordt gemaild naar {', '.join(ontvangers)}."})
 
     @app.route("/data-analyse")
     @login_required
