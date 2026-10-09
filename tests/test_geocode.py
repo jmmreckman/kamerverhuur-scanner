@@ -146,3 +146,58 @@ def test_geocode_by_postcode_gooit_fout_door_na_alle_pogingen():
         with pytest.raises(_requests.exceptions.ReadTimeout):
             geocode_by_postcode("3073KJ", "47A")
     assert mock_get.call_count == 3
+
+
+# --- adressen_binnen_straal: PDOK reverse met paginatie (rows max 100) ---
+
+def _reverse_response(docs):
+    mock = MagicMock()
+    mock.raise_for_status.return_value = None
+    mock.json.return_value = {"response": {"docs": docs}}
+    return mock
+
+
+def _adoc(afstand, nid):
+    return {"weergavenaam": f"Straat {nid}", "afstand": afstand, "nummeraanduiding_id": nid}
+
+
+def test_adressen_binnen_straal_vraagt_max_100_rows_met_start():
+    from rotterdam_scanner.geocode import adressen_binnen_straal
+    # Eén volle pagina (<100 binnen de straal, laatste doc valt buiten) -> één call.
+    docs = [_adoc(float(i), str(i)) for i in range(0, 60)] + [_adoc(55.0, "ver")]
+    with patch("rotterdam_scanner.geocode.requests.get",
+               return_value=_reverse_response(docs)) as mock_get:
+        uit = adressen_binnen_straal(52.0, 4.0, straal_m=50.0)
+    params = mock_get.call_args.kwargs["params"]
+    assert params["rows"] == 100       # nooit meer dan 100 opvragen
+    assert params["start"] == 0
+    assert mock_get.call_count == 1
+    assert len(uit) == 51              # afstand 0..50 (<=50) binnen de straal; 51.0 stopt de rest
+    assert all(a.afstand_m <= 50.0 for a in uit)
+
+
+def test_adressen_binnen_straal_pagineert_bij_meer_dan_100():
+    from rotterdam_scanner.geocode import adressen_binnen_straal
+    pagina1 = [_adoc(float(i) * 0.4, str(i)) for i in range(0, 100)]   # 0.0 .. 39.6 m
+    pagina2 = [_adoc(40.0 + i * 0.2, f"b{i}") for i in range(0, 100)]  # 40.0 .. ; valt deels buiten
+    with patch("rotterdam_scanner.geocode.requests.get",
+               side_effect=[_reverse_response(pagina1), _reverse_response(pagina2)]) as mock_get:
+        uit = adressen_binnen_straal(52.0, 4.0, straal_m=50.0)
+    # Tweede call moet start=100 gebruiken (volgende pagina).
+    assert mock_get.call_count == 2
+    assert mock_get.call_args_list[1].kwargs["params"]["start"] == 100
+    # Alles binnen 50 m uit beide pagina's; de eerste doc >50 m stopt de rest.
+    # Pagina 2: 40.0 + i*0.2 <= 50 voor i=0..50 -> 51 adressen.
+    assert len(uit) == 100 + 51
+    assert all(a.afstand_m <= 50.0 for a in uit)
+
+
+def test_adressen_binnen_straal_stopt_bij_lege_pagina():
+    from rotterdam_scanner.geocode import adressen_binnen_straal
+    # Precies 100 binnen de straal (volle pagina) -> tweede pagina leeg -> stoppen.
+    pagina1 = [_adoc(float(i) * 0.4, str(i)) for i in range(0, 100)]
+    with patch("rotterdam_scanner.geocode.requests.get",
+               side_effect=[_reverse_response(pagina1), _reverse_response([])]) as mock_get:
+        uit = adressen_binnen_straal(52.0, 4.0, straal_m=50.0)
+    assert mock_get.call_count == 2
+    assert len(uit) == 100

@@ -170,6 +170,11 @@ def geocode_vrij_landelijk(adres: str) -> GeocodeResult:
 
 
 PDOK_REVERSE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/reverse"
+# Harde limiet van de PDOK reverse-endpoint: rows mag max 100 zijn (rows>100 geeft
+# een HTTP 400 "number must be at most 100"). In een dichte wijk zitten er binnen
+# 50 m soms méér dan 100 adressen, dus halen we ze in pagina's van 100 op (de
+# resultaten zijn op afstand oplopend gesorteerd) tot we de straal voorbij zijn.
+PDOK_REVERSE_MAX_ROWS = 100
 
 
 @dataclass(frozen=True)
@@ -180,31 +185,49 @@ class NabijAdres:
 
 
 def adressen_binnen_straal(lat: float, lon: float, straal_m: float = 50.0,
-                           max_adressen: int = 250) -> list[NabijAdres]:
+                           max_adressen: int = 500) -> list[NabijAdres]:
     """Alle adressen binnen `straal_m` meter van (lat, lon), via de PDOK reverse-
-    geocoder (gesorteerd op afstand). Gebruikt voor de opkoopbescherming-scan: welke
-    buuradressen liggen binnen de 50 m-ring. `max_adressen` begrenst het aantal dat
-    PDOK teruggeeft (ruim genoeg voor een 50 m-straal, ook in dichte wijken)."""
-    resp = _get_met_retry(
-        PDOK_REVERSE_URL,
-        params={
-            "lat": lat, "lon": lon, "rows": max_adressen, "type": "adres",
-            "fl": "weergavenaam,afstand,nummeraanduiding_id",
-        },
-        timeout=15,
-    )
-    docs = resp.json().get("response", {}).get("docs", [])
+    geocoder (gesorteerd op afstand, oplopend). Gebruikt voor de opkoopbescherming-
+    scan: welke buuradressen liggen binnen de 50 m-ring.
+
+    PDOK capt `rows` op 100, dus we pagineren met `start` in stappen van 100. Omdat
+    de resultaten op afstand gesorteerd zijn, stoppen we zodra we een adres zien dat
+    buiten de straal valt (al het verdere is dan ook buiten de straal). `max_adressen`
+    is een harde bovengrens tegen weglopen in extreem dichte gebieden."""
     uit: list[NabijAdres] = []
-    for d in docs:
-        afstand = d.get("afstand")
-        nid = d.get("nummeraanduiding_id")
-        if afstand is None or nid is None or float(afstand) > straal_m:
-            continue
-        uit.append(NabijAdres(
-            weergavenaam=d.get("weergavenaam", ""),
-            afstand_m=float(afstand),
-            nummeraanduiding_id=str(nid),
-        ))
+    start = 0
+    while start < max_adressen:
+        rows = min(PDOK_REVERSE_MAX_ROWS, max_adressen - start)
+        resp = _get_met_retry(
+            PDOK_REVERSE_URL,
+            params={
+                "lat": lat, "lon": lon, "rows": rows, "start": start,
+                "type": "adres", "fl": "weergavenaam,afstand,nummeraanduiding_id",
+            },
+            timeout=15,
+        )
+        docs = resp.json().get("response", {}).get("docs", [])
+        if not docs:
+            break
+        buiten_straal = False
+        for d in docs:
+            afstand = d.get("afstand")
+            if afstand is None:
+                continue
+            if float(afstand) > straal_m:
+                buiten_straal = True  # gesorteerd op afstand -> hierna alleen verder weg
+                break
+            nid = d.get("nummeraanduiding_id")
+            if nid is None:
+                continue
+            uit.append(NabijAdres(
+                weergavenaam=d.get("weergavenaam", ""),
+                afstand_m=float(afstand),
+                nummeraanduiding_id=str(nid),
+            ))
+        if buiten_straal or len(docs) < rows:
+            break
+        start += rows
     return uit
 
 
