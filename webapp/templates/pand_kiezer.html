@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_kamers, icon_euro %}
+{% block title %}Kies een pand{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Kies een pand</h1>
+</div>
+
+{% if panden %}
+<div class="grid" id="pand-grid">
+  {% for pand in panden %}
+  {% set tegelkleur = (pand.kleur|hexkleur) if current_user.kleurenherkenning else '' %}
+  <a class="card kamer-tile pand-sleepbaar {{ 'pand-getint' if tegelkleur }}"
+     href="{{ url_for('dashboard', pand_slug=pand.slug) }}" draggable="true" data-slug="{{ pand.slug }}"
+     {% if tegelkleur %}style="--tegel-kleur: {{ tegelkleur }}"{% endif %}>
+    <div class="stat-icon" style="margin-bottom:0.6rem">{{ icon_kamers() }}</div>
+    <h2>{{ pand.naam }}</h2>
+  </a>
+  {% endfor %}
+</div>
+
+<style>
+  /* Alleen een subtiele hint + feedback tijdens het slepen - verder blijft het
+     uiterlijk van de tegels ongewijzigd. */
+  .pand-sleepbaar { cursor: grab; }
+  .pand-sleepbaar.pand-sleept { opacity: 0.5; cursor: grabbing; }
+</style>
+<script>
+  (function () {
+    const grid = document.getElementById("pand-grid");
+    if (!grid) return;
+    let gesleept = null;
+    let verplaatst = false;
+
+    grid.querySelectorAll(".pand-sleepbaar").forEach(function (kaart) {
+      kaart.addEventListener("dragstart", function (e) {
+        gesleept = kaart;
+        verplaatst = false;
+        e.dataTransfer.effectAllowed = "move";
+        // setData is nodig in sommige browsers om slepen te starten.
+        try { e.dataTransfer.setData("text/plain", kaart.dataset.slug || ""); } catch (_) {}
+        requestAnimationFrame(function () { kaart.classList.add("pand-sleept"); });
+      });
+
+      kaart.addEventListener("dragover", function (e) {
+        e.preventDefault();  // nodig om drop toe te staan
+        e.dataTransfer.dropEffect = "move";
+        if (!gesleept || kaart === gesleept) return;
+        const rect = kaart.getBoundingClientRect();
+        const voor = e.clientX < rect.left + rect.width / 2;
+        grid.insertBefore(gesleept, voor ? kaart : kaart.nextSibling);
+        verplaatst = true;
+      });
+
+      // Na een echte versleep-actie de klik (navigeren naar het pand) eenmalig
+      // onderdrukken, zodat loslaten na slepen niet meteen het pand opent.
+      kaart.addEventListener("click", function (e) {
+        if (verplaatst) { e.preventDefault(); verplaatst = false; }
+      });
+    });
+
+    grid.addEventListener("dragend", function () {
+      if (gesleept) gesleept.classList.remove("pand-sleept");
+      gesleept = null;
+      if (!verplaatst) return;
+      const volgorde = Array.from(grid.querySelectorAll(".pand-sleepbaar"))
+        .map(function (k) { return k.dataset.slug; });
+      fetch("{{ url_for('pand_volgorde_opslaan') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volgorde: volgorde }),
+      }).catch(function () { /* stil: de volgorde staat lokaal al goed */ });
+    });
+  })();
+</script>
+
+<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-top:1.5rem; max-width:320px">
+  <div class="stat-icon">{{ icon_euro() }}</div>
+  <div>
+    <div class="stat-value">Totaal overzicht</div>
+    <div class="stat-label">winst &amp; betalingen alle panden</div>
+  </div>
+</a>
+{% else %}
+<div class="card">
+  <p>Je hebt nog geen toegang tot een pand. Vraag de beheerder om je toegang te geven.</p>
+</div>
+{% endif %}
+{% endblock %}

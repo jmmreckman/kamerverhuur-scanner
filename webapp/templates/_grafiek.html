@@ -1,0 +1,29 @@
+{% macro winst_grafiek(geschiedenis, hoogte=180, breedte=640) %}
+  {% if geschiedenis|length < 2 %}
+  <p class="muted">Nog te weinig datapunten voor een grafiek - er komt er automatisch eentje bij zodra deze
+     pagina weer bezocht wordt (of wekelijks vanzelf). De grafiek begint vandaag en wordt na verloop van
+     tijd steeds langer.</p>
+  {% else %}
+  {% set bedragen = geschiedenis|map(attribute='winst')|map('float')|list %}
+  {% set min_bedrag = bedragen|min %}
+  {% set max_bedrag = bedragen|max %}
+  {% set marge = 24 %}
+  {% set span = (max_bedrag - min_bedrag) if max_bedrag != min_bedrag else 1 %}
+  {% set stap = (breedte - 2 * marge) / (geschiedenis|length - 1) %}
+  <svg viewBox="0 0 {{ breedte }} {{ hoogte }}" style="width:100%; height:auto; max-width:{{ breedte }}px; color:var(--ok)" role="img" aria-label="Winst over tijd">
+    <polyline
+      fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+      points="{% for punt in geschiedenis %}{{ (marge + loop.index0 * stap)|round(1) }},{{ (hoogte - marge - ((punt.winst|float - min_bedrag) / span) * (hoogte - 2 * marge))|round(1) }}{% if not loop.last %} {% endif %}{% endfor %}"
+    />
+    {% for punt in geschiedenis %}
+    <circle cx="{{ (marge + loop.index0 * stap)|round(1) }}" cy="{{ (hoogte - marge - ((punt.winst|float - min_bedrag) / span) * (hoogte - 2 * marge))|round(1) }}" r="3" fill="currentColor">
+      <title>{{ punt.datum }}: €{{ punt.winst }}</title>
+    </circle>
+    {% endfor %}
+  </svg>
+  <div class="muted" style="display:flex; justify-content:space-between; font-size:0.85rem; max-width:{{ breedte }}px">
+    <span>{{ geschiedenis[0].datum }} (€{{ geschiedenis[0].winst }})</span>
+    <span>{{ geschiedenis[-1].datum }} (€{{ geschiedenis[-1].winst }})</span>
+  </div>
+  {% endif %}
+{% endmacro %}

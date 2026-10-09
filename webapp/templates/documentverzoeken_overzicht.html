@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Documentverzoeken - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Documentverzoeken</h1>
+  <p class="muted">{{ huidig_pand.naam }} - alle verzoeken om ID/paspoort en bewijs van inkomen aan te
+     leveren, met de status en het eventuele concept-huurcontract.</p>
+</div>
+
+<div class="card">
+  {% if verzoeken %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Naam</th><th>Kamer</th><th>Status</th><th></th></tr>
+    {% for v in verzoeken %}
+    <tr>
+      <td>{{ v.naam }}</td>
+      <td>{{ v.kamer }}</td>
+      <td>
+        {% if v.concept_contract_bestandsnaam %}
+          <span class="pil status-betaald">Concept-contract klaar</span>
+        {% elif v.ontvangen_op %}
+          <span class="pil pil-neutral">Documenten ontvangen</span>
+        {% elif v.verzonden_op %}
+          <span class="pil pil-neutral">Verzonden, nog geen reactie</span>
+        {% else %}
+          <span class="pil pil-neutral">Nog niet verzonden</span>
+        {% endif %}
+      </td>
+      <td><a href="{{ url_for('documentverzoek_status', pand_slug=huidig_pand.slug, sleutel=v.sleutel) }}">Bekijken</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen documenten opgevraagd - dat kan vanaf "Ingeplande bezichtigingen" bij de
+     gekozen kandidaat.</p>
+  {% endif %}
+</div>
+{% endblock %}

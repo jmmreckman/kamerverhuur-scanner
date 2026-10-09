@@ -1,0 +1,13 @@
+{
+  "_opmerking": "Dit is een voorbeeld. Maak echte gebruikers aan met scripts/create_user.py (zie README) - dat schrijft naar users.json (niet dit bestand).",
+  "jouwnaam": {
+    "wachtwoord_hash": "pbkdf2:sha256:...",
+    "alle_panden": true,
+    "panden": []
+  },
+  "justin": {
+    "wachtwoord_hash": "pbkdf2:sha256:...",
+    "alle_panden": false,
+    "panden": ["mahoniestraat"]
+  }
+}

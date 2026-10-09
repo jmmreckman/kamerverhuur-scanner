@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Ondertekend{% endblock %}
+{% block content %}
+<div class="card" style="max-width:36rem; margin:2rem auto; text-align:center;">
+  <div style="font-size:2.4rem; line-height:1;">✓</div>
+  <h1>Bedankt, je handtekening is vastgelegd</h1>
+  <p class="muted">Je hebt &ldquo;{{ meta.titel }}&rdquo; ondertekend
+    {% if ondertekenaar.ondertekend_op %}op {{ (ondertekenaar.ondertekend_op or '')[:16] | replace('T',' ') }}{% endif %}.</p>
+  <p>Zodra alle partijen hebben getekend, ontvangt iedereen het volledig ondertekende document per e-mail.</p>
+</div>
+{% endblock %}

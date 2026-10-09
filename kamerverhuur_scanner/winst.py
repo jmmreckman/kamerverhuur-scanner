@@ -1,0 +1,188 @@
+"""Winstberekening per pand: huurinkomsten (IN) min kosten (UIT) = winst.
+
+Kosten bestaan uit:
+- een vaste belastingpost van BELASTING_PER_MAAND per pand, met een optionele
+  handmatige override per pand (Pand.belasting_per_maand);
+- de instelbare onderhoudsreserve (Pand.onderhoud_reserve_per_maand, zelf in
+  te vullen bij "Panden beheren" - bewust geen automatische aanname/
+  percentage, dat is een financiële keuze van de beheerder zelf);
+- optionele handmatig ingevulde energiekosten (Pand.energiekosten_per_maand),
+  voor wie energie liever zelf opgeeft dan uit de automatisch herkende lasten;
+- automatisch herkende terugkerende vaste lasten (energie, internet, VvE,
+  hypotheek, etc.), gescand uit de uitgaande bunq-transacties van de
+  rekening van dit pand (zie herken_terugkerende_lasten()).
+
+Leegstand telt bewust niet mee (in de praktijk verwaarloosbaar voor deze
+panden). De huurinkomsten zijn de NOMINALE/verwachte maandhuur van elke
+bewoonde kamer (kale huur + servicekosten, Tenant.verwacht_bedrag) - dus wat
+een pand in principe elke maand oplevert als alles normaal betaald wordt,
+niet wat er déze specifieke maand daadwerkelijk is binnengekomen. Dat laatste
+kan vertekend zijn door een ingelopen achterstand, een net te laat betaalde
+maand, of iets dergelijks - de betaalcontrole (Betalingen-pagina) blijft de
+plek om dát te volgen, deze pagina laat zien wat het pand structureel
+oplevert (zie kamerverhuur_scanner.runner.verwachte_huurinkomsten_specificatie())."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from decimal import Decimal
+
+from .models import Payment
+
+BELASTING_PER_MAAND = Decimal("75.00")
+
+# Een tegenpartij moet in minstens dit aantal verschillende kalendermaanden
+# voorkomen om als "terugkerende vaste last" te tellen - onderscheidt een
+# vaste last (elke maand energie/internet/VvE/hypotheek) van een eenmalige
+# uitgave of toevallige overboeking.
+_TERUGKEREND_MINIMUM_MAANDEN = 3
+
+# Een tegenpartij mag gemiddeld niet vaker dan dit aantal keer per maand
+# voorkomen om nog als "vaste last" te tellen - een vaste last (energie,
+# water, internet, hypotheek, verzekering, abonnement) wordt normaal
+# gesproken precies 1x per maand afgeschreven, in tegenstelling tot bv.
+# boodschappenbezorging (Picnic/Flink) die vaak wekelijks (of vaker)
+# terugkomt bij dezelfde tegenpartij.
+_MAX_TRANSACTIES_PER_MAAND = 1.5
+
+# Hoe ver terug te scannen om terugkerende lasten te herkennen (~3 maanden
+# geeft precies genoeg kansen om 3x dezelfde tegenpartij terug te zien).
+SCAN_TERUGBLIK_DAGEN = 95
+
+
+@dataclass(frozen=True)
+class Last:
+    omschrijving: str
+    bedrag: Decimal  # gemiddeld bedrag per maand, over de gevonden periode
+    # Tegenpartij-sleutel (zie _tegenpartij_sleutel()) - gebruikt om deze last
+    # definitief te kunnen negeren (zie state.negeer_last(), webapp/app.py:
+    # winst_last_negeren()).
+    sleutel: str = ""
+
+
+@dataclass(frozen=True)
+class Inkomst:
+    """Eén regel van de huurinkomsten-specificatie op de winstpagina - de
+    NOMINALE/verwachte maandhuur van een bewoonde kamer (kale huur +
+    servicekosten), niet wat er die maand daadwerkelijk is binnengekomen.
+    Zie kamerverhuur_scanner.runner.verwachte_huurinkomsten_specificatie()."""
+    kamer: str
+    naam: str
+    verwacht_bedrag: Decimal
+
+
+@dataclass(frozen=True)
+class Winstoverzicht:
+    inkomsten_specificatie: list[Inkomst] = field(default_factory=list)
+    lasten: list[Last] = field(default_factory=list)
+    belasting: Decimal = BELASTING_PER_MAAND
+    onderhoud_reserve: Decimal = Decimal("0")
+    energiekosten: Decimal = Decimal("0")
+
+    @property
+    def inkomsten(self) -> Decimal:
+        return sum((regel.verwacht_bedrag for regel in self.inkomsten_specificatie), Decimal("0"))
+
+    @property
+    def totaal_lasten(self) -> Decimal:
+        return (
+            sum((last.bedrag for last in self.lasten), Decimal("0"))
+            + self.belasting + self.onderhoud_reserve + self.energiekosten
+        )
+
+    @property
+    def winst(self) -> Decimal:
+        return self.inkomsten - self.totaal_lasten
+
+
+def _tegenpartij_sleutel(betaling: Payment) -> str:
+    return (betaling.tegenpartij_iban or betaling.tegenpartij_naam or betaling.omschrijving).strip().lower()
+
+
+def herken_terugkerende_lasten(
+    uitgaande_betalingen: list[Payment], genegeerd: set[str] | None = None
+) -> list[Last]:
+    """Groepeert uitgaande betalingen op tegenpartij (IBAN, of anders naam/
+    omschrijving) en houdt alleen groepen over die:
+    - niet in `genegeerd` staan (zie state.laad_genegeerde_lasten() - een
+      beheerder kan een tegenpartij op de winstpagina definitief negeren,
+      bv. een overboeking naar zichzelf, ongeacht hoe vaak/regelmatig 'ie
+      terugkomt);
+    - in minstens `_TERUGKEREND_MINIMUM_MAANDEN` verschillende kalendermaanden
+      voorkomen (sluit een eenmalige uitgave of toevallige overboeking uit);
+    - gemiddeld niet vaker dan `_MAX_TRANSACTIES_PER_MAAND` keer per maand
+      voorkomen (sluit bv. wekelijkse boodschappenbezorging uit, die anders
+      qua "komt elke maand terug" op een vaste last zou lijken).
+
+    Bedrag per last = gemiddelde van de gevonden bedragen (vangt kleine
+    schommelingen op, bv. een aangepast energie-voorschot), gesorteerd van
+    hoog naar laag."""
+    genegeerd = genegeerd or set()
+    groepen: dict[str, list[Payment]] = {}
+    for betaling in uitgaande_betalingen:
+        sleutel = _tegenpartij_sleutel(betaling)
+        if sleutel in genegeerd:
+            continue
+        groepen.setdefault(sleutel, []).append(betaling)
+
+    lasten = []
+    for sleutel, reeks in groepen.items():
+        maanden = {betaling.datum.strftime("%Y-%m") for betaling in reeks}
+        if len(maanden) < _TERUGKEREND_MINIMUM_MAANDEN:
+            continue
+        if len(reeks) / len(maanden) > _MAX_TRANSACTIES_PER_MAAND:
+            continue
+        gemiddeld = sum((betaling.bedrag for betaling in reeks), Decimal("0")) / len(reeks)
+        laatste = reeks[-1]
+        omschrijving = laatste.tegenpartij_naam or laatste.omschrijving or "Onbekend"
+        lasten.append(Last(omschrijving=omschrijving, bedrag=gemiddeld.quantize(Decimal("0.01")), sleutel=sleutel))
+    return sorted(lasten, key=lambda last: last.bedrag, reverse=True)
+
+
+def bereken_winst(
+    inkomsten_specificatie: list[Inkomst], lasten: list[Last], onderhoud_reserve: Decimal | None,
+    energiekosten: Decimal | None = None, belasting: Decimal | None = None,
+) -> Winstoverzicht:
+    """`belasting` is een optionele handmatige override van de vaste
+    belastingpost; None valt terug op BELASTING_PER_MAAND (€75). `energiekosten`
+    is een optionele handmatig ingevulde vaste energiepost; None = €0."""
+    return Winstoverzicht(
+        inkomsten_specificatie=inkomsten_specificatie, lasten=lasten,
+        onderhoud_reserve=onderhoud_reserve or Decimal("0"),
+        energiekosten=energiekosten or Decimal("0"),
+        belasting=BELASTING_PER_MAAND if belasting is None else belasting,
+    )
+
+
+def verdeelde_winst(winst: Decimal, aantal_beheerders: int) -> Decimal:
+    """Winst van een pand met meerdere beheerders wordt gelijk verdeeld (1
+    beheerder = volle winst); zie webapp/app.py: _aantal_beheerders()."""
+    if aantal_beheerders <= 1:
+        return winst
+    return (winst / aantal_beheerders).quantize(Decimal("0.01"))
+
+
+def gecombineerde_winst_over_tijd(
+    reeksen: dict[str, list[dict]], aantal_beheerders: dict[str, int]
+) -> list[dict]:
+    """Combineert de winst-geschiedenis van meerdere panden (zie
+    state.laad_winst_geschiedenis(), sowieso al oplopend gesorteerd op datum)
+    tot 1 tijdlijn met de gedeelde totale winst per datum, voor de
+    "totale winst alle panden"-grafiek op de pandkiezerpagina.
+
+    Voor elk pand wordt op elke datum het laatst bekende punt tot en met die
+    datum gebruikt (forward-fill) en gedeeld door het aantal beheerders van
+    dat pand (zie verdeelde_winst()) - zo tellen panden die niet exact op
+    dezelfde dag een nieuw datapunt kregen toch correct mee. Panden zonder
+    enig datapunt tellen nergens in mee."""
+    alle_datums = sorted({punt["datum"] for reeks in reeksen.values() for punt in reeks})
+    resultaat = []
+    for datum in alle_datums:
+        totaal = Decimal("0")
+        for pand_slug, reeks in reeksen.items():
+            bekend_tot_nu = [punt for punt in reeks if punt["datum"] <= datum]
+            if not bekend_tot_nu:
+                continue
+            laatste_winst = Decimal(bekend_tot_nu[-1]["winst"])
+            totaal += verdeelde_winst(laatste_winst, aantal_beheerders.get(pand_slug, 1))
+        resultaat.append({"datum": datum, "winst": str(totaal.quantize(Decimal("0.01")))})
+    return resultaat

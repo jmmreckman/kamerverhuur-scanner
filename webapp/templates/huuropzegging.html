@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Huuropzegging doorgeven - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Huuropzegging doorgeven</h1>
+  <p class="muted">Geef door dat een huurder de kamer heeft opgezegd (of dat een tijdelijk
+     contract een nieuwe einddatum krijgt). De nieuwe einddatum wordt direct in de sheet
+     verwerkt, zodat de aanzeg-waarschuwing en de "komt leeg"-tegel op het dashboard er
+     automatisch rekening mee houden.</p>
+</div>
+
+<div class="card">
+  {% if tenants %}
+  <form method="post">
+    <label>Kamer / huurder
+      <select name="kamer" required>
+        <option value="">- kies een huurder -</option>
+        {% for k in tenants %}
+        <option value="{{ k.kamer }}">Kamer {{ k.kamer }} ({{ k.naam }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Nieuwe einddatum
+      <input type="date" name="einddatum" required>
+    </label>
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('dashboard', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+  </form>
+  {% else %}
+  <p class="muted">Geen huidige huurders om een opzegging voor door te geven.</p>
+  {% endif %}
+</div>
+{% endblock %}

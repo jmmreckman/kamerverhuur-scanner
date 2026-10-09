@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Aanmeldingen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Aanmeldingen</h1>
+  <p class="muted">Reacties van geïnteresseerden via de publieke aanbodpagina.</p>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('aanmeldingen_wissen', pand_slug=huidig_pand.slug) }}"
+        onsubmit="return confirm('Alle aanmeldingen wissen? Dit kan niet ongedaan gemaakt worden.')"
+        style="display:inline">
+    <button class="btn btn-secondary" type="submit">Lijst wissen</button>
+  </form>
+  <a class="btn btn-secondary" href="{{ url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Bekijk ingeplande bezichtigingen</a>
+  <a class="btn btn-secondary" href="{{ url_for('documentverzoeken_overzicht', pand_slug=huidig_pand.slug) }}">Documentverzoeken bekijken</a>
+  <a class="btn btn-secondary" href="{{ url_for('licht_huurders_in', pand_slug=huidig_pand.slug) }}">Licht huurders in</a>
+</div>
+
+<div class="card">
+  {% if rijen %}
+  <form method="post" action="{{ url_for('bezichtiging_formulier', pand_slug=huidig_pand.slug) }}">
+  <div class="tabel-scroll">
+  <table>
+    <tr>
+      <th>Uitnodigen</th><th>Ingepland</th>
+      <th>Datum</th><th>Kamer</th><th>Naam</th><th>Email</th><th>Telefoon</th><th>Adres</th>
+      <th>Studie</th><th>Studentnr.</th><th>Ingangsdatum</th><th>Huurduur</th>
+      <th>Inkomstenbron</th><th>Inkomsten</th><th>Borgsteller</th><th>Bezichtiging</th>
+      <th>Video-bel nr.</th><th>Bewijs inschrijving</th>
+      <th>Borgsteller naam</th><th>Borgsteller relatie</th><th>Borgsteller email</th><th>Actie</th>
+    </tr>
+    {% for r in rijen %}
+    <tr>
+      <td>
+        <input type="checkbox" name="aanmelders"
+          value="{{ [r[1], r[2], r[3], r[4], r[13], r[14]] | join('|') }}" style="width:auto">
+      </td>
+      <td>{% if (r[1], r[2], r[3]) in ingepland %}<span class="pil status-betaald">✓ Ingepland</span>{% endif %}</td>
+      {% for cel in r %}
+        {% if loop.index0 == 15 and cel %}
+          <td><a href="{{ cel }}" target="_blank" rel="noopener">Bekijken</a></td>
+        {% else %}
+          <td>{{ cel }}</td>
+        {% endif %}
+      {% endfor %}
+      <td>
+        <a class="btn btn-secondary" href="{{ url_for('contract_nieuw', pand_slug=huidig_pand.slug,
+          kamer=r[1], huurder_naam=r[2], email=r[3], studentnummer=r[7], studierichting=r[6],
+          ingangsdatum=r[8], borgsteller_naam=r[16], borgsteller_relatie=r[17], borgsteller_email=r[18]) }}">Contract maken</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+    <button class="btn" type="submit">Plan bezichtiging in</button>
+    <button class="btn btn-secondary" type="submit"
+      formaction="{{ url_for('bezichtiging_toevoegen_formulier', pand_slug=huidig_pand.slug) }}">Bezichtigers
+      toevoegen aan bestaande lijst</button>
+    <button class="btn btn-secondary" type="submit"
+      formaction="{{ url_for('afwijzing_formulier', pand_slug=huidig_pand.slug) }}">Stuur afwijzing</button>
+  </div>
+  </form>
+  {% else %}
+  <p class="muted">Nog geen aanmeldingen.</p>
+  {% endif %}
+</div>
+{% endblock %}

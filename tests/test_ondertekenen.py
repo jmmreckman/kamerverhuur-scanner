@@ -1,0 +1,394 @@
+"""Unit-tests voor webapp/ondertekenen.py: het berekenen van het
+betaalverzoek, het opzetten/bijhouden van een ondertekenronde, en het
+opbouwen van het handtekeningenblok."""
+import base64
+from datetime import date
+from decimal import Decimal
+
+from kamerverhuur_scanner.models import Pand, Verhuurder
+from webapp import ondertekenen
+
+
+def _pand(**overrides) -> Pand:
+    basis = dict(
+        slug="mahoniestraat", naam="Mahoniestraat 15", google_sheet_id="x",
+        google_sheet_worksheet="Huurders", history_worksheet="Historie",
+        bunq_rekening_iban="NL81BUNQ2163127125",
+        verhuurders=[
+            Verhuurder(naam="Jurian Reckman", adres="Batavierenplantsoen 33, Haarlem"),
+            Verhuurder(naam="Justin Winkelman", adres="Rijksstraatweg 98, Haarlem"),
+        ],
+    )
+    basis.update(overrides)
+    return Pand(**basis)
+
+
+def _metadata(**overrides) -> dict:
+    basis = dict(
+        email="bence@example.com", huurder_naam="Bence Neumayer", kamer="1", borg="1000,00",
+        huurprijs="919,00", ingangsdatum_iso="2026-07-10", borgsteller_naam="", borgsteller_email="",
+    )
+    basis.update(overrides)
+    return basis
+
+
+# --- bereken_betaalverzoek ---
+
+
+def test_bereken_betaalverzoek_ingangsdatum_op_de_eerste_telt_hele_maand():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("900.00"), borg=Decimal("0"), ingangsdatum=date(2026, 2, 1)
+    )
+    assert betaalverzoek["totaal"] == Decimal("900.00")  # februari 2026 heeft 28 dagen, volledige maand
+
+
+def test_bereken_betaalverzoek_ingangsdatum_op_laatste_dag_telt_1_dag():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("500.00"), ingangsdatum=date(2026, 7, 31)
+    )
+    verwachte_pro_rata = (Decimal("930.00") * 1 / 31).quantize(Decimal("0.01"))
+    assert betaalverzoek["totaal"] == Decimal("500.00") + verwachte_pro_rata
+
+
+def test_bereken_betaalverzoek_geeft_volledige_opbouw():
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    assert betaalverzoek["borg"] == Decimal("1000.00")
+    assert betaalverzoek["pro_rata_huur"] == Decimal("660.00")
+    assert betaalverzoek["dagen_resterend"] == 22
+    assert betaalverzoek["ingangsdatum"] == date(2026, 7, 10)
+    assert betaalverzoek["laatste_dag_maand"] == date(2026, 7, 31)
+    assert betaalverzoek["totaal"] == Decimal("1660.00")
+
+
+# --- bouw_betaal_en_tekenmail ---
+
+
+def test_bouw_betaal_en_tekenmail_toont_het_sommetje():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_betaal_en_tekenmail(pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek)
+    assert "EUR 1.660,00 in total" in mail["tekst"]
+    assert "Security deposit: EUR 1.000,00" in mail["tekst"]
+    assert "Pro-rated rent from 10-07-2026 to 31-07-2026 (22 days): EUR 660,00" in mail["tekst"]
+    assert "Bold" in mail["tekst"]
+
+
+def test_bouw_betaal_en_tekenmail_zonder_bold_slot_noemt_bold_niet():
+    pand = _pand(heeft_bold_slot=False)
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_betaal_en_tekenmail(pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek)
+    assert "Bold" not in mail["tekst"]
+    assert "we will send you the fully signed agreement." in mail["tekst"]
+
+
+# --- bouw_huurder_herinnering ---
+
+
+def test_bouw_huurder_herinnering_beide_aangevinkt_is_dubbele_herinnering():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=True, betaal_herinnering=True,
+    )
+    assert "signature & payment" in mail["onderwerp"]
+    assert "We have not yet received your payment" in mail["tekst"]
+    assert "We have not yet received your signature" in mail["tekst"]
+    assert "https://steenhub.nl/tekenen/abc" in mail["tekst"]
+
+
+def test_bouw_huurder_herinnering_alleen_onderteken_bevestigt_betaling():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=True, betaal_herinnering=False,
+    )
+    assert "signature required" in mail["onderwerp"]
+    assert "We have received your payment" in mail["tekst"]
+    assert "thank you." in mail["tekst"]
+    assert "We have not yet received your signature" in mail["tekst"]
+
+
+def test_bouw_huurder_herinnering_alleen_betaal_bevestigt_ondertekening():
+    pand = _pand()
+    betaalverzoek = ondertekenen.bereken_betaalverzoek(
+        huurprijs=Decimal("930.00"), borg=Decimal("1000.00"), ingangsdatum=date(2026, 7, 10)
+    )
+    mail = ondertekenen.bouw_huurder_herinnering(
+        pand, _metadata(), "https://steenhub.nl/tekenen/abc", betaalverzoek,
+        onderteken_herinnering=False, betaal_herinnering=True,
+    )
+    assert "payment required" in mail["onderwerp"]
+    assert "You have already signed the rental agreement" in mail["tekst"]
+    assert "We have not yet received your payment" in mail["tekst"]
+
+
+# --- bouw_tekenmail_overig_herinnering ---
+
+
+def test_bouw_tekenmail_overig_herinnering_is_altijd_een_herinnering():
+    pand = _pand()
+    mail = ondertekenen.bouw_tekenmail_overig_herinnering(
+        "verhuurder", "Jurian Reckman", pand, _metadata(), "https://steenhub.nl/tekenen/def"
+    )
+    assert "Reminder" in mail["onderwerp"]
+    assert "we have not yet received your signature" in mail["tekst"]
+    assert "https://steenhub.nl/tekenen/def" in mail["tekst"]
+
+
+# --- bouw_getekend_contract_mail ---
+
+
+def test_bouw_getekend_contract_mail_huurder_engels_met_gemeente_hint():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(pand, _metadata(), "huurder", "Bence Neumayer")
+    assert mail["onderwerp"] == "Signed rental agreement - room 1, Mahoniestraat 15"
+    assert mail["tekst"].startswith("Dear Bence Neumayer,")
+    assert "register (inschrijven)" in mail["tekst"]
+
+
+def test_bouw_getekend_contract_mail_borgsteller_engels_eigen_administratie():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(
+        pand, _metadata(borgsteller_naam="Ouder van Bence"), "borgsteller", "Ouder van Bence",
+    )
+    assert mail["tekst"].startswith("Dear Ouder van Bence,")
+    assert "own records as guarantor" in mail["tekst"]
+    assert "Bence Neumayer" in mail["tekst"]  # noemt de huurder
+
+
+def test_bouw_getekend_contract_mail_verhuurder_nederlands_met_documenten_link():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(
+        pand, _metadata(), "verhuurder", "Jurian Reckman",
+        documenten_url="https://steenhub.nl/pand/mahoniestraat/documenten/Huidige%20huurders/Bence%20Neumayer",
+    )
+    assert mail["onderwerp"] == "Getekend huurcontract - kamer 1, Mahoniestraat 15"
+    assert mail["tekst"].startswith("Beste Jurian Reckman,")
+    assert "Bence Neumayer" in mail["tekst"]
+    assert "https://steenhub.nl/pand/mahoniestraat/documenten/Huidige%20huurders/Bence%20Neumayer" in mail["tekst"]
+
+
+def test_bouw_getekend_contract_mail_verhuurder_zonder_documenten_url():
+    pand = _pand()
+    mail = ondertekenen.bouw_getekend_contract_mail(pand, _metadata(), "verhuurder", "Justin Winkelman")
+    assert mail["tekst"].startswith("Beste Justin Winkelman,")
+    assert "Documenten" not in mail["tekst"]
+
+
+# --- start_ondertekenronde ---
+
+
+def test_start_ondertekenronde_bevat_huurder_en_alle_verhuurders(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    rollen = [(o["rol"], o["naam"], o["email"]) for o in ronde["ondertekenaars"]]
+    assert ("huurder", "Bence Neumayer", "bence@example.com") in rollen
+    assert ("verhuurder", "Jurian Reckman", "jurian@example.com") in rollen
+    assert ("verhuurder", "Justin Winkelman", "justin@example.com") in rollen
+    assert len(ronde["ondertekenaars"]) == 3  # geen borgsteller in deze metadata
+    # elke ondertekenaar heeft een unieke token
+    tokens = [o["token"] for o in ronde["ondertekenaars"]]
+    assert len(set(tokens)) == len(tokens)
+
+
+def test_start_ondertekenronde_voegt_borgsteller_toe_indien_bekend(tmp_path):
+    metadata = _metadata(borgsteller_naam="Tamás Neumayer", borgsteller_email="tamas@example.com")
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", metadata,
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    borgsteller = next(o for o in ronde["ondertekenaars"] if o["rol"] == "borgsteller")
+    assert borgsteller["naam"] == "Tamás Neumayer"
+    assert borgsteller["email"] == "tamas@example.com"
+
+
+def test_start_ondertekenronde_is_idempotent(tmp_path):
+    eerste = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    tweede = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    # dezelfde tokens, geen nieuwe ronde/tokens aangemaakt bij een 2e aanroep
+    assert eerste["ondertekenaars"] == tweede["ondertekenaars"]
+
+
+def test_zoek_via_token_vindt_de_juiste_ondertekenaar(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    token = ronde["ondertekenaars"][0]["token"]
+    gevonden = ondertekenen.zoek_via_token(token, str(tmp_path))
+    assert gevonden is not None
+    pand_slug, bestandsnaam, ondertekenaar = gevonden
+    assert pand_slug == "mahoniestraat"
+    assert bestandsnaam == "contract.html"
+    assert ondertekenaar["token"] == token
+
+
+def test_zoek_via_token_onbekende_token_geeft_none(tmp_path):
+    assert ondertekenen.zoek_via_token("onbekend-token", str(tmp_path)) is None
+
+
+# --- markeer_ondertekend / alles_getekend ---
+
+
+def test_markeer_ondertekend_zet_tijdstip_ip_en_naam(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    bijgewerkt = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path),
+        ip_adres="203.0.113.5", user_agent="Testbrowser/1.0", getekende_naam="Bence Neumayer",
+    )
+    huurder = next(o for o in bijgewerkt["ondertekenaars"] if o["id"] == huurder_id)
+    assert huurder["ondertekend_op"] is not None
+    assert huurder["ip_adres"] == "203.0.113.5"
+    assert huurder["user_agent"] == "Testbrowser/1.0"
+    assert huurder["getekende_naam"] == "Bence Neumayer"
+    assert ondertekenen.alles_getekend(bijgewerkt) is False  # verhuurders hebben nog niet getekend
+
+
+def test_markeer_ondertekend_is_idempotent_overschrijft_niet(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    eerste = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path), "1.1.1.1", "UA-1", "Eerste Naam"
+    )
+    tweede = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path), "2.2.2.2", "UA-2", "Tweede Naam"
+    )
+    huurder = next(o for o in tweede["ondertekenaars"] if o["id"] == huurder_id)
+    eerste_huurder = next(o for o in eerste["ondertekenaars"] if o["id"] == huurder_id)
+    assert huurder["ip_adres"] == "1.1.1.1"
+    assert huurder["ondertekend_op"] == eerste_huurder["ondertekend_op"]
+
+
+def test_alles_getekend_true_als_iedereen_getekend_heeft(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    for o in ronde["ondertekenaars"]:
+        ronde = ondertekenen.markeer_ondertekend(
+            "mahoniestraat", "contract.html", o["id"], str(tmp_path), "1.1.1.1", "UA", o["naam"]
+        )
+    assert ondertekenen.alles_getekend(ronde) is True
+
+
+# --- handtekening_base64_uit_data_url ---
+
+_GELDIGE_PNG_DATA_URL = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
+
+
+def test_handtekening_base64_uit_data_url_geldig():
+    payload = ondertekenen.handtekening_base64_uit_data_url(_GELDIGE_PNG_DATA_URL)
+    assert payload is not None
+    assert payload in _GELDIGE_PNG_DATA_URL
+
+
+def test_handtekening_base64_uit_data_url_leeg_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("") is None
+    assert ondertekenen.handtekening_base64_uit_data_url(None) is None
+
+
+def test_handtekening_base64_uit_data_url_verkeerd_prefix_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("data:text/plain;base64,aGFsbG8=") is None
+    assert ondertekenen.handtekening_base64_uit_data_url("niet-een-data-url") is None
+
+
+def test_handtekening_base64_uit_data_url_ongeldige_base64_geeft_none():
+    assert ondertekenen.handtekening_base64_uit_data_url("data:image/png;base64,!!!niet-valide!!!") is None
+
+
+def test_handtekening_base64_uit_data_url_te_groot_geeft_none():
+    groot_payload = base64.b64encode(b"x" * (ondertekenen._MAX_HANDTEKENING_BYTES + 1)).decode()
+    assert ondertekenen.handtekening_base64_uit_data_url("data:image/png;base64," + groot_payload) is None
+
+
+# --- bouw_handtekeningen_html ---
+
+
+def test_bouw_handtekeningen_html_escaped_getypte_naam(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    ronde = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path),
+        "203.0.113.5", "UA", '<script>alert(1)</script>',
+    )
+    html = ondertekenen.bouw_handtekeningen_html(ronde)
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "203.0.113.5" in html
+
+
+def test_bouw_handtekeningen_html_toont_getekende_afbeelding(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    payload = ondertekenen.handtekening_base64_uit_data_url(_GELDIGE_PNG_DATA_URL)
+    ronde = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path),
+        "203.0.113.5", "UA", "Bence Neumayer", payload,
+    )
+    html = ondertekenen.bouw_handtekeningen_html(ronde)
+    assert f'src="data:image/png;base64,{payload}"' in html
+
+
+def test_bouw_handtekeningen_html_zonder_afbeelding_toont_geen_img_tag(tmp_path):
+    ronde = ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    huurder_id = ronde["ondertekenaars"][0]["id"]
+    ronde = ondertekenen.markeer_ondertekend(
+        "mahoniestraat", "contract.html", huurder_id, str(tmp_path), "203.0.113.5", "UA", "Bence Neumayer",
+    )
+    html = ondertekenen.bouw_handtekeningen_html(ronde)
+    assert "<img" not in html
+
+
+# --- markeer_verzonden ---
+
+
+def test_markeer_verzonden_zet_tijdstip(tmp_path):
+    ondertekenen.start_ondertekenronde(
+        _pand(), "mahoniestraat", "contract.html", _metadata(),
+        verhuurder_emails=["jurian@example.com", "justin@example.com"], state_dir=str(tmp_path),
+    )
+    assert ondertekenen.lees_ondertekenronde("mahoniestraat", "contract.html", str(tmp_path))["verzonden_op"] is None
+    ronde = ondertekenen.markeer_verzonden("mahoniestraat", "contract.html", str(tmp_path))
+    assert ronde["verzonden_op"] is not None
+    assert ondertekenen.lees_ondertekenronde(
+        "mahoniestraat", "contract.html", str(tmp_path)
+    )["verzonden_op"] == ronde["verzonden_op"]
