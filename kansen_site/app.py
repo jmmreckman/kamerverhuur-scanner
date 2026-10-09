@@ -26,7 +26,8 @@ from pathlib import Path
 
 from .throttle import LoginThrottle
 
-from rotterdam_scanner import den_haag, geocode, mail_voorkeuren, pipeline, rente_update, vergunningenindex
+from rotterdam_scanner import den_haag, geocode, mail_voorkeuren, opkoop_scan, pipeline, rente_update, vergunningenindex
+from rotterdam_scanner.mailer import send_mail
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
@@ -884,6 +885,45 @@ def create_app(config: Config | None = None) -> Flask:
         overig = [a for a in lijst if a.get("id") != adres_id]
         _schrijf_test_adressen(overig)
         return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
+
+    # --- Opkoopbescherming-scan (50m-straal rond een adres, WOZ boven/onder grens) ---
+    # Telt binnen 50 m hoeveel woningen een WOZ boven/onder de opkoopbescherming-grens
+    # hebben (= inschatting concurrentie voor mogelijke vergunningaanvragen). De scan
+    # duurt even (WOZ per adres opvragen), dus draait op de achtergrond en mailt het
+    # resultaat. Beheerder-only.
+    @app.route("/opkoop-scan", methods=["POST"])
+    @beheerder_required
+    def opkoop_scan_starten():
+        data = request.get_json(silent=True) or {}
+        adres = (data.get("adres") or "").strip()
+        if not adres:
+            return jsonify({"fout": "Geen adres opgegeven."}), 400
+        try:
+            res = geocode.geocode_vrij_landelijk(adres)
+        except geocode.GeocodeError:
+            return jsonify({"fout": f"Adres niet gevonden: '{adres}'. Vul het volledig in (bv. 'Pompstraat 42, Rotterdam')."}), 400
+        except Exception:
+            return jsonify({"fout": "Adres opzoeken mislukt (PDOK niet bereikbaar). Probeer het nog eens."}), 502
+        if res.lat is None or res.lon is None:
+            return jsonify({"fout": "Geen coördinaat gevonden voor dit adres."}), 400
+
+        grens = int(config.opkoopbescherming_woz_grens)
+        centrum, lat, lon = res.weergavenaam, res.lat, res.lon
+        ontvanger = "jmmreckman@gmail.com"
+
+        def _werk():
+            try:
+                resultaat = opkoop_scan.scan(lat, lon, grens, centrum)
+                onderwerp, html_body, text_body = opkoop_scan.bouw_mail(resultaat)
+                send_mail(config, onderwerp, html_body, text_body, recipients=[ontvanger])
+                app.logger.info("Opkoop-scan %s: %d boven / %d onder grens; mail naar %s",
+                                centrum, len(resultaat.boven), len(resultaat.onder), ontvanger)
+            except Exception:
+                app.logger.exception("Opkoop-scan mislukt voor %s", centrum)
+
+        threading.Thread(target=_werk, daemon=True).start()
+        return jsonify({"ok": True,
+                        "melding": f"Scan gestart voor {centrum} (50 m-straal). Het resultaat wordt gemaild naar {ontvanger}."})
 
     @app.route("/data-analyse")
     @login_required

@@ -33,6 +33,9 @@ const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
 const testAdresInvoerEl = document.getElementById("test-adres-invoer");
 const testAdresKnop = document.getElementById("test-adres-knop");
 const testAdresStatusEl = document.getElementById("test-adres-status");
+const opkoopScanInvoerEl = document.getElementById("opkoop-scan-invoer");
+const opkoopScanKnop = document.getElementById("opkoop-scan-knop");
+const opkoopScanStatusEl = document.getElementById("opkoop-scan-status");
 
 let alleKansen = [];
 const markerPerId = new Map();
@@ -648,6 +651,41 @@ if (testAdresKnop && testAdresInvoerEl) {
     if (e.key === "Enter") { e.preventDefault(); voegTestAdresToe(); }
   });
   laadTestAdressen();
+}
+
+// Opkoopbescherming-scan: adres -> alle adressen binnen 50 m scannen op WOZ
+// boven/onder de grens; het resultaat wordt gemaild (de scan draait op de
+// server in de achtergrond, dus hier alleen starten + de melding tonen).
+async function startOpkoopScan() {
+  const adres = (opkoopScanInvoerEl.value || "").trim();
+  if (!adres) return;
+  opkoopScanKnop.disabled = true;
+  opkoopScanStatusEl.textContent = "Scan starten...";
+  try {
+    const resp = await fetch("/opkoop-scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adres }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      opkoopScanStatusEl.textContent = data.fout || "Scan starten mislukt.";
+      return;
+    }
+    opkoopScanInvoerEl.value = "";
+    opkoopScanStatusEl.textContent = data.melding || "Scan gestart; resultaat komt per mail.";
+  } catch (err) {
+    opkoopScanStatusEl.textContent = "Scan starten mislukt - probeer het nog eens.";
+  } finally {
+    opkoopScanKnop.disabled = false;
+  }
+}
+
+if (opkoopScanKnop && opkoopScanInvoerEl) {
+  opkoopScanKnop.addEventListener("click", startOpkoopScan);
+  opkoopScanInvoerEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); startOpkoopScan(); }
+  });
 }
 
 laadKansen();

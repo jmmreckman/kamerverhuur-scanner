@@ -169,6 +169,45 @@ def geocode_vrij_landelijk(adres: str) -> GeocodeResult:
     return _doc_naar_resultaat(doc, adres)
 
 
+PDOK_REVERSE_URL = "https://api.pdok.nl/bzk/locatieserver/search/v3_1/reverse"
+
+
+@dataclass(frozen=True)
+class NabijAdres:
+    weergavenaam: str
+    afstand_m: float
+    nummeraanduiding_id: str
+
+
+def adressen_binnen_straal(lat: float, lon: float, straal_m: float = 50.0,
+                           max_adressen: int = 250) -> list[NabijAdres]:
+    """Alle adressen binnen `straal_m` meter van (lat, lon), via de PDOK reverse-
+    geocoder (gesorteerd op afstand). Gebruikt voor de opkoopbescherming-scan: welke
+    buuradressen liggen binnen de 50 m-ring. `max_adressen` begrenst het aantal dat
+    PDOK teruggeeft (ruim genoeg voor een 50 m-straal, ook in dichte wijken)."""
+    resp = _get_met_retry(
+        PDOK_REVERSE_URL,
+        params={
+            "lat": lat, "lon": lon, "rows": max_adressen, "type": "adres",
+            "fl": "weergavenaam,afstand,nummeraanduiding_id",
+        },
+        timeout=15,
+    )
+    docs = resp.json().get("response", {}).get("docs", [])
+    uit: list[NabijAdres] = []
+    for d in docs:
+        afstand = d.get("afstand")
+        nid = d.get("nummeraanduiding_id")
+        if afstand is None or nid is None or float(afstand) > straal_m:
+            continue
+        uit.append(NabijAdres(
+            weergavenaam=d.get("weergavenaam", ""),
+            afstand_m=float(afstand),
+            nummeraanduiding_id=str(nid),
+        ))
+    return uit
+
+
 def geocode_vrij(adres: str, woonplaats: str = "Rotterdam") -> GeocodeResult:
     """Geocodeert een vrije adrestekst (straat + huisnummer als één string, bv.
     'C.P.Tielestraat 30B') binnen een woonplaats. Gebruikt voor adressen die niet
