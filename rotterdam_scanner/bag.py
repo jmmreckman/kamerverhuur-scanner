@@ -15,6 +15,21 @@ BAG_WFS_URL = "https://service.pdok.nl/lv/bag/wfs/v2_0"
 class BagGegevens:
     oppervlakte: int | None
     bouwjaar: int | None
+    # Het BAG-gebruiksdoel van het verblijfsobject, genormaliseerd naar één string
+    # (bij meerdere doelen komma-gescheiden), bv. "woonfunctie", "industriefunctie",
+    # "winkelfunctie". Voor de concurrentie-scan: alleen een woonfunctie is relevant;
+    # een ander gebruiksdoel maakt kamerverhuur zeer onwaarschijnlijk.
+    gebruiksdoel: str | None = None
+
+
+def _gebruiksdoel_tekst(waarde) -> str | None:
+    """Normaliseert het gebruiksdoel-veld naar één string. PDOK levert dit soms als
+    lijst (meerdere doelen) en soms als losse string."""
+    if waarde is None:
+        return None
+    if isinstance(waarde, (list, tuple)):
+        return ", ".join(str(v) for v in waarde if v) or None
+    return str(waarde) or None
 
 
 def fetch_bag_gegevens(adresseerbaarobject_id: str) -> BagGegevens | None:
@@ -42,4 +57,8 @@ def fetch_bag_gegevens(adresseerbaarobject_id: str) -> BagGegevens | None:
     if not features:
         return None
     properties = features[0]["properties"]
-    return BagGegevens(oppervlakte=properties.get("oppervlakte"), bouwjaar=properties.get("bouwjaar"))
+    return BagGegevens(
+        oppervlakte=properties.get("oppervlakte"),
+        bouwjaar=properties.get("bouwjaar"),
+        gebruiksdoel=_gebruiksdoel_tekst(properties.get("gebruiksdoel")),
+    )

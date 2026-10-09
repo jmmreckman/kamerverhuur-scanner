@@ -35,7 +35,7 @@ def test_trechter_volledige_funnel():
         woz_func=lambda nid: woz[nid],
         vergunning_func=lambda rx, ry: binnen[rd_naar_nid[(rx, ry)]],
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
     )
     assert [a.weergavenaam for a in r.afgevallen_opkoop] == ["A 1"]       # WOZ <= grens
     assert [a.weergavenaam for a in r.afgevallen_50m] == ["B 2"]          # binnen 50m
@@ -54,7 +54,7 @@ def test_niet_in_opkoopwijk_slaat_woz_over():
         woz_func=lambda nid: woz_calls.append(nid) or 100,
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: False,  # niet beschermd
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
     )
     assert r.in_opkoopwijk is False
     assert r.afgevallen_opkoop == []
@@ -70,7 +70,7 @@ def test_te_koop_func_markeert_pool():
         woz_func=lambda nid: 600_000,
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
         te_koop_func=lambda naam, grens: "2026-05-01",
     )
     assert r.archief_doorzocht is True
@@ -90,7 +90,7 @@ def test_pool_te_klein_markering():
         woz_func=lambda nid: 600_000,
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: bag[aobj],
+        bag_func=lambda aobj: (bag[aobj], "woonfunctie"),
     )
     assert [a.weergavenaam for a in r.pool_te_klein] == ["A 1"]  # 60 < 72, 90 niet
 
@@ -103,7 +103,7 @@ def test_woz_onbereikbaar_als_alles_none_in_opkoopwijk():
         woz_func=lambda nid: None,
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
     )
     assert r.woz_onbereikbaar is True
 
@@ -116,10 +116,83 @@ def test_gis_onbereikbaar_als_alles_none():
         woz_func=lambda nid: 600_000,
         vergunning_func=lambda rx, ry: None,  # ArcGIS onbereikbaar
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
     )
     assert r.gis_onbereikbaar is True
     assert len(r.pool) == 1  # op onzekerheid sluiten we niet uit
+
+
+def test_ander_gebruiksdoel_gaat_naar_zeer_onwaarschijnlijk():
+    adressen = [
+        _nabij("Woning 1", 5, "1", aobj="aw", rd=(1.0, 1.0)),
+        _nabij("Winkel 2", 10, "2", aobj="ak", rd=(2.0, 2.0)),
+    ]
+    doelen = {"aw": (90, "woonfunctie"), "ak": (120, "winkelfunctie")}
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: None,            # geen WOZ (niet-woning geeft sowieso geen WOZ)
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: False,  # niet beschermd -> opkoop doet niks
+        bag_func=lambda aobj: doelen[aobj],
+    )
+    assert [a.weergavenaam for a in r.zeer_onwaarschijnlijk] == ["Winkel 2"]
+    assert "winkelfunctie" in r.zeer_onwaarschijnlijk[0].reden_afgevallen
+    assert [a.weergavenaam for a in r.pool_reeel] == ["Woning 1"]
+    assert r.zeer_onwaarschijnlijk[0] not in r.pool
+
+
+def test_pool_splitst_in_reeel_en_te_klein():
+    adressen = [
+        _nabij("Groot 1", 5, "1", aobj="ag", rd=(1.0, 1.0)),
+        _nabij("Klein 2", 10, "2", aobj="ak", rd=(2.0, 2.0)),
+    ]
+    opp = {"ag": (95, "woonfunctie"), "ak": (55, "woonfunctie")}
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0, m2_grens=72,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: 600_000,
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True,
+        bag_func=lambda aobj: opp[aobj],
+    )
+    assert [a.weergavenaam for a in r.pool_reeel] == ["Groot 1"]
+    assert [a.weergavenaam for a in r.pool_te_klein] == ["Klein 2"]
+    # beide zitten nog in de pool (te klein is geen harde uitsluiting)
+    assert {a.weergavenaam for a in r.pool} == {"Groot 1", "Klein 2"}
+
+
+def test_woz_func_wordt_herhaald_bij_transiente_fout():
+    # Simuleer twee time-outs, dan succes: de echte _veilige_woz retryt en vindt 'm alsnog.
+    import requests
+    from rotterdam_scanner import woz as woz_mod
+
+    pogingen = {"n": 0}
+
+    class _Waarde:
+        bedrag = 400_000
+
+    def _flaky(nid):
+        pogingen["n"] += 1
+        if pogingen["n"] < 3:
+            raise requests.exceptions.ReadTimeout("time-out")
+        return _Waarde()
+
+    import time as _t
+    orig_sleep = _t.sleep
+    _t.sleep = lambda s: None  # geen echte wachttijd in de test
+    try:
+        # monkeypatch via het woz-module-attribuut dat _veilige_woz gebruikt
+        oud = woz_mod.meest_recente_woz_waarde
+        woz_mod.meest_recente_woz_waarde = _flaky
+        try:
+            waarde = opkoop_scan._veilige_woz("123")
+        finally:
+            woz_mod.meest_recente_woz_waarde = oud
+    finally:
+        _t.sleep = orig_sleep
+    assert waarde == 400_000
+    assert pogingen["n"] == 3
 
 
 def test_bouw_cover_is_kort_met_kanttekening():
@@ -134,11 +207,11 @@ def test_bouw_cover_is_kort_met_kanttekening():
         woz_func=lambda nid: woz[nid],
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 80,
+        bag_func=lambda aobj: (80, "woonfunctie"),
     )
     onderwerp, html, text = opkoop_scan.bouw_cover(r)
     assert "Pompstraat 42, Rotterdam" in onderwerp
-    assert "mogelijke adressen" in onderwerp
+    assert "reële adressen" in onderwerp
     assert "Samenvatting" in text
     assert "14 weken" in text                 # kanttekening over aanvragen
     assert "bijgevoegde PDF" in text          # verwijst naar de bijlage i.p.v. lange lijst
@@ -159,7 +232,7 @@ def test_bouw_rapport_pdf_geeft_geldig_pdf():
         woz_func=lambda nid: woz[nid],
         vergunning_func=lambda rx, ry: False,
         beschermde_wijk_func=lambda naam: True,
-        bag_func=lambda aobj: 60,
+        bag_func=lambda aobj: (60, "woonfunctie"),
     )
     pdf = opkoop_rapport_pdf.bouw_rapport_pdf(r)
     assert isinstance(pdf, bytes) and pdf.startswith(b"%PDF")

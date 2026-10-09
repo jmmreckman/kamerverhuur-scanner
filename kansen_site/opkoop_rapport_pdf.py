@@ -37,13 +37,16 @@ def _cel_stijl():
                           textColor=_DONKER)
 
 
-def _adreslijst_tabel(breedte, rijen, *, met_woz, met_tekoop, celstijl):
+def _adreslijst_tabel(breedte, rijen, *, met_woz, met_tekoop, celstijl,
+                      met_gebruiksdoel=False):
     """Tabel met één rij per adres. Lange lijsten splitsen automatisch over pagina's;
     de koprij wordt bovenaan elke pagina herhaald (repeatRows=1)."""
     koppen = ["Adres", "Afstand"]
     if met_woz:
         koppen.append("WOZ")
     koppen.append("BAG m²")
+    if met_gebruiksdoel:
+        koppen.append("Gebruiksdoel")
     if met_tekoop:
         koppen.append("Te koop gezien")
 
@@ -53,6 +56,8 @@ def _adreslijst_tabel(breedte, rijen, *, met_woz, met_tekoop, celstijl):
         if met_woz:
             rij.append(_eur(a.woz))
         rij.append(_m2(a.bag_m2))
+        if met_gebruiksdoel:
+            rij.append(Paragraph(a.gebruiksdoel or "—", celstijl))
         if met_tekoop:
             rij.append(a.te_koop_laatst or "—")
         data.append(rij)
@@ -62,6 +67,8 @@ def _adreslijst_tabel(breedte, rijen, *, met_woz, met_tekoop, celstijl):
     if met_woz:
         vast.append(26 * mm)               # WOZ
     vast.append(22 * mm)                   # BAG m²
+    if met_gebruiksdoel:
+        vast.append(34 * mm)               # gebruiksdoel
     if met_tekoop:
         vast.append(30 * mm)               # te koop
     adres_breedte = breedte - sum(vast)
@@ -124,13 +131,17 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
         f"{len(r.afgevallen_opkoop)} (WOZ ≤ {_eur(r.grens)})"
         if r.in_opkoopwijk else "n.v.t. (geen opkoopbescherming-wijk)"
     )
+    reeel = r.pool_reeel
     samenvatting = [
         ["1. Adressen binnen 50 m", str(len(r.rijen))],
         ["2. Afgevallen - opkoopbescherming", opkoop_tekst],
         ["3. Afgevallen - binnen 50 m van bestaande vergunning", str(len(r.afgevallen_50m))],
-        ["Overgebleven pool", str(len(r.pool))],
+        ["4. Zeer onwaarschijnlijk - ander gebruiksdoel dan wonen", str(len(r.zeer_onwaarschijnlijk))],
+        [f"5. Waarschijnlijk geen gevaar - te klein (< {r.m2_grens} m²)", str(len(r.pool_te_klein))],
+        ["Reële concurrentiepool", str(len(reeel))],
     ]
-    tab = Table(samenvatting, colWidths=[breedte * 0.72, breedte * 0.28], hAlign="LEFT")
+    laatste = len(samenvatting) - 1
+    tab = Table(samenvatting, colWidths=[breedte * 0.74, breedte * 0.26], hAlign="LEFT")
     tab.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
@@ -138,37 +149,49 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
         ("LINEBELOW", (0, 0), (-1, -2), 0.5, _RAND), ("BOX", (0, 0), (-1, -1), 0.5, _RAND),
-        ("BACKGROUND", (0, 3), (-1, 3), _ACHTERGROND),
-        ("FONTNAME", (0, 3), (-1, 3), "Helvetica-Bold"),
-        ("TEXTCOLOR", (1, 3), (1, 3), _GROEN),
+        ("BACKGROUND", (0, laatste), (-1, laatste), _ACHTERGROND),
+        ("FONTNAME", (0, laatste), (-1, laatste), "Helvetica-Bold"),
+        ("TEXTCOLOR", (1, laatste), (1, laatste), _GROEN),
     ]))
     el.append(tab)
     el.append(Spacer(1, 2 * mm))
     el.append(Paragraph(
-        f"<b>{len(r.pool)}</b> adres(sen) komen - volgens de regels - theoretisch nog in "
+        f"<b>{len(reeel)}</b> adres(sen) komen - volgens de regels - theoretisch nog in "
         "aanmerking voor een 4+-vergunning. Dit is de reële concurrentiepool.", tekst_stijl))
 
-    # --- Pool ---
-    el.append(Paragraph(f"Pool - overgebleven adressen ({len(r.pool)})", kop_stijl))
-    if r.pool:
-        el.append(_adreslijst_tabel(breedte, r.pool, met_woz=r.in_opkoopwijk,
+    # --- Reële pool ---
+    el.append(Paragraph(f"Reële concurrentiepool ({len(reeel)})", kop_stijl))
+    if reeel:
+        el.append(_adreslijst_tabel(breedte, reeel, met_woz=r.in_opkoopwijk,
                                     met_tekoop=r.archief_doorzocht, celstijl=celstijl))
-        # Vermeldingen (sluiten niet uit)
-        regels = [
-            f"Krap voor 4 kamers (BAG &lt; {r.m2_grens} m&sup2;): <b>{len(r.pool_te_klein)}</b> "
-            "&ndash; niet uitgesloten; na een dakkapel/aanbouw kan dit veranderen."
-        ]
-        if r.archief_doorzocht:
-            regels.append(f"Afgelopen 12 mnd te koop geweest (voor zover in ons archief): "
-                          f"<b>{len(r.pool_te_koop_geweest)}</b>.")
-        else:
-            regels.append("Te-koop-geweest: het archief wordt nog opgebouwd en is deze keer "
-                          "niet meegenomen.")
-        el.append(Spacer(1, 2 * mm))
-        for reg in regels:
-            el.append(Paragraph("&bull; " + reg, tekst_stijl))
+        if not r.archief_doorzocht:
+            el.append(Spacer(1, 1.5 * mm))
+            el.append(Paragraph("&bull; Te-koop-geweest: het archief wordt nog opgebouwd en is "
+                                "deze keer niet meegenomen.", tekst_stijl))
     else:
-        el.append(Paragraph("Geen adressen overgebleven in de pool.", tekst_stijl))
+        el.append(Paragraph("Geen adressen in de reële concurrentiepool.", tekst_stijl))
+
+    # --- Waarschijnlijk geen gevaar: te klein (check dakkapel) ---
+    if r.pool_te_klein:
+        el.append(Paragraph(
+            f"Waarschijnlijk geen gevaar - te klein voor 4 kamers ({len(r.pool_te_klein)})", kop_stijl))
+        el.append(Paragraph(
+            f"Gebruiksoppervlakte onder de {r.m2_grens} m&sup2;. <b>Niet uitgesloten:</b> na een "
+            "dakkapel of aanbouw kan zo'n woning alsnog aan de maat komen - dus check de "
+            "verbouwmogelijkheid.", tekst_stijl))
+        el.append(_adreslijst_tabel(breedte, r.pool_te_klein, met_woz=r.in_opkoopwijk,
+                                    met_tekoop=False, celstijl=celstijl))
+
+    # --- Zeer onwaarschijnlijk: ander gebruiksdoel ---
+    if r.zeer_onwaarschijnlijk:
+        el.append(Paragraph(
+            f"Zeer onwaarschijnlijk - ander gebruiksdoel dan wonen ({len(r.zeer_onwaarschijnlijk)})", kop_stijl))
+        el.append(Paragraph(
+            "Volgens de BAG geen woonfunctie (bv. kantoor, winkel, industrie, bijeenkomst). "
+            "Kamerverhuur is hier zeer onwaarschijnlijk; deze panden hebben ook geen openbare "
+            "WOZ-waarde.", tekst_stijl))
+        el.append(_adreslijst_tabel(breedte, r.zeer_onwaarschijnlijk, met_woz=False,
+                                    met_tekoop=False, met_gebruiksdoel=True, celstijl=celstijl))
 
     # --- Afvallers ---
     if r.afgevallen_opkoop:

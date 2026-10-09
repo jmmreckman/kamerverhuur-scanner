@@ -24,6 +24,8 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+import requests
+
 from . import bag, gis, opkoop, woz
 from . import geocode
 
@@ -33,22 +35,32 @@ from . import geocode
 GRENS_M2_4KAMERS = 72
 
 
-def _veilige_woz(nummeraanduiding_id: str) -> int | None:
-    """Meest recente WOZ-waarde, of None bij geen waarde/storing (nooit een exception
-    naar buiten - één hapering mag de hele scan niet laten klappen)."""
-    try:
-        w = woz.meest_recente_woz_waarde(nummeraanduiding_id)
-        return w.bedrag if w else None
-    except Exception:
-        return None
+def _veilige_woz(nummeraanduiding_id: str, *, pogingen: int = 3) -> int | None:
+    """Meest recente WOZ-waarde, of None. None = geen openbare WOZ (bv. een niet-woning:
+    het loket geeft dan een 404, wat woz.fetch als lege lijst teruggeeft) OF het ophalen
+    is na alle retries blijven haken.
+
+    Retries met backoff zijn belangrijk: bij ~100 WOZ-calls achter elkaar op de VPS
+    mislukt er af en toe één op een tijdelijke time-out/5xx; zonder retry zou die woning
+    stilletjes als 'WOZ onbekend' in de pool belanden i.p.v. correct af te vallen op de
+    opkoopgrens. Een 404 (geen WOZ) levert géén exception op en wordt dus niet geretry'd."""
+    for i in range(pogingen):
+        try:
+            w = woz.meest_recente_woz_waarde(nummeraanduiding_id)
+            return w.bedrag if w else None
+        except requests.exceptions.RequestException:
+            if i < pogingen - 1:
+                time.sleep(1.5 * (i + 1))  # 1,5s, 3s
+    return None
 
 
-def _veilige_bag_oppervlakte(adresseerbaarobject_id: str) -> int | None:
+def _veilige_bag(adresseerbaarobject_id: str) -> tuple[int | None, str | None]:
+    """(oppervlakte, gebruiksdoel) uit de BAG, of (None, None) bij een storing."""
     try:
         g = bag.fetch_bag_gegevens(adresseerbaarobject_id)
-        return g.oppervlakte if g else None
+        return (g.oppervlakte, g.gebruiksdoel) if g else (None, None)
     except Exception:
-        return None
+        return (None, None)
 
 
 def _veilig_binnen_50m(rd_x: float | None, rd_y: float | None) -> bool | None:
@@ -72,9 +84,14 @@ class AdresRij:
     rd_y: float | None
     woz: int | None = None
     bag_m2: int | None = None
+    gebruiksdoel: str | None = None
     binnen_50m: bool | None = None
     te_koop_laatst: str | None = None       # ISO-datum, als binnen 12 mnd te koop gezien
     reden_afgevallen: str | None = None      # None = nog in de pool
+
+    @property
+    def woz_onbekend(self) -> bool:
+        return self.woz is None
 
 
 @dataclass
@@ -90,24 +107,39 @@ class ScanResultaat:
     gis_onbereikbaar: bool = False
     archief_doorzocht: bool = False
 
-    # --- trechter-stappen ---
+    # --- uitgesloten categorieën (reden_afgevallen is gezet) ---
     @property
     def afgevallen_opkoop(self) -> list[AdresRij]:
-        return [r for r in self.rijen if r.reden_afgevallen and "opkoop" in r.reden_afgevallen]
+        return [r for r in self.rijen if r.reden_afgevallen and r.reden_afgevallen.startswith("opkoop")]
 
     @property
     def afgevallen_50m(self) -> list[AdresRij]:
         return [r for r in self.rijen if r.reden_afgevallen and "50 m" in r.reden_afgevallen]
 
     @property
+    def zeer_onwaarschijnlijk(self) -> list[AdresRij]:
+        """Ander gebruiksdoel dan wonen (kantoor/winkel/industrie/bijeenkomst/...):
+        kamerverhuur is daar zeer onwaarschijnlijk."""
+        return [r for r in self.rijen if r.reden_afgevallen and r.reden_afgevallen.startswith("ander gebruiksdoel")]
+
+    @property
     def pool(self) -> list[AdresRij]:
-        """De overgebleven adressen: niet uitgesloten door opkoop of de 50 m-norm."""
+        """Alle overgebleven woningen (niet uitgesloten door gebruiksdoel, opkoop of
+        de 50 m-norm). Splitst verder in pool_reeel + pool_te_klein."""
         return [r for r in self.rijen if r.reden_afgevallen is None]
 
-    # --- vermeldingen op de pool (sluiten niet uit) ---
     @property
     def pool_te_klein(self) -> list[AdresRij]:
+        """Woningen onder de m²-grens: waarschijnlijk geen gevaar (te klein voor 4
+        kamers), maar NIET hard uitgesloten - een dakkapel/aanbouw kan dit nog
+        veranderen."""
         return [r for r in self.pool if r.bag_m2 is not None and r.bag_m2 < self.m2_grens]
+
+    @property
+    def pool_reeel(self) -> list[AdresRij]:
+        """De reële concurrentiepool: woningen die groot genoeg zijn (of waarvan de
+        oppervlakte onbekend is) en alle filters hebben overleefd."""
+        return [r for r in self.pool if r.bag_m2 is None or r.bag_m2 >= self.m2_grens]
 
     @property
     def pool_te_koop_geweest(self) -> list[AdresRij]:
@@ -116,7 +148,7 @@ class ScanResultaat:
 
 def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
          straal_m: float = 50.0, m2_grens: int = GRENS_M2_4KAMERS, pauze_s: float = 0.1,
-         adres_func=None, woz_func=_veilige_woz, bag_func=_veilige_bag_oppervlakte,
+         adres_func=None, woz_func=_veilige_woz, bag_func=_veilige_bag,
          vergunning_func=_veilig_binnen_50m, beschermde_wijk_func=None,
          te_koop_func=None, vandaag: date | None = None) -> ScanResultaat:
     """Voert de trechter uit. Alle externe afhankelijkheden zijn injecteerbaar zodat de
@@ -176,13 +208,21 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
     if overlevers and gis_fouten == len(overlevers):
         resultaat.gis_onbereikbaar = True
 
-    # Stap 4 - vermeldingen op de pool (geen uitsluiting): BAG-m² + te-koop-geweest.
-    grens_datum = (vandaag - timedelta(days=365)).isoformat()
-    for i, r in enumerate(resultaat.pool):
+    # Stap 4 - BAG (oppervlakte + gebruiksdoel) op de overgebleven adressen. Een ander
+    # gebruiksdoel dan wonen (kantoor/winkel/industrie/bijeenkomst/...) valt hier af
+    # naar "zeer onwaarschijnlijk": kamerverhuur is daar hoogst onwaarschijnlijk (en er
+    # is ook geen openbare WOZ, vandaar dat zo'n pand de opkoopstap overleefde).
+    for i, r in enumerate([r for r in rijen if r.reden_afgevallen is None]):
         if i and pauze_s:
             time.sleep(pauze_s)
-        r.bag_m2 = bag_func(r.adresseerbaarobject_id)
-        if te_koop_func is not None:
+        r.bag_m2, r.gebruiksdoel = bag_func(r.adresseerbaarobject_id)
+        if r.gebruiksdoel and "woonfunctie" not in r.gebruiksdoel:
+            r.reden_afgevallen = f"ander gebruiksdoel ({r.gebruiksdoel})"
+
+    # Stap 5 - te-koop-geweest (vermelding) op de resterende woning-pool.
+    if te_koop_func is not None:
+        grens_datum = (vandaag - timedelta(days=365)).isoformat()
+        for r in resultaat.pool:
             r.te_koop_laatst = te_koop_func(r.weergavenaam, grens_datum)
 
     return resultaat
@@ -209,10 +249,10 @@ def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
     """Korte begeleidende e-mailtekst (onderwerp, html, text). De volledige
     adreslijsten zitten in het bijgevoegde PDF-rapport (zie bouw_rapport_pdf), zodat
     de mail zelf overzichtelijk blijft."""
-    pool = r.pool
+    reeel = r.pool_reeel
     onderwerp = (
         f"Concurrentie-scan {r.centrum_adres}: "
-        f"{len(pool)} mogelijke adressen binnen {r.straal_m:.0f} m"
+        f"{len(reeel)} reële adressen binnen {r.straal_m:.0f} m"
     )
 
     waarschuwingen = []
@@ -243,11 +283,14 @@ def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
         f"- Adressen binnen {r.straal_m:.0f} m: {len(r.rijen)}",
         f"- {opkoop_regel}",
         f"- Afgevallen door de 50 m-norm: {len(r.afgevallen_50m)}",
-        f"- Overgebleven pool: {len(pool)} adres(sen) waar theoretisch nog een "
+        f"- Zeer onwaarschijnlijk (ander gebruiksdoel dan wonen): {len(r.zeer_onwaarschijnlijk)}",
+        f"- Waarschijnlijk geen gevaar - te klein (< {r.m2_grens} m², check dakkapel): "
+        f"{len(r.pool_te_klein)}",
+        f"=> REËLE concurrentiepool: {len(reeel)} adres(sen) waar theoretisch nog een "
         "4+-aanvraag op zou kunnen liggen",
         "",
-        "Het volledige rapport met alle adreslijsten (pool, afvallers, en de "
-        "vermeldingen over oppervlakte en te-koop-geweest) zit in de bijgevoegde PDF.",
+        "Het volledige rapport met alle adreslijsten (reële pool, de te-kleine en "
+        "andere-gebruiksdoel-adressen, en de afvallers) zit in de bijgevoegde PDF.",
         "",
         _KANTTEKENING,
     ])
@@ -265,8 +308,11 @@ def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
         f"<li>Adressen binnen {r.straal_m:.0f} m: <b>{len(r.rijen)}</b></li>",
         f"<li>{opkoop_regel}</li>",
         f"<li>Afgevallen door de 50 m-norm: <b>{len(r.afgevallen_50m)}</b></li>",
-        f"<li><b>Overgebleven pool: {len(pool)}</b> adres(sen) waar theoretisch nog een "
-        "4+-aanvraag op zou kunnen liggen</li>",
+        f"<li>Zeer onwaarschijnlijk (ander gebruiksdoel): <b>{len(r.zeer_onwaarschijnlijk)}</b></li>",
+        f"<li>Waarschijnlijk geen gevaar - te klein (&lt; {r.m2_grens} m², check dakkapel): "
+        f"<b>{len(r.pool_te_klein)}</b></li>",
+        f"<li><b>Reële concurrentiepool: {len(reeel)}</b> adres(sen) waar theoretisch nog "
+        "een 4+-aanvraag op zou kunnen liggen</li>",
         "</ul>",
         "<p>Het volledige rapport met alle adreslijsten zit in de "
         "<b>bijgevoegde PDF</b>.</p>",

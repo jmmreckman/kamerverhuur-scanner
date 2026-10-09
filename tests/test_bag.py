@@ -1,29 +1,37 @@
+"""Tests voor rotterdam_scanner/bag.py: oppervlakte + gebruiksdoel uit de PDOK BAG-WFS."""
 from unittest.mock import MagicMock, patch
 
-from rotterdam_scanner.bag import fetch_bag_gegevens
+from rotterdam_scanner import bag
 
 
-def _mock_response(payload):
+def _resp(props):
     mock = MagicMock()
-    mock.json.return_value = payload
     mock.raise_for_status.return_value = None
+    mock.json.return_value = {"features": [{"properties": props}]} if props is not None else {"features": []}
     return mock
 
 
-def test_fetch_bag_gegevens_geeft_oppervlakte_en_bouwjaar_terug():
-    payload = {"features": [{"properties": {"oppervlakte": 92, "bouwjaar": 1930}}]}
-    with patch("rotterdam_scanner.bag.requests.get", return_value=_mock_response(payload)):
-        gegevens = fetch_bag_gegevens("0599010000238777")
-    assert gegevens.oppervlakte == 92
-    assert gegevens.bouwjaar == 1930
+def test_gebruiksdoel_tekst_normaliseert_lijst_en_string():
+    assert bag._gebruiksdoel_tekst("woonfunctie") == "woonfunctie"
+    assert bag._gebruiksdoel_tekst(["woonfunctie", "kantoorfunctie"]) == "woonfunctie, kantoorfunctie"
+    assert bag._gebruiksdoel_tekst(None) is None
 
 
-def test_fetch_bag_gegevens_geeft_none_zonder_features():
-    with patch("rotterdam_scanner.bag.requests.get", return_value=_mock_response({"features": []})):
-        assert fetch_bag_gegevens("0599010000238777") is None
+def test_fetch_geeft_oppervlakte_en_gebruiksdoel():
+    props = {"oppervlakte": 254, "bouwjaar": 1911, "gebruiksdoel": "woonfunctie"}
+    with patch("rotterdam_scanner.bag.requests.get", return_value=_resp(props)):
+        g = bag.fetch_bag_gegevens("0599010000220067")
+    assert g.oppervlakte == 254
+    assert g.bouwjaar == 1911
+    assert g.gebruiksdoel == "woonfunctie"
 
 
-def test_fetch_bag_gegevens_geeft_none_bij_leeg_id_zonder_netwerkcall():
+def test_fetch_zonder_feature_geeft_none():
+    with patch("rotterdam_scanner.bag.requests.get", return_value=_resp(None)):
+        assert bag.fetch_bag_gegevens("0599010000000000") is None
+
+
+def test_fetch_leeg_id_geeft_none_zonder_netwerkcall():
     with patch("rotterdam_scanner.bag.requests.get") as mock_get:
-        assert fetch_bag_gegevens("") is None
+        assert bag.fetch_bag_gegevens("") is None
     mock_get.assert_not_called()
