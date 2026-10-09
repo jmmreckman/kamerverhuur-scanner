@@ -53,6 +53,46 @@ def test_scan_zonder_adressen_geeft_geen_deling_door_nul():
     assert r.pct_onder == 0.0
 
 
+def test_scan_breekt_af_als_woz_vanaf_begin_onbereikbaar():
+    # 20 adressen, WOZ geeft altijd None -> na `afbreek_na_fouten` adressen stoppen.
+    adressen = [_nabij(f"Straat {n}", n, str(n)) for n in range(1, 21)]
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0, afbreek_na_fouten=5,
+        woz_func=lambda nid: None, adres_func=lambda lat, lon, straal: adressen,
+    )
+    assert r.woz_onbereikbaar is True
+    assert len(r.adressen) == 5  # vroegtijdig afgebroken, niet alle 20
+    assert r.met_woz == []
+
+
+def test_scan_breekt_niet_af_bij_losse_nones_na_een_treffer():
+    # Eerst een echte waarde, daarna een reeks Nones (niet-woningen): niet afbreken.
+    adressen = [_nabij(f"S {n}", n, str(n)) for n in range(0, 20)]
+
+    def _woz(nid):
+        return 500_000 if nid == "0" else None
+
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0, afbreek_na_fouten=5,
+        woz_func=_woz, adres_func=lambda lat, lon, straal: adressen,
+    )
+    assert r.woz_onbereikbaar is False
+    assert len(r.adressen) == 20  # alles gescand
+    assert len(r.boven) == 1
+
+
+def test_bouw_mail_meldt_onbereikbare_woz():
+    r = opkoop_scan.ScanResultaat(
+        centrum_adres="Testcentrum 1", straal_m=50.0, grens=470_000,
+        adressen=[opkoop_scan.AdresResultaat("A 1", 5.0, None)],
+        woz_onbereikbaar=True,
+    )
+    onderwerp, html, text = opkoop_scan.bouw_mail(r)
+    assert "niet bereikbaar" in onderwerp.lower()
+    assert "LET OP" in text
+    assert "LET OP" in html
+
+
 def test_scan_geeft_straal_door_aan_adres_func():
     gezien = {}
 
@@ -170,6 +210,47 @@ def test_opkoop_scan_start_en_mailt(client, monkeypatch):
     assert "jmmreckman@gmail.com" in data["melding"]
     assert verstuurd["ontvangers"] == ["jmmreckman@gmail.com"]
     assert "Pompstraat 42, Rotterdam" in verstuurd["onderwerp"]
+
+
+def test_opkoop_scan_fout_tijdens_scan_stuurt_foutmail(client, monkeypatch):
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    def _fake_geocode(adres):
+        return geocode.GeocodeResult(
+            weergavenaam="Pompstraat 42, Rotterdam", straatnaam="Pompstraat",
+            huisnummer="42", postcode="3000AA", woonplaats="Rotterdam",
+            rotterdam_wijk="Middelland", cbs_wijknaam="Delfshaven",
+            rd_x=0.0, rd_y=0.0, lon=4.0, lat=52.0,
+            nummeraanduiding_id="42", adresseerbaarobject_id="42",
+        )
+
+    def _kapotte_scan(*a, **kw):
+        raise RuntimeError("PDOK down")
+
+    mails = []
+
+    def _fake_send_mail(config, subject, html_body, text_body, recipients=None):
+        mails.append((subject, recipients))
+
+    class _DirecteThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(kansen_app.geocode, "geocode_vrij_landelijk", _fake_geocode)
+    monkeypatch.setattr(kansen_app.opkoop_scan, "scan", _kapotte_scan)
+    monkeypatch.setattr(kansen_app, "send_mail", _fake_send_mail)
+    monkeypatch.setattr(kansen_app.threading, "Thread", _DirecteThread)
+
+    resp = client.post("/opkoop-scan", json={"adres": "Pompstraat 42, Rotterdam"})
+    # De route zelf slaagt (scan draait in de achtergrond); de fout leidt tot een foutmail.
+    assert resp.status_code == 200
+    assert len(mails) == 1
+    onderwerp, ontvangers = mails[0]
+    assert "MISLUKT" in onderwerp
+    assert ontvangers == ["jmmreckman@gmail.com"]
 
 
 def test_opkoop_scan_onvindbaar_adres_geeft_nette_fout(client, monkeypatch):

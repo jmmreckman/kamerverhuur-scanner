@@ -916,10 +916,30 @@ def create_app(config: Config | None = None) -> Flask:
                 resultaat = opkoop_scan.scan(lat, lon, grens, centrum)
                 onderwerp, html_body, text_body = opkoop_scan.bouw_mail(resultaat)
                 send_mail(config, onderwerp, html_body, text_body, recipients=[ontvanger])
-                app.logger.info("Opkoop-scan %s: %d boven / %d onder grens; mail naar %s",
-                                centrum, len(resultaat.boven), len(resultaat.onder), ontvanger)
-            except Exception:
+                app.logger.info("Opkoop-scan %s: %d adressen, %d boven / %d onder grens "
+                                "(woz_onbereikbaar=%s); mail naar %s", centrum,
+                                len(resultaat.adressen), len(resultaat.boven),
+                                len(resultaat.onder), resultaat.woz_onbereikbaar, ontvanger)
+            except Exception as exc:
+                # Nooit stil falen: ook bij een fout krijgt de gebruiker een mail, zodat
+                # 'ie niet eindeloos op een resultaat zit te wachten dat nooit komt.
                 app.logger.exception("Opkoop-scan mislukt voor %s", centrum)
+                try:
+                    send_mail(
+                        config,
+                        f"Opkoopbescherming-scan MISLUKT voor {centrum}",
+                        f"<p>De scan voor <b>{centrum}</b> is vastgelopen met een fout:</p>"
+                        f"<pre>{type(exc).__name__}: {exc}</pre>"
+                        "<p>Probeer het later opnieuw; blijft het misgaan, dan is er iets "
+                        "mis met PDOK, de WOZ-dienst of de mailverzending op de server.</p>",
+                        f"De scan voor {centrum} is vastgelopen met een fout:\n\n"
+                        f"{type(exc).__name__}: {exc}\n\n"
+                        "Probeer het later opnieuw; blijft het misgaan, dan is er iets mis "
+                        "met PDOK, de WOZ-dienst of de mailverzending op de server.",
+                        recipients=[ontvanger],
+                    )
+                except Exception:
+                    app.logger.exception("Kon ook de foutmail niet versturen voor %s", centrum)
 
         threading.Thread(target=_werk, daemon=True).start()
         return jsonify({"ok": True,

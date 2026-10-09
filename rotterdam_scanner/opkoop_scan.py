@@ -24,7 +24,7 @@ from . import geocode
 WOZ_API = "https://api.kadaster.nl/lvwoz/wozwaardeloket-api/v1"
 
 
-def woz_waarde(nummeraanduiding_id: str, *, timeout: int = 15) -> int | None:
+def woz_waarde(nummeraanduiding_id: str, *, timeout: int = 8) -> int | None:
     """Meest recente vastgestelde WOZ-waarde (in hele euro's) voor een
     nummeraanduiding, of None als er geen waarde te vinden is (bv. een niet-woning,
     of een tijdelijke fout bij de WOZ-dienst)."""
@@ -59,6 +59,10 @@ class ScanResultaat:
     straal_m: float
     grens: int
     adressen: list[AdresResultaat] = field(default_factory=list)
+    # True als de scan vroegtijdig is afgebroken omdat de WOZ-dienst vanaf het begin
+    # onbereikbaar bleek (zie de circuit-breaker in scan()). De adreslijst is dan
+    # onvolledig en er zijn geen WOZ-waarden; de mail meldt dit expliciet.
+    woz_onbereikbaar: bool = False
 
     @property
     def met_woz(self) -> list[AdresResultaat]:
@@ -89,20 +93,37 @@ class ScanResultaat:
 
 def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
          straal_m: float = 50.0, pauze_s: float = 0.15,
-         woz_func=woz_waarde, adres_func=None) -> ScanResultaat:
+         woz_func=woz_waarde, adres_func=None,
+         afbreek_na_fouten: int = 8) -> ScanResultaat:
     """Voert de scan uit: adressen binnen de straal ophalen en per adres de WOZ.
     `woz_func`/`adres_func` zijn injecteerbaar zodat de logica los te testen is
-    zonder echte PDOK/WOZ-calls."""
+    zonder echte PDOK/WOZ-calls.
+
+    Circuit-breaker: als de eerste `afbreek_na_fouten` adressen op rij géén WOZ
+    opleveren én er tot dan toe nog geen enkele waarde is gevonden, dan is de
+    WOZ-dienst hoogstwaarschijnlijk onbereikbaar vanaf de server (of blokkeert
+    'ie het server-IP). We breken dan af i.p.v. honderden keren in een time-out
+    te lopen - zo komt er snel een duidelijke mail i.p.v. minutenlange stilte.
+    Losse Nones (bv. een niet-woning) breken de scan niet af zodra er al minstens
+    één echte waarde is gevonden."""
     adres_func = adres_func or geocode.adressen_binnen_straal
     nabij = adres_func(lat, lon, straal_m)
     resultaat = ScanResultaat(centrum_adres=centrum_adres, straal_m=straal_m, grens=grens)
+    opeenvolgende_fouten = 0
     for i, a in enumerate(nabij):
         if i and pauze_s:
             time.sleep(pauze_s)  # beleefd tegen de WOZ-dienst
+        woz = woz_func(a.nummeraanduiding_id)
         resultaat.adressen.append(
-            AdresResultaat(weergavenaam=a.weergavenaam, afstand_m=a.afstand_m,
-                           woz=woz_func(a.nummeraanduiding_id))
+            AdresResultaat(weergavenaam=a.weergavenaam, afstand_m=a.afstand_m, woz=woz)
         )
+        if woz is None:
+            opeenvolgende_fouten += 1
+            if not resultaat.met_woz and opeenvolgende_fouten >= afbreek_na_fouten:
+                resultaat.woz_onbereikbaar = True
+                break
+        else:
+            opeenvolgende_fouten = 0
     return resultaat
 
 
@@ -115,10 +136,28 @@ def _eur(bedrag: int | None) -> str:
 def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
     """Geeft (onderwerp, html_body, text_body) voor de resultaatmail."""
     grens = _eur(r.grens)
-    onderwerp = (
-        f"Opkoopbescherming-scan {r.centrum_adres}: "
-        f"{len(r.boven)} boven / {len(r.onder)} onder grens ({r.pct_boven}% boven)"
-    )
+    if r.woz_onbereikbaar:
+        onderwerp = f"Opkoopbescherming-scan {r.centrum_adres}: WOZ-dienst niet bereikbaar"
+        waarschuwing_txt = (
+            "LET OP: de WOZ-dienst (WOZ-waardeloket) gaf vanaf het begin geen enkele "
+            "waarde terug - waarschijnlijk tijdelijk onbereikbaar of niet benaderbaar "
+            "vanaf de server. De scan is daarom vroegtijdig afgebroken; onderstaande "
+            "lijst is onvolledig en bevat geen WOZ-waarden. Probeer het later opnieuw.\n"
+        )
+        waarschuwing_html = (
+            "<p style='color:#b00;font-weight:bold'>LET OP: de WOZ-dienst gaf vanaf het "
+            "begin geen enkele waarde terug - waarschijnlijk tijdelijk onbereikbaar of "
+            "niet benaderbaar vanaf de server. De scan is vroegtijdig afgebroken; de "
+            "lijst hieronder is onvolledig en bevat geen WOZ-waarden. Probeer het later "
+            "opnieuw.</p>"
+        )
+    else:
+        onderwerp = (
+            f"Opkoopbescherming-scan {r.centrum_adres}: "
+            f"{len(r.boven)} boven / {len(r.onder)} onder grens ({r.pct_boven}% boven)"
+        )
+        waarschuwing_txt = ""
+        waarschuwing_html = ""
 
     def _lijst_txt(titel, items):
         regels = [f"{titel} ({len(items)}):"]
@@ -130,6 +169,7 @@ def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
         f"Opkoopbescherming-scan rond: {r.centrum_adres}",
         f"Straal: {r.straal_m:.0f} m | Grens: {grens}",
         "",
+        *( [waarschuwing_txt] if waarschuwing_txt else [] ),
         f"Adressen binnen de straal: {len(r.adressen)} "
         f"(met WOZ-waarde: {len(r.met_woz)}, onbekend: {len(r.onbekend)})",
         f"BOVEN de grens (vrij verhandelbaar, potentiële concurrentie): "
@@ -158,6 +198,7 @@ def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
     html = "".join([
         f"<h2>Opkoopbescherming-scan rond {r.centrum_adres}</h2>",
         f"<p>Straal: {r.straal_m:.0f} m &middot; Grens: {grens}</p>",
+        waarschuwing_html,
         "<ul>",
         f"<li>Adressen binnen de straal: <b>{len(r.adressen)}</b> "
         f"(met WOZ: {len(r.met_woz)}, onbekend: {len(r.onbekend)})</li>",
