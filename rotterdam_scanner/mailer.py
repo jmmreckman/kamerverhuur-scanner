@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import smtplib
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -13,21 +15,42 @@ STILLE_BCC = "jmmreckman@gmail.com"
 
 
 def send_mail(config: Config, subject: str, html_body: str, text_body: str,
-              recipients: list[str] | None = None, stille_bcc: bool = True) -> None:
+              recipients: list[str] | None = None, stille_bcc: bool = True,
+              attachments: list[tuple[str, bytes, str]] | None = None) -> None:
     """Verstuurt een e-mail via de (optioneel eigen) SMTP-instellingen. Afzender is
     config.effective_from_header (bv. info@steenhub.nl als SMTP_FROM_EMAIL is gezet);
     ontvangers zijn standaard config.report_to. Elk bericht krijgt standaard een stille
     BCC naar STILLE_BCC mee (alleen in de envelop, niet in de headers). Zet
     stille_bcc=False voor functies waar de gebruiker zelf de ontvanger(s) kiest en er
-    geen meeleeskopie gewenst is (bv. de handmatige concurrentie-scan)."""
+    geen meeleeskopie gewenst is (bv. de handmatige concurrentie-scan).
+
+    `attachments` is een lijst van (bestandsnaam, inhoud-bytes, subtype), bv.
+    ("rapport.pdf", pdf_bytes, "pdf"). Zonder bijlagen is de opbouw identiek aan
+    vroeger (een enkel multipart/alternative-bericht)."""
     to = recipients if recipients is not None else config.report_to
 
-    msg = MIMEMultipart("alternative")
+    # De tekst/html-varianten horen in een 'alternative'-deel; eventuele bijlagen
+    # eromheen in een 'mixed'-deel. Zonder bijlagen blijft het bericht precies een
+    # multipart/alternative (zodat bestaand gedrag ongewijzigd is).
+    alternatief = MIMEMultipart("alternative")
+    alternatief.attach(MIMEText(text_body, "plain", "utf-8"))
+    alternatief.attach(MIMEText(html_body, "html", "utf-8"))
+
+    if attachments:
+        msg = MIMEMultipart("mixed")
+        msg.attach(alternatief)
+        for bestandsnaam, inhoud, subtype in attachments:
+            deel = MIMEBase("application", subtype)
+            deel.set_payload(inhoud)
+            encoders.encode_base64(deel)
+            deel.add_header("Content-Disposition", "attachment", filename=bestandsnaam)
+            msg.attach(deel)
+    else:
+        msg = alternatief
+
     msg["Subject"] = subject
     msg["From"] = config.effective_from_header
     msg["To"] = ", ".join(to)
-    msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     # Envelop-ontvangers = zichtbare ontvangers + (optioneel) het stille BCC-adres. Het
     # BCC-adres komt NIET in msg (geen "Bcc"-header), alleen in de sendmail-envelop,

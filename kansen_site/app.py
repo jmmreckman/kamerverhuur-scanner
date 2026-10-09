@@ -25,6 +25,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from pathlib import Path
 
 from .throttle import LoginThrottle
+from . import opkoop_rapport_pdf
 
 from rotterdam_scanner import archief, den_haag, geocode, mail_voorkeuren, opkoop_scan, pipeline, rente_update, vergunningenindex
 from rotterdam_scanner.mailer import send_mail
@@ -965,12 +966,16 @@ def create_app(config: Config | None = None) -> Flask:
             except Exception:
                 app.logger.exception("Kon ook de foutmail niet versturen voor %s", centrum)
 
+        bestandsnaam = "concurrentie-scan-" + (re.sub(r"[^A-Za-z0-9]+", "-", centrum).strip("-").lower() or "rapport") + ".pdf"
+
         def _werk():
             try:
                 resultaat = opkoop_scan.scan(lat, lon, grens, centrum, te_koop_func=te_koop_func)
-                onderwerp, html_body, text_body = opkoop_scan.bouw_mail(resultaat)
+                onderwerp, html_body, text_body = opkoop_scan.bouw_cover(resultaat)
+                pdf_bytes = opkoop_rapport_pdf.bouw_rapport_pdf(resultaat)
                 send_mail(config, onderwerp, html_body, text_body,
-                          recipients=ontvangers, stille_bcc=False)
+                          recipients=ontvangers, stille_bcc=False,
+                          attachments=[(bestandsnaam, pdf_bytes, "pdf")])
                 app.logger.info("Concurrentie-scan %s: %d adressen -> pool %d "
                                 "(woz_onbereikbaar=%s, gis_onbereikbaar=%s); mail naar %s",
                                 centrum, len(resultaat.rijen), len(resultaat.pool),

@@ -122,7 +122,7 @@ def test_gis_onbereikbaar_als_alles_none():
     assert len(r.pool) == 1  # op onzekerheid sluiten we niet uit
 
 
-def test_bouw_mail_bevat_trechter_en_kanttekening():
+def test_bouw_cover_is_kort_met_kanttekening():
     adressen = [
         _nabij("A 1", 5, "1", rd=(1.0, 1.0)),
         _nabij("C 3", 15, "3", rd=(3.0, 3.0)),
@@ -136,12 +136,34 @@ def test_bouw_mail_bevat_trechter_en_kanttekening():
         beschermde_wijk_func=lambda naam: True,
         bag_func=lambda aobj: 80,
     )
-    onderwerp, html, text = opkoop_scan.bouw_mail(r)
+    onderwerp, html, text = opkoop_scan.bouw_cover(r)
     assert "Pompstraat 42, Rotterdam" in onderwerp
     assert "mogelijke adressen" in onderwerp
-    assert "TRECHTER" in text
+    assert "Samenvatting" in text
     assert "14 weken" in text                 # kanttekening over aanvragen
-    assert "Pool" in html
+    assert "bijgevoegde PDF" in text          # verwijst naar de bijlage i.p.v. lange lijst
+    # de cover bevat GEEN volledige adreslijst-tabel meer (die zit in de PDF)
+    assert "C 3" not in text
+
+
+def test_bouw_rapport_pdf_geeft_geldig_pdf():
+    from kansen_site import opkoop_rapport_pdf
+    adressen = [
+        _nabij("A 1", 5, "1", rd=(1.0, 1.0)),
+        _nabij("C 3", 15, "3", aobj="a3", rd=(3.0, 3.0)),
+    ]
+    woz = {"1": 300_000, "3": 600_000}
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Pompstraat 42, Rotterdam", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: woz[nid],
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True,
+        bag_func=lambda aobj: 60,
+    )
+    pdf = opkoop_rapport_pdf.bouw_rapport_pdf(r)
+    assert isinstance(pdf, bytes) and pdf.startswith(b"%PDF")
+    assert len(pdf) > 1000
 
 
 # --- Route: /opkoop-scan ---
@@ -218,9 +240,11 @@ def test_opkoop_scan_mailt_naar_opgegeven_ontvangers_zonder_bcc(client, monkeypa
     def _fake_scan(lat, lon, grens, centrum, **kw):
         return opkoop_scan.ScanResultaat(centrum, 50.0, grens, 72, "Oud Charlois", True, [])
 
-    def _fake_send_mail(config, subject, html_body, text_body, recipients=None, stille_bcc=True):
+    def _fake_send_mail(config, subject, html_body, text_body, recipients=None,
+                        stille_bcc=True, attachments=None):
         verzonden["recipients"] = recipients
         verzonden["stille_bcc"] = stille_bcc
+        verzonden["attachments"] = attachments
 
     monkeypatch.setattr(kansen_app.geocode, "geocode_vrij_landelijk", _fake_geocode)
     monkeypatch.setattr(kansen_app.opkoop_scan, "scan", _fake_scan)
@@ -234,6 +258,11 @@ def test_opkoop_scan_mailt_naar_opgegeven_ontvangers_zonder_bcc(client, monkeypa
     assert resp.status_code == 200
     assert verzonden["recipients"] == ["een@x.nl", "twee@y.nl"]
     assert verzonden["stille_bcc"] is False
+    # Het rapport gaat als PDF-bijlage mee (niet in de mailtekst).
+    assert verzonden["attachments"] and len(verzonden["attachments"]) == 1
+    naam, inhoud, subtype = verzonden["attachments"][0]
+    assert naam.endswith(".pdf") and subtype == "pdf"
+    assert inhoud.startswith(b"%PDF")
     data = resp.get_json()
     assert "een@x.nl" in data["melding"] and "twee@y.nl" in data["melding"]
 

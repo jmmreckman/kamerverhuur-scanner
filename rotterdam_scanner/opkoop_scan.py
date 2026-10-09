@@ -198,8 +198,17 @@ def _m2(waarde: int | None) -> str:
     return f"{waarde} m²" if waarde is not None else "onbekend"
 
 
-def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
-    """Geeft (onderwerp, html_body, text_body) voor de trechter-resultaatmail."""
+_KANTTEKENING = (
+    "Lopende, nog niet verwerkte vergunningaanvragen (doorlooptijd ~14 weken) zijn "
+    "niet zichtbaar - Rotterdam publiceert kamerverhuur-aanvragen niet, alleen de "
+    "uiteindelijke beslissing."
+)
+
+
+def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
+    """Korte begeleidende e-mailtekst (onderwerp, html, text). De volledige
+    adreslijsten zitten in het bijgevoegde PDF-rapport (zie bouw_rapport_pdf), zodat
+    de mail zelf overzichtelijk blijft."""
     pool = r.pool
     onderwerp = (
         f"Concurrentie-scan {r.centrum_adres}: "
@@ -209,151 +218,59 @@ def bouw_mail(r: ScanResultaat) -> tuple[str, str, str]:
     waarschuwingen = []
     if r.woz_onbereikbaar:
         waarschuwingen.append(
-            "De WOZ-dienst gaf geen enkele waarde terug (tijdelijk onbereikbaar). "
-            "De opkoopbescherming-stap kon daardoor niet betrouwbaar draaien."
+            "De WOZ-dienst gaf geen enkele waarde terug (tijdelijk onbereikbaar); de "
+            "opkoopbescherming-stap kon daardoor niet betrouwbaar draaien."
         )
     if r.gis_onbereikbaar:
         waarschuwingen.append(
-            "De Rotterdamse vergunningenkaart (ArcGIS) was niet bereikbaar. "
-            "De 50 m-norm-stap kon daardoor niet draaien."
+            "De Rotterdamse vergunningenkaart (ArcGIS) was niet bereikbaar; de "
+            "50 m-norm-stap kon daardoor niet draaien."
         )
 
     opkoop_regel = (
-        f"In opkoopbescherming-wijk '{r.buurtnaam}': {len(r.afgevallen_opkoop)} adres(sen) "
-        f"vallen af (WOZ ≤ {_eur(r.grens)})."
+        f"Afgevallen door opkoopbescherming (WOZ ≤ {_eur(r.grens)}): {len(r.afgevallen_opkoop)}"
         if r.in_opkoopwijk else
-        f"Niet in een opkoopbescherming-wijk ('{r.buurtnaam}') - hierop valt niets af."
+        f"Niet in een opkoopbescherming-wijk ('{r.buurtnaam}') - hierop valt niets af"
     )
 
-    # ---------- tekstversie ----------
-    def _lijst_txt(titel, rijen, met_woz=False, met_m2=False, met_tekoop=False):
-        regels = [f"{titel} ({len(rijen)}):"]
-        for a in sorted(rijen, key=lambda x: x.afstand_m):
-            extra = []
-            if met_woz:
-                extra.append(f"WOZ {_eur(a.woz)}")
-            if met_m2:
-                extra.append(f"BAG {_m2(a.bag_m2)}")
-            if met_tekoop and a.te_koop_laatst:
-                extra.append(f"te koop gezien t/m {a.te_koop_laatst}")
-            staart = (" | " + " | ".join(extra)) if extra else ""
-            regels.append(f"  - {a.weergavenaam} | {a.afstand_m:.0f} m{staart}")
-        return "\n".join(regels)
-
-    text_delen = [
+    text = "\n".join([
         f"Concurrentie-scan rond: {r.centrum_adres}",
         f"Straal: {r.straal_m:.0f} m | WOZ-grens opkoop: {_eur(r.grens)} | "
         f"m²-grens 4 kamers: {r.m2_grens} m²",
         "",
-    ]
-    if waarschuwingen:
-        text_delen.append("LET OP:")
-        text_delen.extend(f"- {w}" for w in waarschuwingen)
-        text_delen.append("")
-    text_delen += [
-        "TRECHTER",
-        f"1. Adressen binnen {r.straal_m:.0f} m: {len(r.rijen)}",
-        f"2. {opkoop_regel}",
-        f"3. 50 m-norm: {len(r.afgevallen_50m)} adres(sen) vallen af "
-        f"(binnen 50 m van een bestaande vergunning).",
-        f"=> Overgebleven pool: {len(pool)} adres(sen) waar theoretisch nog een "
-        f"4+-aanvraag op zou kunnen liggen.",
+        *(["LET OP:"] + [f"- {w}" for w in waarschuwingen] + [""] if waarschuwingen else []),
+        "Samenvatting:",
+        f"- Adressen binnen {r.straal_m:.0f} m: {len(r.rijen)}",
+        f"- {opkoop_regel}",
+        f"- Afgevallen door de 50 m-norm: {len(r.afgevallen_50m)}",
+        f"- Overgebleven pool: {len(pool)} adres(sen) waar theoretisch nog een "
+        "4+-aanvraag op zou kunnen liggen",
         "",
-        _lijst_txt("POOL (overgebleven)", pool, met_woz=r.in_opkoopwijk, met_m2=True,
-                   met_tekoop=r.archief_doorzocht),
+        "Het volledige rapport met alle adreslijsten (pool, afvallers, en de "
+        "vermeldingen over oppervlakte en te-koop-geweest) zit in de bijgevoegde PDF.",
         "",
-        "VERMELDINGEN op de pool (sluiten NIET uit):",
-        f"- Krap voor 4 kamers (BAG < {r.m2_grens} m²): {len(r.pool_te_klein)} "
-        "(let op: na een dakkapel/aanbouw kan dit alsnog veranderen).",
-    ]
-    if r.archief_doorzocht:
-        text_delen.append(
-            f"- Afgelopen 12 mnd te koop geweest (voor zover in ons archief): "
-            f"{len(r.pool_te_koop_geweest)}."
-        )
-    else:
-        text_delen.append(
-            "- Te-koop-geweest: archief wordt nog opgebouwd, dus deze keer niet meegenomen."
-        )
-    text_delen += [
-        "",
-        _lijst_txt("Afgevallen - opkoopbescherming", r.afgevallen_opkoop, met_woz=True),
-        "",
-        _lijst_txt("Afgevallen - binnen 50 m van bestaande vergunning", r.afgevallen_50m),
-        "",
-        "Kanttekening: lopende, nog niet verwerkte vergunningaanvragen (doorlooptijd "
-        "~14 weken) zijn niet zichtbaar - Rotterdam publiceert kamerverhuur-aanvragen "
-        "niet, alleen de uiteindelijke beslissing.",
-        "",
-        "Bron: adressen/coördinaten via PDOK, WOZ via het WOZ-waardeloket, oppervlakte "
-        "via BAG, 50 m-norm via de officiele Rotterdamse vergunningenkaart.",
-    ]
-    text = "\n".join(text_delen)
+        _KANTTEKENING,
+    ])
 
-    # ---------- htmlversie ----------
-    def _lijst_html(titel, rijen, met_woz=False, met_m2=False, met_tekoop=False):
-        koppen = ["Adres", "Afstand"]
-        if met_woz:
-            koppen.append("WOZ")
-        if met_m2:
-            koppen.append("BAG m²")
-        if met_tekoop:
-            koppen.append("Te koop gezien")
-        thead = "".join(f"<th style='text-align:left'>{k}</th>" for k in koppen)
-        rows = ""
-        for a in sorted(rijen, key=lambda x: x.afstand_m):
-            cellen = [a.weergavenaam, f"{a.afstand_m:.0f} m"]
-            if met_woz:
-                cellen.append(_eur(a.woz))
-            if met_m2:
-                cellen.append(_m2(a.bag_m2))
-            if met_tekoop:
-                cellen.append(a.te_koop_laatst or "-")
-            rows += "<tr>" + "".join(f"<td>{c}</td>" for c in cellen) + "</tr>"
-        return (f"<h3>{titel} ({len(rijen)})</h3>"
-                f"<table cellpadding='4' style='border-collapse:collapse'>"
-                f"<tr>{thead}</tr>{rows}</table>")
-
-    html_delen = [f"<h2>Concurrentie-scan rond {r.centrum_adres}</h2>",
-                  f"<p>Straal: {r.straal_m:.0f} m &middot; WOZ-grens opkoop: {_eur(r.grens)} "
-                  f"&middot; m²-grens 4 kamers: {r.m2_grens} m²</p>"]
+    html_delen = [
+        f"<h2 style='margin:0 0 .3rem'>Concurrentie-scan rond {r.centrum_adres}</h2>",
+        f"<p style='color:#555;margin:0 0 1rem'>Straal: {r.straal_m:.0f} m &middot; "
+        f"WOZ-grens opkoop: {_eur(r.grens)} &middot; m²-grens 4 kamers: {r.m2_grens} m²</p>",
+    ]
     if waarschuwingen:
         html_delen.append("<p style='color:#b00'><b>Let op:</b><br>"
                           + "<br>".join(waarschuwingen) + "</p>")
     html_delen += [
-        "<ol>",
+        "<ul>",
         f"<li>Adressen binnen {r.straal_m:.0f} m: <b>{len(r.rijen)}</b></li>",
         f"<li>{opkoop_regel}</li>",
-        f"<li>50 m-norm: <b>{len(r.afgevallen_50m)}</b> adres(sen) vallen af "
-        "(binnen 50 m van een bestaande vergunning).</li>",
-        "</ol>",
-        f"<p><b>Overgebleven pool: {len(pool)}</b> adres(sen) waar theoretisch nog een "
-        "4+-aanvraag op zou kunnen liggen.</p>",
-        "<ul>",
-        f"<li>Krap voor 4 kamers (BAG &lt; {r.m2_grens} m²): <b>{len(r.pool_te_klein)}</b> "
-        "<i>(niet uitgesloten - na een dakkapel/aanbouw kan dit veranderen)</i></li>",
-    ]
-    if r.archief_doorzocht:
-        html_delen.append(
-            f"<li>Afgelopen 12 mnd te koop geweest (voor zover in ons archief): "
-            f"<b>{len(r.pool_te_koop_geweest)}</b></li>"
-        )
-    else:
-        html_delen.append(
-            "<li>Te-koop-geweest: archief wordt nog opgebouwd, deze keer niet meegenomen.</li>"
-        )
-    html_delen += [
+        f"<li>Afgevallen door de 50 m-norm: <b>{len(r.afgevallen_50m)}</b></li>",
+        f"<li><b>Overgebleven pool: {len(pool)}</b> adres(sen) waar theoretisch nog een "
+        "4+-aanvraag op zou kunnen liggen</li>",
         "</ul>",
-        _lijst_html("Pool (overgebleven)", pool, met_woz=r.in_opkoopwijk, met_m2=True,
-                    met_tekoop=r.archief_doorzocht),
-        _lijst_html("Afgevallen - opkoopbescherming", r.afgevallen_opkoop, met_woz=True),
-        _lijst_html("Afgevallen - binnen 50 m van bestaande vergunning", r.afgevallen_50m),
-        "<p style='color:#888;font-size:.85em'>Kanttekening: lopende, nog niet verwerkte "
-        "aanvragen (doorlooptijd ~14 weken) zijn niet zichtbaar - Rotterdam publiceert "
-        "kamerverhuur-aanvragen niet, alleen de beslissing.<br>"
-        "Bron: PDOK (adressen/coördinaten), WOZ-waardeloket, BAG (oppervlakte), "
-        "officiele Rotterdamse vergunningenkaart (50 m-norm).</p>",
+        "<p>Het volledige rapport met alle adreslijsten zit in de "
+        "<b>bijgevoegde PDF</b>.</p>",
+        f"<p style='color:#888;font-size:.85em'>{_KANTTEKENING}</p>",
     ]
     html = "".join(html_delen)
-
     return onderwerp, html, text
