@@ -21,3 +21,16 @@ gewicht.steenhub.nl {
 kansen.steenhub.nl {
     reverse_proxy kansen:8080
 }
+
+# Losse projecten (eigen chat/branch, NIET in deze docker-compose.yml): ze draaien
+# als aparte compose-projecten op dezelfde VPS en zijn via hun containernaam
+# bereikbaar op het gedeelde Caddy-netwerk (deploy_default). Deze blokken horen
+# hier zodat ze een reboot / 'git reset --hard' bij een deploy overleven - anders
+# vallen ze telkens weg en geven de subdomeinen ERR_SSL_PROTOCOL_ERROR.
+opdracht.steenhub.nl {
+    reverse_proxy opdracht:8000
+}
+
+rommel.steenhub.nl {
+    reverse_proxy rommel-sorteren:8000
+}
