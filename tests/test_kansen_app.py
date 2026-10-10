@@ -703,9 +703,12 @@ def test_filters_worden_per_account_onthouden(tmp_path):
     assert jurian.get("/api/filters").get_json() == {}
     # Opslaan (met één onbekende sleutel die eruit gefilterd moet worden).
     jurian.post("/api/filters", json={"filter-stad": "rotterdam", "filter-winst": "150",
+                                      "filter-m2-min": "80", "filter-m2-max": "150",
                                       "toon-vergunningen": True, "onbekend": "x"})
     bewaard = jurian.get("/api/filters").get_json()
-    assert bewaard == {"filter-stad": "rotterdam", "filter-winst": "150", "toon-vergunningen": True}
+    assert bewaard == {"filter-stad": "rotterdam", "filter-winst": "150",
+                       "filter-m2-min": "80", "filter-m2-max": "150",
+                       "toon-vergunningen": True}
 
     # Ander account ziet eigen (lege) filters, niet die van jurian.
     justin = app.test_client()

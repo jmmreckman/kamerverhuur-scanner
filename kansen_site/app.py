@@ -61,6 +61,7 @@ def _te_koop_func_voor(config):
 _FILTER_SLEUTELS = {
     "toon-kansen", "toon-vergunningen", "toon-3kamer", "filter-stad", "filter-wijk",
     "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
+    "filter-m2-min", "filter-m2-max",
     "filter-zoek", "filter-dagen", "filter-sorteer",
 }
 

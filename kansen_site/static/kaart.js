@@ -15,6 +15,8 @@ const statusTekstEl = document.getElementById("status-tekst");
 const filterWijkEl = document.getElementById("filter-wijk");
 const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
+const filterM2MinEl = document.getElementById("filter-m2-min");
+const filterM2MaxEl = document.getElementById("filter-m2-max");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
@@ -149,6 +151,9 @@ function gefilterd() {
   const maxEigenInleg = parseFloat(filterEigenInlegEl.value);
   const maxSchakelgeld = parseFloat(filterSchakelgeldEl.value);
   const minWinst = parseFloat(filterWinstEl.value);
+  // m²-filter op de advertentie-oppervlakte (NIET de BAG-oppervlakte).
+  const minM2 = filterM2MinEl ? parseFloat(filterM2MinEl.value) : NaN;
+  const maxM2 = filterM2MaxEl ? parseFloat(filterM2MaxEl.value) : NaN;
   const zoek = filterZoekEl.value.trim().toLowerCase();
   const maxDagen = parseFloat(filterDagenEl.value);
   const stad = filterStadEl ? filterStadEl.value : "";
@@ -160,6 +165,14 @@ function gefilterd() {
     if (!isNaN(maxEigenInleg) && (c.eigenInleg === null || c.eigenInleg > maxEigenInleg)) return false;
     if (!isNaN(maxSchakelgeld) && (c.schakelgeld === null || c.schakelgeld > maxSchakelgeld)) return false;
     if (!isNaN(minWinst) && (c.winst === null || c.winst < minWinst)) return false;
+    if (!isNaN(minM2) || !isNaN(maxM2)) {
+      // Woningen zonder advertentie-m² vallen weg zodra er een m²-grens staat:
+      // we kunnen niet bevestigen dat ze binnen het bereik vallen.
+      const m2 = k.oppervlakte_advertentie;
+      if (m2 === null || m2 === undefined) return false;
+      if (!isNaN(minM2) && m2 < minM2) return false;
+      if (!isNaN(maxM2) && m2 > maxM2) return false;
+    }
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
       const dagen = dagenOpFunda(k.eerst_gezien);
@@ -555,7 +568,8 @@ if (toon3kamerEl) {
   });
 }
 
-for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl, filterZoekEl,
+for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
+                  filterM2MinEl, filterM2MaxEl, filterZoekEl,
                   filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
@@ -575,6 +589,8 @@ function verzamelFilters() {
     "filter-eigen-inleg": filterEigenInlegEl ? filterEigenInlegEl.value : undefined,
     "filter-schakelgeld": filterSchakelgeldEl ? filterSchakelgeldEl.value : undefined,
     "filter-winst": filterWinstEl ? filterWinstEl.value : undefined,
+    "filter-m2-min": filterM2MinEl ? filterM2MinEl.value : undefined,
+    "filter-m2-max": filterM2MaxEl ? filterM2MaxEl.value : undefined,
     "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
     "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
     "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
@@ -593,6 +609,8 @@ function pasFiltersToe(f) {
   zetWaarde(filterEigenInlegEl, f["filter-eigen-inleg"]);
   zetWaarde(filterSchakelgeldEl, f["filter-schakelgeld"]);
   zetWaarde(filterWinstEl, f["filter-winst"]);
+  zetWaarde(filterM2MinEl, f["filter-m2-min"]);
+  zetWaarde(filterM2MaxEl, f["filter-m2-max"]);
   zetWaarde(filterZoekEl, f["filter-zoek"]);
   zetWaarde(filterDagenEl, f["filter-dagen"]);
   zetWaarde(filterSorteerEl, f["filter-sorteer"]);
@@ -618,6 +636,7 @@ function slaFiltersOp() {
 // Elke wijziging aan een filter opslaan (gedebounced).
 for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, filterStadEl, filterWijkEl,
                   filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
+                  filterM2MinEl, filterM2MaxEl,
                   filterZoekEl, filterDagenEl, filterSorteerEl]) {
   if (el) {
     el.addEventListener("input", slaFiltersOp);
