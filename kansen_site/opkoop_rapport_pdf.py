@@ -207,6 +207,10 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     el.append(Paragraph(
         f"<b>{len(reeel)}</b> adres(sen) komen - volgens de regels - theoretisch nog in "
         "aanmerking voor een 4+-vergunning. Dit is de reële concurrentiepool.", tekst_stijl))
+    if r.centrum_rijen:
+        el.append(Paragraph(
+            f"<i>Jouw doeladres zelf ({r.centrum_rijen[0].weergavenaam}) is buiten beschouwing "
+            "gelaten - dat is je eigen doelwit, geen concurrentie.</i>", tekst_stijl))
 
     # --- Grootste risico's: reële pool + afgelopen 12 mnd te koop geweest ---
     risicos = r.grootste_risicos

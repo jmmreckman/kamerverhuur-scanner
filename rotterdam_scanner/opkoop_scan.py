@@ -35,6 +35,12 @@ from . import geocode
 GRENS_M2_4KAMERS = 72
 
 
+def _norm_adres(weergavenaam: str) -> str:
+    """Genormaliseerde adrestekst (lowercase, witruimte samengevouwen) om het
+    centrumadres te matchen tegen de buuradressen - beide komen uit PDOK."""
+    return " ".join((weergavenaam or "").lower().split())
+
+
 def _veilige_woz(nummeraanduiding_id: str, *, pogingen: int = 3) -> int | None:
     """Meest recente WOZ-waarde, of None. None = geen openbare WOZ (bv. een niet-woning:
     het loket geeft dan een 404, wat woz.fetch als lege lijst teruggeeft) OF het ophalen
@@ -120,6 +126,11 @@ class ScanResultaat:
 
     # --- uitgesloten categorieën (reden_afgevallen is gezet) ---
     @property
+    def centrum_rijen(self) -> list[AdresRij]:
+        """Het centrumadres zelf (jouw doeladres) - uitgesloten van de concurrentie."""
+        return [r for r in self.rijen if r.reden_afgevallen == "centrumadres"]
+
+    @property
     def afgevallen_opkoop(self) -> list[AdresRij]:
         return [r for r in self.rijen if r.reden_afgevallen and r.reden_afgevallen.startswith("opkoop")]
 
@@ -194,16 +205,26 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
     buurtnaam = getattr(nabij[0], "buurtnaam", "") if nabij else ""
     in_opkoopwijk = beschermde_wijk_func(buurtnaam)
 
+    # Het centrumadres zelf (jouw doeladres) is geen concurrentie - sluit het meteen uit
+    # zodat het nergens in de pool/risico's opduikt. Match op genormaliseerde adrestekst
+    # (beide uit PDOK, dus dezelfde schrijfwijze).
+    centrum_norm = _norm_adres(centrum_adres)
+    for r in rijen:
+        if centrum_norm and _norm_adres(r.weergavenaam) == centrum_norm:
+            r.reden_afgevallen = "centrumadres"
+
     resultaat = ScanResultaat(
         centrum_adres=centrum_adres, straal_m=straal_m, grens=grens, m2_grens=m2_grens,
         buurtnaam=buurtnaam, in_opkoopwijk=in_opkoopwijk, rijen=rijen,
         archief_doorzocht=te_koop_func is not None,
     )
 
-    # Stap 2 - opkoopbescherming (alleen zinvol in een beschermde wijk).
+    # Stap 2 - opkoopbescherming (alleen zinvol in een beschermde wijk). Al uitgesloten
+    # adressen (zoals het centrumadres) slaan we over.
     if in_opkoopwijk:
+        te_checken = [r for r in rijen if r.reden_afgevallen is None]
         geen_enkele_woz = True
-        for i, r in enumerate(rijen):
+        for i, r in enumerate(te_checken):
             if i and pauze_s:
                 time.sleep(pauze_s)
             r.woz = woz_func(r.nummeraanduiding_id)
@@ -211,7 +232,7 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
                 geen_enkele_woz = False
                 if r.woz <= grens:
                     r.reden_afgevallen = "opkoopbescherming (WOZ ≤ grens)"
-        if geen_enkele_woz and rijen:
+        if geen_enkele_woz and te_checken:
             resultaat.woz_onbereikbaar = True
 
     # Stap 3 - 50 m-norm, op de overlevers van stap 2.

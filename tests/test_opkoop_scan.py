@@ -44,6 +44,27 @@ def test_trechter_volledige_funnel():
     assert r.gis_onbereikbaar is False
 
 
+def test_centrumadres_wordt_uitgesloten():
+    adressen = [
+        _nabij("Pompstraat 42, 3082RT Rotterdam", 0, "1", aobj="a1", rd=(1.0, 1.0)),  # centrum
+        _nabij("Pompstraat 44, 3082RT Rotterdam", 8, "2", aobj="a2", rd=(2.0, 2.0)),  # buur
+    ]
+    woz_calls = []
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Pompstraat 42, 3082RT Rotterdam", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: woz_calls.append(nid) or 600_000,
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True,
+        bag_func=lambda aobj: (95, "woonfunctie"),
+    )
+    # Het centrumadres staat apart en NIET in de pool/risico's.
+    assert [a.weergavenaam for a in r.centrum_rijen] == ["Pompstraat 42, 3082RT Rotterdam"]
+    assert [a.weergavenaam for a in r.pool_reeel] == ["Pompstraat 44, 3082RT Rotterdam"]
+    assert all("42" not in a.weergavenaam for a in r.pool)
+    assert "1" not in woz_calls  # geen WOZ-call voor het uitgesloten centrumadres
+
+
 def test_niet_in_opkoopwijk_slaat_woz_over():
     adressen = [_nabij("A 1", 5, "1", rd=(1.0, 1.0)), _nabij("B 2", 10, "2", rd=(2.0, 2.0))]
     woz_calls = []
