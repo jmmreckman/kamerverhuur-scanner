@@ -161,6 +161,21 @@ body {
 }
 .broninfo-rij.broninfo-totaal { border-bottom: none; border-top: 1px solid var(--rand); margin-top: 0.2rem; padding-top: 0.35rem; }
 
+/* De kaart-pagina vult exact de (dynamische) viewport en scrollt zelf NIET: de
+   topbalk blijft altijd staan en alleen de zijbalk/kaart scrollen intern. Zonder dit
+   schoof op mobiel de topbalk weg zodra de pagina meescrolde met de adresbalk, en kon
+   je niet terugscrollen omdat de kaart elke veegbeweging opvangt. 100dvh houdt rekening
+   met de in-/uitschuivende mobiele browserbalk (met 100vh als fallback). */
+.kaart-body {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.kaart-body .topbar { flex: 0 0 auto; }
+.kaart-body .layout { flex: 1 1 auto; height: auto; min-height: 0; }
+
 .layout {
   display: flex;
   height: calc(100vh - 53px);
