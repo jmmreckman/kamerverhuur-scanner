@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='kaart.css') }}">
+  <script>window.IS_BEHEERDER = {{ is_beheerder|tojson }};</script>
 </head>
 <body>
   <header class="topbar">

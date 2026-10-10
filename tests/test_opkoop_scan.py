@@ -174,6 +174,30 @@ def test_grootste_risicos_is_reeel_en_te_koop_geweest():
     assert risico.te_koop_url == "https://funda.nl/x"
 
 
+def test_nu_te_koop_sorteert_bovenaan():
+    adressen = [
+        _nabij("Verkocht recent", 5, "1", aobj="a1", rd=(1.0, 1.0)),
+        _nabij("Nu te koop ouder", 8, "2", aobj="a2", rd=(2.0, 2.0)),
+    ]
+    tk = {
+        "Verkocht recent": {"sinds": "2026-07-01", "tot": "2026-09-01", "prijs": None,
+                            "bron": "funda", "url": None, "status": "afgevallen"},
+        "Nu te koop ouder": {"sinds": "2026-02-01", "tot": "2026-06-01", "prijs": None,
+                             "bron": "funda", "url": None, "status": "actief"},
+    }
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: 600_000, vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True, bag_func=lambda aobj: (90, "woonfunctie"),
+        te_koop_func=lambda naam, grens: tk.get(naam),
+    )
+    # 'Nu te koop' staat bovenaan ondanks oudere datum (actief = scherpste risico).
+    assert [a.weergavenaam for a in r.grootste_risicos] == ["Nu te koop ouder", "Verkocht recent"]
+    assert r.grootste_risicos[0].nu_te_koop is True
+    assert r.grootste_risicos[1].nu_te_koop is False
+
+
 def test_bouw_rapport_pdf_met_grootste_risicos_rendert():
     from kansen_site import opkoop_rapport_pdf
     adressen = [_nabij("Risico 1", 5, "1", aobj="a1", rd=(1.0, 1.0))]
@@ -389,6 +413,29 @@ def test_opkoop_scan_mailt_naar_opgegeven_ontvangers_zonder_bcc(client, monkeypa
     assert inhoud.startswith(b"%PDF")
     data = resp.get_json()
     assert "een@x.nl" in data["melding"] and "twee@y.nl" in data["melding"]
+
+
+def test_opkoop_scan_zonder_veld_gebruikt_mail_voorkeuren(tmp_path, monkeypatch):
+    from rotterdam_scanner import mail_voorkeuren
+    cfg = _config(tmp_path)
+    mail_voorkeuren.zet_voorkeuren(cfg, "jurian", "voorkeur@x.nl", [])
+    app = kansen_app.create_app(cfg)
+    app.testing = True
+    client = app.test_client()
+    _login(client)
+
+    verzonden = {}
+    monkeypatch.setattr(kansen_app.geocode, "geocode_vrij_landelijk", _fake_geocode)
+    monkeypatch.setattr(kansen_app.opkoop_scan, "scan",
+                        lambda *a, **k: opkoop_scan.ScanResultaat("x", 50.0, 470_000, 72, "Oud Charlois", True, []))
+    monkeypatch.setattr(kansen_app, "send_mail",
+                        lambda *a, recipients=None, stille_bcc=True, attachments=None, **k: verzonden.update(recipients=recipients))
+    monkeypatch.setattr(kansen_app.threading, "Thread", _DirecteThread)
+
+    # Geen "ontvangers"-veld (zoals de kaart-popup doet) -> mail-voorkeuren-adres.
+    resp = client.post("/opkoop-scan", json={"adres": "Pompstraat 42, Rotterdam"})
+    assert resp.status_code == 200
+    assert verzonden["recipients"] == ["voorkeur@x.nl"]
 
 
 def test_opkoop_scan_leeg_ontvanger_valt_terug_op_report_to(client, monkeypatch):

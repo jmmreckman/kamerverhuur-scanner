@@ -101,7 +101,8 @@ def _risico_blok(breedte, nr, a, adres_stijl, label_stijl, waarde_stijl):
     naam = a.weergavenaam
     if a.te_koop_url:
         naam = f'<a href="{a.te_koop_url}" color="#1b7a43">{naam}</a>'
-    kop = Paragraph(f"{nr}. {naam}", adres_stijl)
+    tag = '<font color="#c0392b"><b>[NU TE KOOP]</b></font> ' if a.nu_te_koop else ""
+    kop = Paragraph(f"{nr}. {tag}{naam}", adres_stijl)
 
     te_koop = a.te_koop_laatst or "—"
     if a.te_koop_sinds and a.te_koop_sinds != a.te_koop_laatst:
@@ -213,12 +214,18 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
         label_stijl = ParagraphStyle("RLabel", parent=tekst_stijl, fontName="Helvetica-Bold",
                                      fontSize=9, spaceAfter=0, textColor=_DONKER)
         waarde_stijl = ParagraphStyle("RWaarde", parent=tekst_stijl, fontSize=9, spaceAfter=0)
+        nu_te_koop = sum(1 for a in risicos if a.nu_te_koop)
         el.append(Paragraph(f"⚑ Grootste risico's - handmatig onderzoeken ({len(risicos)})",
                             risico_kop_stijl))
-        el.append(Paragraph(
-            "Deze adressen zijn <b>én</b> viabel voor een 4+-vergunning (reële pool) <b>én</b> "
-            "stonden de afgelopen 12 maanden te koop. Dit zijn je topkandidaten om zelf uit te "
-            "zoeken - meest recent te koop bovenaan.", tekst_stijl))
+        intro = ("Deze adressen zijn <b>én</b> viabel voor een 4+-vergunning (reële pool) <b>én</b> "
+                 "stonden de afgelopen 12 maanden te koop. Dit zijn je topkandidaten om zelf uit te "
+                 "zoeken.")
+        if nu_te_koop:
+            intro += (f' <font color="#c0392b"><b>{nu_te_koop} staan er nú nog te koop</b></font> '
+                      "(gemarkeerd met [NU TE KOOP]) - die staan bovenaan.")
+        else:
+            intro += " Meest recent te koop bovenaan."
+        el.append(Paragraph(intro, tekst_stijl))
         for i, a in enumerate(risicos, 1):
             el.append(_risico_blok(breedte, i, a, risico_adres_stijl, label_stijl, waarde_stijl))
 

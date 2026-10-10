@@ -205,12 +205,15 @@ function bouwPopup(kans) {
     ${signalen ? signalen + "<br>" : ""}
     ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
     <a href="/woning/${encodeURIComponent(kans.object_id)}/berekening" class="reken-link">Rekenen met deze woning &rarr;</a><br>
+    ${window.IS_BEHEERDER ? `<a href="#" class="concurrentie-scan-link">Start concurrentie-scan voor dit adres &rarr;</a><br>` : ""}
     ${kans.url
       ? `<a href="${kans.url}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>`
       : `<a href="${kans.zoek_url}" target="_blank" rel="noopener">Zoek op Google &rarr;</a>`}
   `;
 
   div.querySelector(".popup-verwijder-knop").addEventListener("click", () => verwijderKans(kans));
+  const scanLink = div.querySelector(".concurrentie-scan-link");
+  if (scanLink) scanLink.addEventListener("click", (e) => { e.preventDefault(); startConcurrentieScanVoor(kans, scanLink); });
   div.querySelector(".ster-knop").addEventListener("click", () => favorietToggle(kans));
 
   const kamersInput = div.querySelector(".kamers-input");
@@ -222,6 +225,32 @@ function bouwPopup(kans) {
   }
 
   return div;
+}
+
+async function startConcurrentieScanVoor(kans, linkEl) {
+  // Start de concurrentie-scan voor dit adres zonder overtypen; de ontvanger wordt
+  // server-side bepaald uit de mail-voorkeuren van het ingelogde account. Resultaat
+  // komt per mail (PDF-rapport). De link toont kort de melding/fout als feedback.
+  const origineel = linkEl.textContent;
+  linkEl.textContent = "Concurrentie-scan starten…";
+  linkEl.style.pointerEvents = "none";
+  try {
+    const resp = await fetch("/opkoop-scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adres: kans.weergavenaam }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      linkEl.textContent = data.fout || "Scan starten mislukt";
+      linkEl.style.pointerEvents = "";
+      return;
+    }
+    linkEl.textContent = "✓ " + (data.melding || "Scan gestart; resultaat komt per mail.");
+  } catch (err) {
+    linkEl.textContent = "Scan starten mislukt — probeer opnieuw";
+    linkEl.style.pointerEvents = "";
+  }
 }
 
 async function kamersAanpassen(kans, waarde) {

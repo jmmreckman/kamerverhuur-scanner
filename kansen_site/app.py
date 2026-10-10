@@ -916,9 +916,17 @@ def create_app(config: Config | None = None) -> Flask:
             if ongeldig:
                 return jsonify({"fout": "Ongeldig e-mailadres: " + ", ".join(ongeldig)}), 400
         else:
-            ontvangers = list(config.report_to)
+            # Geen veld meegegeven (bv. vanaf de kaart-popup): val terug op het mailadres
+            # uit de mail-voorkeuren van het ingelogde account, anders op het
+            # geconfigureerde report-adres.
+            voorkeur = mail_voorkeuren.voorkeuren_voor(config, session.get("gebruiker", ""))
+            ontvangers = [a for a in mail_voorkeuren.split_emails(voorkeur.get("email", ""))
+                          if mail_voorkeuren.geldig_email(a)]
+            if not ontvangers:
+                ontvangers = list(config.report_to)
         if not ontvangers:
-            return jsonify({"fout": "Geen (geldig) ontvanger-adres opgegeven."}), 400
+            return jsonify({"fout": "Geen (geldig) ontvanger-adres opgegeven. Stel een "
+                                    "mailadres in bij Mail-voorkeuren."}), 400
 
         try:
             res = geocode.geocode_vrij_landelijk(adres)

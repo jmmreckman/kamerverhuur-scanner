@@ -98,6 +98,12 @@ class AdresRij:
     def woz_onbekend(self) -> bool:
         return self.woz is None
 
+    @property
+    def nu_te_koop(self) -> bool:
+        """Staat volgens de laatst bekende status nú nog te koop (actieve listing),
+        i.p.v. inmiddels verkocht/van de markt - het scherpste risico."""
+        return (self.te_koop_status or "").lower() == "actief"
+
 
 @dataclass
 class ScanResultaat:
@@ -156,7 +162,8 @@ class ScanResultaat:
         4+-vergunning) én de afgelopen 12 mnd te koop geweest. Meest recent te koop
         bovenaan."""
         risicos = [r for r in self.pool_reeel if r.te_koop_laatst]
-        return sorted(risicos, key=lambda r: (r.te_koop_laatst or ""), reverse=True)
+        # Nu-nog-te-koop bovenaan (scherpste risico), daarna op recentheid.
+        return sorted(risicos, key=lambda r: (r.nu_te_koop, r.te_koop_laatst or ""), reverse=True)
 
 
 def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
