@@ -96,16 +96,18 @@ def test_bouw_te_koop_index_combineert_state_en_archief(tmp_path):
         _listing("2", "Doklaan 3, Rotterdam", "2026-02-01", "2026-07-15"),
     ])
     idx = bouw_te_koop_index(live, arch.all())
-    # Per adres de meest recente datum (state 2026-09-20 wint van archief 2026-05-01).
-    assert idx["pompstraat 42, rotterdam"] == "2026-09-20"
-    assert idx["doklaan 3, rotterdam"] == "2026-07-15"
+    # Per adres: 'tot' is de meest recente datum (state 2026-09-20 wint van archief
+    # 2026-05-01), 'sinds' de vroegste over alle bronnen (archief 2026-01-01).
+    assert idx["pompstraat 42, rotterdam"]["tot"] == "2026-09-20"
+    assert idx["pompstraat 42, rotterdam"]["sinds"] == "2026-01-01"
+    assert idx["doklaan 3, rotterdam"]["tot"] == "2026-07-15"
 
 
 def test_bouw_te_koop_index_gebruikt_laatst_beschikbaar(tmp_path):
     live = [_listing("1", "Pompstraat 42, Rotterdam", "2026-01-01", "2026-02-01",
                      laatst_beschikbaar="2026-08-01")]
     idx = bouw_te_koop_index(live, [])
-    assert idx["pompstraat 42, rotterdam"] == "2026-08-01"  # beschikbaar > laatst_gezien
+    assert idx["pompstraat 42, rotterdam"]["tot"] == "2026-08-01"  # beschikbaar > laatst_gezien
 
 
 def test_bouw_te_koop_index_leeg():

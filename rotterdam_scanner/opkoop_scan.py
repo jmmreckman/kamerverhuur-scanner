@@ -86,7 +86,12 @@ class AdresRij:
     bag_m2: int | None = None
     gebruiksdoel: str | None = None
     binnen_50m: bool | None = None
-    te_koop_laatst: str | None = None       # ISO-datum, als binnen 12 mnd te koop gezien
+    te_koop_laatst: str | None = None       # ISO-datum, laatst te koop gezien (binnen 12 mnd)
+    te_koop_sinds: str | None = None        # ISO-datum, vroegst te koop gezien
+    te_koop_prijs: int | None = None        # laatst bekende vraagprijs
+    te_koop_bron: str | None = None         # "funda" / "nvm" (evt. beide)
+    te_koop_url: str | None = None          # advertentie-URL (voor handmatig onderzoek)
+    te_koop_status: str | None = None       # laatst bekende status (actief / afgevallen)
     reden_afgevallen: str | None = None      # None = nog in de pool
 
     @property
@@ -144,6 +149,14 @@ class ScanResultaat:
     @property
     def pool_te_koop_geweest(self) -> list[AdresRij]:
         return [r for r in self.pool if r.te_koop_laatst]
+
+    @property
+    def grootste_risicos(self) -> list[AdresRij]:
+        """De topkandidaten voor handmatig onderzoek: in de reële pool (viabel voor een
+        4+-vergunning) én de afgelopen 12 mnd te koop geweest. Meest recent te koop
+        bovenaan."""
+        risicos = [r for r in self.pool_reeel if r.te_koop_laatst]
+        return sorted(risicos, key=lambda r: (r.te_koop_laatst or ""), reverse=True)
 
 
 def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
@@ -223,7 +236,18 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
     if te_koop_func is not None:
         grens_datum = (vandaag - timedelta(days=365)).isoformat()
         for r in resultaat.pool:
-            r.te_koop_laatst = te_koop_func(r.weergavenaam, grens_datum)
+            info = te_koop_func(r.weergavenaam, grens_datum)
+            if not info:
+                continue
+            if isinstance(info, str):      # eenvoudige bron/fake: alleen een datum
+                r.te_koop_laatst = info
+            else:                          # volledige info-dict (zie archief.bouw_te_koop_index)
+                r.te_koop_laatst = info.get("tot")
+                r.te_koop_sinds = info.get("sinds")
+                r.te_koop_prijs = info.get("prijs")
+                r.te_koop_bron = info.get("bron")
+                r.te_koop_url = info.get("url")
+                r.te_koop_status = info.get("status")
 
     return resultaat
 
@@ -288,6 +312,8 @@ def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
         f"{len(r.pool_te_klein)}",
         f"=> REËLE concurrentiepool: {len(reeel)} adres(sen) waar theoretisch nog een "
         "4+-aanvraag op zou kunnen liggen",
+        f"=> GROOTSTE RISICO'S (reële pool + afgelopen 12 mnd te koop geweest): "
+        f"{len(r.grootste_risicos)} - deze staan bovenaan in de PDF om handmatig uit te zoeken",
         "",
         "Het volledige rapport met alle adreslijsten (reële pool, de te-kleine en "
         "andere-gebruiksdoel-adressen, en de afvallers) zit in de bijgevoegde PDF.",
@@ -313,6 +339,9 @@ def bouw_cover(r: ScanResultaat) -> tuple[str, str, str]:
         f"<b>{len(r.pool_te_klein)}</b></li>",
         f"<li><b>Reële concurrentiepool: {len(reeel)}</b> adres(sen) waar theoretisch nog "
         "een 4+-aanvraag op zou kunnen liggen</li>",
+        f"<li style='color:#b00'><b>Grootste risico's: {len(r.grootste_risicos)}</b> "
+        "(reële pool + afgelopen 12 mnd te koop geweest) - staan bovenaan in de PDF om "
+        "handmatig uit te zoeken</li>",
         "</ul>",
         "<p>Het volledige rapport met alle adreslijsten zit in de "
         "<b>bijgevoegde PDF</b>.</p>",

@@ -157,20 +157,52 @@ class ListingArchief:
         return rec if rec.laatste_peildatum() >= grens_datum_iso else None
 
 
-def bouw_te_koop_index(listings=(), archief_records=()) -> dict[str, str]:
-    """{genormaliseerd adres -> meest recente te-koop-peildatum (ISO)} uit de live
-    StateStore-listings en/of archiefrecords samen. Zo kan de concurrentie-scan de
-    te-koop-check al draaien op de ~maand die in state.json zit, terwijl het blijvende
-    archief nog aan het opbouwen is; per adres wordt de laatste datum gehouden."""
-    idx: dict[str, str] = {}
+def bouw_te_koop_index(listings=(), archief_records=()) -> dict[str, dict]:
+    """{genormaliseerd adres -> info-dict} uit de live StateStore-listings en/of
+    archiefrecords samen, voor de te-koop-geweest-check van de concurrentie-scan.
 
-    def _overweeg(norm: str, datum: str | None) -> None:
-        if norm and datum and (norm not in idx or datum > idx[norm]):
-            idx[norm] = datum
+    Per adres: {"sinds": vroegste gezien-datum, "tot": laatste gezien/beschikbaar-datum,
+    "prijs": laatst bekende vraagprijs, "bron": bronnen als tekst, "url": advertentie-URL,
+    "status": laatst bekende status}. De record met de meest recente datum levert de
+    'laatste' velden (prijs/bron/url/status); 'sinds' is de vroegste over alle bronnen."""
+    idx: dict[str, dict] = {}
+
+    def _overweeg(norm, sinds, tot, prijs, bron, url, status):
+        if not norm or not tot:
+            return
+        rec = idx.get(norm)
+        if rec is None:
+            idx[norm] = {"sinds": sinds or tot, "tot": tot, "prijs": prijs,
+                         "bron": bron, "url": url, "status": status}
+            return
+        if sinds and (not rec["sinds"] or sinds < rec["sinds"]):
+            rec["sinds"] = sinds
+        if tot > rec["tot"]:
+            rec["tot"] = tot
+            if prijs is not None:
+                rec["prijs"] = prijs
+            if bron:
+                rec["bron"] = bron
+            if url:
+                rec["url"] = url
+            if status:
+                rec["status"] = status
+        else:
+            if rec["prijs"] is None and prijs is not None:
+                rec["prijs"] = prijs
+            if not rec.get("url") and url:
+                rec["url"] = url
+
+    def _bron_tekst(bronnen):
+        return ", ".join(b for b in (bronnen or []) if b) or None
 
     for item in listings:
-        datum = getattr(item, "laatst_beschikbaar", None) or getattr(item, "laatst_gezien", None)
-        _overweeg(normaliseer_adres(getattr(item, "weergavenaam", "")), datum)
+        tot = getattr(item, "laatst_beschikbaar", None) or getattr(item, "laatst_gezien", None)
+        _overweeg(normaliseer_adres(getattr(item, "weergavenaam", "")),
+                  getattr(item, "eerst_gezien", None), tot, getattr(item, "prijs", None),
+                  _bron_tekst(getattr(item, "bronnen", None)), getattr(item, "url", None),
+                  getattr(item, "status", None))
     for rec in archief_records:
-        _overweeg(rec.adres_genormaliseerd, rec.laatste_peildatum())
+        _overweeg(rec.adres_genormaliseerd, rec.eerst_gezien, rec.laatste_peildatum(),
+                  rec.prijs, _bron_tekst(rec.bronnen), rec.url, rec.laatste_status)
     return idx

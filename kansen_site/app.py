@@ -943,8 +943,8 @@ def create_app(config: Config | None = None) -> Flask:
             te_koop_index = archief.bouw_te_koop_index(listings, arch.all())
             if te_koop_index:
                 def te_koop_func(weergavenaam, grens_datum):  # noqa: E731 - kleine closure
-                    datum = te_koop_index.get(archief.normaliseer_adres(weergavenaam))
-                    return datum if (datum and datum >= grens_datum) else None
+                    info = te_koop_index.get(archief.normaliseer_adres(weergavenaam))
+                    return info if (info and info.get("tot") and info["tot"] >= grens_datum) else None
         except Exception:
             app.logger.exception("Kon te-koop-gegevens niet laden voor de concurrentie-scan")
 

@@ -142,6 +142,57 @@ def test_ander_gebruiksdoel_gaat_naar_zeer_onwaarschijnlijk():
     assert r.zeer_onwaarschijnlijk[0] not in r.pool
 
 
+def test_grootste_risicos_is_reeel_en_te_koop_geweest():
+    adressen = [
+        _nabij("Risico 1", 5, "1", aobj="a1", rd=(1.0, 1.0)),   # reeel + te koop
+        _nabij("Rustig 2", 10, "2", aobj="a2", rd=(2.0, 2.0)),  # reeel, niet te koop
+        _nabij("Klein 3", 12, "3", aobj="a3", rd=(3.0, 3.0)),   # te koop maar te klein
+    ]
+    opp = {"a1": (95, "woonfunctie"), "a2": (120, "woonfunctie"), "a3": (50, "woonfunctie")}
+    tk = {
+        "Risico 1": {"sinds": "2026-03-01", "tot": "2026-07-01", "prijs": 365_000,
+                     "bron": "funda, nvm", "url": "https://funda.nl/x", "status": "afgevallen"},
+        "Klein 3": {"sinds": "2026-05-01", "tot": "2026-06-01", "prijs": 200_000,
+                    "bron": "funda", "url": None, "status": "afgevallen"},
+    }
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: 600_000,
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True,
+        bag_func=lambda aobj: opp[aobj],
+        te_koop_func=lambda naam, grens: tk.get(naam),
+    )
+    # alleen Risico 1 is én reëel (>=72) én te koop geweest; Klein 3 valt in te-klein
+    assert [a.weergavenaam for a in r.grootste_risicos] == ["Risico 1"]
+    risico = r.grootste_risicos[0]
+    assert risico.te_koop_sinds == "2026-03-01"
+    assert risico.te_koop_laatst == "2026-07-01"
+    assert risico.te_koop_prijs == 365_000
+    assert risico.te_koop_bron == "funda, nvm"
+    assert risico.te_koop_url == "https://funda.nl/x"
+
+
+def test_bouw_rapport_pdf_met_grootste_risicos_rendert():
+    from kansen_site import opkoop_rapport_pdf
+    adressen = [_nabij("Risico 1", 5, "1", aobj="a1", rd=(1.0, 1.0))]
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Pompstraat 42, Rotterdam", pauze_s=0,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: 600_000,
+        vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True,
+        bag_func=lambda aobj: (95, "woonfunctie"),
+        te_koop_func=lambda naam, grens: {"sinds": "2026-03-01", "tot": "2026-07-01",
+                                          "prijs": 365_000, "bron": "funda", "url": "https://funda.nl/x",
+                                          "status": "afgevallen"},
+    )
+    assert len(r.grootste_risicos) == 1
+    pdf = opkoop_rapport_pdf.bouw_rapport_pdf(r)
+    assert pdf.startswith(b"%PDF") and len(pdf) > 1000
+
+
 def test_pool_splitst_in_reeel_en_te_klein():
     adressen = [
         _nabij("Groot 1", 5, "1", aobj="ag", rd=(1.0, 1.0)),

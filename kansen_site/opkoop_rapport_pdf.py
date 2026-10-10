@@ -93,6 +93,50 @@ def _adreslijst_tabel(breedte, rijen, *, met_woz, met_tekoop, celstijl,
     return tabel
 
 
+def _risico_blok(breedte, nr, a, adres_stijl, label_stijl, waarde_stijl):
+    """Detailblok voor één 'grootste risico'-adres: adres (met link) + een tabel met
+    alles wat we weten, voor handmatig onderzoek."""
+    from reportlab.platypus import KeepTogether
+
+    naam = a.weergavenaam
+    if a.te_koop_url:
+        naam = f'<a href="{a.te_koop_url}" color="#1b7a43">{naam}</a>'
+    kop = Paragraph(f"{nr}. {naam}", adres_stijl)
+
+    te_koop = a.te_koop_laatst or "—"
+    if a.te_koop_sinds and a.te_koop_sinds != a.te_koop_laatst:
+        te_koop = f"{a.te_koop_sinds} t/m {a.te_koop_laatst}"
+    if (a.te_koop_status or "").lower() == "actief":
+        status = "nog actief te koop (volgens laatste gegevens)"
+    elif a.te_koop_status:
+        status = f"{a.te_koop_status} (≈ daarna van de markt / verkocht rond {a.te_koop_laatst})"
+    else:
+        status = "—"
+
+    rijen = [
+        ["Afstand tot centrum", f"{a.afstand_m:.0f} m"],
+        ["WOZ-waarde", _eur(a.woz) if a.woz is not None else "niet openbaar / onbekend"],
+        ["Oppervlakte (BAG)", _m2(a.bag_m2)],
+        ["Gebruiksdoel", a.gebruiksdoel or "—"],
+        ["Te koop gezien", te_koop],
+        ["Status (laatst bekend)", status],
+        ["Vraagprijs (laatst bekend)", _eur(a.te_koop_prijs) if a.te_koop_prijs else "—"],
+        ["Bron", a.te_koop_bron or "—"],
+    ]
+    data = [[Paragraph(k, label_stijl), Paragraph(str(v), waarde_stijl)] for k, v in rijen]
+    tab = Table(data, colWidths=[breedte * 0.34, breedte * 0.66], hAlign="LEFT")
+    tab.setStyle(TableStyle([
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.3, _RAND),
+        ("BOX", (0, 0), (-1, -1), 0.5, _RAND),
+        ("BACKGROUND", (0, 0), (0, -1), _ACHTERGROND),
+    ]))
+    return KeepTogether([kop, tab])
+
+
 def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     vandaag = vandaag or date.today()
     buffer = io.BytesIO()
@@ -108,6 +152,10 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     tekst_stijl = ParagraphStyle("Tekst", parent=basis["Normal"], textColor=_DONKER, fontSize=9.5, spaceAfter=4)
     waarschuw_stijl = ParagraphStyle("Waarschuw", parent=basis["Normal"], textColor=_ROOD, fontSize=9.5, spaceAfter=4)
     voet_stijl = ParagraphStyle("Voet", parent=basis["Normal"], textColor=_GRIJS, fontSize=8, spaceBefore=14)
+    risico_kop_stijl = ParagraphStyle("RisicoKop", parent=basis["Heading2"], textColor=_ROOD,
+                                      fontSize=13, spaceBefore=14, spaceAfter=4)
+    risico_adres_stijl = ParagraphStyle("RisicoAdres", parent=basis["Normal"], textColor=_DONKER,
+                                        fontSize=10.5, spaceBefore=8, spaceAfter=3, fontName="Helvetica-Bold")
     celstijl = _cel_stijl()
 
     breedte = doc.width
@@ -158,6 +206,21 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     el.append(Paragraph(
         f"<b>{len(reeel)}</b> adres(sen) komen - volgens de regels - theoretisch nog in "
         "aanmerking voor een 4+-vergunning. Dit is de reële concurrentiepool.", tekst_stijl))
+
+    # --- Grootste risico's: reële pool + afgelopen 12 mnd te koop geweest ---
+    risicos = r.grootste_risicos
+    if risicos:
+        label_stijl = ParagraphStyle("RLabel", parent=tekst_stijl, fontName="Helvetica-Bold",
+                                     fontSize=9, spaceAfter=0, textColor=_DONKER)
+        waarde_stijl = ParagraphStyle("RWaarde", parent=tekst_stijl, fontSize=9, spaceAfter=0)
+        el.append(Paragraph(f"⚑ Grootste risico's - handmatig onderzoeken ({len(risicos)})",
+                            risico_kop_stijl))
+        el.append(Paragraph(
+            "Deze adressen zijn <b>én</b> viabel voor een 4+-vergunning (reële pool) <b>én</b> "
+            "stonden de afgelopen 12 maanden te koop. Dit zijn je topkandidaten om zelf uit te "
+            "zoeken - meest recent te koop bovenaan.", tekst_stijl))
+        for i, a in enumerate(risicos, 1):
+            el.append(_risico_blok(breedte, i, a, risico_adres_stijl, label_stijl, waarde_stijl))
 
     # --- Reële pool ---
     el.append(Paragraph(f"Reële concurrentiepool ({len(reeel)})", kop_stijl))
