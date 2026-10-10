@@ -164,10 +164,17 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     if reeel:
         el.append(_adreslijst_tabel(breedte, reeel, met_woz=r.in_opkoopwijk,
                                     met_tekoop=r.archief_doorzocht, celstijl=celstijl))
-        if not r.archief_doorzocht:
-            el.append(Spacer(1, 1.5 * mm))
-            el.append(Paragraph("&bull; Te-koop-geweest: het archief wordt nog opgebouwd en is "
-                                "deze keer niet meegenomen.", tekst_stijl))
+        el.append(Spacer(1, 1.5 * mm))
+        if r.archief_doorzocht:
+            n = len(r.pool_te_koop_geweest)
+            el.append(Paragraph(
+                f"&bull; Afgelopen 12 mnd te koop geweest (reële pool): <b>{n}</b>. "
+                "Let op: dit dekt alleen woningen die onze eigen scanner heeft gezien; die "
+                "historie bouwt nog maar kort op (± 1 maand nu) en groeit elke dag - afwezigheid "
+                "betekent dus niet per se dat een woning niet te koop stond.", tekst_stijl))
+        else:
+            el.append(Paragraph("&bull; Te-koop-geweest: nog geen gegevens beschikbaar "
+                                "(de historie wordt opgebouwd).", tekst_stijl))
     else:
         el.append(Paragraph("Geen adressen in de reële concurrentiepool.", tekst_stijl))
 

@@ -3,6 +3,7 @@ verwijderen, en de te-koop-geweest-match op adres + datumgrens."""
 from rotterdam_scanner.archief import (
     ListingArchief,
     archief_pad_voor,
+    bouw_te_koop_index,
     normaliseer_adres,
 )
 from rotterdam_scanner.state import ListingState
@@ -84,3 +85,28 @@ def test_laatst_beschikbaar_wint_als_peildatum(tmp_path):
     rec = arch.all()[0]
     assert rec.laatste_peildatum() == "2026-06-01"
     assert arch.te_koop_geweest_sinds("Pompstraat 42, Rotterdam", "2026-01-01") is not None
+
+
+def test_bouw_te_koop_index_combineert_state_en_archief(tmp_path):
+    # Live state: woning recent gezien. Archief: zelfde adres ouder + een ander adres.
+    live = [_listing("1", "Pompstraat 42, Rotterdam", "2026-03-01", "2026-09-20")]
+    arch = ListingArchief(tmp_path / "a.json")
+    arch.vul_aan([
+        _listing("1", "Pompstraat 42, Rotterdam", "2026-01-01", "2026-05-01"),
+        _listing("2", "Doklaan 3, Rotterdam", "2026-02-01", "2026-07-15"),
+    ])
+    idx = bouw_te_koop_index(live, arch.all())
+    # Per adres de meest recente datum (state 2026-09-20 wint van archief 2026-05-01).
+    assert idx["pompstraat 42, rotterdam"] == "2026-09-20"
+    assert idx["doklaan 3, rotterdam"] == "2026-07-15"
+
+
+def test_bouw_te_koop_index_gebruikt_laatst_beschikbaar(tmp_path):
+    live = [_listing("1", "Pompstraat 42, Rotterdam", "2026-01-01", "2026-02-01",
+                     laatst_beschikbaar="2026-08-01")]
+    idx = bouw_te_koop_index(live, [])
+    assert idx["pompstraat 42, rotterdam"] == "2026-08-01"  # beschikbaar > laatst_gezien
+
+
+def test_bouw_te_koop_index_leeg():
+    assert bouw_te_koop_index([], []) == {}

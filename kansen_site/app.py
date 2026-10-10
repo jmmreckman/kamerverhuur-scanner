@@ -932,22 +932,21 @@ def create_app(config: Config | None = None) -> Flask:
         grens = int(config.opkoopbescherming_woz_grens)
         centrum, lat, lon = res.weergavenaam, res.lat, res.lon
 
-        # #5: matchen tegen het blijvende listings-archief (te-koop-geweest). Lukt het
-        # laden niet, of is het archief nog leeg, dan draait de scan gewoon zonder #5.
+        # #5 (te-koop-geweest): match tegen zowel de live state.json (recente ~maand +
+        # favorieten) als het blijvende archief (groeit over de tijd). Zo draait de check
+        # al op wat we nu hebben; dekking groeit vanzelf. Lukt laden niet of is er niets,
+        # dan draait de scan gewoon zonder #5.
         te_koop_func = None
         try:
+            listings = StateStore(config.state_path).all()
             arch = archief.ListingArchief(archief.archief_pad_voor(config.state_path))
-            if len(arch):
-                index = arch.index_op_adres()
-
+            te_koop_index = archief.bouw_te_koop_index(listings, arch.all())
+            if te_koop_index:
                 def te_koop_func(weergavenaam, grens_datum):  # noqa: E731 - kleine closure
-                    rec = index.get(archief.normaliseer_adres(weergavenaam))
-                    if rec is None:
-                        return None
-                    peil = rec.laatste_peildatum()
-                    return peil if peil >= grens_datum else None
+                    datum = te_koop_index.get(archief.normaliseer_adres(weergavenaam))
+                    return datum if (datum and datum >= grens_datum) else None
         except Exception:
-            app.logger.exception("Kon listings-archief niet laden voor de concurrentie-scan")
+            app.logger.exception("Kon te-koop-gegevens niet laden voor de concurrentie-scan")
 
         def _foutmail(exc):
             try:

@@ -155,3 +155,22 @@ class ListingArchief:
         if rec is None:
             return None
         return rec if rec.laatste_peildatum() >= grens_datum_iso else None
+
+
+def bouw_te_koop_index(listings=(), archief_records=()) -> dict[str, str]:
+    """{genormaliseerd adres -> meest recente te-koop-peildatum (ISO)} uit de live
+    StateStore-listings en/of archiefrecords samen. Zo kan de concurrentie-scan de
+    te-koop-check al draaien op de ~maand die in state.json zit, terwijl het blijvende
+    archief nog aan het opbouwen is; per adres wordt de laatste datum gehouden."""
+    idx: dict[str, str] = {}
+
+    def _overweeg(norm: str, datum: str | None) -> None:
+        if norm and datum and (norm not in idx or datum > idx[norm]):
+            idx[norm] = datum
+
+    for item in listings:
+        datum = getattr(item, "laatst_beschikbaar", None) or getattr(item, "laatst_gezien", None)
+        _overweeg(normaliseer_adres(getattr(item, "weergavenaam", "")), datum)
+    for rec in archief_records:
+        _overweeg(rec.adres_genormaliseerd, rec.laatste_peildatum())
+    return idx
