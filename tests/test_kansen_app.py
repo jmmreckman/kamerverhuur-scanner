@@ -677,6 +677,31 @@ def test_api_kansen_toont_afgevallen_favoriet(tmp_path):
     assert data[0]["status"] == "afgevallen"
 
 
+def test_filters_worden_per_account_onthouden(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+
+    jurian = app.test_client()
+    jurian.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    # Leeg bij start.
+    assert jurian.get("/api/filters").get_json() == {}
+    # Opslaan (met één onbekende sleutel die eruit gefilterd moet worden).
+    jurian.post("/api/filters", json={"filter-stad": "rotterdam", "filter-winst": "150",
+                                      "toon-vergunningen": True, "onbekend": "x"})
+    bewaard = jurian.get("/api/filters").get_json()
+    assert bewaard == {"filter-stad": "rotterdam", "filter-winst": "150", "toon-vergunningen": True}
+
+    # Ander account ziet eigen (lege) filters, niet die van jurian.
+    justin = app.test_client()
+    justin.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    assert justin.get("/api/filters").get_json() == {}
+
+
+def test_filters_zonder_login_geweigerd(app_client):
+    assert app_client.get("/api/filters").status_code == 302
+    assert app_client.post("/api/filters", json={}).status_code == 302
+
+
 def test_favoriet_is_per_account(tmp_path):
     app = create_app(_config(tmp_path))
     app.testing = True

@@ -54,6 +54,58 @@ def _te_koop_func_voor(config):
         return info if (info and info.get("tot") and info["tot"] >= grens_datum) else None
 
     return _f
+
+
+# --- Filter-voorkeuren per account (kaart) ---
+# De sleutels die de kaart-filters mag opslaan (zie kaart.html/kaart.js).
+_FILTER_SLEUTELS = {
+    "toon-kansen", "toon-vergunningen", "toon-3kamer", "filter-stad", "filter-wijk",
+    "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
+    "filter-zoek", "filter-dagen", "filter-sorteer",
+}
+
+
+def _filter_voorkeuren_pad(config) -> Path:
+    return Path(config.state_path).parent / "filter_voorkeuren.json"
+
+
+def _laad_filter_voorkeuren(config, gebruiker: str) -> dict:
+    try:
+        data = json.loads(_filter_voorkeuren_pad(config).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    waarde = data.get(gebruiker) if isinstance(data, dict) else None
+    return waarde if isinstance(waarde, dict) else {}
+
+
+def _zet_filter_voorkeuren(config, gebruiker: str, filters: dict) -> None:
+    pad = _filter_voorkeuren_pad(config)
+    try:
+        data = json.loads(pad.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    data[gebruiker] = filters
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _schoon_filters(data) -> dict:
+    """Alleen bekende sleutels en eenvoudige waarden bewaren (strings begrensd)."""
+    if not isinstance(data, dict):
+        return {}
+    schoon = {}
+    for sleutel, waarde in data.items():
+        if sleutel not in _FILTER_SLEUTELS:
+            continue
+        if waarde is None or isinstance(waarde, bool):
+            schoon[sleutel] = waarde
+        elif isinstance(waarde, (int, float)):
+            schoon[sleutel] = waarde
+        elif isinstance(waarde, str):
+            schoon[sleutel] = waarde[:100]
+    return schoon
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
@@ -765,6 +817,19 @@ def create_app(config: Config | None = None) -> Flask:
         ]
         globale = _effectieve_globale_defaults(config)  # één keer lezen, niet per woning
         return jsonify([_listing_naar_json(item, config, globale, gebruiker) for item in zichtbaar])
+
+    @app.route("/api/filters", methods=["GET"])
+    @login_required
+    def api_filters_ophalen():
+        # De opgeslagen kaart-filters van het ingelogde account (leeg = standaard).
+        return jsonify(_laad_filter_voorkeuren(config, session.get("gebruiker", "")))
+
+    @app.route("/api/filters", methods=["POST"])
+    @login_required
+    def api_filters_opslaan():
+        schoon = _schoon_filters(request.get_json(silent=True))
+        _zet_filter_voorkeuren(config, session.get("gebruiker", ""), schoon)
+        return jsonify({"ok": True})
 
     @app.route("/api/broninfo")
     @login_required

@@ -441,6 +441,12 @@ async function laadKansen() {
   const resp = await fetch("/api/kansen");
   alleKansen = await resp.json();
   vulWijkFilter(alleKansen);
+  // Opgeslagen filters eenmalig toepassen - ná vulWijkFilter, zodat de bewaarde
+  // wijk-keuze ook werkt (de wijk-opties bestaan dan pas), en vóór de eerste render.
+  if (!_filtersToegepast) {
+    _filtersToegepast = true;
+    try { pasFiltersToe(await _opgeslagenFiltersPromise); } catch (e) { /* standaardfilters */ }
+  }
   renderAlles();
 }
 
@@ -545,6 +551,74 @@ for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterW
 for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
+
+// --- Filters onthouden per ingelogd account (server-side) ---
+function verzamelFilters() {
+  return {
+    "toon-kansen": toonKansenEl ? toonKansenEl.checked : undefined,
+    "toon-vergunningen": toonVergunningenEl ? toonVergunningenEl.checked : undefined,
+    "toon-3kamer": toon3kamerEl ? toon3kamerEl.checked : undefined,
+    "filter-stad": filterStadEl ? filterStadEl.value : undefined,
+    "filter-wijk": filterWijkEl ? filterWijkEl.value : undefined,
+    "filter-investeerders": filterInvesteerdersEl ? filterInvesteerdersEl.value : undefined,
+    "filter-eigen-inleg": filterEigenInlegEl ? filterEigenInlegEl.value : undefined,
+    "filter-schakelgeld": filterSchakelgeldEl ? filterSchakelgeldEl.value : undefined,
+    "filter-winst": filterWinstEl ? filterWinstEl.value : undefined,
+    "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
+    "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
+    "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
+  };
+}
+
+function pasFiltersToe(f) {
+  if (!f || typeof f !== "object") return;
+  const zetWaarde = (el, v) => { if (el && v !== undefined && v !== null) el.value = v; };
+  const zetCheck = (el, v) => { if (el && typeof v === "boolean") el.checked = v; };
+  zetCheck(toonKansenEl, f["toon-kansen"]);
+  zetCheck(toon3kamerEl, f["toon-3kamer"]);
+  zetWaarde(filterStadEl, f["filter-stad"]);
+  zetWaarde(filterWijkEl, f["filter-wijk"]);  // alleen effectief als de wijk-optie al bestaat
+  zetWaarde(filterInvesteerdersEl, f["filter-investeerders"]);
+  zetWaarde(filterEigenInlegEl, f["filter-eigen-inleg"]);
+  zetWaarde(filterSchakelgeldEl, f["filter-schakelgeld"]);
+  zetWaarde(filterWinstEl, f["filter-winst"]);
+  zetWaarde(filterZoekEl, f["filter-zoek"]);
+  zetWaarde(filterDagenEl, f["filter-dagen"]);
+  zetWaarde(filterSorteerEl, f["filter-sorteer"]);
+  // Vergunningenlaag apart: aanzetten triggert het laden van de laag.
+  if (toonVergunningenEl && f["toon-vergunningen"] && !toonVergunningenEl.checked) {
+    toonVergunningenEl.checked = true;
+    toonVergunningenEl.dispatchEvent(new Event("change"));
+  }
+}
+
+let _filtersOpslaanTimer = null;
+function slaFiltersOp() {
+  clearTimeout(_filtersOpslaanTimer);
+  _filtersOpslaanTimer = setTimeout(() => {
+    fetch("/api/filters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(verzamelFilters()),
+    }).catch(() => { /* stil: opslaan is best-effort */ });
+  }, 400);
+}
+
+// Elke wijziging aan een filter opslaan (gedebounced).
+for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, filterStadEl, filterWijkEl,
+                  filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
+                  filterZoekEl, filterDagenEl, filterSorteerEl]) {
+  if (el) {
+    el.addEventListener("input", slaFiltersOp);
+    el.addEventListener("change", slaFiltersOp);
+  }
+}
+
+// Opgeslagen filters eenmalig ophalen (bij het laden toegepast, zie laadKansen).
+let _filtersToegepast = false;
+const _opgeslagenFiltersPromise = fetch("/api/filters")
+  .then((r) => (r.ok ? r.json() : null))
+  .catch(() => null);
 
 verversKnop.addEventListener("click", async () => {
   verversKnop.disabled = true;
