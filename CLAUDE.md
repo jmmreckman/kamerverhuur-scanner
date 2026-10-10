@@ -143,9 +143,16 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   rows max 100) 2) opkoopbescherming (WOZ per adres, alleen in een beschermde wijk)
   3) 50 m-norm (`gis.binnen_50m_van_kamerverhuurvergunning`) 4) vermelding (géén harde
   uitsluiting): BAG-oppervlakte <72 m² + te-koop-geweest (uit het archief). Mailt het
-  resultaat naar een zelf op te geven ontvanger-veld (komma = meerdere). Route
-  `POST /opkoop-scan`. **Beperking:** lopende/onverwerkte kamerverhuur-*aanvragen* zijn
-  niet te zien — Rotterdam publiceert alleen de beslissing, niet de aanvraag.
+  resultaat naar een zelf op te geven ontvanger-veld (komma = meerdere; leeg = het
+  mailadres uit de mail-voorkeuren van het ingelogde account). Ook te starten vanuit
+  het kaart-popup per woning. Route `POST /opkoop-scan`. **Beperking:** lopende/
+  onverwerkte kamerverhuur-*aanvragen* zijn niet te zien — Rotterdam publiceert alleen
+  de beslissing, niet de aanvraag.
+- **Favorieten zijn per account** (`ListingState.favoriet_accounts`, niet meer de oude
+  gedeelde `favoriet`-bool — die telt alleen nog als legacy "voor iedereen" tot 'ie
+  opnieuw getoggled wordt). Een woning favoriet maken start op de achtergrond (zonder
+  mail) een concurrentie-scan; de 1-zins-samenvatting (`concurrentie_samenvatting`,
+  woning-niveau) verschijnt in het kaart-popup.
 - `rotterdam_scanner/archief.py` — **blijvend listings-archief**
   (`listings_archief.json`, naast `state.json`). **Bewaart ÁLLE ooit geziene listings
   voor altijd en wordt elke scan-run aangevuld — NOOIT prunen/leegmaken.** `StateStore`

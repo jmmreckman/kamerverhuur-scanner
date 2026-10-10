@@ -647,11 +647,14 @@ def test_favoriet_togglet_heen_en_weer(tmp_path):
     resp = client.post("/kansen/3000AA-1/favoriet")
     assert resp.status_code == 200
     assert resp.get_json()["favoriet"] is True
-    assert StateStore(tmp_path / "state.json").get("3000AA-1").favoriet is True
+    # Per account: jurian staat nu in favoriet_accounts (de oude gedeelde bool blijft uit).
+    opgeslagen = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert opgeslagen.favoriet_accounts == ["jurian"]
+    assert opgeslagen.is_favoriet_voor("jurian") is True
 
     resp = client.post("/kansen/3000AA-1/favoriet")
     assert resp.get_json()["favoriet"] is False
-    assert StateStore(tmp_path / "state.json").get("3000AA-1").favoriet is False
+    assert StateStore(tmp_path / "state.json").get("3000AA-1").is_favoriet_voor("jurian") is False
 
 
 def test_favoriet_onbekende_woning_geeft_404(app_client):
@@ -672,6 +675,57 @@ def test_api_kansen_toont_afgevallen_favoriet(tmp_path):
     assert len(data) == 1
     assert data[0]["favoriet"] is True
     assert data[0]["status"] == "afgevallen"
+
+
+def test_favoriet_is_per_account(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    _zet_listing(tmp_path)  # actief
+
+    jurian = app.test_client()
+    jurian.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    jurian.post("/kansen/3000AA-1/favoriet")
+
+    # Justin ziet dezelfde woning NIET als favoriet (eigen lijst).
+    justin = app.test_client()
+    justin.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+    woning_justin = next(w for w in justin.get("/api/kansen").get_json() if w["object_id"] == "3000AA-1")
+    assert woning_justin["favoriet"] is False
+
+    # Jurian zelf ziet 'm wél als favoriet.
+    woning_jurian = next(w for w in jurian.get("/api/kansen").get_json() if w["object_id"] == "3000AA-1")
+    assert woning_jurian["favoriet"] is True
+
+
+def test_favoriet_start_concurrentie_samenvatting(tmp_path, monkeypatch):
+    from rotterdam_scanner import opkoop_scan
+    import kansen_site.app as ka
+
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    client = app.test_client()
+    _zet_listing(tmp_path)  # heeft lat/lon
+    client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+
+    class _DirecteThread:
+        def __init__(self, target=None, daemon=None):
+            self._target = target
+
+        def start(self):
+            self._target()
+
+    monkeypatch.setattr(ka.threading, "Thread", _DirecteThread)
+    monkeypatch.setattr(ka.opkoop_scan, "scan",
+                        lambda *a, **k: opkoop_scan.ScanResultaat("x", 50.0, 470_000, 72, "Middelland", True, []))
+
+    resp = client.post("/kansen/3000AA-1/favoriet")
+    data = resp.get_json()
+    assert data["favoriet"] is True
+    assert data["concurrentie_scan_loopt"] is True
+    # Synchroon uitgevoerd -> samenvatting staat opgeslagen in de state.
+    opgeslagen = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert opgeslagen.concurrentie_samenvatting
+    assert "reële concurrent" in opgeslagen.concurrentie_samenvatting
 
 
 def test_bekendmakingen_check_roept_pipeline_aan(app_client, monkeypatch):

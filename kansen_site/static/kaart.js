@@ -203,6 +203,11 @@ function bouwPopup(kans) {
     ${kans.woz_check_nodig ? '<span style="color:#b3261e">WOZ-waarde handmatig checken</span><br>' : ""}
     ${kans.woz_check_nodig && kans.woz_check_url ? `<a href="${kans.woz_check_url}" target="_blank" rel="noopener">Zelf WOZ-waarde opzoeken &rarr;</a><br>` : ""}
     ${signalen ? signalen + "<br>" : ""}
+    ${kans.concurrentie_samenvatting
+      ? `<span style="color:#1b7a43;font-size:0.9em">Concurrentie (50 m): ${escapeHtml(kans.concurrentie_samenvatting)}</span><br>`
+      : (kans._concurrentie_scan_loopt
+          ? `<span style="color:#5f6368;font-size:0.85em">Concurrentie-scan loopt op de achtergrond… (ververs zo voor de samenvatting)</span><br>`
+          : "")}
     ${kans.opmerking ? `<span style="color:#5f6368;font-size:0.9em">${kans.opmerking}</span><br>` : ""}
     <a href="/woning/${encodeURIComponent(kans.object_id)}/berekening" class="reken-link">Rekenen met deze woning &rarr;</a><br>
     ${window.IS_BEHEERDER ? `<a href="#" class="concurrentie-scan-link">Start concurrentie-scan voor dit adres &rarr;</a><br>` : ""}
@@ -281,6 +286,10 @@ async function favorietToggle(kans) {
     if (!resp.ok) throw new Error("favoriet mislukt");
     const data = await resp.json();
     kans.favoriet = data.favoriet;
+    if (data.concurrentie_samenvatting) kans.concurrentie_samenvatting = data.concurrentie_samenvatting;
+    // Net favoriet gemaakt: de concurrentie-scan draait op de achtergrond; toon dat
+    // zodat de gebruiker weet dat de samenvatting zo verschijnt (na een ververs).
+    kans._concurrentie_scan_loopt = !!data.concurrentie_scan_loopt;
     renderAlles();
     const marker = markerPerId.get(kans.object_id);
     if (marker) marker.openPopup();

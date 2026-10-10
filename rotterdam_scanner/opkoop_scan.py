@@ -259,6 +259,28 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
     return resultaat
 
 
+def korte_samenvatting(r: ScanResultaat) -> str:
+    """Eén-zins-samenvatting van de concurrentie-scan, voor in het kaart-popup van een
+    favoriete woning."""
+    reeel = r.pool_reeel
+    nu = sum(1 for a in reeel if a.nu_te_koop)
+    risico = len(r.grootste_risicos)
+    delen = [f"{len(reeel)} reële concurrent(en) binnen {r.straal_m:.0f} m"]
+    if nu:
+        delen.append(f"{nu} nu te koop")
+    if risico:
+        delen.append(f"{risico} recent te koop geweest")
+    staart = []
+    if r.pool_te_klein:
+        staart.append(f"{len(r.pool_te_klein)} te klein")
+    if r.zeer_onwaarschijnlijk:
+        staart.append(f"{len(r.zeer_onwaarschijnlijk)} ander gebruiksdoel")
+    zin = ", waarvan ".join([delen[0], "; ".join(delen[1:])]) if len(delen) > 1 else delen[0]
+    if staart:
+        zin += " (" + ", ".join(staart) + ")"
+    return zin + "."
+
+
 def _eur(bedrag: int | None) -> str:
     if bedrag is None:
         return "onbekend"

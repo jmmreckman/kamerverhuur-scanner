@@ -270,6 +270,28 @@ def test_woz_func_wordt_herhaald_bij_transiente_fout():
     assert pogingen["n"] == 3
 
 
+def test_korte_samenvatting_een_zin():
+    adressen = [
+        _nabij("Groot 1", 5, "1", aobj="a1", rd=(1.0, 1.0)),
+        _nabij("Klein 2", 10, "2", aobj="a2", rd=(2.0, 2.0)),
+    ]
+    opp = {"a1": (95, "woonfunctie"), "a2": (50, "woonfunctie")}
+    r = opkoop_scan.scan(
+        52.0, 4.0, 470_000, "Centrum 1", pauze_s=0, m2_grens=72,
+        adres_func=lambda lat, lon, straal: adressen,
+        woz_func=lambda nid: 600_000, vergunning_func=lambda rx, ry: False,
+        beschermde_wijk_func=lambda naam: True, bag_func=lambda aobj: opp[aobj],
+        te_koop_func=lambda naam, grens: {"sinds": "2026-05-01", "tot": "2026-10-09",
+                                          "prijs": None, "bron": "funda", "url": None,
+                                          "status": "actief"} if naam == "Groot 1" else None,
+    )
+    zin = opkoop_scan.korte_samenvatting(r)
+    assert zin.endswith(".")
+    assert "1 reële concurrent" in zin
+    assert "1 nu te koop" in zin
+    assert "1 te klein" in zin
+
+
 def test_bouw_cover_is_kort_met_kanttekening():
     adressen = [
         _nabij("A 1", 5, "1", rd=(1.0, 1.0)),

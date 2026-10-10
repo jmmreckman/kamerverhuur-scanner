@@ -293,7 +293,8 @@ def controleer_favorieten(state, cache_path: Path, vandaag: date | None = None):
     daar precies één mail over kan sturen. Panden waarvan een treffer al eerder is
     gemeld (zelfde publicatie-id) leveren niets nieuws op."""
     favorieten = [
-        item for item in state.all() if item.favoriet and item.lat is not None and item.lon is not None
+        item for item in state.all()
+        if item.heeft_favoriet() and item.lat is not None and item.lon is not None
     ]
     if not favorieten:
         return []

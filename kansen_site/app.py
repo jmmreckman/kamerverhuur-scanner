@@ -35,6 +35,25 @@ from rotterdam_scanner.handmatig import parse_bestand
 # Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
 # volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _te_koop_func_voor(config):
+    """Bouwt de te-koop-geweest-functie voor de concurrentie-scan uit de live state +
+    het blijvende archief. None als er (nog) niets te matchen is."""
+    try:
+        listings = StateStore(config.state_path).all()
+        arch = archief.ListingArchief(archief.archief_pad_voor(config.state_path))
+        index = archief.bouw_te_koop_index(listings, arch.all())
+    except Exception:
+        return None
+    if not index:
+        return None
+
+    def _f(weergavenaam, grens_datum):
+        info = index.get(archief.normaliseer_adres(weergavenaam))
+        return info if (info and info.get("tot") and info["tot"] >= grens_datum) else None
+
+    return _f
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
@@ -537,7 +556,7 @@ def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> boo
     return False
 
 
-def _listing_naar_json(item, config, globale_defaults: dict | None = None) -> dict:
+def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebruiker: str | None = None) -> dict:
     # Winst/inleg/schakelgeld live doorrekenen met de actuele (globale + per-woning)
     # uitgangspunten, zodat de kaart en lijst overeenkomen met de rekentool.
     winst_totaal, inleg_na_totaal, schakelgeld_totaal = _live_totalen(item, config, globale_defaults)
@@ -577,7 +596,8 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None) -> di
         "laatst_beschikbaar": item.laatst_beschikbaar,
         "laatst_gecheckt": item.laatst_gecheckt,
         "status": item.status,
-        "favoriet": item.favoriet,
+        "favoriet": item.is_favoriet_voor(gebruiker) if gebruiker is not None else item.favoriet,
+        "concurrentie_samenvatting": item.concurrentie_samenvatting,
         "bekendmaking_waarschuwingen": item.bekendmaking_waarschuwingen,
         "bronnen": item.bronnen,
         # Zoeklink op adres: fallback voor woningen die (nog) alleen via de NVM/Move-
@@ -730,18 +750,21 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def api_kansen():
         state = StateStore(config.state_path)
+        gebruiker = session.get("gebruiker")
         # Favorieten blijven op de kaart staan, ook als de woning inmiddels van
         # Funda is (afgevallen) - zodat een eventuele vergunning-waarschuwing bij
         # het pand zichtbaar blijft en je 'm niet kwijtraakt zodra je gekocht hebt.
+        # Favorieten zijn per account: een afgevallen woning blijft alleen zichtbaar
+        # voor de accounts die 'm favoriet maakten (of als oude gedeelde favoriet).
         zichtbaar = [
             item
             for item in state.all()
-            if (item.status == "actief" or item.favoriet)
+            if (item.status == "actief" or item.is_favoriet_voor(gebruiker))
             and item.lat is not None
             and item.lon is not None
         ]
         globale = _effectieve_globale_defaults(config)  # één keer lezen, niet per woning
-        return jsonify([_listing_naar_json(item, config, globale) for item in zichtbaar])
+        return jsonify([_listing_naar_json(item, config, globale, gebruiker) for item in zichtbaar])
 
     @app.route("/api/broninfo")
     @login_required
@@ -767,17 +790,54 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/kansen/<object_id>/favoriet", methods=["POST"])
     @login_required
     def kans_favoriet(object_id):
-        # Zet het sterretje aan/uit. Alleen favorieten worden gemonitord op nieuwe
-        # kamerverhuurvergunningen binnen 50 m (zie bekendmakingen.py); de check
-        # zelf loopt mee op de dagelijkse scan of via "Vergunningen checken".
+        # Zet het sterretje aan/uit - per account (zie ListingState.favoriet_accounts).
+        # Favorieten worden gemonitord op nieuwe kamerverhuurvergunningen binnen 50 m
+        # (bekendmakingen.py), en krijgen eenmalig een concurrentie-samenvatting op de
+        # achtergrond (zonder mail) die in het kaart-popup verschijnt.
+        gebruiker = session.get("gebruiker")
         state = StateStore(config.state_path)
         item = state.get(object_id)
         if item is None:
             return jsonify({"fout": "Onbekende woning."}), 404
-        item.favoriet = not item.favoriet
+
+        was_fav = item.is_favoriet_voor(gebruiker)
+        item.favoriet = False  # oude gedeelde bool uitfaseren zodra er getoggled wordt
+        if was_fav:
+            if gebruiker in item.favoriet_accounts:
+                item.favoriet_accounts.remove(gebruiker)
+        elif gebruiker and gebruiker not in item.favoriet_accounts:
+            item.favoriet_accounts.append(gebruiker)
+        nu_fav = item.is_favoriet_voor(gebruiker)
         state.upsert(item)
         state.save()
-        return jsonify({"favoriet": item.favoriet})
+
+        scan_loopt = (nu_fav and item.lat is not None and item.lon is not None
+                      and not item.concurrentie_samenvatting)
+        if scan_loopt:
+            lat, lon, centrum = item.lat, item.lon, item.weergavenaam
+            grens = int(config.opkoopbescherming_woz_grens)
+            te_koop_func = _te_koop_func_voor(config)
+
+            def _bereken_samenvatting():
+                try:
+                    resultaat = opkoop_scan.scan(lat, lon, grens, centrum, te_koop_func=te_koop_func)
+                    samenvatting = opkoop_scan.korte_samenvatting(resultaat)
+                    st = StateStore(config.state_path)
+                    it = st.get(object_id)
+                    if it is not None:
+                        it.concurrentie_samenvatting = samenvatting
+                        it.concurrentie_samenvatting_datum = date.today().isoformat()
+                        st.upsert(it)
+                        st.save()
+                    app.logger.info("Concurrentie-samenvatting %s: %s", centrum, samenvatting)
+                except Exception:
+                    app.logger.exception("Concurrentie-samenvatting berekenen mislukt voor %s", centrum)
+
+            threading.Thread(target=_bereken_samenvatting, daemon=True).start()
+
+        return jsonify({"favoriet": nu_fav,
+                        "concurrentie_samenvatting": item.concurrentie_samenvatting,
+                        "concurrentie_scan_loopt": scan_loopt})
 
     @app.route("/bekendmakingen/check", methods=["POST"])
     @login_required
@@ -1062,7 +1122,7 @@ def create_app(config: Config | None = None) -> Flask:
 
         state.upsert(item)
         state.save()
-        return jsonify(_listing_naar_json(item, config))
+        return jsonify(_listing_naar_json(item, config, gebruiker=session.get("gebruiker")))
 
     @app.route("/woning/<object_id>/berekening")
     @login_required

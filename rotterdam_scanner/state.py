@@ -82,6 +82,18 @@ class ListingState:
     # favoriet blijft gemonitord én zichtbaar op de kaart, ook als de woning
     # inmiddels van Funda is verdwenen ("afgevallen").
     favoriet: bool = False
+    # Favorieten zijn per account: de set gebruikersnamen die deze woning als favoriet
+    # markeerden. `favoriet` (de oude gedeelde bool) blijft bestaan voor achterwaartse
+    # compatibiliteit: een oude gedeelde favoriet (favoriet=True, nog geen accounts in
+    # deze lijst) telt als favoriet voor iedereen, tot iemand 'm opnieuw toggelt - dan
+    # gaat 'ie over op deze per-account-lijst.
+    favoriet_accounts: list[str] = field(default_factory=list)
+    # Korte, automatisch berekende samenvatting van de concurrentie-scan (binnen 50 m)
+    # voor deze woning - berekend op de achtergrond zodra de woning favoriet wordt, en
+    # getoond in het kaart-popup. Woning-niveau (niet per account): de buurt is voor
+    # elk account gelijk. `_datum` voor eventuele versheids-check / herberekening.
+    concurrentie_samenvatting: str | None = None
+    concurrentie_samenvatting_datum: str | None = None
     # Nieuwe kamerverhuurvergunningen die binnen 50 m van deze (favoriete) woning
     # zijn afgegeven, gevonden in de officiële bekendmakingen. Elke waarschuwing is
     # een dict: publicatie_id, titel, datum (ISO), url, adres, afstand_m. Wordt
@@ -120,6 +132,19 @@ class ListingState:
         if self.prijs is None or not self.primaire_oppervlakte:
             return None
         return self.prijs / self.primaire_oppervlakte
+
+    def is_favoriet_voor(self, gebruiker: str | None) -> bool:
+        """Favoriet voor dit account? Een oude gedeelde favoriet (favoriet=True, nog
+        geen per-account-lijst) telt als favoriet voor iedereen, tot 'ie opnieuw
+        getoggled wordt."""
+        if gebruiker and gebruiker in self.favoriet_accounts:
+            return True
+        return bool(self.favoriet) and not self.favoriet_accounts
+
+    def heeft_favoriet(self) -> bool:
+        """Door minstens één account (of als oude gedeelde favoriet) gemarkeerd - voor
+        prune (bewaren) en de vergunning-monitoring (blijven checken)."""
+        return bool(self.favoriet_accounts) or bool(self.favoriet)
 
 
 class StateStore:
@@ -161,7 +186,7 @@ class StateStore:
             # zolang een woning ongewijzigd te koop blijft). Zo verdwijnt een
             # handmatig gemarkeerde favoriet nooit vanzelf van de kaart - conform
             # de belofte bij het favoriet-veld in ListingState.
-            if item.favoriet:
+            if item.heeft_favoriet():
                 keep[object_id] = item
                 continue
             # Een woning blijft bewaard zolang hij óf recent in een alert langskwam

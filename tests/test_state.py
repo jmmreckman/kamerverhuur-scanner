@@ -147,3 +147,25 @@ def test_bron_statistieken_telt_overlap_en_alleen_bronnen():
         "totaal": 3, "funda": 2, "nvm": 2, "beide": 1,
         "alleen_funda": 1, "alleen_nvm": 1, "onbekende_bron": 1,
     }
+
+
+def test_is_favoriet_voor_per_account():
+    from rotterdam_scanner.state import ListingState
+    item = ListingState(object_id="1", url="u", weergavenaam="A", eerst_gezien="2026-01-01",
+                        laatst_gezien="2026-01-01", status="actief", favoriet_accounts=["jurian"])
+    assert item.is_favoriet_voor("jurian") is True
+    assert item.is_favoriet_voor("justin") is False
+    assert item.heeft_favoriet() is True
+
+
+def test_legacy_gedeelde_favoriet_telt_voor_iedereen():
+    from rotterdam_scanner.state import ListingState
+    # Oude gedeelde favoriet (favoriet=True, nog geen accounts) -> favoriet voor iedereen.
+    item = ListingState(object_id="1", url="u", weergavenaam="A", eerst_gezien="2026-01-01",
+                        laatst_gezien="2026-01-01", status="actief", favoriet=True)
+    assert item.is_favoriet_voor("jurian") is True
+    assert item.is_favoriet_voor("justin") is True
+    assert item.heeft_favoriet() is True
+    # Zodra er een per-account-lijst is, telt de oude bool niet meer mee.
+    item.favoriet_accounts = ["jurian"]
+    assert item.is_favoriet_voor("justin") is False
