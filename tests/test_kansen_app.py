@@ -245,6 +245,22 @@ def test_kans_verwijderd_valt_niet_meer_uit_api_kansen(app_client, tmp_path):
     assert resp.get_json() == []
 
 
+def test_verwijderen_heft_favoriet_op_en_haalt_van_kaart(app_client, tmp_path):
+    # Een favoriete woning verwijderen moet 'm ook ontfavorieten, anders blijft 'ie
+    # (als afgevallen favoriet) op de kaart staan en "komt 'ie terug" na een refresh.
+    _zet_listing(tmp_path)
+    app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    app_client.post("/kansen/3000AA-1/favoriet")
+    assert app_client.get("/api/kansen").get_json()  # staat op de kaart
+
+    app_client.post("/kansen/3000AA-1/verwijderen")
+
+    opgeslagen = StateStore(tmp_path / "state.json").get("3000AA-1")
+    assert opgeslagen.is_favoriet_voor("jurian") is False
+    assert opgeslagen.handmatig_verwijderd is True
+    assert app_client.get("/api/kansen").get_json() == []  # weg van de kaart, ook na refresh
+
+
 def test_kans_kamers_zonder_login_wordt_omgeleid(app_client):
     resp = app_client.post("/kansen/3000AA-1/kamers")
     assert resp.status_code == 302

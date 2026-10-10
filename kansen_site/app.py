@@ -1139,6 +1139,13 @@ def create_app(config: Config | None = None) -> Flask:
         item.status = "afgevallen"
         item.handmatig_verwijderd = True
         item.afvalreden = reden
+        # Ook de favoriet opheffen, anders blijft een afgevallen favoriet op de kaart
+        # staan en "komt 'ie terug" na een refresh ondanks het verwijderen. De oude
+        # gedeelde bool heffen we helemaal op; de eigen account-favoriet halen we weg.
+        gebruiker = session.get("gebruiker")
+        item.favoriet = False
+        if gebruiker in item.favoriet_accounts:
+            item.favoriet_accounts.remove(gebruiker)
         state.upsert(item)
         state.save()
         return jsonify({"ok": True})
