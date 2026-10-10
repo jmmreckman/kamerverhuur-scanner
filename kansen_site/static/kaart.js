@@ -337,8 +337,19 @@ function renderStralen() {
 function renderMarkers(kansen) {
   markerLaag.clearLayers();
   markerPerId.clear();
-  if (toonKansenEl && !toonKansenEl.checked) return;
-  for (const kans of kansen) {
+  const toonKansen = !toonKansenEl || toonKansenEl.checked;
+  const teTonen = toonKansen ? [...kansen] : [];
+  const ids = new Set(teTonen.map((k) => k.object_id));
+  // Favorieten krijgen ALTIJD een marker (net als hun 50m-cirkel, zie renderStralen) -
+  // ook als 'toon kansen' uit staat of de favoriet buiten de ingestelde filters valt.
+  // Anders zie je een losse 50m-cirkel zonder klikbare woning op de kaart.
+  for (const kans of alleKansen) {
+    if (kans.favoriet && kans.lat != null && kans.lon != null && !ids.has(kans.object_id)) {
+      teTonen.push(kans);
+      ids.add(kans.object_id);
+    }
+  }
+  for (const kans of teTonen) {
     const icoon = markerIcoon(kans);
     const marker = (icoon ? L.marker([kans.lat, kans.lon], { icon: icoon }) : L.marker([kans.lat, kans.lon])).bindPopup(bouwPopup(kans));
     marker.addTo(markerLaag);
