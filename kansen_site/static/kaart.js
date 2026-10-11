@@ -17,6 +17,7 @@ const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterM2MinEl = document.getElementById("filter-m2-min");
 const filterM2MaxEl = document.getElementById("filter-m2-max");
+const filterPrijsM2MaxEl = document.getElementById("filter-prijs-m2-max");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
@@ -154,6 +155,8 @@ function gefilterd() {
   // m²-filter op de advertentie-oppervlakte (NIET de BAG-oppervlakte).
   const minM2 = filterM2MinEl ? parseFloat(filterM2MinEl.value) : NaN;
   const maxM2 = filterM2MaxEl ? parseFloat(filterM2MaxEl.value) : NaN;
+  // Max. prijs per m², ook op de advertentie-oppervlakte (NIET de BAG).
+  const maxPrijsM2 = filterPrijsM2MaxEl ? parseFloat(filterPrijsM2MaxEl.value) : NaN;
   const zoek = filterZoekEl.value.trim().toLowerCase();
   const maxDagen = parseFloat(filterDagenEl.value);
   const stad = filterStadEl ? filterStadEl.value : "";
@@ -172,6 +175,12 @@ function gefilterd() {
       if (m2 === null || m2 === undefined) return false;
       if (!isNaN(minM2) && m2 < minM2) return false;
       if (!isNaN(maxM2) && m2 > maxM2) return false;
+    }
+    if (!isNaN(maxPrijsM2)) {
+      // €/m² op de advertentie-oppervlakte; zonder m²/prijs niet te bepalen → weg.
+      const m2 = k.oppervlakte_advertentie;
+      if (!m2 || k.prijs === null || k.prijs === undefined) return false;
+      if (k.prijs / m2 > maxPrijsM2) return false;
     }
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
@@ -569,7 +578,7 @@ if (toon3kamerEl) {
 }
 
 for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
-                  filterM2MinEl, filterM2MaxEl, filterZoekEl,
+                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterZoekEl,
                   filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
@@ -591,6 +600,7 @@ function verzamelFilters() {
     "filter-winst": filterWinstEl ? filterWinstEl.value : undefined,
     "filter-m2-min": filterM2MinEl ? filterM2MinEl.value : undefined,
     "filter-m2-max": filterM2MaxEl ? filterM2MaxEl.value : undefined,
+    "filter-prijs-m2-max": filterPrijsM2MaxEl ? filterPrijsM2MaxEl.value : undefined,
     "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
     "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
     "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
@@ -611,6 +621,7 @@ function pasFiltersToe(f) {
   zetWaarde(filterWinstEl, f["filter-winst"]);
   zetWaarde(filterM2MinEl, f["filter-m2-min"]);
   zetWaarde(filterM2MaxEl, f["filter-m2-max"]);
+  zetWaarde(filterPrijsM2MaxEl, f["filter-prijs-m2-max"]);
   zetWaarde(filterZoekEl, f["filter-zoek"]);
   zetWaarde(filterDagenEl, f["filter-dagen"]);
   zetWaarde(filterSorteerEl, f["filter-sorteer"]);
@@ -636,7 +647,7 @@ function slaFiltersOp() {
 // Elke wijziging aan een filter opslaan (gedebounced).
 for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, filterStadEl, filterWijkEl,
                   filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
-                  filterM2MinEl, filterM2MaxEl,
+                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl,
                   filterZoekEl, filterDagenEl, filterSorteerEl]) {
   if (el) {
     el.addEventListener("input", slaFiltersOp);
