@@ -138,6 +138,22 @@ def _risico_blok(breedte, nr, a, adres_stijl, label_stijl, waarde_stijl):
     return KeepTogether([kop, tab])
 
 
+def _historie_zin(oudste_iso: str | None, aantal: int | None, vandaag: date) -> str:
+    """Eerlijke omschrijving van hoe diep onze te-koop-historie werkelijk reikt,
+    i.p.v. een hardcoded '± 1 maand'. Gebaseerd op de vroegste waarneming in het
+    archief en het aantal records."""
+    if not oudste_iso or not aantal:
+        return "(onze historie wordt nog opgebouwd en is nu nog erg beperkt)"
+    try:
+        oudste = date.fromisoformat(oudste_iso[:10])
+    except ValueError:
+        return f"(archief: {aantal} woningen)"
+    dagen = max(0, (vandaag - oudste).days)
+    diepte = f"~{max(1, round(dagen / 7))} weken" if dagen < 60 else f"~{round(dagen / 30)} maanden"
+    return (f"(archief: {aantal} woningen, oudste waarneming "
+            f"{oudste.strftime('%d-%m-%Y')}, {diepte} historie)")
+
+
 def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
     vandaag = vandaag or date.today()
     buffer = io.BytesIO()
@@ -241,11 +257,12 @@ def bouw_rapport_pdf(r: ScanResultaat, vandaag: date | None = None) -> bytes:
         el.append(Spacer(1, 1.5 * mm))
         if r.archief_doorzocht:
             n = len(r.pool_te_koop_geweest)
+            diepte = _historie_zin(r.archief_oudste_iso, r.archief_aantal, vandaag)
             el.append(Paragraph(
                 f"&bull; Afgelopen 12 mnd te koop geweest (reële pool): <b>{n}</b>. "
-                "Let op: dit dekt alleen woningen die onze eigen scanner heeft gezien; die "
-                "historie bouwt nog maar kort op (± 1 maand nu) en groeit elke dag - afwezigheid "
-                "betekent dus niet per se dat een woning niet te koop stond.", tekst_stijl))
+                f"Let op: dit dekt alleen woningen die onze eigen scanner heeft gezien {diepte} "
+                "en groeit elke dag - afwezigheid betekent dus niet per se dat een woning niet "
+                "te koop stond. Check bij twijfel de verkoopgeschiedenis op Funda.", tekst_stijl))
         else:
             el.append(Paragraph("&bull; Te-koop-geweest: nog geen gegevens beschikbaar "
                                 "(de historie wordt opgebouwd).", tekst_stijl))

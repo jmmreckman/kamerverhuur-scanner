@@ -123,6 +123,10 @@ class ScanResultaat:
     woz_onbereikbaar: bool = False
     gis_onbereikbaar: bool = False
     archief_doorzocht: bool = False
+    # Hoe diep de te-koop-historie reikt (voor een eerlijke melding i.p.v. een
+    # hardcoded "± 1 maand"): vroegste waarneming in het archief + aantal records.
+    archief_oudste_iso: str | None = None
+    archief_aantal: int | None = None
 
     # --- uitgesloten categorieën (reden_afgevallen is gezet) ---
     @property
@@ -181,7 +185,8 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
          straal_m: float = 50.0, m2_grens: int = GRENS_M2_4KAMERS, pauze_s: float = 0.1,
          adres_func=None, woz_func=_veilige_woz, bag_func=_veilige_bag,
          vergunning_func=_veilig_binnen_50m, beschermde_wijk_func=None,
-         te_koop_func=None, vandaag: date | None = None) -> ScanResultaat:
+         te_koop_func=None, archief_oudste_iso: str | None = None,
+         archief_aantal: int | None = None, vandaag: date | None = None) -> ScanResultaat:
     """Voert de trechter uit. Alle externe afhankelijkheden zijn injecteerbaar zodat de
     logica los te testen is zonder echte PDOK/WOZ/BAG/ArcGIS-calls.
 
@@ -217,6 +222,7 @@ def scan(lat: float, lon: float, grens: int, centrum_adres: str, *,
         centrum_adres=centrum_adres, straal_m=straal_m, grens=grens, m2_grens=m2_grens,
         buurtnaam=buurtnaam, in_opkoopwijk=in_opkoopwijk, rijen=rijen,
         archief_doorzocht=te_koop_func is not None,
+        archief_oudste_iso=archief_oudste_iso, archief_aantal=archief_aantal,
     )
 
     # Stap 2 - opkoopbescherming (alleen zinvol in een beschermde wijk). Al uitgesloten

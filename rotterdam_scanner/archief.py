@@ -87,6 +87,13 @@ class ListingArchief:
         payload = {"records": {oid: asdict(r) for oid, r in self._records.items()}}
         self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    def historie_stats(self) -> tuple[str | None, int]:
+        """(vroegste eerst_gezien-datum, aantal records). Voor een eerlijke melding
+        in het scan-rapport: hoe diep reikt onze te-koop-historie werkelijk."""
+        records = list(self._records.values())
+        datums = [r.eerst_gezien for r in records if r.eerst_gezien]
+        return (min(datums) if datums else None, len(records))
+
     def all(self) -> list[ArchiefRecord]:
         return list(self._records.values())
 

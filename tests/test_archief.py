@@ -37,6 +37,19 @@ def test_vul_aan_voegt_toe_en_zet_adres_index(tmp_path):
     assert rec.laatst_gezien == "2026-01-10"
 
 
+def test_historie_stats_geeft_vroegste_datum_en_aantal(tmp_path):
+    arch = ListingArchief(tmp_path / "arch.json")
+    # leeg
+    assert arch.historie_stats() == (None, 0)
+    arch.vul_aan([
+        _listing("1", "Pompstraat 42, Rotterdam", "2026-04-12", "2026-05-01"),
+        _listing("2", "Doklaan 3, Rotterdam", "2026-02-20", "2026-03-01"),
+    ])
+    oudste, aantal = arch.historie_stats()
+    assert oudste == "2026-02-20"  # vroegste eerst_gezien over alle records
+    assert aantal == 2
+
+
 def test_vul_aan_werkt_bij_maar_verwijdert_nooit(tmp_path):
     pad = tmp_path / "arch.json"
     arch = ListingArchief(pad)

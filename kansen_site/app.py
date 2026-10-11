@@ -1071,9 +1071,11 @@ def create_app(config: Config | None = None) -> Flask:
         # al op wat we nu hebben; dekking groeit vanzelf. Lukt laden niet of is er niets,
         # dan draait de scan gewoon zonder #5.
         te_koop_func = None
+        archief_oudste_iso, archief_aantal = None, None
         try:
             listings = StateStore(config.state_path).all()
             arch = archief.ListingArchief(archief.archief_pad_voor(config.state_path))
+            archief_oudste_iso, archief_aantal = arch.historie_stats()
             te_koop_index = archief.bouw_te_koop_index(listings, arch.all())
             if te_koop_index:
                 def te_koop_func(weergavenaam, grens_datum):  # noqa: E731 - kleine closure
@@ -1103,7 +1105,9 @@ def create_app(config: Config | None = None) -> Flask:
 
         def _werk():
             try:
-                resultaat = opkoop_scan.scan(lat, lon, grens, centrum, te_koop_func=te_koop_func)
+                resultaat = opkoop_scan.scan(lat, lon, grens, centrum, te_koop_func=te_koop_func,
+                                             archief_oudste_iso=archief_oudste_iso,
+                                             archief_aantal=archief_aantal)
                 onderwerp, html_body, text_body = opkoop_scan.bouw_cover(resultaat)
                 pdf_bytes = opkoop_rapport_pdf.bouw_rapport_pdf(resultaat)
                 send_mail(config, onderwerp, html_body, text_body,
