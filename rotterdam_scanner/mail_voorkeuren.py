@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 from .config import Config
+from .jsonbestand import schrijf_json_atomisch
 
 # De beschikbare mailings: (sleutel, korte naam, uitleg). Nieuwe mailings later hier
 # toevoegen - de pagina en de ontvangerslogica pikken ze automatisch op.
@@ -60,9 +61,7 @@ def laad(config: Config) -> dict:
 
 
 def _schrijf(config: Config, data: dict) -> None:
-    pad = _pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    schrijf_json_atomisch(_pad(config), data)
 
 
 def voorkeuren_voor(config: Config, gebruiker: str) -> dict:

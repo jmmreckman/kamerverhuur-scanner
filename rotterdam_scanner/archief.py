@@ -22,6 +22,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import date
 from pathlib import Path
 
+from .jsonbestand import schrijf_json_atomisch
+
 ARCHIEF_BESTANDSNAAM = "listings_archief.json"
 
 
@@ -85,7 +87,7 @@ class ListingArchief:
 
     def save(self) -> None:
         payload = {"records": {oid: asdict(r) for oid, r in self._records.items()}}
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        schrijf_json_atomisch(self.path, payload)
 
     def historie_stats(self) -> tuple[str | None, int]:
         """(vroegste eerst_gezien-datum, aantal records). Voor een eerlijke melding

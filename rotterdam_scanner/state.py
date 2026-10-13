@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
+from .jsonbestand import schrijf_json_atomisch
+
 
 @dataclass
 class ListingState:
@@ -163,7 +165,7 @@ class StateStore:
 
     def save(self) -> None:
         payload = {"listings": {oid: asdict(item) for oid, item in self._listings.items()}}
-        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        schrijf_json_atomisch(self.path, payload)
 
     def get(self, object_id: str) -> ListingState | None:
         return self._listings.get(object_id)

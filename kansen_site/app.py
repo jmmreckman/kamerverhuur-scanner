@@ -31,6 +31,7 @@ from rotterdam_scanner import archief, den_haag, geocode, mail_voorkeuren, opkoo
 from rotterdam_scanner.mailer import send_mail
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
+from rotterdam_scanner.jsonbestand import schrijf_json_atomisch
 
 # Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
 # volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
@@ -88,8 +89,7 @@ def _zet_filter_voorkeuren(config, gebruiker: str, filters: dict) -> None:
     except (OSError, ValueError):
         data = {}
     data[gebruiker] = filters
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    schrijf_json_atomisch(pad, data)
 
 
 def _schoon_filters(data) -> dict:
@@ -131,9 +131,7 @@ def _laad_reken_overrides(config) -> dict:
 
 
 def _schrijf_reken_overrides(config, data: dict) -> None:
-    pad = _reken_overrides_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    schrijf_json_atomisch(_reken_overrides_pad(config), data)
 
 
 def _account_overrides_voor(config, gebruiker: str | None) -> dict:
@@ -168,9 +166,7 @@ def _laad_verwijderd(config) -> dict:
 
 
 def _schrijf_verwijderd(config, data: dict) -> None:
-    pad = _verwijderd_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    schrijf_json_atomisch(_verwijderd_pad(config), data)
 
 
 def _verwijderd_voor(config, gebruiker: str | None) -> dict:
@@ -335,10 +331,7 @@ def _lees_handmatige_run(config) -> dict | None:
 
 
 def _schrijf_handmatige_run(config, data: dict) -> None:
-    pad = _handmatige_run_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    with open(pad, "w", encoding="utf-8") as bestand:
-        json.dump(data, bestand, ensure_ascii=False, indent=2)
+    schrijf_json_atomisch(_handmatige_run_pad(config), data)
 
 
 def _storing_respons():
@@ -365,10 +358,7 @@ def _laad_toegang(config) -> dict:
 
 
 def _schrijf_toegang(config, data: dict) -> None:
-    pad = _toegang_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    with open(pad, "w", encoding="utf-8") as bestand:
-        json.dump(data, bestand, ensure_ascii=False, indent=2)
+    schrijf_json_atomisch(_toegang_pad(config), data)
 
 
 def _is_buiten_werking(config, gebruiker: str) -> bool:
@@ -449,10 +439,12 @@ def _laad_logboek(config) -> dict:
 
 
 def _schrijf_logboek(config, data: dict) -> None:
-    pad = _logboek_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    with open(pad, "w", encoding="utf-8") as bestand:
-        json.dump(data, bestand, ensure_ascii=False, indent=2)
+    # Atomair schrijven: logboek.json wordt bij élke request bijgewerkt, dus dit is
+    # het bestand dat het vaakst midden in een schrijf wordt betrapt als de container
+    # bij een deploy stopt of door OOM sneuvelt. Een gewone truncate-dan-schrijf liet
+    # dan een leeg bestand achter -> _laad_logboek() ving de JSON-fout stil op en de
+    # eerstvolgende request begon met een vers, leeg logboek (data van weken weg).
+    schrijf_json_atomisch(_logboek_pad(config), data)
 
 
 def _logboek_record(data: dict, gebruiker: str) -> dict:
@@ -560,9 +552,7 @@ def _laad_reken_defaults(config) -> dict:
 
 
 def _schrijf_reken_defaults(config, defaults: dict) -> None:
-    pad = _reken_defaults_pad(config)
-    pad.parent.mkdir(parents=True, exist_ok=True)
-    pad.write_text(json.dumps(defaults, indent=2, ensure_ascii=False), encoding="utf-8")
+    schrijf_json_atomisch(_reken_defaults_pad(config), defaults)
 
 
 def _ongeveer_gelijk(a, b) -> bool:
@@ -1074,9 +1064,7 @@ def create_app(config: Config | None = None) -> Flask:
         return data if isinstance(data, list) else []
 
     def _schrijf_test_adressen(lijst: list) -> None:
-        _test_adressen_pad().write_text(
-            json.dumps(lijst, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        schrijf_json_atomisch(_test_adressen_pad(), lijst)
 
     @app.route("/api/test-adressen")
     @beheerder_required
