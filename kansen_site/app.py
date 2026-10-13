@@ -107,6 +107,47 @@ def _schoon_filters(data) -> dict:
         elif isinstance(waarde, str):
             schoon[sleutel] = waarde[:100]
     return schoon
+
+
+# --- Rekentool-overrides per account ("rekenen met deze woning") ---
+# De per-woning aangepaste uitgangspunten zijn ACCOUNTGEBONDEN: wat jij op de
+# rekenpagina van een woning invult, verandert alleen jouw beeld, niet dat van
+# andere ingelogde gebruikers. (De globale "instellingen alle panden" blijven
+# wél gedeeld, zie reken_defaults.json / reken_instellingen.) Opslag:
+#   {gebruiker: {object_id: uitgangspunten-dict}}.
+# Legacy: zolang een account nog niets eigens heeft opgeslagen voor een woning
+# valt het terug op de oude gedeelde berekening op de listing (item.berekening),
+# zodat bestaande instellingen niet verdwijnen bij de overgang.
+def _reken_overrides_pad(config) -> Path:
+    return Path(config.state_path).parent / "reken_overrides.json"
+
+
+def _laad_reken_overrides(config) -> dict:
+    try:
+        data = json.loads(_reken_overrides_pad(config).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _schrijf_reken_overrides(config, data: dict) -> None:
+    pad = _reken_overrides_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _account_overrides_voor(config, gebruiker: str | None) -> dict:
+    """De per-woning overrides van één account: {object_id: uitgangspunten}."""
+    waarde = _laad_reken_overrides(config).get(gebruiker or "")
+    return waarde if isinstance(waarde, dict) else {}
+
+
+def _zet_reken_override(config, gebruiker: str, object_id: str, uitg: dict) -> None:
+    data = _laad_reken_overrides(config)
+    if not isinstance(data.get(gebruiker), dict):
+        data[gebruiker] = {}
+    data[gebruiker][object_id] = uitg
+    _schrijf_reken_overrides(config, data)
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
@@ -512,15 +553,21 @@ def _reken_uitgangspunten_dict(item, globale_defaults: dict) -> dict:
     return uitg
 
 
-def _huidige_uitgangspunten(item, config, globale_defaults: dict | None = None) -> dict:
+def _huidige_uitgangspunten(item, config, globale_defaults: dict | None = None,
+                            account_overrides: dict | None = None) -> dict:
     """De voor déze woning geldende uitgangspunten: globale standaard + voorvulling,
-    overschreven door wat de gebruiker eerder op de rekenpagina heeft aangepast.
-    `globale_defaults` kan worden meegegeven om per-item herlezen van reken_defaults.json
-    te vermijden (bv. bij de kaart-lijst met veel woningen)."""
+    overschreven door wat dít account eerder op de rekenpagina heeft aangepast.
+    `globale_defaults` en `account_overrides` ({object_id: uitgangspunten}) kunnen
+    worden meegegeven om per-item herlezen van de bestanden te vermijden (bv. bij de
+    kaart-lijst met veel woningen). Heeft het account nog geen eigen waarde voor deze
+    woning, dan valt het terug op de oude gedeelde berekening (item.berekening)."""
     if globale_defaults is None:
         globale_defaults = _effectieve_globale_defaults(config)
     uitg = _reken_uitgangspunten_dict(item, globale_defaults)
-    for key, waarde in (item.berekening or {}).items():
+    override = (account_overrides or {}).get(item.object_id)
+    if override is None:
+        override = item.berekening or {}  # legacy: gedeeld tot dit account iets opslaat
+    for key, waarde in override.items():
         if key in uitg:
             uitg[key] = waarde
     # De oppervlakte voor de ICR vóór ophoging komt uit de woning zelf (advertentie-m²,
@@ -530,14 +577,15 @@ def _huidige_uitgangspunten(item, config, globale_defaults: dict | None = None) 
     return uitg
 
 
-def _live_totalen(item, config, globale_defaults: dict | None = None):
+def _live_totalen(item, config, globale_defaults: dict | None = None,
+                  account_overrides: dict | None = None):
     """De investeerder-onafhankelijke totalen (winst p/m, eigen inleg ná ophoging,
     schakelgeld vóór ophoging) doorgerekend met dezelfde uitgangspunten als de
     rekenpagina, zodat de kaart/lijst altijd overeenkomen met de rekentool - ook als
     je de globale uitgangspunten aanpast. (None, None, None) als er geen koopsom of
     aantal kamers is. De totalen gebruiken aantal_investeerders = 1; de kaart deelt
     zelf door het gekozen aantal investeerders."""
-    uitg = _huidige_uitgangspunten(item, config, globale_defaults)
+    uitg = _huidige_uitgangspunten(item, config, globale_defaults, account_overrides)
     if not uitg.get("koopsom") or not uitg.get("aantal_kamers"):
         return None, None, None
     uitg = dict(uitg)
@@ -609,10 +657,12 @@ def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> boo
     return False
 
 
-def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebruiker: str | None = None) -> dict:
-    # Winst/inleg/schakelgeld live doorrekenen met de actuele (globale + per-woning)
-    # uitgangspunten, zodat de kaart en lijst overeenkomen met de rekentool.
-    winst_totaal, inleg_na_totaal, schakelgeld_totaal = _live_totalen(item, config, globale_defaults)
+def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebruiker: str | None = None,
+                       account_overrides: dict | None = None) -> dict:
+    # Winst/inleg/schakelgeld live doorrekenen met de actuele (globale + per-account
+    # per-woning) uitgangspunten, zodat de kaart en lijst overeenkomen met de rekentool.
+    winst_totaal, inleg_na_totaal, schakelgeld_totaal = _live_totalen(
+        item, config, globale_defaults, account_overrides)
     return {
         "object_id": item.object_id,
         "url": item.url,
@@ -817,7 +867,10 @@ def create_app(config: Config | None = None) -> Flask:
             and item.lon is not None
         ]
         globale = _effectieve_globale_defaults(config)  # één keer lezen, niet per woning
-        return jsonify([_listing_naar_json(item, config, globale, gebruiker) for item in zichtbaar])
+        overrides = _account_overrides_voor(config, gebruiker)  # idem: per-account, één keer
+        return jsonify([
+            _listing_naar_json(item, config, globale, gebruiker, overrides) for item in zichtbaar
+        ])
 
     @app.route("/api/filters", methods=["GET"])
     @login_required
@@ -1199,7 +1252,10 @@ def create_app(config: Config | None = None) -> Flask:
 
         state.upsert(item)
         state.save()
-        return jsonify(_listing_naar_json(item, config, gebruiker=session.get("gebruiker")))
+        gebruiker = session.get("gebruiker")
+        return jsonify(_listing_naar_json(
+            item, config, gebruiker=gebruiker,
+            account_overrides=_account_overrides_voor(config, gebruiker)))
 
     @app.route("/woning/<object_id>/berekening")
     @login_required
@@ -1212,7 +1268,8 @@ def create_app(config: Config | None = None) -> Flask:
         item = state.get(object_id)
         if item is None:
             abort(404)
-        uitg = _huidige_uitgangspunten(item, config)
+        uitg = _huidige_uitgangspunten(
+            item, config, account_overrides=_account_overrides_voor(config, session["gebruiker"]))
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return render_template(
             "berekening.html", item=item, velden=_velden_voor_weergave(uitg),
@@ -1230,7 +1287,9 @@ def create_app(config: Config | None = None) -> Flask:
             return jsonify({"fout": "Onbekende woning."}), 404
 
         data = request.get_json(silent=True) or {}
-        uitg = _huidige_uitgangspunten(item, config)
+        gebruiker = session["gebruiker"]
+        uitg = _huidige_uitgangspunten(
+            item, config, account_overrides=_account_overrides_voor(config, gebruiker))
         for key, _label, soort in REKENVELDEN:
             if key not in data:
                 continue
@@ -1245,9 +1304,7 @@ def create_app(config: Config | None = None) -> Flask:
         uitg["aantal_kamers"] = int(round(uitg["aantal_kamers"]))
         uitg["aantal_investeerders"] = int(round(uitg["aantal_investeerders"])) or 1
 
-        item.berekening = uitg
-        state.upsert(item)
-        state.save()
+        _zet_reken_override(config, gebruiker, object_id, uitg)
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
 
@@ -1260,7 +1317,8 @@ def create_app(config: Config | None = None) -> Flask:
         item = state.get(object_id)
         if item is None:
             abort(404)
-        uitg = _huidige_uitgangspunten(item, config)
+        uitg = _huidige_uitgangspunten(
+            item, config, account_overrides=_account_overrides_voor(config, session["gebruiker"]))
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         from kansen_site import rapport_pdf  # lazy: reportlab niet nodig voor de rest van de site
         pdf = rapport_pdf.bouw_berekening_pdf(
@@ -1437,11 +1495,11 @@ def create_app(config: Config | None = None) -> Flask:
             return jsonify({"fout": "Ongeldige huurwaarde."}), 400
         if huur <= 0:
             return jsonify({"fout": "Ongeldige huurwaarde."}), 400
-        uitg = _huidige_uitgangspunten(item, config)
+        gebruiker = session["gebruiker"]
+        uitg = _huidige_uitgangspunten(
+            item, config, account_overrides=_account_overrides_voor(config, gebruiker))
         uitg["kale_huur_per_kamer"] = round(huur, 2)
-        item.berekening = uitg
-        state.upsert(item)
-        state.save()
+        _zet_reken_override(config, gebruiker, object_id, uitg)
         return jsonify({"ok": True, "url": url_for("berekening", object_id=object_id)})
 
     @app.route("/reken-instellingen", methods=["GET", "POST"])
@@ -1490,6 +1548,25 @@ def create_app(config: Config | None = None) -> Flask:
                         bijgewerkt += 1
                 if bijgewerkt:
                     state.save()
+
+                # Dezelfde propagatie naar de per-account overrides: de "alle
+                # panden"-instelling geldt gebruikersbreed, dus elke override die de
+                # oude globale waarde nog volgde schuift mee. Bewust afwijkende
+                # waarden (per account) blijven ongemoeid.
+                alle_overrides = _laad_reken_overrides(config)
+                overrides_gewijzigd = False
+                for per_woning in alle_overrides.values():
+                    if not isinstance(per_woning, dict):
+                        continue
+                    for ber in per_woning.values():
+                        if not isinstance(ber, dict):
+                            continue
+                        for k in gewijzigd:
+                            if k in ber and _ongeveer_gelijk(ber[k], oud[k]):
+                                ber[k] = nieuw[k]
+                                overrides_gewijzigd = True
+                if overrides_gewijzigd:
+                    _schrijf_reken_overrides(config, alle_overrides)
 
             _schrijf_reken_defaults(config, {k: nieuw[k] for k in _GEDEELDE_REKENVELDEN})
             flash(

@@ -542,9 +542,9 @@ def test_berekening_opslaan_bewaart_en_geeft_doorgerekende_sommen(tmp_path):
     assert round(data["winst_pm_pp"], 2) == 1_086.63
     assert round(data["eigen_inleg_na_ophoging_pp"], 2) == -1_880.42
 
-    # Opgeslagen bij de woning (procenten als fractie) en overleeft een herstart.
-    state = StateStore(tmp_path / "state.json")
-    bewaard = state.get("a").berekening
+    # Opgeslagen per account (procenten als fractie) en overleeft een herstart.
+    overrides = json.loads((tmp_path / "reken_overrides.json").read_text(encoding="utf-8"))
+    bewaard = overrides["jurian"]["a"]
     assert bewaard["kale_huur_per_kamer"] == 560
     assert bewaard["overdrachtsbelasting"] == pytest.approx(0.08)
     assert bewaard["rente"] == pytest.approx(0.059)
@@ -556,6 +556,40 @@ def test_berekening_opgeslagen_waarden_worden_hergebruikt_bij_volgend_bezoek(tmp
     client.post("/woning/a/berekening", json={"kale_huur_per_kamer": "600"})
     resp = client.get("/woning/a/berekening")
     assert 'name="kale_huur_per_kamer" value="600' in resp.get_data(as_text=True)
+
+
+def test_rekentool_overrides_zijn_per_account(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    _zet_listing(tmp_path, object_id="a", prijs=355_000, aantal_kamers_mogelijk=6)
+
+    jurian = app.test_client()
+    jurian.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    justin = app.test_client()
+    justin.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+
+    # Beide accounts stellen een eigen kale huur in voor dezelfde woning.
+    jurian.post("/woning/a/berekening", json={"kale_huur_per_kamer": "600"})
+    justin.post("/woning/a/berekening", json={"kale_huur_per_kamer": "700"})
+
+    # Elk account ziet z'n eigen waarde terug; de ander wordt niet overschreven.
+    assert 'name="kale_huur_per_kamer" value="600' in jurian.get("/woning/a/berekening").get_data(as_text=True)
+    assert 'name="kale_huur_per_kamer" value="700' in justin.get("/woning/a/berekening").get_data(as_text=True)
+    overrides = json.loads((tmp_path / "reken_overrides.json").read_text(encoding="utf-8"))
+    assert overrides["jurian"]["a"]["kale_huur_per_kamer"] == 600
+    assert overrides["justin"]["a"]["kale_huur_per_kamer"] == 700
+
+    # "Instellingen alle panden" blijft gebruikersbreed: een globale rente-wijziging
+    # schuift door naar álle accounts die de oude waarde nog volgden.
+    oude_rente = overrides["jurian"]["a"]["rente"]
+    nieuw_pct = round(oude_rente * 100 + 1, 4)
+    jurian.post("/reken-instellingen", data={"rente": str(nieuw_pct)})
+    na = json.loads((tmp_path / "reken_overrides.json").read_text(encoding="utf-8"))
+    assert na["jurian"]["a"]["rente"] == pytest.approx(nieuw_pct / 100)
+    assert na["justin"]["a"]["rente"] == pytest.approx(nieuw_pct / 100)
+    # maar de per-account kale huur blijft onaangeroerd.
+    assert na["jurian"]["a"]["kale_huur_per_kamer"] == 600
+    assert na["justin"]["a"]["kale_huur_per_kamer"] == 700
 
 
 def test_berekening_opslaan_weigert_ongeldige_waarde(tmp_path):
@@ -1129,8 +1163,8 @@ def test_wwso_gebruik_zet_kale_huur_in_rekentool(tmp_path):
     resp = client.post("/woning/3000AA-1/wwso/gebruik", json={"kale_huur_per_kamer": 512.5})
     assert resp.status_code == 200
     assert resp.get_json()["ok"] is True
-    item = StateStore(tmp_path / "state.json").get("3000AA-1")
-    assert item.berekening["kale_huur_per_kamer"] == 512.5
+    overrides = json.loads((tmp_path / "reken_overrides.json").read_text(encoding="utf-8"))
+    assert overrides["jurian"]["3000AA-1"]["kale_huur_per_kamer"] == 512.5
 
 
 # --- Gebruikers-logboek (beheerder-only) -------------------------------------
