@@ -488,6 +488,13 @@ async function laadKansen() {
 const vergunningenLaag = L.markerClusterGroup
   ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 })
   : L.layerGroup();
+// Aparte laag voor de 50m-cirkels rond elke vergunning. Bewust NIET in de
+// cluster-laag (die is voor punt-markers; echte meter-radius-cirkels horen daar
+// niet in) maar in een losse laag die samen met de vergunningenlaag aan/uit gaat.
+// Canvas-renderer: er kunnen honderden/duizenden vergunningen zijn, en zoveel
+// SVG-paden maken pannen/zoomen traag; op canvas blijft het vloeiend.
+const vergunningStralenLaag = L.layerGroup();
+const stralenRenderer = L.canvas({ padding: 0.5 });
 let vergunningenGeladen = false;
 let vergunningenData = [];
 
@@ -518,15 +525,28 @@ function isDrieKamer(v) {
 
 function renderVergunningen() {
   vergunningenLaag.clearLayers();
+  vergunningStralenLaag.clearLayers();
   const toon3 = toon3kamerEl && toon3kamerEl.checked;
   const punten = vergunningenData.filter(
     (v) => v.lat != null && v.lon != null && (toon3 || !isDrieKamer(v))
   );
   const markers = punten.map((v) => {
     const drie = isDrieKamer(v);
+    const stipKleur = drie ? "#00796b" : "#7b1fa2";
+    // 50m-cirkel (de wettelijke norm-afstand) rond de vergunning, in dezelfde
+    // kleur als de stip. Niet-interactief zodat een klik doorgaat naar de stip.
+    L.circle([v.lat, v.lon], {
+      radius: 50, // meter
+      color: stipKleur,
+      weight: 1,
+      fillColor: stipKleur,
+      fillOpacity: 0.08,
+      interactive: false,
+      renderer: stralenRenderer,
+    }).addTo(vergunningStralenLaag);
     return L.circleMarker([v.lat, v.lon], {
       radius: drie ? 5 : 6,
-      color: drie ? "#00796b" : "#7b1fa2",
+      color: stipKleur,
       weight: 1,
       fillColor: drie ? "#4db6ac" : "#ab47bc",
       fillOpacity: 0.8,
@@ -565,9 +585,13 @@ if (toonVergunningenEl) {
   toonVergunningenEl.addEventListener("change", async () => {
     if (toonVergunningenEl.checked) {
       await laadVergunningen();
-      if (toonVergunningenEl.checked) kaart.addLayer(vergunningenLaag);
+      if (toonVergunningenEl.checked) {
+        kaart.addLayer(vergunningStralenLaag);
+        kaart.addLayer(vergunningenLaag);
+      }
     } else {
       kaart.removeLayer(vergunningenLaag);
+      kaart.removeLayer(vergunningStralenLaag);
     }
   });
 }
