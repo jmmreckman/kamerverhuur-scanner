@@ -148,6 +148,51 @@ def _zet_reken_override(config, gebruiker: str, object_id: str, uitg: dict) -> N
         data[gebruiker] = {}
     data[gebruiker][object_id] = uitg
     _schrijf_reken_overrides(config, data)
+
+
+# --- Per-account verwijderde woningen ("uit mijn kansenlijst") ---
+# Een woning die jij verwijdert verdwijnt alleen uit JOUW lijst, niet voor
+# andere ingelogde gebruikers. Opslag: {gebruiker: {object_id: reden}}.
+# Oude (gedeelde) verwijderingen van vóór deze wijziging blijven werken via de
+# listing-velden status="afgevallen"/handmatig_verwijderd (legacy).
+def _verwijderd_pad(config) -> Path:
+    return Path(config.state_path).parent / "verwijderd_accounts.json"
+
+
+def _laad_verwijderd(config) -> dict:
+    try:
+        data = json.loads(_verwijderd_pad(config).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _schrijf_verwijderd(config, data: dict) -> None:
+    pad = _verwijderd_pad(config)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    pad.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _verwijderd_voor(config, gebruiker: str | None) -> dict:
+    """De door dit account verwijderde woningen: {object_id: reden}."""
+    waarde = _laad_verwijderd(config).get(gebruiker or "")
+    return waarde if isinstance(waarde, dict) else {}
+
+
+def _zet_verwijderd(config, gebruiker: str, object_id: str, reden: str) -> None:
+    data = _laad_verwijderd(config)
+    if not isinstance(data.get(gebruiker), dict):
+        data[gebruiker] = {}
+    data[gebruiker][object_id] = reden
+    _schrijf_verwijderd(config, data)
+
+
+def _herstel_verwijderd(config, gebruiker: str, object_id: str) -> None:
+    data = _laad_verwijderd(config)
+    per = data.get(gebruiker)
+    if isinstance(per, dict) and object_id in per:
+        del per[object_id]
+        _schrijf_verwijderd(config, data)
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
@@ -859,12 +904,16 @@ def create_app(config: Config | None = None) -> Flask:
         # het pand zichtbaar blijft en je 'm niet kwijtraakt zodra je gekocht hebt.
         # Favorieten zijn per account: een afgevallen woning blijft alleen zichtbaar
         # voor de accounts die 'm favoriet maakten (of als oude gedeelde favoriet).
+        # Account-gebonden verwijderde woningen uit JOUW lijst filteren (niet die van
+        # anderen). Legacy-verwijderingen (status afgevallen) vallen al buiten de filter.
+        verwijderd = _verwijderd_voor(config, gebruiker)
         zichtbaar = [
             item
             for item in state.all()
             if (item.status == "actief" or item.is_favoriet_voor(gebruiker))
             and item.lat is not None
             and item.lon is not None
+            and item.object_id not in verwijderd
         ]
         globale = _effectieve_globale_defaults(config)  # één keer lezen, niet per woning
         overrides = _account_overrides_voor(config, gebruiker)  # idem: per-account, één keer
@@ -1194,18 +1243,17 @@ def create_app(config: Config | None = None) -> Flask:
         if item is None:
             return jsonify({"fout": "Onbekende woning."}), 404
         reden = request.form.get("reden", "").strip() or "Handmatig verwijderd via kansen.steenhub.nl."
-        item.status = "afgevallen"
-        item.handmatig_verwijderd = True
-        item.afvalreden = reden
-        # Ook de favoriet opheffen, anders blijft een afgevallen favoriet op de kaart
-        # staan en "komt 'ie terug" na een refresh ondanks het verwijderen. De oude
-        # gedeelde bool heffen we helemaal op; de eigen account-favoriet halen we weg.
         gebruiker = session.get("gebruiker")
-        item.favoriet = False
+        # Account-gebonden verwijderen: alleen uit JOUW kansenlijst. De gedeelde
+        # listing (status/handmatig_verwijderd) laten we met rust, zodat andere
+        # gebruikers de woning gewoon blijven zien.
+        _zet_verwijderd(config, gebruiker, object_id, reden)
+        # Je eigen favoriet opheffen, anders komt 'ie via de favoriet-regel terug.
+        # De oude gedeelde favoriet-bool laten we staan (die telt voor iedereen).
         if gebruiker in item.favoriet_accounts:
             item.favoriet_accounts.remove(gebruiker)
-        state.upsert(item)
-        state.save()
+            state.upsert(item)
+            state.save()
         return jsonify({"ok": True})
 
     @app.route("/kansen/<object_id>/kamers", methods=["POST"])
@@ -1586,25 +1634,38 @@ def create_app(config: Config | None = None) -> Flask:
     def kans_terugplaatsen(object_id):
         state = StateStore(config.state_path)
         item = state.get(object_id)
-        if item is None:
+        gebruiker = session.get("gebruiker")
+        if item is None and object_id not in _verwijderd_voor(config, gebruiker):
             return jsonify({"fout": "Onbekende woning."}), 404
-        item.status = "actief"
-        item.handmatig_verwijderd = False
-        item.afvalreden = None
-        state.upsert(item)
-        state.save()
-        flash(f"{item.weergavenaam} teruggeplaatst.")
+        # Account-gebonden herstel uit jouw eigen verwijderd-lijst.
+        _herstel_verwijderd(config, gebruiker, object_id)
+        # Legacy: was 'ie oud (gedeeld) verwijderd, dan óók de listing terugzetten.
+        if item is not None and item.handmatig_verwijderd:
+            item.status = "actief"
+            item.handmatig_verwijderd = False
+            item.afvalreden = None
+            state.upsert(item)
+            state.save()
+        flash(f"{item.weergavenaam if item else object_id} teruggeplaatst.")
         return redirect(url_for("verwijderd"))
 
     @app.route("/verwijderd")
     @login_required
     def verwijderd():
         state = StateStore(config.state_path)
-        items = sorted(
-            (item for item in state.all() if item.handmatig_verwijderd),
-            key=lambda item: item.laatst_gezien, reverse=True,
-        )
-        return render_template("verwijderd.html", items=items, gebruiker=session["gebruiker"])
+        gebruiker = session.get("gebruiker")
+        eigen = _verwijderd_voor(config, gebruiker)  # {object_id: reden}
+        items = []
+        for item in state.all():
+            if item.object_id in eigen:
+                item.afvalreden = eigen[item.object_id]  # transient, alleen voor weergave
+            elif item.handmatig_verwijderd:
+                pass  # legacy: oud gedeeld verwijderd (afvalreden staat al op de listing)
+            else:
+                continue
+            items.append(item)
+        items.sort(key=lambda it: it.laatst_gezien, reverse=True)
+        return render_template("verwijderd.html", items=items, gebruiker=gebruiker)
 
     @app.route("/handmatig-toevoegen", methods=["GET", "POST"])
     @login_required

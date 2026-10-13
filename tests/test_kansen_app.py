@@ -211,7 +211,7 @@ def test_kans_verwijderen_onbekende_woning_geeft_404(app_client):
     assert resp.status_code == 404
 
 
-def test_kans_verwijderen_zet_status_en_vlag(app_client, tmp_path):
+def test_kans_verwijderen_is_account_gebonden(app_client, tmp_path):
     _zet_listing(tmp_path)
     app_client.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
 
@@ -219,10 +219,13 @@ def test_kans_verwijderen_zet_status_en_vlag(app_client, tmp_path):
     assert resp.status_code == 200
     assert resp.get_json() == {"ok": True}
 
+    # De gedeelde listing blijft onaangeroerd (andere accounts zien 'm nog).
     item = StateStore(tmp_path / "state.json").get("3000AA-1")
-    assert item.status == "afgevallen"
-    assert item.handmatig_verwijderd is True
-    assert item.afvalreden == "Zelfbewoningsplicht"
+    assert item.status == "actief"
+    assert item.handmatig_verwijderd is False
+    # De verwijdering + reden staan in de account-store.
+    verwijderd = json.loads((tmp_path / "verwijderd_accounts.json").read_text(encoding="utf-8"))
+    assert verwijderd["jurian"]["3000AA-1"] == "Zelfbewoningsplicht"
 
 
 def test_kans_verwijderen_zonder_reden_gebruikt_standaardtekst(app_client, tmp_path):
@@ -231,8 +234,8 @@ def test_kans_verwijderen_zonder_reden_gebruikt_standaardtekst(app_client, tmp_p
 
     app_client.post("/kansen/3000AA-1/verwijderen")
 
-    item = StateStore(tmp_path / "state.json").get("3000AA-1")
-    assert item.afvalreden == "Handmatig verwijderd via kansen.steenhub.nl."
+    verwijderd = json.loads((tmp_path / "verwijderd_accounts.json").read_text(encoding="utf-8"))
+    assert verwijderd["jurian"]["3000AA-1"] == "Handmatig verwijderd via kansen.steenhub.nl."
 
 
 def test_kans_verwijderd_valt_niet_meer_uit_api_kansen(app_client, tmp_path):
@@ -257,8 +260,27 @@ def test_verwijderen_heft_favoriet_op_en_haalt_van_kaart(app_client, tmp_path):
 
     opgeslagen = StateStore(tmp_path / "state.json").get("3000AA-1")
     assert opgeslagen.is_favoriet_voor("jurian") is False
-    assert opgeslagen.handmatig_verwijderd is True
     assert app_client.get("/api/kansen").get_json() == []  # weg van de kaart, ook na refresh
+
+
+def test_verwijderen_is_per_account_en_herstel(tmp_path):
+    app = create_app(_config(tmp_path))
+    app.testing = True
+    _zet_listing(tmp_path)
+
+    jurian = app.test_client()
+    jurian.post("/login", data={"gebruiker": "jurian", "wachtwoord": "geheim123"})
+    justin = app.test_client()
+    justin.post("/login", data={"gebruiker": "justin", "wachtwoord": "anderwachtwoord"})
+
+    # Jurian verwijdert; verdwijnt uit ZIJN lijst maar Justin ziet 'm nog.
+    jurian.post("/kansen/3000AA-1/verwijderen")
+    assert jurian.get("/api/kansen").get_json() == []
+    assert len(justin.get("/api/kansen").get_json()) == 1
+
+    # Jurian herstelt; staat weer in zijn eigen lijst.
+    jurian.post("/kansen/3000AA-1/terugplaatsen")
+    assert len(jurian.get("/api/kansen").get_json()) == 1
 
 
 def test_kans_kamers_zonder_login_wordt_omgeleid(app_client):
