@@ -1,0 +1,645 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f2f3f7;
+  --surface: #ffffff;
+  --surface-alt: #f8f9fc;
+  --text: #14161c;
+  --muted: #6b7280;
+  --border: #e7e8ee;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-soft: #eef0ff;
+  --ok: #059669;
+  --ok-soft: #ecfdf5;
+  --warn: #d97706;
+  --warn-soft: #fffbeb;
+  --bad: #dc2626;
+  --bad-soft: #fef2f2;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 8px 24px rgba(16, 24, 40, 0.10), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101116;
+    --surface: #1a1c23;
+    --surface-alt: #21232b;
+    --text: #edeef2;
+    --muted: #9497a3;
+    --border: #2c2e38;
+    --primary: #818cf8;
+    --primary-hover: #a5b0fb;
+    --primary-soft: #262a45;
+    --ok: #34d399;
+    --ok-soft: #0f2b23;
+    --warn: #fbbf24;
+    --warn-soft: #322408;
+    --bad: #f87171;
+    --bad-soft: #341313;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+/* ---------- Topbar ---------- */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "brand . right" "links links links";
+  column-gap: 0.5rem;
+  row-gap: 0.6rem;
+  align-items: center;
+  padding: 0.7rem 1.5rem;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.navbar-brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--primary), #8b5cf6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+.logo-mark svg { width: 56%; height: 56%; }
+
+.nav-links {
+  grid-area: links;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-link svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+.nav-link:hover { background: var(--surface-alt); color: var(--text); }
+
+.nav-link.actief { background: var(--primary-soft); color: var(--primary); }
+
+.nav-menu { display: contents; }
+
+.nav-right {
+  grid-area: right;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.nav-right select { width: auto; margin: 0; }
+
+.nav-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nav-logout:hover { background: var(--surface-alt); color: var(--text); }
+.nav-logout svg { width: 16px; height: 16px; }
+
+/* ---------- Mobiel navigatiemenu (hamburger) ---------- */
+
+.nav-toggle-checkbox { display: none; }
+
+.nav-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.nav-toggle-btn:hover { background: var(--surface-alt); }
+.nav-toggle-btn svg { width: 22px; height: 22px; }
+
+@media (max-width: 860px) {
+  .navbar { display: flex; flex-wrap: wrap; }
+  .nav-toggle-btn { display: flex; }
+
+  .nav-menu {
+    display: none;
+    flex-basis: 100%;
+    order: 3;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.2rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-menu { display: flex; }
+
+  .nav-links { flex-direction: column; align-items: stretch; gap: 0.3rem; }
+  .nav-link {
+    justify-content: flex-start;
+    padding: 0.9rem 1rem;
+    font-size: 1.05rem;
+    border-radius: 10px;
+  }
+  .nav-link svg { width: 20px; height: 20px; }
+
+  .nav-right { flex-direction: column; align-items: stretch; margin-left: 0; margin-top: 0.5rem; gap: 0.4rem; }
+  .nav-right select { width: 100%; }
+  .nav-logout {
+    justify-content: flex-start;
+    padding: 0.9rem 1rem;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+}
+
+/* ---------- Layout ---------- */
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.page-header { margin-bottom: 1.5rem; }
+.page-header h1 { margin: 0 0 0.2rem; font-size: 1.6rem; letter-spacing: -0.01em; }
+
+h1 { font-size: 1.5rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.4rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ---------- Stat cards (dashboard) ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.stat-icon svg { width: 22px; height: 22px; }
+.stat-icon.ok { background: var(--ok-soft); color: var(--ok); }
+.stat-icon.warn { background: var(--warn-soft); color: var(--warn); }
+.stat-icon.bad { background: var(--bad-soft); color: var(--bad); }
+
+.stat-value { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+.stat-label { color: var(--muted); font-size: 0.85rem; margin-top: 0.15rem; }
+
+a.stat-card { text-decoration: none; color: inherit; transition: box-shadow 0.15s ease, transform 0.15s ease; }
+a.stat-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+
+/* ---------- Itemkaartjes (bv. rijen in een lijst met veel acties per rij,
+   zoals Contracten) - overzichtelijker dan platte tekst vol hyperlinks. ---------- */
+
+.item-box {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.9rem;
+}
+.item-box:last-child { margin-bottom: 0; }
+.item-box-acties { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.7rem; }
+
+/* ---------- Tabellen ---------- */
+
+.tabel-scroll { overflow-x: auto; }
+
+/* Op smalle schermen wordt een .tabel-responsief-tabel een gestapelde lijst
+   (elke rij een kaartje, elke cel een label + waarde) in plaats van
+   horizontaal te moeten scrollen. */
+@media (max-width: 640px) {
+  .tabel-responsief table, .tabel-responsief thead, .tabel-responsief tbody,
+  .tabel-responsief th, .tabel-responsief td, .tabel-responsief tr {
+    display: block;
+  }
+  .tabel-responsief thead tr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .tabel-responsief tbody tr {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    margin-bottom: 0.9rem;
+    padding: 0.5rem 0.9rem;
+  }
+  .tabel-responsief tbody tr:last-child { margin-bottom: 0; }
+  .tabel-responsief td {
+    border-bottom: none;
+    padding: 0.45rem 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    text-align: right;
+  }
+  .tabel-responsief td:not(:last-child) { border-bottom: 1px solid var(--border); }
+  .tabel-responsief td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  /* Cellen met complexere inhoud (bv. meerdere knoppen) krijgen het label
+     boven de inhoud in plaats van ernaast, anders wordt het te krap. */
+  .tabel-responsief td.tabel-cel-stapel {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+  .tabel-responsief td.tabel-cel-stapel::before { margin-bottom: 0.3rem; }
+  .tabel-responsief .tabel-scroll { overflow-x: visible; }
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.65rem 0.7rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+tr:last-child td { border-bottom: none; }
+
+/* ---------- Statuspillen ---------- */
+
+.pil {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.status-betaald { background: var(--ok-soft); color: var(--ok); }
+.status-te-weinig-ontvangen, .status-te-veel-ontvangen { background: var(--warn-soft); color: var(--warn); }
+.status-nog-niet-ontvangen { background: var(--bad-soft); color: var(--bad); }
+.pil-neutral { background: var(--primary-soft); color: var(--primary); margin-right: 0.3rem; }
+.pil svg { width: 0.9em; height: 0.9em; margin-right: 0.2rem; flex-shrink: 0; }
+
+/* Compacte oud-huurder-waarschuwing op de betaalpagina (icoon klein houden,
+   anders schaalt de inline-SVG naar volle breedte). */
+.oud-huurder-waarschuwing { border-left: 4px solid var(--warn); }
+.oud-huurder-kop { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--warn); font-weight: 700; font-size: 0.95rem; }
+.oud-huurder-icoon { display: inline-flex; flex-shrink: 0; }
+.oud-huurder-icoon svg { width: 1.1em; height: 1.1em; }
+td.status-betaald, td.status-te-weinig-ontvangen, td.status-te-veel-ontvangen, td.status-nog-niet-ontvangen {
+  background: none;
+}
+
+/* ---------- Knoppen ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.15rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn:hover { background: var(--primary-hover); }
+.btn:active { transform: scale(0.98); }
+.btn svg { width: 16px; height: 16px; }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--primary-soft); }
+
+.btn-link-danger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 0.75rem;
+  color: var(--bad);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.btn-link:hover { color: var(--text); }
+
+.aanzeg-lijst { list-style: none; padding: 0; margin: 0; }
+.aanzeg-lijst li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+}
+.aanzeg-lijst li + li { border-top: 1px solid var(--border); }
+
+.btn-xs {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.btn-xs svg { width: 13px; height: 13px; }
+.btn-xs[disabled], .btn-xs.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* ---------- Kamer/kaart-tegels ---------- */
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+
+.kamer-tile {
+  display: block;
+  text-decoration: none;
+  color: var(--text);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.kamer-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.kamer-tile h2 { margin-bottom: 0.35rem; }
+
+.muted { color: var(--muted); font-size: 0.9rem; }
+
+/* ---------- Flash-meldingen ---------- */
+
+.flash {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.testaccount-banner {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.badge-test {
+  display: inline-block;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* ---------- Formulieren ---------- */
+
+form label { display: block; margin-bottom: 1rem; font-weight: 600; font-size: 0.9rem; }
+form input, form textarea, form select {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+form input:focus, form textarea:focus, form select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--surface);
+}
+form textarea { min-height: 6rem; }
+
+.inline-form { display: flex; gap: 0.5rem; margin-top: 0.75rem; align-items: flex-start; }
+.inline-form input { margin-top: 0; }
+
+.login-page { max-width: 380px; margin: 4rem auto; }
+
+.warning-box {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+/* ---------- Contractsjabloon: tekstverwerker-editor ---------- */
+
+.editor-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.editor-toolbar .btn { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+
+.editor-oppervlak {
+  min-height: 24rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text);
+  line-height: 1.5;
+}
+.editor-oppervlak:focus { outline: none; border-color: var(--primary); background: var(--surface); }
+.editor-oppervlak h2 { font-size: 1.05rem; margin: 1.1rem 0 0.3rem; }
+.editor-oppervlak h2:first-child { margin-top: 0; }
+.editor-oppervlak p { margin: 0.4rem 0; }
+.editor-oppervlak ul { margin: 0.4rem 0; padding-left: 1.3rem; }
+
+/* ---------- Breadcrumb ---------- */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+.breadcrumb a { text-decoration: none; color: var(--muted); }
+.breadcrumb a:hover { color: var(--primary); }
+.breadcrumb a:last-child { color: var(--text); font-weight: 600; }
+.breadcrumb-sep { opacity: 0.5; }
+
+/* ---------- Documenten: dropzone + bestandstegels ---------- */
+
+.dropzone {
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--muted);
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone-actief { border-color: var(--primary); background: var(--primary-soft); }
+.dropzone-icon { width: 28px; height: 28px; margin-bottom: 0.5rem; color: var(--primary); }
+.dropzone-link { color: var(--primary); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+.nieuwe-map { margin-top: 1rem; font-size: 0.9rem; }
+.nieuwe-map summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+
+.bestand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.9rem;
+}
+.bestand-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 0.6rem;
+  text-decoration: none;
+  color: var(--text);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.bestand-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.tile-icon { width: 30px; height: 30px; color: var(--primary); }
+.tile-naam { font-size: 0.85rem; font-weight: 600; word-break: break-word; }
+.tile-meta { font-size: 0.75rem; color: var(--muted); }
+
+/* --- Kleurenherkenning per pand --- */
+/* Wanneer een gebruiker "kleurenherkenning panden" aan heeft (body.pand-thema),
+   is --primary al overschreven met de pandkleur (zie base.html), dus de hele
+   accentkleur loopt automatisch mee. Deze regels voegen alleen wat extra,
+   subtiele herkenning toe zonder de achtergrond te raken. */
+.pand-thema .navbar {
+  border-top: 3px solid var(--primary);
+}
+.pand-thema .logo-mark {
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 55%, #000));
+}
+
+/* Pandkiezer: elke tegel krijgt zijn eigen herkenningskleur (--tegel-kleur). */
+.kamer-tile.pand-getint {
+  border-left: 4px solid var(--tegel-kleur);
+}
+.kamer-tile.pand-getint .stat-icon {
+  background: color-mix(in srgb, var(--tegel-kleur) 15%, var(--surface));
+  color: var(--tegel-kleur);
+}
+
+/* Klein gekleurd bolletje om een pandkleur te tonen (bv. in de panden-lijst). */
+.pand-kleurstip {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+}

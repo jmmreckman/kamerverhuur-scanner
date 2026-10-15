@@ -1,0 +1,609 @@
+"""Route-tests voor het opvragen van documenten (ID/paspoort, bewijs van
+inkomen/garantsteller) bij de gekozen kandidaat na een bezichtiging: knop +
+editable mail vanaf de bezichtigingen-pagina, de publieke uploadpagina, en
+de statuspagina voor de beheerder."""
+import io
+import json
+import re
+from decimal import Decimal
+
+import pytest
+from werkzeug.security import generate_password_hash
+
+from kamerverhuur_scanner.config import Config
+from kamerverhuur_scanner.models import Tenant
+from webapp.app import create_app
+
+
+class FakeSheetClient:
+    def __init__(self, _config, pand):
+        self.pand = pand
+        self.bezichtigingen = []
+        self.aanmeldingen_rijen = []
+        self.kamers = []
+
+    def get_kamers(self):
+        return self.kamers
+
+    def add_bezichtiging(self, datum_iso, afspraak):
+        self.bezichtigingen.append((datum_iso, dict(afspraak)))
+
+    def get_aanmeldingen(self):
+        return self.aanmeldingen_rijen
+
+    def get_bezichtigingen(self):
+        return [
+            [
+                datum_iso, a["tijd_start"], a["tijd_eind"], a["kamer"], a["naam"], a["email"],
+                a["telefoon"], a["bezichtiging"], a["bel_nummer"], "10-07-2026 12:00",
+            ]
+            for datum_iso, a in self.bezichtigingen
+        ]
+
+    def get_bezichtigingen_met_rijnummer(self):
+        return list(enumerate(self.get_bezichtigingen(), start=2))
+
+    def verwijder_bezichtiging(self, rijnummer):
+        del self.bezichtigingen[rijnummer - 2]
+
+
+_fake_sheet_singleton = {}
+
+
+def _fake_sheet_factory(config, pand):
+    if pand.slug not in _fake_sheet_singleton:
+        _fake_sheet_singleton[pand.slug] = FakeSheetClient(config, pand)
+    return _fake_sheet_singleton[pand.slug]
+
+
+@pytest.fixture
+def app_client(tmp_path, monkeypatch):
+    import webapp.app as appmodule
+    _fake_sheet_singleton.clear()
+    monkeypatch.setattr(appmodule, "SheetClient", _fake_sheet_factory)
+
+    properties_file = tmp_path / "properties.json"
+    properties_file.write_text(json.dumps([
+        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
+         "bunq_rekening_iban": "NL81BUNQ2163127125"},
+    ]))
+    users_file = tmp_path / "users.json"
+    users_file.write_text(json.dumps({
+        "beheerder": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": []},
+    }))
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    config = Config(
+        google_service_account_file="fake.json", properties_file=str(properties_file),
+        bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
+        users_file=str(users_file), flask_secret_key="test-secret",
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=str(state_dir),
+        smtp_host="smtp.example.com", smtp_port=587, smtp_username="info@steenhub.nl",
+        smtp_password="geheim", smtp_from_email="info@steenhub.nl", smtp_from_naam="Steenhub",
+        email_bcc=["jurian@example.com"], email_bcc_beheerder=["jmmreckman@gmail.com"],
+    )
+    app = create_app(config)
+    app.testing = True
+    client = app.test_client()
+    client.post("/login", data={"username": "beheerder", "password": "geheim123"})
+    client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")  # instantieert de FakeSheetClient-singleton
+    client.test_config = config  # handig voor tests die zelf al bestanden willen wegschrijven
+    return client
+
+
+@pytest.fixture
+def verstuurde_mails(monkeypatch):
+    verstuurd = []
+
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, **kwargs):
+        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
+
+    import webapp.app as appmodule
+    monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
+    return verstuurd
+
+
+def _voeg_bezichtiging_toe(naam="Jane Doe", email="jane@example.com", kamer="1"):
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.add_bezichtiging("2026-08-01", {
+        "tijd_start": "10:00", "tijd_eind": "10:20", "kamer": kamer, "naam": naam,
+        "email": email, "telefoon": "+31612345678", "bezichtiging": "In person", "bel_nummer": "",
+    })
+
+
+def _rijnummer(app_client) -> int:
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")
+    match = re.search(r'name="rijnummers" value="(\d+)"', resp.get_data(as_text=True))
+    assert match
+    return int(match.group(1))
+
+
+def test_documentverzoek_knop_staat_op_bezichtigingen_pagina(app_client):
+    _voeg_bezichtiging_toe()
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen")
+    assert b"Documenten verzoeken" in resp.data
+
+
+def test_documentverzoek_voorbeeld_vereist_precies_een_selectie(app_client):
+    _voeg_bezichtiging_toe()
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/documenten-verzoeken",
+        data={}, follow_redirects=True,
+    )
+    assert "precies 1 kandidaat" in resp.get_data(as_text=True).lower()
+
+
+def test_documentverzoek_voorbeeld_zonder_email_geeft_foutmelding(app_client):
+    _voeg_bezichtiging_toe(email="")
+    rijnummer = _rijnummer(app_client)
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/documenten-verzoeken",
+        data={"rijnummers": str(rijnummer)}, follow_redirects=True,
+    )
+    assert "geen e-mailadres bekend" in resp.get_data(as_text=True).lower()
+
+
+def test_documentverzoek_voorbeeld_toont_editable_mail_met_upload_link(app_client):
+    _voeg_bezichtiging_toe()
+    rijnummer = _rijnummer(app_client)
+    resp = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/documenten-verzoeken",
+        data={"rijnummers": str(rijnummer)},
+    )
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Documents needed" in body
+    assert "/documenten/" in body
+    assert "Jane Doe" in body
+
+
+@pytest.mark.usefixtures("verstuurde_mails")
+def test_documentverzoek_versturen_mailt_kandidaat_en_redirect_naar_status(app_client, verstuurde_mails):
+    _voeg_bezichtiging_toe()
+    rijnummer = _rijnummer(app_client)
+    voorbeeld = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/documenten-verzoeken",
+        data={"rijnummers": str(rijnummer)},
+    )
+    body = voorbeeld.get_data(as_text=True)
+    sleutel_match = re.search(r'/documentverzoek/([a-z0-9-]+)/versturen', body)
+    assert sleutel_match
+    sleutel = sleutel_match.group(1)
+
+    resp = app_client.post(
+        f"/pand/mahoniestraat/documentverzoek/{sleutel}/versturen",
+        data={"onderwerp": "Documents needed - room 1", "tekst": "Please upload your documents."},
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert "verstuurd" in resp.get_data(as_text=True).lower()
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "jane@example.com"
+    assert verstuurde_mails[0]["onderwerp"] == "Documents needed - room 1"
+
+
+def _maak_verzoek(app_client) -> tuple[str, str]:
+    """Maakt een documentverzoek aan en geeft (token, sleutel) terug."""
+    _voeg_bezichtiging_toe()
+    rijnummer = _rijnummer(app_client)
+    voorbeeld = app_client.post(
+        "/pand/mahoniestraat/aanmeldingen/bezichtigingen/documenten-verzoeken",
+        data={"rijnummers": str(rijnummer)},
+    )
+    body = voorbeeld.get_data(as_text=True)
+    token_match = re.search(r'/documenten/([\w-]+)', body)
+    sleutel_match = re.search(r'/documentverzoek/([a-z0-9-]+)/versturen', body)
+    assert token_match and sleutel_match
+    return token_match.group(1), sleutel_match.group(1)
+
+
+def _maak_verzoek_en_haal_token(app_client) -> str:
+    token, _sleutel = _maak_verzoek(app_client)
+    return token
+
+
+def test_documenten_upload_onbekende_token_geeft_404(app_client):
+    resp = app_client.get("/documenten/onbekende-token")
+    assert resp.status_code == 404
+
+
+def test_documenten_upload_pagina_toont_uploadvelden(app_client):
+    token = _maak_verzoek_en_haal_token(app_client)
+    resp = app_client.get(f"/documenten/{token}")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "id_bestanden" in body
+    assert "inkomen_bestanden" in body
+
+
+def test_documenten_upload_zonder_bestanden_geeft_foutmelding(app_client):
+    token = _maak_verzoek_en_haal_token(app_client)
+    resp = app_client.post(f"/documenten/{token}", data={}, content_type="multipart/form-data")
+    assert resp.status_code == 400
+    assert "select at least one file" in resp.get_data(as_text=True).lower()
+
+
+def test_documenten_upload_slaat_bestanden_op_en_toont_bevestiging(app_client, verstuurde_mails):
+    token = _maak_verzoek_en_haal_token(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+            "inkomen_bestanden": (io.BytesIO(b"fake-inkomen-bytes"), "loonstrook.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    assert "Thank you" in resp.get_data(as_text=True)
+    # beheerder krijgt een meldingsmail dat er documenten binnen zijn
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] == "jurian@example.com"
+    assert "Documents received" in verstuurde_mails[0]["onderwerp"]
+
+
+def test_documentverzoek_status_toont_geuploade_bestanden(app_client):
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    resp = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "id.jpg" in body
+    assert "Copy of ID or passport" in body
+
+
+def test_documentverzoek_bestand_download_werkt(app_client):
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    match = re.search(r'/bestand/([\w.-]+)"', status.get_data(as_text=True))
+    assert match
+    resp = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}/bestand/{match.group(1)}")
+    assert resp.status_code == 200
+    assert resp.data == b"fake-id-bytes"
+
+
+def test_documentverzoek_bestand_onbekend_geeft_404(app_client):
+    resp = app_client.get("/pand/mahoniestraat/documentverzoek/onbekende-sleutel/bestand/x")
+    assert resp.status_code == 404
+
+
+def test_documentverzoek_status_onbekende_sleutel_geeft_404(app_client):
+    resp = app_client.get("/pand/mahoniestraat/documentverzoek/onbekende-sleutel")
+    assert resp.status_code == 404
+
+
+# --- Overzichtspagina van alle documentverzoeken (anders alleen bereikbaar via de meldingsmail) ---
+
+
+def test_documentverzoeken_overzicht_leeg(app_client):
+    resp = app_client.get("/pand/mahoniestraat/documentverzoeken")
+    assert resp.status_code == 200
+    assert "nog geen documenten opgevraagd" in resp.get_data(as_text=True).lower()
+
+
+def test_documentverzoeken_overzicht_toont_verzoeken_met_link(app_client):
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.get("/pand/mahoniestraat/documentverzoeken")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert f"/pand/mahoniestraat/documentverzoek/{sleutel}" in body
+
+
+def test_aanmeldingen_pagina_linkt_naar_documentverzoeken_overzicht(app_client):
+    resp = app_client.get("/pand/mahoniestraat/aanmeldingen")
+    assert "/pand/mahoniestraat/documentverzoeken" in resp.get_data(as_text=True)
+
+
+# --- Drive-sync: geuploade documenten (en het eerder aangeleverde bewijs
+# van inschrijving) komen ook in de Drive-map van de kandidaat terecht ---
+
+
+@pytest.fixture
+def drive_sync_calls(monkeypatch):
+    """Vangt aanroepen naar drive_sync op i.p.v. echt rclone te draaien - zie
+    kamerverhuur_scanner/drive_sync.py, gekoppeld in kandidaat_documenten_upload()."""
+    import webapp.app as appmodule
+    calls = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "upload_bestand",
+        lambda config, pand, huurder_naam, bestandsnaam, inhoud: calls.append(
+            (huurder_naam, bestandsnaam, inhoud)
+        ) or True,
+    )
+    return calls
+
+
+def test_documenten_upload_kopieert_naar_drive_map_van_kandidaat(app_client, drive_sync_calls):
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+            "inkomen_bestanden": (io.BytesIO(b"fake-inkomen-bytes"), "loonstrook.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    namen = [huurder_naam for huurder_naam, _bestandsnaam, _inhoud in drive_sync_calls]
+    assert namen == ["Jane Doe", "Jane Doe"]
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert any("id.jpg" in b for b in bestandsnamen)
+    assert any("loonstrook.pdf" in b for b in bestandsnamen)
+
+
+def test_documenten_upload_kopieert_ook_eerder_aangeleverd_bewijs_inschrijving(app_client, drive_sync_calls):
+    from kamerverhuur_scanner.lokale_media import LokaleMediaClient
+
+    file_id = LokaleMediaClient(
+        app_client.test_config, _fake_sheet_singleton["mahoniestraat"].pand, "aanmeldingen"
+    ).upload_bestand("1", "enrollment.pdf", "application/pdf", b"fake-enrollment-bytes")
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "", "", "", "", "", "", "", "", "",
+         f"/pand/mahoniestraat/aanmeldingen/bewijs/1/{file_id}", "", "", ""],
+    ]
+
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert "enrollment.pdf" in bestandsnamen
+    inhoud_per_naam = {b: i for _n, b, i in drive_sync_calls}
+    assert inhoud_per_naam["enrollment.pdf"] == b"fake-enrollment-bytes"
+
+
+def test_documenten_upload_zonder_gevonden_aanmelding_slaat_studiebewijs_over(app_client, drive_sync_calls):
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    # geen aanmeldingen geregistreerd voor deze kandidaat - alleen het net
+    # geuploade ID-document wordt naar Drive gekopieerd, verder geen fout
+    bestandsnamen = [b for _n, b, _i in drive_sync_calls]
+    assert len(bestandsnamen) == 1
+    assert "id.jpg" in bestandsnamen[0]
+
+
+# --- AI-uitlezen + automatisch concept-huurcontract ---
+
+
+_AI_RESULTAAT = {
+    "volledige_naam": "Jane Doe", "geboortedatum": "01-01-2000", "geboorteplaats": "Rotterdam",
+    "studierichting": "Computer Science", "studentnummer": "123456",
+}
+
+
+@pytest.fixture
+def fake_ai(monkeypatch):
+    """Vangt aanroepen naar document_ai.lees_documenten_uit op (geen echte
+    Anthropic-aanroep in tests) - zie webapp.app._verwerk_documenten_met_ai()."""
+    import webapp.app as appmodule
+    calls = []
+
+    def _fake_lees_documenten_uit(config, documenten):
+        calls.append(documenten)
+        return dict(_AI_RESULTAAT)
+
+    monkeypatch.setattr(appmodule.document_ai, "lees_documenten_uit", _fake_lees_documenten_uit)
+    return calls
+
+
+def test_zonder_ai_ingesteld_wordt_ai_stap_stil_overgeslagen(app_client, verstuurde_mails):
+    # Zonder ANTHROPIC_API_KEY (de standaard in de testconfig) faalt
+    # document_ai.lees_documenten_uit met een DocumentAIError - dat mag de
+    # rest van de upload nooit laten crashen, en er wordt geen concept-
+    # contract gegenereerd of jmmreckman@gmail.com gemaild.
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    # alleen de "documenten ontvangen"-meldingsmail aan de beheerder, geen concept-contractmail
+    assert len(verstuurde_mails) == 1
+    assert verstuurde_mails[0]["aan"] != "jmmreckman@gmail.com"
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    assert "Concept-huurcontract" not in status.get_data(as_text=True)
+
+
+def test_upload_genereert_automatisch_concept_contract_en_mailt_beheerder(app_client, verstuurde_mails, fake_ai):
+    token, sleutel = _maak_verzoek(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+            "inkomen_bestanden": (io.BytesIO(b"fake-inkomen-bytes"), "loon.pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    assert len(fake_ai) == 1  # AI is precies 1x aangeroepen, met de geuploade documenten
+
+    onderwerpen = [m["onderwerp"] for m in verstuurde_mails]
+    assert any("Concept-huurcontract klaar" in o for o in onderwerpen)
+    concept_mail = next(m for m in verstuurde_mails if "Concept-huurcontract klaar" in m["onderwerp"])
+    assert concept_mail["aan"] == "jmmreckman@gmail.com"
+    assert "Jane Doe" in concept_mail["tekst"]
+
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    body = status.get_data(as_text=True)
+    assert "Concept-huurcontract" in body
+    assert "Bekijk concept" in body
+
+
+def test_concept_contract_bevat_kamerprijs_en_ai_gegevens(app_client, fake_ai):
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.kamers = [
+        Tenant(
+            row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("930.00"),
+            kale_huurprijs=Decimal("800.00"), servicekosten=Decimal("130.00"),
+        ),
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    match = re.search(r'/contracten/([^/"]+\.html)"', status.get_data(as_text=True))
+    assert match
+    contract = app_client.get(f"/pand/mahoniestraat/contracten/{match.group(1)}")
+    body = contract.get_data(as_text=True)
+    assert "Jane Doe" in body
+    assert "€930,00" in body
+    assert "Rotterdam" in body  # geboorteplaats, uit de AI-uitlezing
+
+
+def test_concept_contract_gebruikt_ai_naam_niet_de_oude_aanmeldingsnaam(app_client, monkeypatch):
+    # De naam op het ID-document is leidend voor het contract (dat is de
+    # wettelijke naam) - een afwijking t.o.v. de eerder ingevulde aanmelding
+    # mag niet betekenen dat de oude naam alsnog in het contract belandt.
+    import webapp.app as appmodule
+    monkeypatch.setattr(
+        appmodule.document_ai, "lees_documenten_uit",
+        lambda config, documenten: {**_AI_RESULTAAT, "volledige_naam": "Jane Elizabeth Doe"},
+    )
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "", "", "", "", "", "", "", "", "",
+         "", "", "", ""],
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    match = re.search(r'/contracten/([^/"]+\.html)"', status.get_data(as_text=True))
+    assert match
+    contract = app_client.get(f"/pand/mahoniestraat/contracten/{match.group(1)}")
+    assert "Jane Elizabeth Doe" in contract.get_data(as_text=True)
+
+
+def test_concept_contract_hernoemt_documentenmap_naar_officiele_naam(app_client, monkeypatch):
+    # De kandidaat leverde documenten aan onder "Jane Doe"; de AI leest de
+    # volledige ID-naam "Jane Elizabeth Doe" uit. De al aangemaakte Drive-map
+    # hoort dan hernoemd te worden i.p.v. dat er een tweede mapje ontstaat.
+    import webapp.app as appmodule
+    monkeypatch.setattr(
+        appmodule.document_ai, "lees_documenten_uit",
+        lambda config, documenten: {**_AI_RESULTAAT, "volledige_naam": "Jane Elizabeth Doe"},
+    )
+    hernoemingen = []
+    monkeypatch.setattr(
+        appmodule.drive_sync, "hernoem_huurder_map",
+        lambda config, pand, oude, nieuwe: hernoemingen.append((oude, nieuwe)) or True,
+    )
+    token, _sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert ("Jane Doe", "Jane Elizabeth Doe") in hernoemingen
+
+
+def test_concept_contract_toont_mismatch_met_aanmelding(app_client, fake_ai):
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    sheet.aanmeldingen_rijen = [
+        ["10-07-2026", "1", "Jane Doe", "jane@example.com", "", "", "Physics", "999999", "", "", "", "",
+         "", "", "", "", "", "", ""],
+    ]
+    token, sleutel = _maak_verzoek(app_client)
+    app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    status = app_client.get(f"/pand/mahoniestraat/documentverzoek/{sleutel}")
+    body = status.get_data(as_text=True)
+    assert "mogelijk afwijkende gegevens" in body.lower()
+    assert "999999" in body
+    assert "Physics" in body
+
+
+# --- Directe aanvraag (huurder rechtstreeks, geen bezichtiging) -------------
+
+def _maak_directe_aanvraag(app_client, kamer="1", naam="Nadia", email="nadia@example.com"):
+    voorbeeld = app_client.post(
+        f"/pand/mahoniestraat/kamers/{kamer}/directe-aanvraag",
+        data={"naam": naam, "email": email, "telefoon": "+31600000000"},
+    )
+    body = voorbeeld.get_data(as_text=True)
+    token = re.search(r'/documenten/([\w-]+)', body).group(1)
+    sleutel = re.search(r'/documentverzoek/([a-z0-9-]+)/versturen', body).group(1)
+    return token, sleutel
+
+
+def test_directe_aanvraag_knop_staat_op_kamerpagina(app_client):
+    resp = app_client.get("/pand/mahoniestraat/kamers/1/directe-aanvraag")
+    assert resp.status_code == 200
+    assert "rechtstreeks" in resp.get_data(as_text=True).lower()
+
+
+def test_directe_aanvraag_vereist_naam_en_email(app_client):
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/directe-aanvraag", data={"naam": "", "email": ""}
+    )
+    assert "verplicht" in resp.get_data(as_text=True).lower()
+
+
+def test_directe_aanvraag_maakt_direct_verzoek(app_client):
+    from webapp import documentverzoek
+    _token, sleutel = _maak_directe_aanvraag(app_client)
+    verzoek = documentverzoek.lees_verzoek("mahoniestraat", sleutel, app_client.test_config.state_dir)
+    assert verzoek["direct"] is True
+    assert verzoek["naam"] == "Nadia"
+
+
+def test_publieke_pagina_directe_aanvraag_toont_vragenlijst(app_client):
+    token, _sleutel = _maak_directe_aanvraag(app_client)
+    body = app_client.get(f"/documenten/{token}").get_data(as_text=True)
+    assert "Your details" in body
+    assert "Your current address" in body
+    assert "inschrijving_bestanden" in body
+
+
+def test_publieke_pagina_gewoon_verzoek_toont_geen_vragenlijst(app_client):
+    token = _maak_verzoek_en_haal_token(app_client)  # via bezichtiging = niet direct
+    body = app_client.get(f"/documenten/{token}").get_data(as_text=True)
+    assert "Your details" not in body
+
+
+def test_directe_aanvraag_slaat_vragenlijst_op_bij_upload(app_client, verstuurde_mails):
+    from webapp import documentverzoek
+    token, sleutel = _maak_directe_aanvraag(app_client)
+    resp = app_client.post(
+        f"/documenten/{token}",
+        data={
+            "huidig_adres": "Teststraat 1, Rotterdam",
+            "studie": "Bouwkunde",
+            "gewenste_ingangsdatum": "01-09-2026",
+            "borgsteller_naam": "Ouder van Nadia",
+            "id_bestanden": (io.BytesIO(b"fake-id-bytes"), "id.jpg"),
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    verzoek = documentverzoek.lees_verzoek("mahoniestraat", sleutel, app_client.test_config.state_dir)
+    gegevens = verzoek["aanvraag_gegevens"]
+    assert gegevens["huidig_adres"] == "Teststraat 1, Rotterdam"
+    assert gegevens["studie"] == "Bouwkunde"
+    assert gegevens["gewenste_ingangsdatum"] == "01-09-2026"
+    assert gegevens["borgsteller_naam"] == "Ouder van Nadia"

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Thank you{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Thank you for your application!</h1>
+</div>
+<div class="card">
+  <p>We've received your application for room {{ kamer.kamer }} at {{ huidig_pand.naam }}.</p>
+  <p>If your details match what we're looking for, we'll get in touch to arrange a viewing.</p>
+</div>
+<a class="btn btn-secondary" href="{{ url_for('aanbod_overzicht') }}">Back to all rooms</a>
+{% endblock %}
