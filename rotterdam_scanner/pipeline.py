@@ -5,12 +5,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from . import bekendmakingen, den_haag
+from . import bekendmakingen, den_haag, mail_voorkeuren
 from .archief import ListingArchief, archief_pad_voor
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
 from .config import Config
-from .mailer import send_report
+from .mailer import send_mail, send_report
 from .funda_mail import FundaListing, fetch_recent_funda_mail_scan, fetch_verwijder_commandos
 from .nvm_mail import haal_nvm_woningen
 from .move_scrape import haal_move_woningen
@@ -654,12 +654,53 @@ def _controleer_favoriet_bekendmakingen(
         return 0
 
     aantal_nieuw = sum(len(nieuwe) for _fav, nieuwe in nieuw_per_pand)
-    onderwerp, html_body, text_body = bekendmakingen.bouw_alert_mail(nieuw_per_pand)
-    try:
-        send_report(config, onderwerp, html_body, text_body)
-    except Exception as exc:  # noqa: BLE001 - de waarschuwing staat al bij de woning; mail is extra
-        result.fouten.append(f"Versturen van de bekendmaking-waarschuwing mislukt: {exc}")
+    # Favorieten zijn per account: elk account krijgt de waarschuwing over zijn éígen
+    # favorieten op zijn eigen mail-voorkeuren-adres (dat overschrijft de env-ontvangers).
+    # Een oude gedeelde favoriet zonder account valt terug op config.report_to.
+    for recipients, items in _bekendmaking_mailgroepen(config, nieuw_per_pand):
+        onderwerp, html_body, text_body = bekendmakingen.bouw_alert_mail(items)
+        try:
+            send_mail(config, onderwerp, html_body, text_body, recipients=recipients)
+        except Exception as exc:  # noqa: BLE001 - de waarschuwing staat al bij de woning; mail is extra
+            result.fouten.append(f"Versturen van de bekendmaking-waarschuwing mislukt: {exc}")
     return aantal_nieuw
+
+
+def _bekendmaking_mailgroepen(config: Config, nieuw_per_pand):
+    """Groepeer de (favoriet, nieuwe-treffers)-paren per ontvanger. Per account gaat de
+    waarschuwing naar het in de mail-voorkeuren ingestelde adres van dát account; dat
+    overschrijft dus de env-ontvangers (config.report_to). Heeft een account geen geldig
+    eigen adres ingesteld, dan vallen zijn favorieten terug op config.report_to zodat de
+    waarschuwing niet stil verloren gaat. Een oude gedeelde favoriet (favoriet=True, nog
+    geen favoriet_accounts) valt eveneens terug op config.report_to.
+
+    Geeft een lijst (recipients, items) terug - één groep per ontvanger-adreslijst."""
+    per_account: dict[str, list] = {}
+    terugval: list = []
+    for fav, nieuwe in nieuw_per_pand:
+        accounts = list(getattr(fav, "favoriet_accounts", None) or [])
+        if accounts:
+            for account in accounts:
+                per_account.setdefault(account, []).append((fav, nieuwe))
+        else:
+            terugval.append((fav, nieuwe))
+
+    groepen: list[tuple[list[str], list]] = []
+    for account, items in per_account.items():
+        prefs = mail_voorkeuren.voorkeuren_voor(config, account)
+        adressen = [
+            adres
+            for adres in mail_voorkeuren.split_emails(prefs.get("email", ""))
+            if mail_voorkeuren.geldig_email(adres)
+        ]
+        if adressen:
+            groepen.append((adressen, items))
+        else:
+            terugval.extend(items)
+
+    if terugval:
+        groepen.append((list(config.report_to), terugval))
+    return groepen
 
 
 def controleer_bekendmakingen(config: Config, today: date | None = None) -> dict:

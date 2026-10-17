@@ -3,9 +3,11 @@ from unittest.mock import patch
 
 import pytest
 
+from rotterdam_scanner import mail_voorkeuren as mv
 from rotterdam_scanner import pipeline
 from rotterdam_scanner.bag import BagGegevens
 from rotterdam_scanner.config import Config
+from rotterdam_scanner.state import ListingState
 from rotterdam_scanner.funda_mail import FundaListing, FundaMailScan
 from rotterdam_scanner.geocode import GeocodeError, GeocodeResult
 from rotterdam_scanner.monumenten import HuurprijsopslagSignaal
@@ -1124,3 +1126,53 @@ def test_run_combineert_funda_en_nvm(tmp_path):
     assert set(gedeeld.bronnen) == {"funda", "nvm"}
     assert gedeeld.url.startswith("https://links.funda.nl")
     assert state.get("3000BB-2").bronnen == ["nvm"]
+
+
+# --- Bekendmaking-waarschuwing: per account naar het eigen mail-voorkeuren-adres ---
+
+def _fav(object_id, favoriet_accounts=(), favoriet=False):
+    return ListingState(
+        object_id=object_id, url=f"https://funda.nl/{object_id}",
+        weergavenaam=f"Straat {object_id}", eerst_gezien="2026-01-01",
+        laatst_gezien="2026-01-02", status="actief",
+        favoriet=favoriet, favoriet_accounts=list(favoriet_accounts),
+    )
+
+
+def test_bekendmaking_mail_gaat_naar_account_eigen_adres_niet_env(tmp_path):
+    # De kern van de fix: het mail-voorkeuren-adres overschrijft de env-ontvangers.
+    cfg = _config(tmp_path, report_to=["jmmreckman@example.com", "winkellink@example.com"])
+    mv.zet_voorkeuren(cfg, "jurian", "jur@x.nl", {"dagelijkse_kansen"})
+    fav = _fav("1", favoriet_accounts=["jurian"])
+    nieuw = [(fav, [{"publicatie_id": "p1"}])]
+    groepen = pipeline._bekendmaking_mailgroepen(cfg, nieuw)
+    assert groepen == [(["jur@x.nl"], nieuw)]  # winkellink/env komt er niet in voor
+
+
+def test_bekendmaking_mail_per_account_gescheiden(tmp_path):
+    cfg = _config(tmp_path, report_to=["env@x.nl"])
+    mv.zet_voorkeuren(cfg, "jurian", "jur@x.nl", {"dagelijkse_kansen"})
+    mv.zet_voorkeuren(cfg, "justin", "jus@x.nl", {"dagelijkse_kansen"})
+    fav_j = _fav("1", favoriet_accounts=["jurian"])
+    fav_s = _fav("2", favoriet_accounts=["justin"])
+    nieuw = [(fav_j, [{"publicatie_id": "pa"}]), (fav_s, [{"publicatie_id": "pb"}])]
+    groepen = {tuple(adr): items for adr, items in pipeline._bekendmaking_mailgroepen(cfg, nieuw)}
+    assert groepen[("jur@x.nl",)] == [(fav_j, [{"publicatie_id": "pa"}])]
+    assert groepen[("jus@x.nl",)] == [(fav_s, [{"publicatie_id": "pb"}])]
+
+
+def test_bekendmaking_legacy_gedeelde_favoriet_valt_terug_op_env(tmp_path):
+    cfg = _config(tmp_path, report_to=["env@x.nl"])
+    fav = _fav("1", favoriet=True)  # oude gedeelde favoriet, nog geen favoriet_accounts
+    nieuw = [(fav, [{"publicatie_id": "p1"}])]
+    groepen = pipeline._bekendmaking_mailgroepen(cfg, nieuw)
+    assert groepen == [(["env@x.nl"], nieuw)]
+
+
+def test_bekendmaking_account_zonder_adres_valt_terug_op_env(tmp_path):
+    cfg = _config(tmp_path, report_to=["env@x.nl"])
+    mv.zet_voorkeuren(cfg, "jurian", "", {"dagelijkse_kansen"})  # account zonder eigen adres
+    fav = _fav("1", favoriet_accounts=["jurian"])
+    nieuw = [(fav, [{"publicatie_id": "p1"}])]
+    groepen = pipeline._bekendmaking_mailgroepen(cfg, nieuw)
+    assert groepen == [(["env@x.nl"], nieuw)]
