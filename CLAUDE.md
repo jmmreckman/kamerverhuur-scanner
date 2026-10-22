@@ -161,6 +161,17 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   toekomst terugkerende woningen). Gevuld in `pipeline._vul_archief_aan` vóór
   `prune_expired`; gelezen door de concurrentie-scan. Geen terugwerkende kracht
   (woningen die vóór de invoering al geprund waren, zijn weg).
+- `rotterdam_scanner/oude_vergunningen.py` — **eenmalige import** van de officiële
+  ArcGIS-laag "Verleende vergunning kamerverhuur" (Rotterdam, FeatureServer
+  `Update_Sept2026/84`). Die laag is één geaggregeerde multipolygon (~473 parcels)
+  **zonder attributen** (bewust geanonimiseerd): we splitsen de parcels, nemen per
+  parcel het zwaartepunt en reverse-geocoden dat (PDOK) naar een adres. **Info-only:
+  aantal personen (3/4+) en besluitdatum zijn ONBEKEND, dus NIET voor de 50m-
+  uitsluiting.** Ontdubbelt tegen de bekendmakingen-index (op ~20 m) en schrijft
+  `oude_vergunningen.json` in de data-map (**bewust niet in git** — adres-data van
+  derden). Draaien op de VPS: `docker compose run --rm fundazoeker python -m
+  rotterdam_scanner.oude_vergunningen`. Kaartlaag/toggle "Toon oude vergunningen"
+  (grijze stips) + route `GET /api/oude-vergunningen`.
 
 ---
 

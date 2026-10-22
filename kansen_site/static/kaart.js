@@ -30,6 +30,7 @@ const bekendmakingenKnop = document.getElementById("bekendmakingen-knop");
 const toonKansenEl = document.getElementById("toon-kansen");
 const toonVergunningenEl = document.getElementById("toon-vergunningen");
 const toon3kamerEl = document.getElementById("toon-3kamer");
+const toonOudeVergunningenEl = document.getElementById("toon-oude-vergunningen");
 const vergunningenStatusEl = document.getElementById("vergunningen-status");
 const zijbalkEl = document.getElementById("zijbalk");
 const zijbalkKnop = document.getElementById("zijbalk-knop");
@@ -660,6 +661,7 @@ const LEGENDA = [
   { type: "cirkel", rand: "#7b1fa2", vul: "#ab47bc", titel: "50 m-norm rond een vergunning" },
   { type: "stip", rand: "#15803d", vul: "#22c55e", titel: "Test-adres (handmatig, beheerder)" },
   { type: "cirkel", rand: "#15803d", vul: "#86efac", titel: "50 m rond een test-adres" },
+  { type: "stip", rand: "#6b7280", vul: "#9ca3af", titel: "Oude vergunning (historisch, personen onbekend)" },
 ];
 
 const legendaKnop = document.getElementById("legenda-knop");
@@ -773,6 +775,12 @@ const stralenRenderer = L.canvas({ padding: 0.5 });
 let vergunningenGeladen = false;
 let vergunningenData = [];
 
+// Oude (historische) vergunningen uit de officiele ArcGIS-laag: info-only, personen
+// en datum onbekend, dus bewust een eigen (grijze) stijl en een losse laag.
+const oudeVergunningenLaag = L.layerGroup();
+let oudeVergunningenGeladen = false;
+let oudeVergunningenData = [];
+
 function bouwVergunningPopup(v) {
   const div = document.createElement("div");
   div.className = "popup-inhoud popup-vergunning";
@@ -853,8 +861,56 @@ async function laadVergunningen() {
   }
 }
 
+function bouwOudeVergunningPopup(v) {
+  const div = document.createElement("div");
+  div.className = "popup-inhoud popup-vergunning";
+  div.innerHTML = `
+    <span class="adres">${escapeHtml(v.adres || "onbekend adres")}</span>
+    <span class="vergunning-badge">oude vergunning</span><br>
+    <span style="color:#5f6368;font-size:0.9em">Historisch verleende kamerverhuurvergunning.<br>Aantal personen en besluitdatum onbekend (niet in de officiele bron).</span>
+  `;
+  return div;
+}
+
+function renderOudeVergunningen() {
+  oudeVergunningenLaag.clearLayers();
+  oudeVergunningenData
+    .filter((v) => v.lat != null && v.lon != null)
+    .forEach((v) => L.circleMarker([v.lat, v.lon], {
+      radius: 5,
+      color: "#6b7280",
+      weight: 1,
+      fillColor: "#9ca3af",
+      fillOpacity: 0.75,
+    }).bindPopup(bouwOudeVergunningPopup(v)).addTo(oudeVergunningenLaag));
+}
+
+async function laadOudeVergunningen() {
+  if (oudeVergunningenGeladen) return;
+  try {
+    const resp = await fetch("/api/oude-vergunningen");
+    const data = await resp.json();
+    oudeVergunningenData = data.vergunningen || [];
+    oudeVergunningenGeladen = true;
+    renderOudeVergunningen();
+  } catch (err) {
+    oudeVergunningenGeladen = false;
+    if (toonOudeVergunningenEl) toonOudeVergunningenEl.checked = false;
+  }
+}
+
 if (toonKansenEl) {
   toonKansenEl.addEventListener("change", renderAlles);
+}
+if (toonOudeVergunningenEl) {
+  toonOudeVergunningenEl.addEventListener("change", async () => {
+    if (toonOudeVergunningenEl.checked) {
+      await laadOudeVergunningen();
+      if (toonOudeVergunningenEl.checked) kaart.addLayer(oudeVergunningenLaag);
+    } else {
+      kaart.removeLayer(oudeVergunningenLaag);
+    }
+  });
 }
 if (toonVergunningenEl) {
   toonVergunningenEl.addEventListener("change", async () => {
@@ -891,6 +947,7 @@ function verzamelFilters() {
     "toon-kansen": toonKansenEl ? toonKansenEl.checked : undefined,
     "toon-vergunningen": toonVergunningenEl ? toonVergunningenEl.checked : undefined,
     "toon-3kamer": toon3kamerEl ? toon3kamerEl.checked : undefined,
+    "toon-oude-vergunningen": toonOudeVergunningenEl ? toonOudeVergunningenEl.checked : undefined,
     "filter-stad": filterStadEl ? filterStadEl.value : undefined,
     "filter-wijk": filterWijkEl ? filterWijkEl.value : undefined,
     "filter-investeerders": filterInvesteerdersEl ? filterInvesteerdersEl.value : undefined,
@@ -931,6 +988,10 @@ function pasFiltersToe(f) {
     toonVergunningenEl.checked = true;
     toonVergunningenEl.dispatchEvent(new Event("change"));
   }
+  if (toonOudeVergunningenEl && f["toon-oude-vergunningen"] && !toonOudeVergunningenEl.checked) {
+    toonOudeVergunningenEl.checked = true;
+    toonOudeVergunningenEl.dispatchEvent(new Event("change"));
+  }
 }
 
 let _filtersOpslaanTimer = null;
@@ -946,7 +1007,7 @@ function slaFiltersOp() {
 }
 
 // Elke wijziging aan een filter opslaan (gedebounced).
-for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, filterStadEl, filterWijkEl,
+for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, toonOudeVergunningenEl, filterStadEl, filterWijkEl,
                   filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
                   filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterWoningtypeEl,
                   filterZoekEl, filterDagenEl, filterSorteerEl]) {

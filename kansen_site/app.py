@@ -64,7 +64,7 @@ _FILTER_SLEUTELS = {
     "toon-kansen", "toon-vergunningen", "toon-3kamer", "filter-stad", "filter-wijk",
     "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
     "filter-m2-min", "filter-m2-max", "filter-prijs-m2-max",
-    "filter-woningtype",
+    "filter-woningtype", "toon-oude-vergunningen",
     "filter-zoek", "filter-dagen", "filter-sorteer",
 }
 
@@ -1051,6 +1051,28 @@ def create_app(config: Config | None = None) -> Flask:
             "compleet": index.meta.get("volledige_enumeratie_gedaan", False)
             and not index.onverwerkt(),
         })
+
+    def _oude_vergunningen_pad() -> Path:
+        return Path(config.state_path).parent / "oude_vergunningen.json"
+
+    @app.route("/api/oude-vergunningen")
+    @login_required
+    def api_oude_vergunningen():
+        # Historische kamerverhuurvergunningen uit de officiele ArcGIS-laag, eenmalig
+        # geimporteerd (zie rotterdam_scanner/oude_vergunningen.py, draai dat op de VPS).
+        # Info-only: aantal personen en besluitdatum zijn ONBEKEND (de bron is bewust
+        # geanonimiseerd), dus deze laag voedt NIET de 50m-uitsluiting. Bestand ontbreekt
+        # tot de import is gedraaid -> dan gewoon een lege lijst.
+        try:
+            data = json.loads(_oude_vergunningen_pad().read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        vergunningen = [
+            {"adres": v.get("adres"), "lat": v.get("lat"), "lon": v.get("lon")}
+            for v in (data.get("vergunningen") or [])
+            if v.get("lat") is not None and v.get("lon") is not None
+        ]
+        return jsonify({"vergunningen": vergunningen, "bijgewerkt": data.get("bijgewerkt")})
 
     # --- Test-adressen (handmatig, voor het testen van de 50m-afstandseis) ---
     # Een los adres (niet per se te koop) op de kaart met een groene 50m-cirkel
