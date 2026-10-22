@@ -602,6 +602,11 @@ if (zoekInvoerEl) {
   zoekInvoerEl.addEventListener("input", toonZoekResultaten);
   zoekInvoerEl.addEventListener("focus", toonZoekResultaten);
   zoekInvoerEl.addEventListener("keydown", (e) => {
+    // Android-toetsenbord stuurt tijdens woordcompositie/autocorrectie een pseudo-
+    // Enter (isComposing / keyCode 229). Die NIET als "ga naar eerste resultaat"
+    // behandelen: dat maakte het veld leeg + blurde 'm, waardoor het toetsenbord
+    // telkens wegsprong zodra je verder wilde typen.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape") {
       zoekInvoerEl.value = "";
       verbergZoekResultaten();

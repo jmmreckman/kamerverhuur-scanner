@@ -228,6 +228,10 @@ body {
   .zijbalk.zijbalk-open {
     display: block;
   }
+
+  /* De zweef-zoekbox hoort alleen bij de kaart; staat de lijst (zijbalk) open,
+     dan zit 'ie in de weg, dus verbergen we 'm zolang de lijst zichtbaar is. */
+  .zijbalk.zijbalk-open ~ .kaart-wrap .zoek-balk { display: none; }
 }
 
 .filters {
