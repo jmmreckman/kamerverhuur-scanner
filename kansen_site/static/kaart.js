@@ -40,6 +40,8 @@ const opkoopScanInvoerEl = document.getElementById("opkoop-scan-invoer");
 const opkoopScanKnop = document.getElementById("opkoop-scan-knop");
 const opkoopScanStatusEl = document.getElementById("opkoop-scan-status");
 const opkoopScanOntvangersEl = document.getElementById("opkoop-scan-ontvangers");
+const zoekInvoerEl = document.getElementById("zoek-invoer");
+const zoekResultatenEl = document.getElementById("zoek-resultaten");
 
 let alleKansen = [];
 const markerPerId = new Map();
@@ -431,6 +433,134 @@ function renderAlles() {
   renderStralen();
   renderMarkers(kansen);
   renderLijst(kansen);
+}
+
+// --- Snelzoeken op straatnaam (zweeft linksboven over de kaart) ---------------
+// Typ (een deel van) een straatnaam; typefouten mogen. We tonen een korte lijst
+// met alleen straat + huisnummer en springen bij een klik naar de woning op de
+// kaart met het ballonnetje open. Fuzzy, zodat zowel "onies" (deel) als
+// "mahonystraat" (typefout) de Mahoniestraat vinden.
+const ZOEK_MAX_RESULTATEN = 15;
+
+function normaliseerZoek(tekst) {
+  return (tekst || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "") // accenten weg
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// "Mahoniestraat 15, Rotterdam" -> "Mahoniestraat 15" (stad weg voor weergave).
+function straatHuisnummer(kans) {
+  const naam = kans.weergavenaam || "";
+  return (naam.split(",")[0] || naam).trim();
+}
+
+// Minimale edit-afstand om `zoek` ergens ín `doel` terug te vinden (benaderd
+// substring-matchen): rij 0 blijft 0 zodat de match overal mag beginnen, en we
+// nemen het minimum van de laatste rij zodat 'ie overal mag eindigen. Zo telt een
+// deeltreffer ("onies") als afstand 0 en een typefout ("mahony") als afstand 1.
+function fuzzyAfstand(zoek, doel) {
+  const m = zoek.length, n = doel.length;
+  if (m === 0) return 0;
+  let vorige = new Array(n + 1).fill(0);
+  for (let i = 1; i <= m; i++) {
+    const huidige = new Array(n + 1);
+    huidige[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const kost = zoek[i - 1] === doel[j - 1] ? 0 : 1;
+      huidige[j] = Math.min(vorige[j - 1] + kost, vorige[j] + 1, huidige[j - 1] + 1);
+    }
+    vorige = huidige;
+  }
+  return Math.min(...vorige);
+}
+
+function zoekWoningen(term) {
+  const zoek = normaliseerZoek(term);
+  if (!zoek) return [];
+  // Hoe langer de zoekterm, hoe meer typefouten we toestaan.
+  const drempel = zoek.length <= 4 ? 1 : Math.floor(zoek.length / 4) + 1;
+  const treffers = [];
+  for (const kans of alleKansen) {
+    if (kans.lat == null || kans.lon == null) continue; // zonder plek niets om heen te vliegen
+    const afstand = fuzzyAfstand(zoek, normaliseerZoek(straatHuisnummer(kans)));
+    if (afstand <= drempel) treffers.push({ kans, afstand });
+  }
+  treffers.sort((a, b) => {
+    if (a.afstand !== b.afstand) return a.afstand - b.afstand;
+    return straatHuisnummer(a.kans).localeCompare(straatHuisnummer(b.kans), "nl", { numeric: true });
+  });
+  return treffers.slice(0, ZOEK_MAX_RESULTATEN).map((t) => t.kans);
+}
+
+function verbergZoekResultaten() {
+  zoekResultatenEl.hidden = true;
+  zoekResultatenEl.innerHTML = "";
+}
+
+function gaNaarWoning(kans) {
+  verbergZoekResultaten();
+  zoekInvoerEl.value = "";
+  if (kans.lat != null && kans.lon != null) kaart.setView([kans.lat, kans.lon], 17);
+  const marker = markerPerId.get(kans.object_id);
+  if (marker) {
+    marker.openPopup();
+  } else if (kans.lat != null && kans.lon != null) {
+    // Woning valt buiten de huidige filters/toggle, dus er staat geen marker. Toon
+    // het ballonnetje alsnog los op de locatie (zelfde inhoud als een markerpopup).
+    L.popup().setLatLng([kans.lat, kans.lon]).setContent(bouwPopup(kans)).openOn(kaart);
+  }
+  sluitZijbalk();
+}
+
+function toonZoekResultaten() {
+  if (!zoekInvoerEl || !zoekResultatenEl) return;
+  if (!normaliseerZoek(zoekInvoerEl.value)) { verbergZoekResultaten(); return; }
+  const treffers = zoekWoningen(zoekInvoerEl.value);
+  zoekResultatenEl.innerHTML = "";
+  if (!treffers.length) {
+    const leeg = document.createElement("li");
+    leeg.className = "zoek-geen";
+    leeg.textContent = "Geen woning gevonden";
+    zoekResultatenEl.appendChild(leeg);
+    zoekResultatenEl.hidden = false;
+    return;
+  }
+  for (const kans of treffers) {
+    const naam = straatHuisnummer(kans);
+    // Straat vet, huisnummer grijs: splits op de eerste losse cijfergroep.
+    const match = naam.match(/^(.*?)(\s+\d.*)?$/);
+    const straat = (match && match[1] ? match[1] : naam).trim();
+    const nr = match && match[2] ? match[2].trim() : "";
+    const li = document.createElement("li");
+    li.className = "zoek-resultaat";
+    li.innerHTML = `<strong>${escapeHtml(straat)}</strong>${nr ? ` <span class="huisnr">${escapeHtml(nr)}</span>` : ""}`;
+    li.addEventListener("click", () => gaNaarWoning(kans));
+    zoekResultatenEl.appendChild(li);
+  }
+  zoekResultatenEl.hidden = false;
+}
+
+if (zoekInvoerEl) {
+  zoekInvoerEl.addEventListener("input", toonZoekResultaten);
+  zoekInvoerEl.addEventListener("focus", toonZoekResultaten);
+  zoekInvoerEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      zoekInvoerEl.value = "";
+      verbergZoekResultaten();
+      zoekInvoerEl.blur();
+    } else if (e.key === "Enter") {
+      const eerste = zoekWoningen(zoekInvoerEl.value)[0];
+      if (eerste) { e.preventDefault(); gaNaarWoning(eerste); }
+    }
+  });
+  // Klik buiten de zoekbalk sluit de resultatenlijst.
+  document.addEventListener("click", (e) => {
+    const balk = document.getElementById("zoek-balk");
+    if (balk && !balk.contains(e.target)) verbergZoekResultaten();
+  });
 }
 
 function sluitZijbalk() {

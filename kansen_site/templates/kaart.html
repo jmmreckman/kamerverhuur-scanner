@@ -123,7 +123,14 @@
       <p id="aantal-tekst" class="muted"></p>
       <ul id="lijst" class="lijst"></ul>
     </aside>
-    <main id="kaart" class="kaart"></main>
+    <main class="kaart-wrap">
+      <div id="zoek-balk" class="zoek-balk">
+        <input type="search" id="zoek-invoer" class="zoek-invoer" autocomplete="off"
+               placeholder="Zoek op straatnaam…" aria-label="Zoek een woning op straatnaam">
+        <ul id="zoek-resultaten" class="zoek-resultaten" hidden></ul>
+      </div>
+      <div id="kaart" class="kaart"></div>
+    </main>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"

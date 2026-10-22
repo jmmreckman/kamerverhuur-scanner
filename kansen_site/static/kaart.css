@@ -292,7 +292,51 @@ body {
   vertical-align: middle;
 }
 
-.kaart { flex: 1; }
+.kaart-wrap { flex: 1; position: relative; min-width: 0; }
+.kaart { position: absolute; inset: 0; }
+
+/* Zweeft linksboven over de kaart: typ een straatnaam (deel/typefout mag), krijg
+   direct een korte lijst (straat + huisnummer) en spring bij een klik naar de
+   woning op de kaart met het ballonnetje open. */
+.zoek-balk {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1200;
+  width: min(320px, calc(100% - 24px));
+}
+.zoek-invoer {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  background: white;
+  font-size: 0.95em;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+}
+.zoek-resultaten {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.zoek-resultaten[hidden] { display: none; }
+.zoek-resultaat {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--rand);
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.zoek-resultaat:last-child { border-bottom: none; }
+.zoek-resultaat:hover { background: var(--achtergrond); }
+.zoek-resultaat .huisnr { color: #5f6368; }
+.zoek-geen { padding: 0.5rem 0.7rem; color: #5f6368; font-size: 0.9em; }
 
 .lijst {
   list-style: none;
