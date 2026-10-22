@@ -325,22 +325,33 @@ async function favorietToggle(kans) {
   }
 }
 
-function _puntIcoon(kleur, teken) {
-  return L.divIcon({
-    className: "favoriet-marker",
-    html: `<div class="favoriet-marker-punt" style="background:${kleur}">${teken}</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-  });
+// Gekleurde varianten van exact dezelfde Leaflet-teardrop-pin als de standaard
+// blauwe (lokaal meegeleverd in static/markers), zodat goud/paars/rood dezelfde
+// vorm houden i.p.v. losse rondjes. Eén instantie per kleur (gedeeld over markers).
+const _pinIconen = {};
+function pinIcoon(kleur) {
+  if (!_pinIconen[kleur]) {
+    _pinIconen[kleur] = L.icon({
+      iconUrl: `/static/markers/marker-icon-${kleur}.png`,
+      iconRetinaUrl: `/static/markers/marker-icon-2x-${kleur}.png`,
+      shadowUrl: "/static/markers/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+      shadowAnchor: [12, 41],
+    });
+  }
+  return _pinIconen[kleur];
 }
 
 // Markerkleur op prioriteit: rood (openstaande vergunning-waarschuwing) > goud
 // (favoriet) > paars (appartement). Woonhuis en onbekend woningtype houden de
 // standaard blauwe Leaflet-pin (null = geen eigen icoon).
 function markerIcoon(kans) {
-  if ((kans.bekendmaking_waarschuwingen || []).length > 0) return _puntIcoon("#b3261e", "⚠");
-  if (kans.favoriet) return _puntIcoon("#f4b400", "★");
-  if (kans.woningtype === "appartement") return _puntIcoon("#7c3aed", "");
+  if ((kans.bekendmaking_waarschuwingen || []).length > 0) return pinIcoon("red");
+  if (kans.favoriet) return pinIcoon("gold");
+  if (kans.woningtype === "appartement") return pinIcoon("violet");
   return null;
 }
 
