@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from html import escape
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 from .pipeline import RunResult
 from .state import ListingState
@@ -61,10 +61,21 @@ def _maps_zoeklink(plaatsnaam: str, stad: str = "Rotterdam") -> str:
     return f"https://www.google.com/maps/search/{quote(f'{plaatsnaam}, {stad}')}"
 
 
+def _advertentie_url(item: ListingState) -> str:
+    """De link achter 'Bekijk advertentie' en de adresnaam. Funda-woningen hebben een
+    echte advertentie-URL; NVM/Move-woningen niet (url=""), dus daar maken we er een
+    Google-zoeklink op het adres van -- zo kom je alsnog in één klik bij de
+    makelaarsvermelding. (Zelfde truc als de handmatige-invoer-fallback.)"""
+    url = (item.url or "").strip()
+    if url.startswith(("http://", "https://")):
+        return url
+    return f"https://www.google.com/search?q={quote_plus((item.weergavenaam or '') + ' te koop')}"
+
+
 def _acties_html(item: ListingState, scanner_email: str) -> str:
     verwijder_url = _verwijder_mailto(scanner_email, item.object_id)
     return (
-        f'<span style="{_ACTIE_STYLE}"><a href="{escape(item.url)}">Bekijk advertentie &rarr;</a></span><br>'
+        f'<span style="{_ACTIE_STYLE}"><a href="{escape(_advertentie_url(item))}">Bekijk advertentie &rarr;</a></span><br>'
         f'<span style="{_ACTIE_VERWIJDER_STYLE}"><a href="{escape(verwijder_url)}">Verwijderen</a></span>'
     )
 
@@ -104,7 +115,7 @@ def _row(item: ListingState, today: date, scanner_email: str) -> str:
 
     return f"""
     <tr>
-      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
+      <td style="{_TD_STYLE}"><a href="{escape(_advertentie_url(item))}">{escape(item.weergavenaam)}</a></td>
       <td style="{_TD_STYLE}">{wijk_html}</td>
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
@@ -160,7 +171,7 @@ def _den_haag_row(item: ListingState, today: date, scanner_email: str) -> str:
     )
     return f"""
     <tr>
-      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a>{opmerking_html}</td>
+      <td style="{_TD_STYLE}"><a href="{escape(_advertentie_url(item))}">{escape(item.weergavenaam)}</a>{opmerking_html}</td>
       <td style="{_TD_STYLE}">{wijk_html}</td>
       <td style="{_TD_STYLE}">{_euro(item.prijs)}</td>
       <td style="{_TD_STYLE}">{oppervlakte_tekst}</td>
@@ -178,7 +189,7 @@ def _den_haag_row(item: ListingState, today: date, scanner_email: str) -> str:
 def _afvallen_row(item: ListingState) -> str:
     return f"""
     <tr>
-      <td style="{_TD_STYLE}"><a href="{escape(item.url)}">{escape(item.weergavenaam)}</a></td>
+      <td style="{_TD_STYLE}"><a href="{escape(_advertentie_url(item))}">{escape(item.weergavenaam)}</a></td>
       <td style="{_TD_STYLE}">{escape(item.afvalreden or '-')}</td>
     </tr>
     """
@@ -337,7 +348,7 @@ def _item_regels(item: ListingState, today: date, scanner_email: str) -> list[st
     prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
     regels = [
         f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)",
-        f"    bekijk: {item.url}",
+        f"    bekijk: {_advertentie_url(item)}",
         f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}",
         f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}",
     ]
@@ -364,7 +375,7 @@ def _den_haag_item_regels(item: ListingState, today: date, scanner_email: str) -
     prijs_per_m2_tekst = f"{_euro(item.prijs_per_m2)}/m²" if item.prijs_per_m2 else "€/m² onbekend"
     regels = [
         f"- {item.weergavenaam} ({item.wijknaam or '-'}, {dagen} dagen bekend)",
-        f"    bekijk: {item.url}",
+        f"    bekijk: {_advertentie_url(item)}",
         f"    verwijderen: {_verwijder_mailto(scanner_email, item.object_id)}",
         f"    {_euro(item.prijs)}, {oppervlakte_tekst}, {prijs_per_m2_tekst}",
     ]
@@ -425,14 +436,14 @@ def build_text_report(result: RunResult, today: date, scanner_email: str) -> str
     lines.append("")
     lines.append(f"Handmatig verwijderd ({len(result.handmatig_verwijderd)}):")
     for item in result.handmatig_verwijderd:
-        lines.append(f"- {item.weergavenaam}: {item.afvalreden} ({item.url})")
+        lines.append(f"- {item.weergavenaam}: {item.afvalreden} ({_advertentie_url(item)})")
     if not result.handmatig_verwijderd:
         lines.append("  (geen)")
 
     lines.append("")
     lines.append(f"Vandaag afgevallen op de checks ({len(result.nieuw_afgevallen)}):")
     for item in result.nieuw_afgevallen:
-        lines.append(f"- {item.weergavenaam}: {item.afvalreden} ({item.url})")
+        lines.append(f"- {item.weergavenaam}: {item.afvalreden} ({_advertentie_url(item)})")
     if not result.nieuw_afgevallen:
         lines.append("  (geen)")
 
