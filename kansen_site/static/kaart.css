@@ -342,6 +342,57 @@ body {
 .zoek-resultaat .huisnr { color: #5f6368; }
 .zoek-geen { padding: 0.5rem 0.7rem; color: #5f6368; font-size: 0.9em; }
 
+/* Legenda-knop + uitklapbaar paneel, rechtsonder over de kaart (boven de
+   Leaflet-attributie). De inhoud wordt datagedreven gevuld vanuit LEGENDA in
+   kaart.js, zodat een nieuw kaart-element automatisch in de legenda verschijnt. */
+.legenda-knop {
+  position: absolute;
+  right: 10px;
+  bottom: 26px;
+  z-index: 1200;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--rand);
+  border-radius: 8px;
+  background: white;
+  font-size: 0.9em;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}
+.legenda-knop.actief { background: var(--achtergrond); }
+.legenda-paneel {
+  position: absolute;
+  right: 10px;
+  bottom: 64px;
+  z-index: 1200;
+  width: min(300px, calc(100% - 20px));
+  max-height: 60vh;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--rand);
+  border-radius: 10px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.25);
+  padding: 0.6rem 0.75rem;
+}
+.legenda-paneel[hidden] { display: none; }
+.legenda-kop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+.legenda-sluiten {
+  border: none; background: none; cursor: pointer;
+  font-size: 1.3rem; line-height: 1; color: #5f6368; padding: 0 0.2rem;
+}
+.legenda-lijst { list-style: none; margin: 0; padding: 0; }
+.legenda-item { display: flex; align-items: center; gap: 0.55rem; padding: 0.28rem 0; font-size: 0.9em; }
+.legenda-swatch { flex: 0 0 26px; display: inline-flex; align-items: center; justify-content: center; }
+.legenda-pin { height: 26px; width: auto; display: block; }
+.legenda-telmarker {
+  width: 22px; height: 22px; border-radius: 50%;
+  color: #fff; font-weight: 700; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.legenda-stip { width: 15px; height: 15px; border-radius: 50%; border: 2px solid; display: inline-block; }
+.legenda-cirkel { width: 22px; height: 22px; border-radius: 50%; border: 2px solid; display: inline-block; }
+.legenda-titel { flex: 1; }
+
 .lijst {
   list-style: none;
   margin: 0;

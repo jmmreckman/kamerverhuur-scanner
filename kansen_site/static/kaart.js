@@ -643,6 +643,71 @@ if (zoekInvoerEl) {
   });
 }
 
+// --- Legenda (rechtsonder) ---------------------------------------------------
+// Eén bron van waarheid voor alles wat op de kaart staat. Voeg je een nieuw
+// kaart-element toe (marker/stip/cirkel), zet 'm hier in LEGENDA erbij, dan werkt
+// de legenda automatisch bij. type: "pin" (teardrop-marker, kleur = bestandsnaam),
+// "telmarker" (rondje met getal), "stip" (vergunning/test-punt), "cirkel" (50 m-zone).
+const LEGENDA = [
+  { type: "pin", kleur: "blue", titel: "Woonhuis" },
+  { type: "pin", kleur: "violet", titel: "Appartement" },
+  { type: "pin", kleur: "gold", titel: "Favoriet (gemonitord op vergunningen < 50 m)" },
+  { type: "pin", kleur: "red", titel: "Nieuwe kamerverhuurvergunning < 50 m — let op" },
+  { type: "telmarker", rand: "#2a81cb", titel: "Meerdere woningen op dezelfde plek" },
+  { type: "cirkel", rand: "#0284c7", vul: "#7dd3fc", titel: "50 m-zone rond je favoriet" },
+  { type: "stip", rand: "#7b1fa2", vul: "#ab47bc", titel: "Kamerverhuurvergunning (4+ bewoners)" },
+  { type: "stip", rand: "#00796b", vul: "#4db6ac", titel: "Kamerverhuurvergunning (3 bewoners)" },
+  { type: "cirkel", rand: "#7b1fa2", vul: "#ab47bc", titel: "50 m-norm rond een vergunning" },
+  { type: "stip", rand: "#15803d", vul: "#22c55e", titel: "Test-adres (handmatig, beheerder)" },
+  { type: "cirkel", rand: "#15803d", vul: "#86efac", titel: "50 m rond een test-adres" },
+];
+
+const legendaKnop = document.getElementById("legenda-knop");
+const legendaPaneel = document.getElementById("legenda-paneel");
+const legendaLijstEl = document.getElementById("legenda-lijst");
+const legendaSluitenKnop = document.getElementById("legenda-sluiten");
+
+function legendaSwatch(item) {
+  if (item.type === "pin") {
+    const url = item.kleur === "blue"
+      ? "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png"
+      : `/static/markers/marker-icon-${item.kleur}.png`;
+    return `<img class="legenda-pin" src="${url}" alt="">`;
+  }
+  if (item.type === "telmarker") {
+    return `<span class="legenda-telmarker" style="background:${item.rand}">2</span>`;
+  }
+  if (item.type === "stip") {
+    return `<span class="legenda-stip" style="border-color:${item.rand};background:${item.vul}"></span>`;
+  }
+  // cirkel (50 m-zone): rand-kleur + doorschijnende vulling ("55" ~ 33% alpha).
+  return `<span class="legenda-cirkel" style="border-color:${item.rand};background:${item.vul}55"></span>`;
+}
+
+function vulLegenda() {
+  if (!legendaLijstEl) return;
+  legendaLijstEl.innerHTML = LEGENDA
+    .map((it) => `<li class="legenda-item"><span class="legenda-swatch">${legendaSwatch(it)}</span><span class="legenda-titel">${escapeHtml(it.titel)}</span></li>`)
+    .join("");
+}
+
+function zetLegenda(open) {
+  if (!legendaPaneel || !legendaKnop) return;
+  legendaPaneel.hidden = !open;
+  legendaKnop.classList.toggle("actief", open);
+}
+
+if (legendaKnop && legendaPaneel) {
+  vulLegenda();
+  legendaKnop.addEventListener("click", (e) => { e.stopPropagation(); zetLegenda(legendaPaneel.hidden); });
+  if (legendaSluitenKnop) legendaSluitenKnop.addEventListener("click", () => zetLegenda(false));
+  // Buiten het paneel klikken of Escape sluit 'm weer.
+  document.addEventListener("click", (e) => {
+    if (!legendaPaneel.hidden && !legendaPaneel.contains(e.target) && e.target !== legendaKnop) zetLegenda(false);
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") zetLegenda(false); });
+}
+
 function sluitZijbalk() {
   zijbalkEl.classList.remove("zijbalk-open");
   zijbalkKnop.textContent = "Toon lijst";
