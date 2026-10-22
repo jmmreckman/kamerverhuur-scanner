@@ -325,19 +325,23 @@ async function favorietToggle(kans) {
   }
 }
 
-// Favorieten krijgen een goudkleurige, iets grotere marker; een favoriet met een
-// openstaande vergunning-waarschuwing wordt rood, zodat 'm meteen opvalt.
-function markerIcoon(kans) {
-  const heeftWaarschuwing = (kans.bekendmaking_waarschuwingen || []).length > 0;
-  if (!kans.favoriet && !heeftWaarschuwing) return null;
-  const kleur = heeftWaarschuwing ? "#b3261e" : "#f4b400";
-  const teken = heeftWaarschuwing ? "⚠" : "★";
+function _puntIcoon(kleur, teken) {
   return L.divIcon({
     className: "favoriet-marker",
     html: `<div class="favoriet-marker-punt" style="background:${kleur}">${teken}</div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
   });
+}
+
+// Markerkleur op prioriteit: rood (openstaande vergunning-waarschuwing) > goud
+// (favoriet) > paars (appartement). Woonhuis en onbekend woningtype houden de
+// standaard blauwe Leaflet-pin (null = geen eigen icoon).
+function markerIcoon(kans) {
+  if ((kans.bekendmaking_waarschuwingen || []).length > 0) return _puntIcoon("#b3261e", "⚠");
+  if (kans.favoriet) return _puntIcoon("#f4b400", "★");
+  if (kans.woningtype === "appartement") return _puntIcoon("#7c3aed", "");
+  return null;
 }
 
 // Woningen op exact dezelfde coördinaat (bv. Coolhaven 150a en 150b) overlappen op
