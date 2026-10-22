@@ -28,6 +28,11 @@ class ListingState:
     prijs: int | None = None
     bag_oppervlakte: int | None = None
     oppervlakte_advertentie: int | None = None
+    # Kenmerken uit de NVM/Move-bron. woningtype_detail = ruwe objectDetailedType
+    # (bv. "BENEDENWONING"); de appartement/woonhuis-classificatie wordt daaruit
+    # afgeleid bij het serialiseren (zie woningkenmerken.py), niet apart opgeslagen.
+    woningtype_detail: str | None = None
+    perceel_oppervlakte: int | None = None
     huurprijsopslag_signalen: list[str] = field(default_factory=list)
     opslag_percentage: float = 0.0
     aantal_kamers_mogelijk: int | None = None

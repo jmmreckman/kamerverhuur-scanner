@@ -514,6 +514,11 @@ def _verwerk_listings(
                 existing.prijs = listing.prijs
             if listing.oppervlakte_advertentie is not None:
                 existing.oppervlakte_advertentie = listing.oppervlakte_advertentie
+            # Kenmerken (NVM/Move): alleen met een niet-lege waarde overschrijven.
+            if listing.woningtype_detail:
+                existing.woningtype_detail = listing.woningtype_detail
+            if listing.perceel_oppervlakte is not None:
+                existing.perceel_oppervlakte = listing.perceel_oppervlakte
             _voeg_bron_toe(existing, listing.bron)
             state.upsert(existing)
             result.al_bekend.append(existing)
@@ -526,6 +531,11 @@ def _verwerk_listings(
             continue
 
         _voeg_bron_toe(processed, listing.bron)
+        # Kenmerken uit de bron meenemen op de nieuw verwerkte woning.
+        if listing.woningtype_detail:
+            processed.woningtype_detail = listing.woningtype_detail
+        if listing.perceel_oppervlakte is not None:
+            processed.perceel_oppervlakte = listing.perceel_oppervlakte
         if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
             processed.afvalreden = _HANDMATIG_VERWIJDERD_REDEN

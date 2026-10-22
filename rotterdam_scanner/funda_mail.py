@@ -65,6 +65,10 @@ class FundaListing:
     # zien is wat elk kanaal wel/niet oplevert (bron-tracking). Default "funda" zodat
     # de bestaande Funda-scan ongewijzigd blijft.
     bron: str = "funda"
+    # Kenmerken uit de NVM/Move-bron (de Funda-mail levert ze niet). woningtype_detail
+    # is Move's ruwe objectDetailedType (bv. "BENEDENWONING"); perceel_oppervlakte in m².
+    woningtype_detail: str | None = None
+    perceel_oppervlakte: int | None = None
 
     @property
     def adres_bekend(self) -> bool:

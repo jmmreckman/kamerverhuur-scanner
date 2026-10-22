@@ -68,6 +68,7 @@ _QUERY = """query SearchDossierViewObjectsWithCursorQuery($dossierId: ID!, $filt
               address { street nr nrExtension city zipCode }
               koopPrice { formatMoneyLong formatMoneyShort }
               woonOppervlakte
+              perceelOppervlakte
               aantalKamers
               status
               objectDetailedType
@@ -204,6 +205,7 @@ def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
         if not object_id:
             continue
         opp = obj.get("woonOppervlakte")
+        perceel = obj.get("perceelOppervlakte")
         woningen.setdefault(
             object_id,
             FundaListing(
@@ -216,6 +218,8 @@ def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
                 woonplaats=(adres.get("city") or "").strip() or None,
                 prijs=_prijs_uit(obj.get("koopPrice")),
                 oppervlakte_advertentie=int(opp) if isinstance(opp, (int, float)) else None,
+                woningtype_detail=(obj.get("objectDetailedType") or None),
+                perceel_oppervlakte=int(perceel) if isinstance(perceel, (int, float)) else None,
                 bron="nvm",
             ),
         )

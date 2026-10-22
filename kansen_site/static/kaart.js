@@ -18,6 +18,7 @@ const filterWinstEl = document.getElementById("filter-winst");
 const filterM2MinEl = document.getElementById("filter-m2-min");
 const filterM2MaxEl = document.getElementById("filter-m2-max");
 const filterPrijsM2MaxEl = document.getElementById("filter-prijs-m2-max");
+const filterWoningtypeEl = document.getElementById("filter-woningtype");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
@@ -162,6 +163,7 @@ function gefilterd() {
   const zoek = filterZoekEl.value.trim().toLowerCase();
   const maxDagen = parseFloat(filterDagenEl.value);
   const stad = filterStadEl ? filterStadEl.value : "";
+  const woningtype = filterWoningtypeEl ? filterWoningtypeEl.value : "";
 
   return alleKansen.filter((k) => {
     const c = kansCijfers(k);
@@ -184,6 +186,7 @@ function gefilterd() {
       if (!m2 || k.prijs === null || k.prijs === undefined) return false;
       if (k.prijs / m2 > maxPrijsM2) return false;
     }
+    if (woningtype && k.woningtype !== woningtype) return false;
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
       const dagen = dagenOpFunda(k.eerst_gezien);
@@ -215,6 +218,8 @@ function bouwPopup(kans) {
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
     ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
     ${kans.bag_oppervlakte && kans.bag_oppervlakte !== kans.primaire_oppervlakte ? kans.bag_oppervlakte + " m² (BAG, ter info)<br>" : ""}
+    ${kans.woningtype_label ? `${kans.woningtype_label}${kans.woningtype ? ` &middot; ${kans.woningtype}` : ""}<br>` : ""}
+    ${kans.perceel_oppervlakte ? `Perceel: ${kans.perceel_oppervlakte} m²<br>` : ""}
     <span class="kamers-editor">
       ${kamersLabel}: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
       ${kans.aantal_kamers_handmatig ? `<button type="button" class="kamers-reset-knop" title="${resetTitel}">automatisch</button>` : ""}
@@ -796,7 +801,7 @@ for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterW
                   filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
-for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
+for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl, filterWoningtypeEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
 
@@ -815,6 +820,7 @@ function verzamelFilters() {
     "filter-m2-min": filterM2MinEl ? filterM2MinEl.value : undefined,
     "filter-m2-max": filterM2MaxEl ? filterM2MaxEl.value : undefined,
     "filter-prijs-m2-max": filterPrijsM2MaxEl ? filterPrijsM2MaxEl.value : undefined,
+    "filter-woningtype": filterWoningtypeEl ? filterWoningtypeEl.value : undefined,
     "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
     "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
     "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
@@ -836,6 +842,7 @@ function pasFiltersToe(f) {
   zetWaarde(filterM2MinEl, f["filter-m2-min"]);
   zetWaarde(filterM2MaxEl, f["filter-m2-max"]);
   zetWaarde(filterPrijsM2MaxEl, f["filter-prijs-m2-max"]);
+  zetWaarde(filterWoningtypeEl, f["filter-woningtype"]);
   zetWaarde(filterZoekEl, f["filter-zoek"]);
   zetWaarde(filterDagenEl, f["filter-dagen"]);
   zetWaarde(filterSorteerEl, f["filter-sorteer"]);
@@ -861,7 +868,7 @@ function slaFiltersOp() {
 // Elke wijziging aan een filter opslaan (gedebounced).
 for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, filterStadEl, filterWijkEl,
                   filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
-                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl,
+                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterWoningtypeEl,
                   filterZoekEl, filterDagenEl, filterSorteerEl]) {
   if (el) {
     el.addEventListener("input", slaFiltersOp);

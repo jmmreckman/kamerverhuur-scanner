@@ -32,6 +32,7 @@ from rotterdam_scanner.mailer import send_mail
 from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.jsonbestand import schrijf_json_atomisch
+from rotterdam_scanner.woningkenmerken import classificeer_woningtype, mooi_woningtype
 
 # Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
 # volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
@@ -63,6 +64,7 @@ _FILTER_SLEUTELS = {
     "toon-kansen", "toon-vergunningen", "toon-3kamer", "filter-stad", "filter-wijk",
     "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
     "filter-m2-min", "filter-m2-max", "filter-prijs-m2-max",
+    "filter-woningtype",
     "filter-zoek", "filter-dagen", "filter-sorteer",
 }
 
@@ -710,6 +712,11 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebru
         "primaire_oppervlakte": item.primaire_oppervlakte,
         "bag_oppervlakte": item.bag_oppervlakte,
         "oppervlakte_advertentie": item.oppervlakte_advertentie,
+        # Woningkenmerken uit de NVM/Move-bron. woningtype = grove klasse voor het
+        # filter (appartement/woonhuis/None), woningtype_label = leesbare ruwe type.
+        "woningtype": classificeer_woningtype(item.woningtype_detail),
+        "woningtype_label": mooi_woningtype(item.woningtype_detail),
+        "perceel_oppervlakte": item.perceel_oppervlakte,
         "aantal_kamers_mogelijk": item.aantal_kamers_mogelijk,
         "aantal_kamers_handmatig": item.aantal_kamers_handmatig,
         # p.p.-velden (legacy) afgeleid van de totalen bij het standaardaantal
