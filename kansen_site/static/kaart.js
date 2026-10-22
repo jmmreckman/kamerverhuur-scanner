@@ -295,8 +295,7 @@ async function kamersAanpassen(kans, waarde) {
     const bijgewerkt = await resp.json();
     Object.assign(kans, bijgewerkt);
     renderAlles();
-    const marker = markerPerId.get(kans.object_id);
-    if (marker) marker.openPopup();
+    openWoning(kans);
   } catch (err) {
     alert("Aanpassen van het aantal kamers is mislukt - probeer het nog eens.");
   }
@@ -315,8 +314,7 @@ async function favorietToggle(kans) {
     // zodat de gebruiker weet dat de samenvatting zo verschijnt (na een ververs).
     kans._concurrentie_scan_loopt = !!data.concurrentie_scan_loopt;
     renderAlles();
-    const marker = markerPerId.get(kans.object_id);
-    if (marker) marker.openPopup();
+    openWoning(kans);
   } catch (err) {
     alert("Favoriet instellen is mislukt - probeer het nog eens.");
   }
@@ -335,6 +333,53 @@ function markerIcoon(kans) {
     iconSize: [26, 26],
     iconAnchor: [13, 13],
   });
+}
+
+// Woningen op exact dezelfde coördinaat (bv. Coolhaven 150a en 150b) overlappen op
+// de kaart zodat je er maar één kunt aanklikken. Zulke plekken krijgen daarom één
+// marker met het aantal erop (rood bij een waarschuwing, goud bij een favoriet,
+// anders blauw); klikken opent een keuzelijstje met de losse woningen.
+function groepMarkerIcoon(groep) {
+  const heeftWaarschuwing = groep.some((k) => (k.bekendmaking_waarschuwingen || []).length > 0);
+  const heeftFavoriet = groep.some((k) => k.favoriet);
+  const kleur = heeftWaarschuwing ? "#b3261e" : heeftFavoriet ? "#f4b400" : "#2a81cb";
+  return L.divIcon({
+    className: "groep-marker",
+    html: `<div class="groep-marker-punt" style="background:${kleur}">${groep.length}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
+function bouwGroepKeuze(groep) {
+  const div = document.createElement("div");
+  div.className = "groep-keuze";
+  const titel = document.createElement("div");
+  titel.className = "groep-keuze-titel";
+  titel.textContent = `${groep.length} woningen op deze plek`;
+  div.appendChild(titel);
+  for (const kans of groep) {
+    const knop = document.createElement("button");
+    knop.type = "button";
+    knop.className = "groep-keuze-item";
+    knop.innerHTML = `${kans.favoriet ? "★ " : ""}${escapeHtml(straatHuisnummer(kans))}`;
+    knop.addEventListener("click", () => { kaart.closePopup(); openWoning(kans); });
+    div.appendChild(knop);
+  }
+  return div;
+}
+
+// Opent het ballonnetje van één specifieke woning, waar 'ie ook staat: heeft 'ie een
+// eigen marker (alleenstaand) dan die popup; zit 'ie in een coördinaat-groep of valt
+// 'ie buiten de filters, dan tonen we de volledige popup los op de locatie.
+function openWoning(kans) {
+  if (kans.lat == null || kans.lon == null) return;
+  const marker = markerPerId.get(kans.object_id);
+  if (marker) {
+    marker.openPopup();
+  } else {
+    L.popup().setLatLng([kans.lat, kans.lon]).setContent(bouwPopup(kans)).openOn(kaart);
+  }
 }
 
 // Lichtblauwe 50m-straal rond elke favoriet: zo zie je in één oogopslag welke
@@ -373,11 +418,29 @@ function renderMarkers(kansen) {
       ids.add(kans.object_id);
     }
   }
+  // Groepeer op coördinaat zodat woningen op exact dezelfde plek niet overlappen.
+  const groepen = new Map();
   for (const kans of teTonen) {
-    const icoon = markerIcoon(kans);
-    const marker = (icoon ? L.marker([kans.lat, kans.lon], { icon: icoon }) : L.marker([kans.lat, kans.lon])).bindPopup(bouwPopup(kans));
-    marker.addTo(markerLaag);
-    markerPerId.set(kans.object_id, marker);
+    if (kans.lat == null || kans.lon == null) continue;
+    const sleutel = `${kans.lat.toFixed(6)},${kans.lon.toFixed(6)}`;
+    if (!groepen.has(sleutel)) groepen.set(sleutel, []);
+    groepen.get(sleutel).push(kans);
+  }
+  for (const groep of groepen.values()) {
+    if (groep.length === 1) {
+      const kans = groep[0];
+      const icoon = markerIcoon(kans);
+      const marker = (icoon ? L.marker([kans.lat, kans.lon], { icon: icoon }) : L.marker([kans.lat, kans.lon])).bindPopup(bouwPopup(kans));
+      marker.addTo(markerLaag);
+      markerPerId.set(kans.object_id, marker);
+    } else {
+      // Meerdere woningen op één plek: één telmarker met een keuzelijst. markerPerId
+      // vullen we hier bewust niet; openWoning() valt dan terug op een losse popup,
+      // zodat de lijst/zoekfunctie alsnog de juiste woning kan openen.
+      const marker = L.marker([groep[0].lat, groep[0].lon], { icon: groepMarkerIcoon(groep) });
+      marker.bindPopup(bouwGroepKeuze(groep));
+      marker.addTo(markerLaag);
+    }
   }
 }
 
@@ -411,8 +474,7 @@ function renderLijst(kansen) {
     `;
     li.addEventListener("click", () => {
       kaart.setView([kans.lat, kans.lon], 16);
-      const marker = markerPerId.get(kans.object_id);
-      if (marker) marker.openPopup();
+      openWoning(kans);
       sluitZijbalk();
     });
     li.querySelector(".verwijder-knop").addEventListener("click", (event) => {
@@ -504,14 +566,7 @@ function gaNaarWoning(kans) {
   verbergZoekResultaten();
   zoekInvoerEl.value = "";
   if (kans.lat != null && kans.lon != null) kaart.setView([kans.lat, kans.lon], 17);
-  const marker = markerPerId.get(kans.object_id);
-  if (marker) {
-    marker.openPopup();
-  } else if (kans.lat != null && kans.lon != null) {
-    // Woning valt buiten de huidige filters/toggle, dus er staat geen marker. Toon
-    // het ballonnetje alsnog los op de locatie (zelfde inhoud als een markerpopup).
-    L.popup().setLatLng([kans.lat, kans.lon]).setContent(bouwPopup(kans)).openOn(kaart);
-  }
+  openWoning(kans);
   sluitZijbalk();
 }
 

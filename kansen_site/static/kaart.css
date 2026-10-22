@@ -549,6 +549,36 @@ body {
   text-align: center;
 }
 
+/* Telmarker voor meerdere woningen op exact dezelfde plek (bv. 150a/150b): één
+   stip met het aantal; klikken opent een keuzelijst (.groep-keuze) met de woningen. */
+.groep-marker { background: none; border: none; }
+.groep-marker-punt {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 24px;
+  text-align: center;
+}
+.groep-keuze-titel { font-weight: 600; margin-bottom: 6px; font-size: 0.9em; }
+.groep-keuze-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  margin: 3px 0;
+  border: 1px solid var(--rand);
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.groep-keuze-item:hover { background: var(--achtergrond); }
+
 /* --- Toon kansen / Toon vergunningen --- */
 
 .checkbox-filter {
