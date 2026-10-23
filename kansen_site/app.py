@@ -194,7 +194,7 @@ def _herstel_verwijderd(config, gebruiker: str, object_id: str) -> None:
 from rotterdam_scanner.investering import AANTAL_INVESTEERDERS, RekenUitgangspunten, bereken_rekentool
 from rotterdam_scanner.investering import aantal_kamers_mogelijk as bereken_aantal_kamers_mogelijk
 from rotterdam_scanner.investering import bereken_met_aantal_kamers as bereken_investering
-from rotterdam_scanner.state import StateStore, bron_statistieken
+from rotterdam_scanner.state import ListingState, StateStore, bron_statistieken
 from rotterdam_scanner.wwso_punten import (
     ENERGIELABEL_PUNTEN,
     KEUKEN_VOORZIENINGEN,
@@ -1211,6 +1211,25 @@ def create_app(config: Config | None = None) -> Flask:
         _schrijf_eigendommen(overig)
         return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
 
+    def _eigendom_item(object_id: str):
+        """Een eigendom als minimaal ListingState-achtig item, zodat de rekentool er
+        ook voor een eigen pand mee overweg kan (koopsom/kamers leeg -> je vult ze
+        zelf; opslaan/PDF/WWSO zijn uit, want die horen bij een echte kans)."""
+        eig = next((e for e in _laad_eigendommen() if e.get("id") == object_id), None)
+        if eig is None:
+            return None
+        vandaag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return ListingState(
+            object_id=eig["id"],
+            url=eig.get("url") or "",
+            weergavenaam=eig.get("weergavenaam") or "eigen pand",
+            eerst_gezien=vandaag,
+            laatst_gezien=vandaag,
+            status="actief",
+            lat=eig.get("lat"),
+            lon=eig.get("lon"),
+        )
+
     # --- Concurrentie-scan (trechter binnen 50 m rond een adres) ---
     # Telt hoeveel woningen binnen 50 m - volgens de regels - theoretisch nog in
     # aanmerking komen voor een 4+-kamerverhuurvergunning: adressen ophalen,
@@ -1406,14 +1425,19 @@ def create_app(config: Config | None = None) -> Flask:
         # meteen uit (zie static/berekening.js).
         state = StateStore(config.state_path)
         item = state.get(object_id)
+        is_eigendom = False
         if item is None:
-            abort(404)
+            item = _eigendom_item(object_id)
+            if item is None:
+                abort(404)
+            is_eigendom = True
         uitg = _huidige_uitgangspunten(
             item, config, account_overrides=_account_overrides_voor(config, session["gebruiker"]))
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return render_template(
             "berekening.html", item=item, velden=_velden_voor_weergave(uitg),
             resultaat=asdict(resultaat), gebruiker=session["gebruiker"],
+            is_eigendom=is_eigendom,
         )
 
     @app.route("/woning/<object_id>/berekening", methods=["POST"])
@@ -1423,8 +1447,12 @@ def create_app(config: Config | None = None) -> Flask:
         # bewaart ze bij de woning en geeft de doorgerekende sommen terug als JSON.
         state = StateStore(config.state_path)
         item = state.get(object_id)
+        is_eigendom = False
         if item is None:
-            return jsonify({"fout": "Onbekende woning."}), 404
+            item = _eigendom_item(object_id)
+            if item is None:
+                return jsonify({"fout": "Onbekende woning."}), 404
+            is_eigendom = True
 
         data = request.get_json(silent=True) or {}
         gebruiker = session["gebruiker"]
@@ -1444,7 +1472,10 @@ def create_app(config: Config | None = None) -> Flask:
         uitg["aantal_kamers"] = int(round(uitg["aantal_kamers"]))
         uitg["aantal_investeerders"] = int(round(uitg["aantal_investeerders"])) or 1
 
-        _zet_reken_override(config, gebruiker, object_id, uitg)
+        # Een eigendom heeft geen kans-record om bij te bewaren: wel live doorrekenen,
+        # niet opslaan (de rekentool is voor een eigen pand puur een losse scenario-tool).
+        if not is_eigendom:
+            _zet_reken_override(config, gebruiker, object_id, uitg)
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
 

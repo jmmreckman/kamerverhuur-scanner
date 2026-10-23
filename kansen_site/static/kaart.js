@@ -1225,9 +1225,13 @@ function renderEigendommen() {
       a.textContent = "Bekijk op steenhub.nl →";
       linkPlek.appendChild(a);
       linkPlek.appendChild(document.createElement("br"));
-    } else {
-      linkPlek.innerHTML = '<span class="muted">(geen link ingevuld)</span><br>';
     }
+    const reken = document.createElement("a");
+    reken.className = "reken-link";
+    reken.href = `/woning/${encodeURIComponent(e.id)}/berekening`;
+    reken.textContent = "Reken met deze woning →";
+    linkPlek.appendChild(reken);
+    linkPlek.appendChild(document.createElement("br"));
     popup.querySelector(".popup-verwijder-knop").addEventListener("click", () => {
       marker.closePopup();
       verwijderEigendom(e.id);

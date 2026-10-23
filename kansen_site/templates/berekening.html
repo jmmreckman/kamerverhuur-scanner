@@ -12,8 +12,10 @@
     <h1>Rekentool</h1>
     <div class="topbar-acties">
       <span id="opslag-status" class="muted"></span>
+      {% if not is_eigendom %}
       <a href="{{ url_for('berekening_pdf', object_id=item.object_id) }}" class="link-knop" download>Exporteer als PDF</a>
       <a href="{{ url_for('wwso', object_id=item.object_id) }}" class="link-knop">Bereken WWSO-huur</a>
+      {% endif %}
       <a href="{{ url_for('reken_instellingen') }}" class="link-knop">Instellingen alle panden</a>
       <a href="{{ url_for('kaart') }}" class="link-knop">&larr; Terug naar kaart</a>
       <span class="muted">{{ gebruiker }}</span>
@@ -26,7 +28,7 @@
     <p class="muted">
       {% if item.wijknaam %}{{ item.wijknaam }} &middot; {% endif %}
       {% if item.primaire_oppervlakte %}{{ item.primaire_oppervlakte }} m² &middot; {% endif %}
-      <a href="{{ item.url }}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>
+      {% if is_eigendom %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener">Bekijk op steenhub.nl &rarr;</a>{% endif %}{% else %}<a href="{{ item.url }}" target="_blank" rel="noopener">Bekijk op Funda &rarr;</a>{% endif %}
     </p>
   </div>
 
