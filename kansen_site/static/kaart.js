@@ -12,15 +12,21 @@ const testLaag = L.layerGroup().addTo(kaart);
 // Eigen panden ("Eigendom toevoegen"): handmatige adressen met een doorklik naar
 // steenhub.nl. Eigen laag, los van de filters (altijd zichtbaar voor de beheerder).
 const eigendommenLaag = L.layerGroup().addTo(kaart);
-// Teardrop-pin in exact dezelfde maat/vorm als de andere (Leaflet-)pins (25x41, punt
-// onderaan), met het Steenhub-logo (drie witte baksteentjes) erin, in diamant-kleur.
-// Gedeeld door de marker en de legenda.
+// Peer-geslepen diamant met de punt naar beneden (marker voor een eigendom), als
+// gefacetteerde SVG: strak, schaalt scherp, geen schaduw en met marge zodat de
+// randen niet afkappen. Gedeeld door de marker en de legenda.
 const EIGENDOM_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 41" style="width:100%;height:100%;display:block">' +
-  '<path d="M12.5 0C5.6 0 0 5.6 0 12.5 0 18.5 7 28 12.5 41 18 28 25 18.5 25 12.5 25 5.6 19.4 0 12.5 0Z" fill="#06b6d4" stroke="#0e7490" stroke-width="1"/>' +
-  '<rect x="6" y="7.8" width="13" height="3.3" rx="0.7" fill="#ffffff"/>' +
-  '<rect x="6" y="11.6" width="6.1" height="3.3" rx="0.7" fill="#ffffff"/>' +
-  '<rect x="12.9" y="11.6" width="6.1" height="3.3" rx="0.7" fill="#ffffff"/>' +
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 42" style="width:100%;height:100%;display:block">' +
+  '<path d="M14 2.5C7.4 2.5 2.5 7.4 2.5 13.5 2.5 19 6 24.5 9.5 29.5 11.5 32.5 13 36 14 40 15 36 16.5 32.5 18.5 29.5 22 24.5 25.5 19 25.5 13.5 25.5 7.4 20.6 2.5 14 2.5Z" fill="#bdeef7"/>' +
+  '<g stroke="#5bb0c7" stroke-width="0.4" stroke-linejoin="round">' +
+  '<polygon points="14,2.5 2.5,13.5 9.5,13.5" fill="#9adcec"/>' +
+  '<polygon points="14,2.5 9.5,13.5 18.5,13.5" fill="#ffffff"/>' +
+  '<polygon points="14,2.5 18.5,13.5 25.5,13.5" fill="#d4f4fb"/>' +
+  '<polygon points="2.5,13.5 9.5,13.5 14,40" fill="#7fcfe3"/>' +
+  '<polygon points="9.5,13.5 18.5,13.5 14,40" fill="#cdeff7"/>' +
+  '<polygon points="18.5,13.5 25.5,13.5 14,40" fill="#93dcee"/>' +
+  '</g>' +
+  '<path d="M14 2.5C7.4 2.5 2.5 7.4 2.5 13.5 2.5 19 6 24.5 9.5 29.5 11.5 32.5 13 36 14 40 15 36 16.5 32.5 18.5 29.5 22 24.5 25.5 19 25.5 13.5 25.5 7.4 20.6 2.5 14 2.5Z" fill="none" stroke="#0e7490" stroke-width="1" stroke-linejoin="round"/>' +
   '</svg>';
 const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
@@ -698,7 +704,7 @@ function legendaSwatch(item) {
     return `<span class="legenda-telmarker" style="background:${item.rand}">2</span>`;
   }
   if (item.type === "eigendom") {
-    return `<span style="display:inline-block;width:16px;height:26px">${EIGENDOM_SVG}</span>`;
+    return `<span style="display:inline-block;width:18px;height:27px">${EIGENDOM_SVG}</span>`;
   }
   if (item.type === "stip") {
     return `<span class="legenda-stip" style="border-color:${item.rand};background:${item.vul}"></span>`;
@@ -1196,10 +1202,10 @@ let eigendommen = [];
 function eigendomIcoon() {
   return L.divIcon({
     className: "eigendom-marker",
-    html: `<div style="width:25px;height:41px">${EIGENDOM_SVG}</div>`,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
+    html: `<div style="width:28px;height:42px">${EIGENDOM_SVG}</div>`,
+    iconSize: [28, 42],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -38],
   });
 }
 
