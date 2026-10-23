@@ -1144,18 +1144,43 @@ def create_app(config: Config | None = None) -> Flask:
     def _eigendommen_pad() -> Path:
         return Path(config.state_path).parent / "eigendommen.json"
 
-    def _laad_eigendommen() -> list:
+    def _laad_eigendommen_data() -> dict:
+        # Formaat: {"gebruikers": {naam: [eigendommen]}}. Een oude platte lijst (van toen
+        # het nog gedeeld was) wordt als "_legacy" teruggegeven en bij de eerste lees
+        # gemigreerd naar het account dat 'm opent (zie _eigendommen_van).
         pad = _eigendommen_pad()
         if not pad.exists():
-            return []
+            return {"gebruikers": {}}
         try:
             data = json.loads(pad.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            return []
-        return data if isinstance(data, list) else []
+            return {"gebruikers": {}}
+        if isinstance(data, list):
+            return {"gebruikers": {}, "_legacy": data}
+        if not isinstance(data, dict):
+            return {"gebruikers": {}}
+        data.setdefault("gebruikers", {})
+        return data
 
-    def _schrijf_eigendommen(lijst: list) -> None:
-        schrijf_json_atomisch(_eigendommen_pad(), lijst)
+    def _eigendommen_van(gebruiker: str) -> list:
+        data = _laad_eigendommen_data()
+        gebruikers = data.get("gebruikers", {})
+        eigen = gebruikers.get(gebruiker)
+        if isinstance(eigen, list):
+            return eigen
+        legacy = data.get("_legacy")
+        if isinstance(legacy, list) and legacy:
+            # Eenmalige migratie: de oude gedeelde lijst wordt van deze (eerste) gebruiker.
+            gebruikers[gebruiker] = legacy
+            schrijf_json_atomisch(_eigendommen_pad(), {"gebruikers": gebruikers})
+            return legacy
+        return []
+
+    def _schrijf_eigendommen_van(gebruiker: str, lijst: list) -> None:
+        data = _laad_eigendommen_data()
+        gebruikers = data.get("gebruikers", {})
+        gebruikers[gebruiker] = lijst
+        schrijf_json_atomisch(_eigendommen_pad(), {"gebruikers": gebruikers})
 
     def _geldige_steenhub_url(url: str) -> bool:
         # Alleen http(s)-links op steenhub.nl toestaan, zodat er geen willekeurige
@@ -1170,7 +1195,7 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/api/eigendommen")
     @beheerder_required
     def api_eigendommen():
-        return jsonify({"eigendommen": _laad_eigendommen()})
+        return jsonify({"eigendommen": _eigendommen_van(session["gebruiker"])})
 
     @app.route("/api/eigendommen", methods=["POST"])
     @beheerder_required
@@ -1198,24 +1223,27 @@ def create_app(config: Config | None = None) -> Flask:
             "url": url,
             "toegevoegd": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
-        lijst = _laad_eigendommen()
+        gebruiker = session["gebruiker"]
+        lijst = _eigendommen_van(gebruiker)
         lijst.append(nieuw)
-        _schrijf_eigendommen(lijst)
+        _schrijf_eigendommen_van(gebruiker, lijst)
         return jsonify({"eigendom": nieuw})
 
     @app.route("/api/eigendommen/<eigendom_id>/verwijderen", methods=["POST"])
     @beheerder_required
     def api_eigendom_verwijderen(eigendom_id):
-        lijst = _laad_eigendommen()
+        gebruiker = session["gebruiker"]
+        lijst = _eigendommen_van(gebruiker)
         overig = [e for e in lijst if e.get("id") != eigendom_id]
-        _schrijf_eigendommen(overig)
+        _schrijf_eigendommen_van(gebruiker, overig)
         return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
 
     def _eigendom_item(object_id: str):
         """Een eigendom als minimaal ListingState-achtig item, zodat de rekentool er
-        ook voor een eigen pand mee overweg kan (koopsom/kamers leeg -> je vult ze
-        zelf; opslaan/PDF/WWSO zijn uit, want die horen bij een echte kans)."""
-        eig = next((e for e in _laad_eigendommen() if e.get("id") == object_id), None)
+        ook voor een eigen pand mee overweg kan. Alleen binnen de eigendommen van het
+        ingelogde account - een ander account kan er dus niet bij via het id."""
+        eigen = _eigendommen_van(session["gebruiker"]) if "gebruiker" in session else []
+        eig = next((e for e in eigen if e.get("id") == object_id), None)
         if eig is None:
             return None
         vandaag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1447,12 +1475,10 @@ def create_app(config: Config | None = None) -> Flask:
         # bewaart ze bij de woning en geeft de doorgerekende sommen terug als JSON.
         state = StateStore(config.state_path)
         item = state.get(object_id)
-        is_eigendom = False
         if item is None:
             item = _eigendom_item(object_id)
             if item is None:
                 return jsonify({"fout": "Onbekende woning."}), 404
-            is_eigendom = True
 
         data = request.get_json(silent=True) or {}
         gebruiker = session["gebruiker"]
@@ -1472,10 +1498,10 @@ def create_app(config: Config | None = None) -> Flask:
         uitg["aantal_kamers"] = int(round(uitg["aantal_kamers"]))
         uitg["aantal_investeerders"] = int(round(uitg["aantal_investeerders"])) or 1
 
-        # Een eigendom heeft geen kans-record om bij te bewaren: wel live doorrekenen,
-        # niet opslaan (de rekentool is voor een eigen pand puur een losse scenario-tool).
-        if not is_eigendom:
-            _zet_reken_override(config, gebruiker, object_id, uitg)
+        # Reken-overrides staan per account in reken_overrides.json (los van de kans-
+        # state), dus ook een eigendom kan z'n ingevulde waarden gewoon bewaren - keyed
+        # op het eigendom-id, per account. Wordt bij heropenen weer voorgevuld.
+        _zet_reken_override(config, gebruiker, object_id, uitg)
         resultaat = bereken_rekentool(RekenUitgangspunten(**uitg))
         return jsonify(asdict(resultaat))
 
