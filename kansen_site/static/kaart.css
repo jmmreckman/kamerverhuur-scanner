@@ -607,6 +607,7 @@ body {
 /* Telmarker voor meerdere woningen op exact dezelfde plek (bv. 150a/150b): één
    stip met het aantal; klikken opent een keuzelijst (.groep-keuze) met de woningen. */
 .groep-marker { background: none; border: none; }
+.eigendom-marker { background: none; border: none; }
 .groep-marker-punt {
   width: 28px;
   height: 28px;

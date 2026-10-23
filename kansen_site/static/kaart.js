@@ -12,6 +12,15 @@ const testLaag = L.layerGroup().addTo(kaart);
 // Eigen panden ("Eigendom toevoegen"): handmatige adressen met een doorklik naar
 // steenhub.nl. Eigen laag, los van de filters (altijd zichtbaar voor de beheerder).
 const eigendommenLaag = L.layerGroup().addTo(kaart);
+// Groene teardrop-pin met het Steenhub-logo (drie witte baksteentjes) erin. Gedeeld
+// door de marker en de legenda. Pin-vorm met punt onderaan, net als de woning-pins.
+const EIGENDOM_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" style="width:100%;height:100%;display:block">' +
+  '<path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 24 12 24s12-15 12-24C24 5.4 18.6 0 12 0z" fill="#166534" stroke="#ffffff" stroke-width="1.5"/>' +
+  '<rect x="5.3" y="7.2" width="13.4" height="3.3" rx="0.7" fill="#ffffff"/>' +
+  '<rect x="5.3" y="11.1" width="6.2" height="3.3" rx="0.7" fill="#ffffff"/>' +
+  '<rect x="12.5" y="11.1" width="6.2" height="3.3" rx="0.7" fill="#ffffff"/>' +
+  '</svg>';
 const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
 const statusTekstEl = document.getElementById("status-tekst");
@@ -688,7 +697,7 @@ function legendaSwatch(item) {
     return `<span class="legenda-telmarker" style="background:${item.rand}">2</span>`;
   }
   if (item.type === "eigendom") {
-    return `<span class="legenda-telmarker" style="background:#166534;font-size:12px">🏠</span>`;
+    return `<span style="display:inline-block;width:18px;height:27px">${EIGENDOM_SVG}</span>`;
   }
   if (item.type === "stip") {
     return `<span class="legenda-stip" style="border-color:${item.rand};background:${item.vul}"></span>`;
@@ -1185,10 +1194,11 @@ let eigendommen = [];
 
 function eigendomIcoon() {
   return L.divIcon({
-    className: "favoriet-marker",
-    html: `<div class="favoriet-marker-punt" style="background:#166534;font-size:14px">🏠</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
+    className: "eigendom-marker",
+    html: `<div style="width:28px;height:42px">${EIGENDOM_SVG}</div>`,
+    iconSize: [28, 42],
+    iconAnchor: [14, 42],
+    popupAnchor: [0, -38],
   });
 }
 
