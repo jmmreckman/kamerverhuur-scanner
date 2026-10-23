@@ -13,7 +13,7 @@ import json
 import re
 import threading
 import uuid
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from dataclasses import asdict
 from datetime import date, datetime, timezone
 from functools import wraps
@@ -1134,6 +1134,81 @@ def create_app(config: Config | None = None) -> Flask:
         lijst = _laad_test_adressen()
         overig = [a for a in lijst if a.get("id") != adres_id]
         _schrijf_test_adressen(overig)
+        return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
+
+    # --- Eigen panden ("Eigendom toevoegen") ---
+    # De gebruiker pint zijn eigen panden op de kaart met een handmatig adres + een
+    # link naar het pand op steenhub.nl; een klik op de marker linkt daarheen door.
+    # Beheerder-only (het is de portefeuille van de eigenaar); opgeslagen als simpele
+    # JSON naast de state.
+    def _eigendommen_pad() -> Path:
+        return Path(config.state_path).parent / "eigendommen.json"
+
+    def _laad_eigendommen() -> list:
+        pad = _eigendommen_pad()
+        if not pad.exists():
+            return []
+        try:
+            data = json.loads(pad.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        return data if isinstance(data, list) else []
+
+    def _schrijf_eigendommen(lijst: list) -> None:
+        schrijf_json_atomisch(_eigendommen_pad(), lijst)
+
+    def _geldige_steenhub_url(url: str) -> bool:
+        # Alleen http(s)-links op steenhub.nl toestaan, zodat er geen willekeurige
+        # (phishing-)link als klikbare marker op de kaart belandt.
+        try:
+            ontleed = urlparse(url)
+        except ValueError:
+            return False
+        host = (ontleed.hostname or "").lower()
+        return ontleed.scheme in ("http", "https") and (host == "steenhub.nl" or host.endswith(".steenhub.nl"))
+
+    @app.route("/api/eigendommen")
+    @beheerder_required
+    def api_eigendommen():
+        return jsonify({"eigendommen": _laad_eigendommen()})
+
+    @app.route("/api/eigendommen", methods=["POST"])
+    @beheerder_required
+    def api_eigendom_toevoegen():
+        data = request.get_json(silent=True) or {}
+        adres = (data.get("adres") or "").strip()
+        url = (data.get("url") or "").strip()
+        if not adres:
+            return jsonify({"fout": "Geen adres opgegeven."}), 400
+        if url and not _geldige_steenhub_url(url):
+            return jsonify({"fout": "De link moet een https://steenhub.nl/-adres zijn."}), 400
+        try:
+            resultaat = geocode.geocode_vrij_landelijk(adres)
+        except geocode.GeocodeError:
+            return jsonify({"fout": f"Adres niet gevonden: '{adres}'. Vul het volledig in (bv. 'Baumannlaan 123, Rotterdam')."}), 400
+        except Exception:
+            return jsonify({"fout": "Adres opzoeken mislukt (PDOK niet bereikbaar). Probeer het nog eens."}), 502
+        if resultaat.lat is None or resultaat.lon is None:
+            return jsonify({"fout": "Geen coördinaat gevonden voor dit adres."}), 400
+        nieuw = {
+            "id": uuid.uuid4().hex[:8],
+            "weergavenaam": resultaat.weergavenaam,
+            "lat": resultaat.lat,
+            "lon": resultaat.lon,
+            "url": url,
+            "toegevoegd": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        lijst = _laad_eigendommen()
+        lijst.append(nieuw)
+        _schrijf_eigendommen(lijst)
+        return jsonify({"eigendom": nieuw})
+
+    @app.route("/api/eigendommen/<eigendom_id>/verwijderen", methods=["POST"])
+    @beheerder_required
+    def api_eigendom_verwijderen(eigendom_id):
+        lijst = _laad_eigendommen()
+        overig = [e for e in lijst if e.get("id") != eigendom_id]
+        _schrijf_eigendommen(overig)
         return jsonify({"ok": True, "verwijderd": len(lijst) - len(overig)})
 
     # --- Concurrentie-scan (trechter binnen 50 m rond een adres) ---

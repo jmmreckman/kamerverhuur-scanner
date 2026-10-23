@@ -9,6 +9,9 @@ const markerLaag = L.layerGroup().addTo(kaart);
 // Eigen laag voor handmatig toegevoegde test-adressen (groene 50m-cirkels), los
 // van de filters/toggles - zie de "test 50m adres toevoegen"-functie onderaan.
 const testLaag = L.layerGroup().addTo(kaart);
+// Eigen panden ("Eigendom toevoegen"): handmatige adressen met een doorklik naar
+// steenhub.nl. Eigen laag, los van de filters (altijd zichtbaar voor de beheerder).
+const eigendommenLaag = L.layerGroup().addTo(kaart);
 const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
 const statusTekstEl = document.getElementById("status-tekst");
@@ -38,6 +41,10 @@ const zijbalkSluitenKnop = document.getElementById("zijbalk-sluiten-knop");
 const testAdresInvoerEl = document.getElementById("test-adres-invoer");
 const testAdresKnop = document.getElementById("test-adres-knop");
 const testAdresStatusEl = document.getElementById("test-adres-status");
+const eigendomAdresEl = document.getElementById("eigendom-adres");
+const eigendomUrlEl = document.getElementById("eigendom-url");
+const eigendomKnop = document.getElementById("eigendom-knop");
+const eigendomStatusEl = document.getElementById("eigendom-status");
 const opkoopScanInvoerEl = document.getElementById("opkoop-scan-invoer");
 const opkoopScanKnop = document.getElementById("opkoop-scan-knop");
 const opkoopScanStatusEl = document.getElementById("opkoop-scan-status");
@@ -662,6 +669,7 @@ const LEGENDA = [
   { type: "stip", rand: "#15803d", vul: "#22c55e", titel: "Test-adres (handmatig, beheerder)" },
   { type: "cirkel", rand: "#15803d", vul: "#86efac", titel: "50 m rond een test-adres" },
   { type: "stip", rand: "#6b7280", vul: "#9ca3af", titel: "Oude vergunning (historisch, personen onbekend)" },
+  { type: "eigendom", titel: "Eigen pand (klik → steenhub.nl)" },
 ];
 
 const legendaKnop = document.getElementById("legenda-knop");
@@ -678,6 +686,9 @@ function legendaSwatch(item) {
   }
   if (item.type === "telmarker") {
     return `<span class="legenda-telmarker" style="background:${item.rand}">2</span>`;
+  }
+  if (item.type === "eigendom") {
+    return `<span class="legenda-telmarker" style="background:#166534;font-size:12px">🏠</span>`;
   }
   if (item.type === "stip") {
     return `<span class="legenda-stip" style="border-color:${item.rand};background:${item.vul}"></span>`;
@@ -1167,6 +1178,115 @@ if (testAdresKnop && testAdresInvoerEl) {
     if (e.key === "Enter") { e.preventDefault(); voegTestAdresToe(); }
   });
   laadTestAdressen();
+}
+
+// --- Eigen panden ("Eigendom toevoegen"): marker met doorklik naar steenhub.nl ---
+let eigendommen = [];
+
+function eigendomIcoon() {
+  return L.divIcon({
+    className: "favoriet-marker",
+    html: `<div class="favoriet-marker-punt" style="background:#166534;font-size:14px">🏠</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+  });
+}
+
+function renderEigendommen() {
+  eigendommenLaag.clearLayers();
+  for (const e of eigendommen) {
+    if (e.lat == null || e.lon == null) continue;
+    const marker = L.marker([e.lat, e.lon], { icon: eigendomIcoon() });
+    const popup = document.createElement("div");
+    popup.className = "popup-inhoud popup-eigendom";
+    popup.innerHTML = `
+      <span class="adres">${escapeHtml(e.weergavenaam || "eigen pand")}</span>
+      <span class="vergunning-badge">eigendom</span><br>
+      <span class="eigendom-link-plek"></span>
+      <button type="button" class="popup-verwijder-knop">Verwijderen</button>
+    `;
+    const linkPlek = popup.querySelector(".eigendom-link-plek");
+    if (e.url) {
+      // href via property i.p.v. HTML-string: geen attribuut-injectie mogelijk.
+      const a = document.createElement("a");
+      a.href = e.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = "Bekijk op steenhub.nl →";
+      linkPlek.appendChild(a);
+      linkPlek.appendChild(document.createElement("br"));
+    } else {
+      linkPlek.innerHTML = '<span class="muted">(geen link ingevuld)</span><br>';
+    }
+    popup.querySelector(".popup-verwijder-knop").addEventListener("click", () => {
+      marker.closePopup();
+      verwijderEigendom(e.id);
+    });
+    marker.bindPopup(popup);
+    marker.addTo(eigendommenLaag);
+  }
+}
+
+async function laadEigendommen() {
+  try {
+    const resp = await fetch("/api/eigendommen", { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    eigendommen = data.eigendommen || [];
+    renderEigendommen();
+  } catch (err) {
+    /* stil: zonder eigendommen werkt de kaart gewoon */
+  }
+}
+
+async function voegEigendomToe() {
+  const adres = (eigendomAdresEl.value || "").trim();
+  const url = eigendomUrlEl ? (eigendomUrlEl.value || "").trim() : "";
+  if (!adres) return;
+  eigendomKnop.disabled = true;
+  eigendomStatusEl.textContent = "Adres opzoeken...";
+  try {
+    const resp = await fetch("/api/eigendommen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adres, url }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      eigendomStatusEl.textContent = data.fout || "Toevoegen mislukt.";
+      return;
+    }
+    const nieuw = data.eigendom;
+    eigendommen.push(nieuw);
+    renderEigendommen();
+    eigendomAdresEl.value = "";
+    if (eigendomUrlEl) eigendomUrlEl.value = "";
+    eigendomStatusEl.textContent = `Toegevoegd: ${nieuw.weergavenaam}`;
+    kaart.setView([nieuw.lat, nieuw.lon], 16);
+  } catch (err) {
+    eigendomStatusEl.textContent = "Toevoegen mislukt - probeer het nog eens.";
+  } finally {
+    eigendomKnop.disabled = false;
+  }
+}
+
+async function verwijderEigendom(id) {
+  try {
+    const resp = await fetch(`/api/eigendommen/${encodeURIComponent(id)}/verwijderen`, { method: "POST" });
+    if (!resp.ok) throw new Error("verwijderen mislukt");
+    eigendommen = eigendommen.filter((e) => e.id !== id);
+    renderEigendommen();
+  } catch (err) {
+    alert("Eigendom verwijderen is mislukt - probeer het nog eens.");
+  }
+}
+
+if (eigendomKnop && eigendomAdresEl) {
+  eigendomKnop.addEventListener("click", voegEigendomToe);
+  for (const el of [eigendomAdresEl, eigendomUrlEl]) {
+    if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); voegEigendomToe(); } });
+  }
+  laadEigendommen();
 }
 
 // Opkoopbescherming-scan: adres -> alle adressen binnen 50 m scannen op WOZ
