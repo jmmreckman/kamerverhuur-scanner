@@ -123,6 +123,36 @@ def hernoem_huurder_map(config: Config, pand: Pand, oude_naam: str, nieuwe_naam:
     return _run("move", van, naar, "--delete-empty-src-dirs")
 
 
+def hernoem_pand_map(config: Config, oude_naam: str, nieuwe_naam: str) -> bool:
+    """Hernoemt de hoofd-Drive-map van een pand ("Steenhub <oude naam>" ->
+    "Steenhub <nieuwe naam>") als de pandnaam wijzigt. De mapnaam is namelijk
+    van de pandnaam afgeleid (zie pand_root), niet van de vaste slug - dus
+    zonder dit zou het hernoemen van een pand (bv. een huisnummer erbij zetten)
+    de hele bestaande map "wezen": alle WWSO-rapporten, huurdersmappen en oude
+    huurders blijven dan onder de oude naam staan, terwijl de app voortaan een
+    nieuwe lege map onder de nieuwe naam gebruikt (en bv. het WWSO-rapport niet
+    meer vindt bij een concept-contract).
+
+    Bestaat de doelmap al (bv. omdat er na de hernoeming al iets in een nieuwe
+    lege map is weggeschreven), dan worden de inhouden samengevoegd ('move')
+    en de nu lege bronmappen opgeruimd. Doet niets (en faalt stil, net als de
+    rest van drive_sync) als een van beide namen leeg is, de namen gelijk zijn
+    (hoofdletterongevoelig), of er geen Drive-koppeling is."""
+    oude_naam = (oude_naam or "").strip()
+    nieuwe_naam = (nieuwe_naam or "").strip()
+    if (
+        not config.rclone_remote
+        or not oude_naam
+        or not nieuwe_naam
+        or oude_naam.casefold() == nieuwe_naam.casefold()
+    ):
+        return False
+    basis = config.rclone_remote.rstrip("/")
+    van = f"{basis}/Steenhub {oude_naam}"
+    naar = f"{basis}/Steenhub {nieuwe_naam}"
+    return _run("move", van, naar, "--delete-empty-src-dirs")
+
+
 def upload_getekend_document(config: Config, bestandsnaam: str, inhoud: bytes) -> bool:
     """Uploadt (of overschrijft) een volledig getekend document naar de losse
     Drive-map "Steenhub getekende documenten" (onder RCLONE_REMOTE, dus naast de

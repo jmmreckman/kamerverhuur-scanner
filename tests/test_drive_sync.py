@@ -70,6 +70,33 @@ def test_verhuis_naar_oude_huurders_roept_rclone_moveto(monkeypatch):
     ]]
 
 
+def test_hernoem_pand_map_roept_rclone_move(monkeypatch):
+    aangeroepen = []
+    monkeypatch.setattr(drive_sync.subprocess, "run", lambda cmd, **k: aangeroepen.append(cmd))
+    config = _config("gdrive:vastgoed")
+    assert drive_sync.hernoem_pand_map(
+        config, "Burgemeester Baumannlaan", "Burgemeester Baumannlaan 70b"
+    ) is True
+    assert aangeroepen == [[
+        "rclone", "move",
+        "gdrive:vastgoed/Steenhub Burgemeester Baumannlaan",
+        "gdrive:vastgoed/Steenhub Burgemeester Baumannlaan 70b",
+        "--delete-empty-src-dirs",
+    ]]
+
+
+def test_hernoem_pand_map_doet_niets_bij_gelijke_naam_of_geen_remote(monkeypatch):
+    aangeroepen = []
+    monkeypatch.setattr(drive_sync.subprocess, "run", lambda *a, **k: aangeroepen.append(a))
+    # Gelijke naam (hoofdletterongevoelig) -> niets.
+    assert drive_sync.hernoem_pand_map(_config("gdrive:vastgoed"), "Pand A", "pand a") is False
+    # Lege naam -> niets.
+    assert drive_sync.hernoem_pand_map(_config("gdrive:vastgoed"), "", "Pand B") is False
+    # Geen Drive-koppeling -> niets.
+    assert drive_sync.hernoem_pand_map(_config(None), "Pand A", "Pand B") is False
+    assert aangeroepen == []
+
+
 def test_mislukte_rclone_opdracht_faalt_stil(monkeypatch):
     import subprocess as sp
 

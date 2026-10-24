@@ -584,7 +584,14 @@ def create_app(config: Config | None = None) -> Flask:
             if not gegevens["naam"] or not gegevens["google_sheet_id"] or not gegevens["bunq_rekening_iban"]:
                 flash("Naam, Google Sheet ID en bunq-IBAN zijn verplicht.")
             else:
+                oude_naam = pand.naam
                 zet_pand(config.properties_file, slug, gegevens)
+                # De Drive-map hangt aan de pandnaam (Steenhub <naam>), niet aan de
+                # vaste slug. Wijzigt de naam, dan de bestaande map meehernoemen,
+                # anders raakt alles (WWSO-rapporten, huurdersmappen) "verweesd"
+                # onder de oude naam. Best-effort, net als de rest van drive_sync.
+                if gegevens["naam"] != oude_naam:
+                    drive_sync.hernoem_pand_map(config, oude_naam, gegevens["naam"])
                 flash(f"Pand '{gegevens['naam']}' bijgewerkt.")
                 if request.form.get("sheet_structuur") == "on":
                     _bouw_sheet_structuur_veilig(slug)
