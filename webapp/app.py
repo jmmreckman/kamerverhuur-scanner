@@ -2193,7 +2193,21 @@ def create_app(config: Config | None = None) -> Flask:
                 # contract_bevestiging() hieronder.
                 "kan_bevestiging_mailen": kan_bevestiging_mailen,
             })
-        return render_template("contracten.html", contracten=contracten)
+        return render_template("contracten.html", contracten=contracten, kamers=_sheet_kamers())
+
+    @app.route("/pand/<pand_slug>/huurder-gegevens-opvragen", methods=["POST"])
+    @login_required
+    def huurder_gegevens_opvragen(pand_slug: str):
+        """Shortcut vanaf de Contracten-pagina naar de 'directe aanvraag': de link
+        waarmee een nieuwe huurder (via-via, zonder bezichtiging) in één keer al haar
+        gegevens invult en documenten uploadt, zodat het concept-huurcontract ontstaat.
+        Je kiest hier alleen de kamer; de rest loopt via de bestaande directe-aanvraag
+        (die stond voorheen alleen op de kamer-detailpagina)."""
+        kamer = request.form.get("kamer", "").strip()
+        if not kamer:
+            flash("Kies eerst een kamer voor de nieuwe huurder.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        return redirect(url_for("directe_aanvraag", pand_slug=pand_slug, kamer_naam=kamer))
 
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/bevestiging", methods=["GET", "POST"])
     @login_required

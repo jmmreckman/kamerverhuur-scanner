@@ -11,6 +11,19 @@
   {% if current_user.mag_gebruikers_beheren() %}
   <a class="btn btn-secondary" href="{{ url_for('contractsjabloon_bewerken') }}">Contractsjabloon aanpassen</a>
   {% endif %}
+  {% if kamers %}
+  <form method="post" action="{{ url_for('huurder_gegevens_opvragen', pand_slug=huidig_pand.slug) }}" style="margin-top:.8rem">
+    <label class="muted" for="opvraag-kamer" style="display:block;margin-bottom:.35rem">
+      Nieuwe huurder rechtstreeks (zonder bezichtiging) &mdash; kies de kamer:
+    </label>
+    <span style="display:inline-flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <select name="kamer" id="opvraag-kamer" style="padding:.45rem .5rem;border-radius:.5rem;border:1px solid #cbd5e1">
+        {% for k in kamers %}<option value="{{ k.kamer }}">{{ k.kamer }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary">Volledige huurder-gegevens opvragen link</button>
+    </span>
+  </form>
+  {% endif %}
 </div>
 
 <div class="card">
