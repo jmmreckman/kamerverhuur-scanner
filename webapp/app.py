@@ -2686,7 +2686,14 @@ def create_app(config: Config | None = None) -> Flask:
             html_inhoud = contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
-        return Response(html_inhoud, mimetype="text/html")
+        resp = Response(html_inhoud, mimetype="text/html")
+        # Deze response wordt in een iframe getoond op de ondertekenpagina
+        # (tekenen.html, zelfde origin). De globale X-Frame-Options: DENY uit
+        # _beveiligingsheaders zou dat blokkeren ("steenhub.nl heeft de
+        # verbinding geweigerd"), dus hier expliciet SAMEORIGIN zetten - de
+        # after_request-setdefault laat een reeds gezette waarde staan.
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+        return resp
 
     @app.route("/tekenen/<token>/pdf")
     def tekenen_pdf(token: str):
