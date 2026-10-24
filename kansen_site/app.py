@@ -15,7 +15,7 @@ import threading
 import uuid
 from urllib.parse import quote_plus, urlparse
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
@@ -458,6 +458,42 @@ def _logboek_record(data: dict, gebruiker: str) -> dict:
     })
 
 
+def _tel_woning(container: dict, object_id: str, nu: datetime) -> None:
+    """Hoogt de dag-emmer voor deze woning op, zodat we per venster (week/maand/altijd)
+    kunnen tellen. Een oud los totaal (legacy) blijft behouden onder '_oud' (datum
+    onbekend -> telt alleen mee bij 'altijd'). Dagen ouder dan ~40 dagen vouwen we in
+    '_oud' samen zodat het logboek bounded blijft (week/maand gebruiken <=30 dagen)."""
+    vandaag = nu.strftime("%Y-%m-%d")
+    grens = (nu - timedelta(days=40)).strftime("%Y-%m-%d")
+    huidig = container.get(object_id)
+    if isinstance(huidig, int):
+        huidig = {"_oud": huidig}
+        container[object_id] = huidig
+    elif not isinstance(huidig, dict):
+        huidig = {}
+        container[object_id] = huidig
+    for sleutel in [k for k in huidig if k != "_oud" and k < grens]:
+        huidig["_oud"] = int(huidig.get("_oud", 0)) + int(huidig.pop(sleutel))
+    huidig[vandaag] = int(huidig.get(vandaag, 0)) + 1
+
+
+def _som_in_venster(waarde, cutoff: str | None) -> int:
+    """Totaal binnen het tijdvenster. waarde = legacy int of {datum: n, '_oud': n};
+    cutoff = None (altijd) of 'YYYY-MM-DD' (tel alleen dagen >= cutoff)."""
+    if isinstance(waarde, int):
+        return waarde if cutoff is None else 0
+    if not isinstance(waarde, dict):
+        return 0
+    totaal = 0
+    for sleutel, n in waarde.items():
+        if sleutel == "_oud":
+            if cutoff is None:
+                totaal += int(n)
+        elif cutoff is None or sleutel >= cutoff:
+            totaal += int(n)
+    return totaal
+
+
 def _registreer_login(config, gebruiker: str) -> None:
     """Telt een geslaagde login. Zet _laatste_ts opnieuw, zodat de pauze sinds de
     vorige sessie niet als 'tijd op de site' wordt meegerekend."""
@@ -509,11 +545,9 @@ def _registreer_activiteit(config, gebruiker: str, endpoint: str | None,
 
             object_id = (view_args or {}).get("object_id")
             if object_id and method == "GET" and endpoint in _WONING_BEKEKEN_ENDPOINTS:
-                w = rec.setdefault("woningen_bekeken", {})
-                w[object_id] = int(w.get(object_id, 0)) + 1
+                _tel_woning(rec.setdefault("woningen_bekeken", {}), object_id, nu)
             if object_id and method == "POST" and endpoint in _WONING_BEREKEND_ENDPOINTS:
-                w = rec.setdefault("woningen_berekend", {})
-                w[object_id] = int(w.get(object_id, 0)) + 1
+                _tel_woning(rec.setdefault("woningen_berekend", {}), object_id, nu)
 
             _schrijf_logboek(config, data)
     except Exception:
@@ -1994,11 +2028,22 @@ def create_app(config: Config | None = None) -> Flask:
             item = state.get(object_id)
             return item.weergavenaam if item is not None else object_id
 
+        # Tijdvenster voor de woning-lijsten: week / maand / altijd (default altijd).
+        _VENSTERS = {"week": 7, "maand": 30, "altijd": None}
+        venster = request.args.get("venster", "altijd")
+        if venster not in _VENSTERS:
+            venster = "altijd"
+        _dagen = _VENSTERS[venster]
+        cutoff = None if _dagen is None else (
+            datetime.now(timezone.utc) - timedelta(days=_dagen)).strftime("%Y-%m-%d")
+
         def _top(teller: dict, n: int = 8) -> list[dict]:
-            gesorteerd = sorted(teller.items(), key=lambda kv: (-kv[1], kv[0]))
+            met = ((oid, _som_in_venster(w, cutoff)) for oid, w in teller.items())
+            gesorteerd = sorted(((oid, t) for oid, t in met if t > 0),
+                                key=lambda kv: (-kv[1], kv[0]))
             return [
-                {"naam": _woningnaam(oid), "object_id": oid, "aantal": aantal}
-                for oid, aantal in gesorteerd[:n]
+                {"naam": _woningnaam(oid), "object_id": oid, "aantal": t}
+                for oid, t in gesorteerd[:n]
             ]
 
         gebruikers_lijst = []
@@ -2023,6 +2068,7 @@ def create_app(config: Config | None = None) -> Flask:
         )
         return render_template(
             "gebruikers.html", gebruikers=gebruikers_lijst, gebruiker=session["gebruiker"],
+            venster=venster,
         )
 
     return app

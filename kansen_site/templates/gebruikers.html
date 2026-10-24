@@ -26,6 +26,11 @@
     .gb-lijst li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gb-aantal { font-variant-numeric: tabular-nums; opacity: .8; flex: none; }
     .gb-leeg { opacity: .55; font-style: italic; }
+    .gb-venster { display: flex; gap: .4rem; margin: .3rem 0 .2rem; flex-wrap: wrap; }
+    .gb-venster-knop { font-size: .82rem; padding: .3rem .7rem; border-radius: .6rem;
+      border: 1px solid rgba(128,128,128,.3); text-decoration: none; color: inherit; }
+    .gb-venster-knop.actief { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .gb-venster-uitleg { font-size: .78rem; margin: .15rem 0 0; }
   </style>
 </head>
 <body>
@@ -45,6 +50,12 @@
       pauzes korter dan 30&nbsp;min), de meest bezochte pagina&rsquo;s en de woningen die het
       vaakst zijn bekeken en doorgerekend. Alleen zichtbaar voor beheerders.
     </p>
+    <div class="gb-venster">
+      {% for s, label in [("week", "Afgelopen week"), ("maand", "Afgelopen maand"), ("altijd", "Altijd")] %}
+      <a href="{{ url_for('gebruikers', venster=s) }}" class="gb-venster-knop{% if venster == s %} actief{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <p class="muted gb-venster-uitleg">De woning-lijsten hieronder tellen binnen het gekozen venster. &ldquo;Week&rdquo;/&ldquo;maand&rdquo; tellen vanaf de invoering van deze functie; oudere bezoeken hebben geen datum en vallen onder &ldquo;Altijd&rdquo;.</p>
   </div>
 
   <div class="gb-wrap">
