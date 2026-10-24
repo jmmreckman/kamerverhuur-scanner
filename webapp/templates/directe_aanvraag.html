@@ -7,15 +7,18 @@
 </div>
 
 <div class="card">
-  <p>Voor een huurder die je rechtstreeks (via-via) gevonden hebt, zonder bezichtigingsronde. Vul haar naam en
-     e-mailadres in; ze krijgt dan één link waarop ze in één keer haar gegevens invult én haar documenten uploadt.
-     Daarna wordt automatisch het concept-huurcontract opgesteld, net als bij de gewone route.</p>
+  <p>Voor een huurder die je rechtstreeks (via-via) gevonden hebt, zonder bezichtigingsronde. Je maakt
+     &eacute;&eacute;n link die je naar haar stuurt (bv. via WhatsApp); zij vult daarop <strong>zelf</strong>
+     al haar gegevens (naam, e-mail, telefoon, &hellip;) in &eacute;n uploadt haar documenten. Daarna wordt
+     automatisch het concept-huurcontract opgesteld, net als bij de gewone route.</p>
+  <p class="muted">Je hoeft hieronder niets in te vullen &mdash; klik gewoon op &ldquo;Link aanmaken&rdquo;.
+     Vul je het t&oacute;ch alvast in, dan staat het voor haar voorgevuld (en kun je de link ook mailen).</p>
   <form method="post">
-    <label>Naam van de nieuwe huurder
-      <input type="text" name="naam" value="{{ naam }}" required autofocus>
+    <label>Naam van de nieuwe huurder (optioneel)
+      <input type="text" name="naam" value="{{ naam }}">
     </label>
-    <label>E-mailadres
-      <input type="email" name="email" value="{{ email }}" required>
+    <label>E-mailadres (optioneel &mdash; alleen nodig als je de link wilt mailen)
+      <input type="email" name="email" value="{{ email }}">
     </label>
     <label>Telefoonnummer (optioneel)
       <input type="text" name="telefoon" value="{{ telefoon }}">

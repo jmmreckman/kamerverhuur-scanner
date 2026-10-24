@@ -1655,20 +1655,20 @@ def create_app(config: Config | None = None) -> Flask:
         gecombineerd), zodat het concept-huurcontract opgesteld kan worden zonder
         dat ze eerst als aanmelding in het systeem hoeft te staan."""
         if request.method == "POST":
+            # Naam/e-mail zijn optioneel: standaard vult de huurder zelf alles in op de
+            # publieke pagina. Vul je ze tóch vast in, dan staan ze voor haar voorgevuld
+            # (en kun je de link ook mailen).
             naam = request.form.get("naam", "").strip()
             email = request.form.get("email", "").strip()
             telefoon = request.form.get("telefoon", "").strip()
-            if not naam or not email:
-                flash("Naam en e-mailadres van de nieuwe huurder zijn verplicht.")
-                return render_template(
-                    "directe_aanvraag.html", kamer=kamer_naam, naam=naam, email=email, telefoon=telefoon
-                )
             verzoek = documentverzoek.start_documentverzoek(
                 pand_slug, kamer_naam, naam, email, telefoon, config.state_dir, direct=True
             )
-            mail = documentverzoek.bouw_directe_aanvraag_mail(g.pand, kamer_naam, naam, _upload_url(verzoek["token"]))
+            upload_url = _upload_url(verzoek["token"])
+            mail = documentverzoek.bouw_directe_aanvraag_mail(g.pand, kamer_naam, naam, upload_url)
             return render_template(
-                "documentverzoek_voorbeeld.html", sleutel=verzoek["sleutel"], kandidaat_naam=naam,
+                "directe_aanvraag_link.html", kamer=kamer_naam, upload_url=upload_url,
+                sleutel=verzoek["sleutel"], email=email,
                 onderwerp=mail["onderwerp"], tekst=mail["tekst"],
                 annuleren_url=url_for("kamer_detail", pand_slug=pand_slug, kamer_naam=kamer_naam),
             )
@@ -1716,6 +1716,22 @@ def create_app(config: Config | None = None) -> Flask:
             # (er is geen aanmelding in het systeem) - meteen bewaren, ook als de
             # bestand-upload daarna eventueel misgaat.
             if verzoek.get("direct"):
+                # De huurder vult zelf haar contactgegevens in (blanco link). Die
+                # overnemen op het verzoek zodat de Drive-map + het concept-contract
+                # kloppen (alleen niet-lege waarden overschrijven, zodat een vooraf
+                # ingevulde link blijft werken). Naam + e-mail moeten uiteindelijk
+                # bekend zijn (uit het formulier of al op het verzoek).
+                verzoek = documentverzoek.zet_huurder_contact(
+                    pand_slug, verzoek["sleutel"],
+                    request.form.get("naam", "").strip(),
+                    request.form.get("email", "").strip(),
+                    request.form.get("telefoon", "").strip(), config.state_dir)
+                if not verzoek.get("naam") or not verzoek.get("email"):
+                    return render_template(
+                        "documenten_upload.html", pand=pand, verzoek=verzoek,
+                        aanvraag_velden=documentverzoek.AANVRAAG_VELDEN,
+                        fout="Please fill in at least your name and email address.",
+                    ), 400
                 gegevens = {key: request.form.get(key, "").strip() for key, _label in documentverzoek.AANVRAAG_VELDEN}
                 verzoek = documentverzoek.zet_aanvraag_gegevens(pand_slug, verzoek["sleutel"], gegevens, config.state_dir)
 

@@ -557,11 +557,31 @@ def test_directe_aanvraag_knop_staat_op_kamerpagina(app_client):
     assert "rechtstreeks" in resp.get_data(as_text=True).lower()
 
 
-def test_directe_aanvraag_vereist_naam_en_email(app_client):
+def test_directe_aanvraag_zonder_naam_maakt_toch_een_blanco_link(app_client):
+    # Naam/e-mail zijn optioneel: zonder invoer wordt gewoon een (blanco) link gemaakt,
+    # die de huurder zelf invult. De responspagina toont de deelbare /documenten/-link.
     resp = app_client.post(
         "/pand/mahoniestraat/kamers/1/directe-aanvraag", data={"naam": "", "email": ""}
     )
-    assert "verplicht" in resp.get_data(as_text=True).lower()
+    assert resp.status_code == 200
+    assert "/documenten/" in resp.get_data(as_text=True)
+
+
+def test_blanco_link_publieke_pagina_vraagt_naam_en_email(app_client):
+    # Een blanco directe link: de publieke pagina vraagt naam + e-mail uit, en zonder
+    # die (en zonder dat ze al op het verzoek staan) wordt de upload geweigerd.
+    resp = app_client.post(
+        "/pand/mahoniestraat/kamers/1/directe-aanvraag", data={"naam": "", "email": ""}
+    )
+    token = re.search(r"/documenten/([\w-]+)", resp.get_data(as_text=True)).group(1)
+    pagina = app_client.get(f"/documenten/{token}").get_data(as_text=True)
+    assert 'name="naam"' in pagina and 'name="email"' in pagina
+    geweigerd = app_client.post(
+        f"/documenten/{token}",
+        data={"id_bestanden": (io.BytesIO(b"x"), "id.jpg")},
+        content_type="multipart/form-data",
+    )
+    assert geweigerd.status_code == 400
 
 
 def test_directe_aanvraag_maakt_direct_verzoek(app_client):

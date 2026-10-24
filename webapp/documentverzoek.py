@@ -127,6 +127,10 @@ def start_documentverzoek(
     geen bezichtiging): de publieke pagina toont dan óók de vragenlijst (zie
     AANVRAAG_VELDEN), zodat er geen aparte aanmelding nodig is."""
     sleutel = maak_sleutel(kamer, naam, email)
+    if direct and not naam and not email:
+        # Blanco link (de huurder vult zelf naam/e-mail in op de publieke pagina):
+        # er is niets om idempotent op te sleutelen, dus een unieke sleutel per link.
+        sleutel = _slugify(f"{kamer}-{secrets.token_hex(4)}")
     bestaand = lees_verzoek(pand_slug, sleutel, state_dir)
     if bestaand is not None:
         return bestaand
@@ -189,6 +193,25 @@ def zet_aanvraag_gegevens(pand_slug: str, sleutel: str, gegevens: dict, state_di
     if verzoek is None:
         raise ValueError(f"Geen documentverzoek gevonden voor '{sleutel}'.")
     verzoek["aanvraag_gegevens"] = gegevens
+    _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
+    return verzoek
+
+
+def zet_huurder_contact(pand_slug: str, sleutel: str, naam: str, email: str,
+                        telefoon: str, state_dir: str = ".") -> dict:
+    """Bij een directe aanvraag met een blanco link vult de huurder zélf haar naam/
+    e-mail/telefoon in op de publieke pagina. Die zetten we hier op het verzoek, zodat
+    de Drive-map en het concept-huurcontract haar gegevens gebruiken. Alleen met een
+    niet-lege waarde overschrijven (een eventueel vooraf ingevulde waarde blijft staan)."""
+    verzoek = lees_verzoek(pand_slug, sleutel, state_dir)
+    if verzoek is None:
+        raise ValueError(f"Geen documentverzoek gevonden voor '{sleutel}'.")
+    if naam:
+        verzoek["naam"] = naam
+    if email:
+        verzoek["email"] = email
+    if telefoon:
+        verzoek["telefoon"] = telefoon
     _schrijf_verzoek(pand_slug, sleutel, state_dir, verzoek)
     return verzoek
 

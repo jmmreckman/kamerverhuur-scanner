@@ -19,8 +19,17 @@
 <div class="card">
   <form method="post" enctype="multipart/form-data"
         onsubmit="this.querySelector('button[type=submit]').disabled = true; this.querySelector('button[type=submit]').textContent = 'Uploading...';">
-    {% if verzoek.direct and aanvraag_velden %}
+    {% if verzoek.direct %}
     <h2>Your details</h2>
+    <label>Full name
+      <input type="text" name="naam" value="{{ verzoek.naam or '' }}" required autofocus>
+    </label>
+    <label>Email address
+      <input type="email" name="email" value="{{ verzoek.email or '' }}" required>
+    </label>
+    <label>Phone number (optional)
+      <input type="text" name="telefoon" value="{{ verzoek.telefoon or '' }}">
+    </label>
     {% for key, label in aanvraag_velden %}
     <label>{{ label }}
       <input type="text" name="{{ key }}"
