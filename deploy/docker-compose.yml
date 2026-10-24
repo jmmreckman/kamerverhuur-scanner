@@ -1,0 +1,173 @@
+# Eén website die meerdere panden bedient (dropdown/toegang per gebruiker),
+# achter Caddy als reverse-proxy (die ook automatisch gratis HTTPS regelt).
+#
+# Nieuw pand toevoegen: een blok toevoegen aan properties.json - geen nieuwe
+# container of nieuw domein nodig, het is dezelfde site.
+
+services:
+  app:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "8000"
+
+  # Draait elk uur (op het hele uur, Europe/Amsterdam) automatisch dezelfde
+  # betaalcontrole als de "Nu controleren"-knop, voor alle panden. Zelfde
+  # image als 'app', alleen een ander opstartcommando - geen losse cron-
+  # daemon nodig. Zie scripts/dagelijkse_controle.py (naam is historisch).
+  dagelijkse-check:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "-m", "scripts.dagelijkse_controle"]
+
+  # Legt elke week automatisch een winst-datapunt vast per pand (zie
+  # scripts/winst_snapshot.py), zodat de winst-grafiek op de site blijft
+  # aangroeien ook als niemand de winstberekeningspagina bezoekt.
+  winst-snapshot:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "-m", "scripts.winst_snapshot"]
+
+  # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
+  # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
+  # verder dan gedeelde hosting. Code + Dockerfile staan op een aparte
+  # branch in deze repo; Docker bouwt rechtstreeks vanaf die branch als
+  # git-context (geen lokale checkout nodig). WEIGHT_APP_USERNAME/
+  # WEIGHT_APP_PASSWORD in weight-tracker.env (kopieer van
+  # weight-tracker.env.example, zelfde patroon als app.env) - zonder die
+  # twee draait de app zonder login.
+  weight-tracker:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/weight-tracking-portal-x3phgn
+    container_name: weight-tracker
+    restart: unless-stopped
+    env_file:
+      - ./weight-tracker.env
+    environment:
+      - WEIGHT_DB_PATH=/data/weight.db
+    volumes:
+      - weight-tracker-data:/data
+    expose:
+      - "8420"
+
+  # Los, derde project (fundazoeker) dat meelift op dezelfde VPS - geen
+  # relatie met de andere twee projecten verder dan gedeelde hosting. Draait
+  # zelf elke dag om 09:00 (Europe/Amsterdam) een scan naar geschikte
+  # Rotterdamse kamerverhuur-panden en mailt een rapport - dus geen
+  # expose/Caddy-blok/subdomein nodig voor deze service zelf (de bijbehorende
+  # kaart-website draait als de aparte 'kansen'-service hieronder). Code +
+  # Dockerfile staan op een aparte branch in deze repo; Docker bouwt
+  # rechtstreeks vanaf die branch als git-context. SCANNER_GMAIL_ADDRESS/
+  # SCANNER_GMAIL_APP_PASSWORD (en evt. REPORT_TO_ADDRESS/SMTP_*) in
+  # fundazoeker.env (kopieer van fundazoeker.env.example) - zonder de
+  # Gmail-gegevens start de container niet.
+  fundazoeker:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: fundazoeker
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+
+  # Kaart-website (https://kansen.steenhub.nl) bij fundazoeker: zelfde image/
+  # branch/git-context, alleen een ander opstartcommando (gunicorn i.p.v. de
+  # dagelijkse scan) - en deelt daarom ook hetzelfde fundazoeker-data-volume,
+  # zodat hij dezelfde state.json ziet die de dagelijkse scan bijhoudt.
+  # KANSEN_APP_USERS/KANSEN_APP_SECRET_KEY in fundazoeker.env (zie
+  # fundazoeker.env.example) - zonder die twee weigert de container te
+  # starten (geen kaart zonder wachtwoord).
+  kansen:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: kansen
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    # STEENHUB_USERS_FILE laat de kansen-site inloggen accepteren met dezelfde
+    # accounts als steenhub.nl (de 'app'-service): de users.json van die app
+    # wordt hier read-only ingekoppeld en de login checkt tegen de werkzeug-
+    # wachtwoordhashes daarin (zie kansen_site/app.py). Het bestand moet dus al
+    # bestaan op de host (./data/users.json van de app-service) - dat is zo
+    # zodra steenhub.nl minstens één gebruiker heeft.
+    environment:
+      - STEENHUB_USERS_FILE=/app/steenhub-users.json
+    volumes:
+      - fundazoeker-data:/app/data
+      - ./data/users.json:/app/steenhub-users.json:ro
+    # --timeout 1200: "Handmatig toevoegen" verwerkt elk adres synchroon door
+    # alle checks (geocoding, BAG, gis, opkoop, WOZ) - bij een paar honderd
+    # adressen in één keer kan dat zo'n 15-20 minuten duren (zie README).
+    command: ["gunicorn", "kansen_site.app:create_app()", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "1200"]
+    expose:
+      - "8080"
+
+  # Dagelijkse beschikbaarheid-check (gratis, geen betaalde scraper) - bezoekt
+  # voor elke actieve woning de eigen Funda-URL rechtstreeks en zet 'm op
+  # "afgevallen" zodra die "verkocht" blijkt. Zie "Beschikbaarheid-check" in
+  # fundazoeker's eigen README. Zelfde image/branch/volume als fundazoeker,
+  # alleen een ander opstartcommando.
+  beschikbaarheid-check:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: beschikbaarheid-check
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["python3", "-m", "scripts.dagelijkse_beschikbaarheid_check"]
+
+  # Bouwt en onderhoudt de volledige index van Rotterdamse kamerverhuur-
+  # vergunningen (officiële bekendmakingen) voor de "Toon vergunningen"-kaartlaag
+  # en het data-analyse-dashboard op kansen.steenhub.nl. Zelfde image/branch/
+  # volume als fundazoeker; werkt zelf-plannend (eenmalige backfill van het
+  # archief, daarna dagelijks bijwerken). Zie fundazoeker's README ("Vergunningen-
+  # laag & data-analyse").
+  vergunningen-index:
+    build:
+      context: https://github.com/jmmreckman/kamerverhuur-scanner.git#claude/rotterdam-property-scraper-impfg0
+    container_name: vergunningen-index
+    restart: unless-stopped
+    env_file:
+      - ./fundazoeker.env
+    volumes:
+      - fundazoeker-data:/app/data
+    command: ["python3", "-m", "scripts.vergunningen_index_bijwerken"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - weight-tracker
+      - kansen
+
+volumes:
+  caddy_data:
+  caddy_config:
+  weight-tracker-data:
+  fundazoeker-data:

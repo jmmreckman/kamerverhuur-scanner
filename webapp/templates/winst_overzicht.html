@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "_grafiek.html" import winst_grafiek %}
+{% block title %}Totaal overzicht{% endblock %}
+{% block content %}
+<style>
+  .komend-per-pand { list-style:none; margin:0.6rem 0 0; padding:0.6rem 0 0; border-top:1px solid var(--border); }
+  .komend-per-pand li { display:flex; justify-content:space-between; gap:1rem; padding:0.15rem 0; font-size:0.9rem; }
+  .komend-per-pand li span:last-child { color:var(--muted); white-space:nowrap; }
+</style>
+<div class="page-header">
+  <h1>Totaal overzicht</h1>
+</div>
+
+<div class="card">
+  <h2>Totale winst alle panden</h2>
+  <p class="muted">Som van de laatst berekende winst per pand (zie de winstberekeningspagina van elk pand),
+     gedeeld door het aantal beheerders bij panden met meerdere beheerders - jouw eigen deel dus, niet per se
+     de volledige winst van elk pand.</p>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Pand</th><th>Laatste winst</th><th>Beheerders</th><th>Jouw deel</th></tr>
+    {% for regel in specificatie %}
+    <tr>
+      <td><a href="{{ url_for('winstberekening', pand_slug=regel.pand.slug) }}">{{ regel.pand.naam }}</a></td>
+      <td>{{ regel.laatste|eur if regel.laatste is not none else "-" }}</td>
+      <td>{{ regel.aantal_beheerders }}</td>
+      <td>{{ regel.verdeeld|eur if regel.verdeeld is not none else "-" }}</td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight:700"><td colspan="3">Totaal</td><td style="color:{{ 'var(--ok)' if totaal >= 0 else 'var(--bad)' }}">{{ totaal|eur }}</td></tr>
+  </table>
+  </div>
+  {% if specificatie|selectattr("laatste", "none")|list %}
+  <p class="muted" style="margin-top:0.75rem">Panden met "-" hebben nog geen winst-datapunt - bezoek de
+     winstberekeningspagina van dat pand eenmalig, of wacht op de wekelijkse automatische snapshot.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Betalingen alle panden</h2>
+  <div class="grid">
+    <div class="stat-card">
+      <div>
+        <div class="stat-value">{{ betalingen_nu.betaald }}/{{ betalingen_nu.totaal }}</div>
+        <div class="stat-label">betalingen binnen &mdash; deze maand ({{ huidige_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">{{ betalingen_nu.ontvangen|eur }} / {{ betalingen_nu.verwacht|eur }} ontvangen</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div>
+        {% if komend_berekend_op %}
+        <div class="stat-value">{{ betalingen_komend.betaald }}/{{ betalingen_komend.totaal }}</div>
+        <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">{{ betalingen_komend.ontvangen|eur }} / {{ betalingen_komend.verwacht|eur }} ontvangen</div>
+        {% if komend_per_pand %}
+        <ul class="komend-per-pand">
+          {% for p in komend_per_pand %}
+          <li><span>{{ p.naam }}</span><span>{{ p.betaald }}/{{ p.totaal }} &middot; {{ p.ontvangen|eur }}</span></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        {% else %}
+        <div class="stat-label">alvast vooruitbetaald &mdash; komende maand ({{ komende_maandnaam }})</div>
+        <div class="muted" style="margin-top:0.3rem">Nog niet opgehaald &mdash; klik op "Ververs" om te zien wie er al voor volgende maand vooruitbetaald heeft.</div>
+        {% endif %}
+        <div style="margin-top:0.6rem">
+          <form method="post" action="{{ url_for('winst_overzicht_ververs_komende') }}" style="display:inline">
+            <button type="submit" class="btn-secondary">Ververs</button>
+          </form>
+          {% if komend_berekend_op %}<span class="muted" style="margin-left:0.5rem; font-size:0.85rem">bijgewerkt {{ komend_berekend_op }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Winst over tijd</h2>
+  {{ winst_grafiek(geschiedenis) }}
+</div>
+
+{% if toon_test_logboek %}
+<div class="card">
+  <a class="btn btn-secondary" href="{{ url_for('test_account_logboek') }}">Logboek test accounts</a>
+</div>
+{% endif %}
+{% endblock %}

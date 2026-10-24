@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_grafiek.html" import winst_grafiek %}
+{% block title %}Winstberekening - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Winstberekening</h1>
+  <p class="muted">{{ huidig_pand.naam }}</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon ok">€</div>
+    <div>
+      <div class="stat-value" style="color:var(--ok)">{{ overzicht.inkomsten|eur }}</div>
+      <div class="stat-label">verwachte huurinkomsten (IN)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon bad">€</div>
+    <div>
+      <div class="stat-value" style="color:var(--bad)">{{ overzicht.totaal_lasten|eur }}</div>
+      <div class="stat-label">totale lasten (UIT)</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon {{ 'ok' if overzicht.winst >= 0 else 'bad' }}">€</div>
+    <div>
+      <div class="stat-value" style="color:{{ 'var(--ok)' if overzicht.winst >= 0 else 'var(--bad)' }}">{{ overzicht.winst|eur }}</div>
+      <div class="stat-label">winst (IN - UIT)</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Huurinkomsten</h2>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Kamer</th><th>Huurder</th><th>Verwachte huur</th></tr>
+    {% for regel in overzicht.inkomsten_specificatie %}
+    <tr>
+      <td>{{ regel.kamer }}</td>
+      <td>{{ regel.naam }}</td>
+      <td>{{ regel.verwacht_bedrag|eur }}</td>
+    </tr>
+    {% endfor %}
+    <tr style="font-weight:700"><td colspan="2">Totaal huurinkomsten</td><td style="color:var(--ok)">{{ overzicht.inkomsten|eur }}</td></tr>
+  </table>
+  </div>
+  {% if not overzicht.inkomsten_specificatie %}
+  <p class="muted" style="margin-top:0.75rem">Geen bewoonde kamers gevonden voor dit pand.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Lasten</h2>
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Omschrijving</th><th>Bedrag</th><th></th></tr>
+    {% for last in overzicht.lasten %}
+    <tr>
+      <td>{{ last.omschrijving }}</td>
+      <td>{{ last.bedrag|eur }}</td>
+      <td>
+        <form method="post" action="{{ url_for('winst_last_negeren', pand_slug=huidig_pand.slug) }}"
+              onsubmit="return confirm('Deze betaling definitief negeren? \'{{ last.omschrijving }}\' telt dan nooit meer mee als vaste last, tot je 'm terugzet via Negeerlijst beheren.');">
+          <input type="hidden" name="sleutel" value="{{ last.sleutel }}">
+          <input type="hidden" name="omschrijving" value="{{ last.omschrijving }}">
+          <button class="btn-link-danger" type="submit" title="Deze betaling negeren">&times;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr><td>Belasting</td><td>{{ overzicht.belasting|eur }}</td><td></td></tr>
+    {% if overzicht.energiekosten %}<tr><td>Energiekosten (handmatig)</td><td>{{ overzicht.energiekosten|eur }}</td><td></td></tr>{% endif %}
+    <tr><td>Onderhoudsreserve</td><td>{{ overzicht.onderhoud_reserve|eur }}</td><td></td></tr>
+    <tr style="font-weight:700"><td>Totaal lasten</td><td style="color:var(--bad)">{{ overzicht.totaal_lasten|eur }}</td><td></td></tr>
+  </table>
+  </div>
+  {% if not overzicht.lasten %}
+  <p class="muted" style="margin-top:0.75rem">Nog geen terugkerende lasten herkend - een tegenpartij moet in
+     minstens 3 verschillende maanden voorkomen (en gemiddeld niet vaker dan zo'n anderhalf keer per maand,
+     dus geen wekelijkse bezorgingen) op de rekening van dit pand voordat 'ie hier verschijnt.</p>
+  {% endif %}
+  {% if not overzicht.onderhoud_reserve %}
+  <p class="muted">Geen onderhoudsreserve ingesteld voor dit pand{% if current_user.mag_gebruikers_beheren() %} - vul
+     die in bij <a href="{{ url_for('pand_bewerken', slug=huidig_pand.slug) }}">Panden beheren</a> als je die wilt
+     meetellen{% endif %}.</p>
+  {% endif %}
+  <p style="margin-top:1rem">
+    <a href="{{ url_for('winst_negeerlijst', pand_slug=huidig_pand.slug) }}">Negeerlijst beheren</a>
+  </p>
+</div>
+
+<div class="card">
+  <h2>Winst over tijd</h2>
+  {{ winst_grafiek(geschiedenis) }}
+</div>
+{% endblock %}

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Velden plaatsen &mdash; {{ meta.titel }}{% endblock %}
+{% block content %}
+<style>
+  .tp-toolbar { position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:0.8rem;
+    flex-wrap:wrap; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius-sm); box-shadow:var(--shadow); padding:0.6rem 0.9rem; margin-bottom:1rem; }
+  .tp-toolbar input[type=email] { max-width:15rem; }
+  .tp-pages { display:flex; flex-direction:column; align-items:center; gap:1.1rem; }
+  .tp-page { position:relative; width:100%; max-width:800px; box-shadow:var(--shadow); line-height:0; }
+  .tp-page img { width:100%; height:auto; display:block; border:1px solid var(--border); }
+  .tp-page.plaatsen { cursor:crosshair; }
+  .tp-veld { position:absolute; box-sizing:border-box; border-radius:4px; }
+  .tp-veld.handtekening { border:2px dashed #1b7a43; background:rgba(27,122,67,0.12); }
+  .tp-veld.tekst { border:2px dashed #1d6fb8; background:rgba(29,111,184,0.10); }
+  /* Het invoerveld vult de hele box, zodat je overal in de box kunt tikken om te
+     typen (belangrijk op mobiel). Slepen en verwijderen via de hoekknopjes. */
+  .tp-veld input { position:absolute; inset:0; width:100%; height:100%; box-sizing:border-box;
+    border:0; background:rgba(255,255,255,0.9); font-size:0.8rem; padding:0.1rem 1.25rem; text-align:center; }
+  .tp-greep, .tp-veld-x { position:absolute; top:0; z-index:2; width:1.15rem; height:1.15rem;
+    display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:#fff;
+    line-height:1; user-select:none; }
+  .tp-greep { left:0; cursor:move; touch-action:none; }
+  .tp-veld-x { right:0; font-weight:bold; cursor:pointer; }
+  .tp-veld.handtekening .tp-greep, .tp-veld.handtekening .tp-veld-x { background:#1b7a43; }
+  .tp-veld.tekst .tp-greep, .tp-veld.tekst .tp-veld-x { background:#1d6fb8; }
+</style>
+
+<div class="page-header">
+  <h1>Velden plaatsen</h1>
+  <p class="muted">{{ meta.titel }} &mdash; kies een veldsoort en tik op de PDF om 'm te plaatsen. Tik daarna in het veld om te typen; versleep met het greepje (⠿) linksboven, verwijderen met de × rechtsboven.
+    <strong style="color:#1b7a43;">Handtekeningveld</strong>: vul een mailadres in, daar tekent die persoon.
+    <strong style="color:#1d6fb8;">Tekstveld</strong>: typ zelf de tekst (bijv. plaats, BSN, datum).</p>
+</div>
+
+<form method="post" id="tp-form">
+  <div class="tp-toolbar">
+    <button type="button" class="btn btn-secondary" id="tp-knop-handtekening">➕ Handtekeningveld</button>
+    <button type="button" class="btn btn-secondary" id="tp-knop-tekst">➕ Tekstveld</button>
+    <label style="margin:0; font-size:0.85rem;">Standaard mailadres (handtekening)
+      <input type="email" id="tp-standaard-email" placeholder="naam@voorbeeld.nl">
+    </label>
+    <span class="muted" id="tp-teller"></span>
+    <span style="flex:1;"></span>
+    <button type="submit" name="actie" value="opslaan" class="btn btn-secondary">Opslaan</button>
+    <button type="submit" name="actie" value="versturen" class="btn">Opslaan &amp; tekenverzoeken versturen</button>
+  </div>
+  <input type="hidden" name="velden_json" id="tp-velden-json">
+
+  <div class="tp-pages">
+    {% for i in range(pagina_aantal) %}
+    <div class="tp-page" data-pagina="{{ i }}">
+      <img src="{{ url_for('tekenportaal_pagina', doc_id=meta.doc_id, pagina=i) }}" alt="Pagina {{ i + 1 }}" loading="lazy">
+    </div>
+    {% endfor %}
+  </div>
+</form>
+
+<script>
+(function () {
+  var STD = { handtekening: { b: 0.26, h: 0.07 }, tekst: { b: 0.26, h: 0.05 } };
+  var velden = {{ meta.velden | tojson }};
+  var plaatsSoort = null;
+  var form = document.getElementById("tp-form");
+  var pages = Array.prototype.slice.call(document.querySelectorAll(".tp-page"));
+  var teller = document.getElementById("tp-teller");
+  var knopH = document.getElementById("tp-knop-handtekening");
+  var knopT = document.getElementById("tp-knop-tekst");
+  var standaardEmail = document.getElementById("tp-standaard-email");
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function soortVan(veld) { return veld.type === "tekst" ? "tekst" : "handtekening"; }
+  function esc(s) { return (s || "").replace(/"/g, "&quot;"); }
+
+  function render() {
+    pages.forEach(function (p) {
+      Array.prototype.slice.call(p.querySelectorAll(".tp-veld")).forEach(function (el) { el.remove(); });
+    });
+    velden.forEach(function (veld, index) {
+      var page = pages[veld.pagina];
+      if (!page) return;
+      var soort = soortVan(veld);
+      var box = document.createElement("div");
+      box.className = "tp-veld " + soort;
+      box.style.left = (veld.x * 100) + "%";
+      box.style.top = (veld.y * 100) + "%";
+      box.style.width = (veld.breedte * 100) + "%";
+      box.style.height = (veld.hoogte * 100) + "%";
+      var invoer = soort === "tekst"
+        ? '<input type="text" placeholder="typ hier (bijv. Haarlem)" value="' + esc(veld.tekst) + '">'
+        : '<input type="email" placeholder="mailadres (tekent hier)" value="' + esc(veld.email) + '">';
+      box.innerHTML =
+        '<span class="tp-greep" title="Versleep">&#9776;</span>' +
+        '<span class="tp-veld-x" title="Verwijderen">&times;</span>' + invoer;
+
+      var input = box.querySelector("input");
+      input.addEventListener("input", function (e) {
+        if (soort === "tekst") { velden[index].tekst = e.target.value; }
+        else { velden[index].email = e.target.value.trim(); }
+      });
+      box.querySelector(".tp-veld-x").addEventListener("click", function (e) {
+        e.stopPropagation(); velden.splice(index, 1); render();
+      });
+      maakSleepbaar(box.querySelector(".tp-greep"), box, page, index);
+      page.appendChild(box);
+    });
+    teller.textContent = velden.length + " veld(en) geplaatst";
+  }
+
+  function maakSleepbaar(greep, box, page, index) {
+    greep.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var rect = page.getBoundingClientRect();
+      var startX = e.clientX, startY = e.clientY;
+      var begin = { x: velden[index].x, y: velden[index].y };
+      function move(ev) {
+        var dx = (ev.clientX - startX) / rect.width;
+        var dy = (ev.clientY - startY) / rect.height;
+        velden[index].x = clamp(begin.x + dx, 0, 1 - velden[index].breedte);
+        velden[index].y = clamp(begin.y + dy, 0, 1 - velden[index].hoogte);
+        box.style.left = (velden[index].x * 100) + "%";
+        box.style.top = (velden[index].y * 100) + "%";
+      }
+      function up() { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); }
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+    });
+  }
+
+  function zetModus(soort) {
+    plaatsSoort = (plaatsSoort === soort) ? null : soort;
+    knopH.textContent = plaatsSoort === "handtekening" ? "✓ Tik op de PDF…" : "➕ Handtekeningveld";
+    knopT.textContent = plaatsSoort === "tekst" ? "✓ Tik op de PDF…" : "➕ Tekstveld";
+    pages.forEach(function (p) { p.classList.toggle("plaatsen", plaatsSoort !== null); });
+  }
+  knopH.addEventListener("click", function () { zetModus("handtekening"); });
+  knopT.addEventListener("click", function () { zetModus("tekst"); });
+
+  pages.forEach(function (page) {
+    page.addEventListener("click", function (e) {
+      if (!plaatsSoort) return;
+      if (e.target.closest(".tp-veld")) return;
+      var rect = page.getBoundingClientRect();
+      var cx = (e.clientX - rect.left) / rect.width;
+      var cy = (e.clientY - rect.top) / rect.height;
+      var maat = STD[plaatsSoort];
+      velden.push({
+        type: plaatsSoort,
+        pagina: parseInt(page.dataset.pagina, 10),
+        x: clamp(cx - maat.b / 2, 0, 1 - maat.b),
+        y: clamp(cy - maat.h / 2, 0, 1 - maat.h),
+        breedte: maat.b, hoogte: maat.h,
+        email: plaatsSoort === "handtekening" ? standaardEmail.value.trim() : "",
+        tekst: ""
+      });
+      // na het plaatsen uit de plaatsmodus, zodat je meteen in het veld kunt typen
+      plaatsSoort = null;
+      knopH.textContent = "➕ Handtekeningveld";
+      knopT.textContent = "➕ Tekstveld";
+      pages.forEach(function (p) { p.classList.remove("plaatsen"); });
+      render();
+    });
+  });
+
+  form.addEventListener("submit", function (e) {
+    if (velden.length === 0) { e.preventDefault(); alert("Plaats eerst minstens één veld."); return; }
+    for (var i = 0; i < velden.length; i++) {
+      if (soortVan(velden[i]) === "tekst") {
+        if (!velden[i].tekst || !velden[i].tekst.trim()) { e.preventDefault(); alert("Tekstveld " + (i + 1) + " is nog leeg."); return; }
+      } else if (!velden[i].email) { e.preventDefault(); alert("Handtekeningveld " + (i + 1) + " heeft nog geen mailadres."); return; }
+    }
+    document.getElementById("tp-velden-json").value = JSON.stringify(velden);
+  });
+
+  render();
+})();
+</script>
+{% endblock %}
