@@ -122,6 +122,19 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
 - `kamerverhuur_scanner/state.py` — kleine JSON-state in `state_dir` (laatste
   resultaat, verzonden mails, winst-geschiedenis, **pand-volgorde per gebruiker**).
+- **Communicatie-/onderhoudsmodule** (okt 2026): `webapp/communicatie_db.py`
+  (SQLite-opslag in `state_dir/communicatie.db`: contacten, berichten, klussen,
+  vakmannen, acties — pure laag, los getest), `webapp/communicatie_ai.py`
+  (AI-concept/samenvatting + stijl-nacheck tegen `;`/`—`/AI-stopwoorden + de
+  vaste vakman-mail), `webapp/mail_import.py` + `scripts/gmail_backfill.py`
+  (eenmalige Gmail-IMAP-backfill). Schermen: communicatie per huurder (Huurders →
+  Communicatie), centrale **Onderhoud**-tickets, **Openstaande acties**
+  (goedkeuringswachtrij → versturen via de bestaande mailer), klusjesmannen-beheer,
+  en "Wat vraagt aandacht" op de pandkiezer-startpagina. Alles respecteert de
+  pand-toegang per gebruiker. Nog te doen (wacht op inloggegevens): Gmail
+  app-wachtwoord voor de backfill; `onderhoud@` + IMAP voor de dagelijkse inname
+  (Fase 2). Nieuwe env: `BEHEERDER_TELEFOON` (vakman-mail), `GMAIL_IMAP_USER/
+  GMAIL_IMAP_PASSWORD/GMAIL_EIGEN_ADRES` (backfill). Plan: `docs/communicatie-onderhoud-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,
