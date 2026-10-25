@@ -65,6 +65,12 @@ class Config:
     # terug op email_bcc als deze niet gezet is.
     email_bcc_beheerder: list[str] = field(default_factory=list)
 
+    # Telefoonnummer van de beheerder, gebruikt in de automatische mail aan een
+    # klusjesman (zie webapp/communicatie_ai.bouw_vakman_mail): "bel me eerst bij
+    # bedragen boven 150 euro". Bewust via env, niet hardcoded in git. Leeg = de
+    # mail noemt geen nummer (je vult het dan in bij het goedkeuren).
+    beheerder_telefoon: str = ""
+
     # Voor het optionele AI-uitlezen van geuploade documenten (zie
     # kamerverhuur_scanner/document_ai.py) - alleen nodig als je die functie gebruikt.
     anthropic_api_key: str | None = None
@@ -98,6 +104,7 @@ class Config:
             email_bcc_beheerder=[
                 e.strip() for e in os.environ.get("EMAIL_BCC_BEHEERDER", "").split(",") if e.strip()
             ],
+            beheerder_telefoon=os.environ.get("BEHEERDER_TELEFOON", "").strip(),
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip() or None,
             anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5",
             rclone_remote=os.environ.get("RCLONE_REMOTE", "").strip() or None,

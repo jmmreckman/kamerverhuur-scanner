@@ -1364,19 +1364,23 @@ def create_app(config: Config | None = None) -> Flask:
             )
         return redirect(url_for("onderhoud_detail", klus_id=klus_id))
 
+    def _render_onderhoud_detail(db, klus, concept=None, stopwoorden=None):
+        return render_template(
+            "onderhoud_detail.html", klus=klus,
+            berichten=communicatie_db.berichten_van_klus(db, klus["id"]),
+            contact=communicatie_db.get_contact(db, klus["contact_id"]) if klus["contact_id"] else None,
+            pand=find_pand(_properties(), klus["pand_slug"]),
+            concept=concept, stopwoorden=stopwoorden or [],
+            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
+            vakmannen=communicatie_db.lijst_vakmannen(db),
+            vakman=communicatie_db.get_vakman(db, klus["vakman_id"]) if klus["vakman_id"] else None,
+        )
+
     @app.route("/onderhoud/<int:klus_id>")
     @login_required
     def onderhoud_detail(klus_id: int):
         db = _comm_db()
-        klus = _klus_of_404(db, klus_id)
-        return render_template(
-            "onderhoud_detail.html", klus=klus,
-            berichten=communicatie_db.berichten_van_klus(db, klus_id),
-            contact=communicatie_db.get_contact(db, klus["contact_id"]) if klus["contact_id"] else None,
-            pand=find_pand(_properties(), klus["pand_slug"]),
-            concept=None, stopwoorden=[],
-            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
-        )
+        return _render_onderhoud_detail(db, _klus_of_404(db, klus_id))
 
     @app.route("/onderhoud/<int:klus_id>/bericht", methods=["POST"])
     @login_required
@@ -1415,11 +1419,7 @@ def create_app(config: Config | None = None) -> Flask:
             stopwoorden = communicatie_ai.vind_ai_stopwoorden(concept)
         except communicatie_ai.CommunicatieAIError as exc:
             flash(str(exc))
-        return render_template(
-            "onderhoud_detail.html", klus=klus, berichten=berichten, contact=contact, pand=pand,
-            concept=concept, stopwoorden=stopwoorden,
-            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
-        )
+        return _render_onderhoud_detail(db, klus, concept=concept, stopwoorden=stopwoorden)
 
     @app.route("/onderhoud/<int:klus_id>/status", methods=["POST"])
     @login_required
@@ -1452,6 +1452,89 @@ def create_app(config: Config | None = None) -> Flask:
               "Concept in de wachtrij gezet. Let op: geen e-mailadres bekend voor deze huurder, "
               "dus versturen kan pas als dat ingevuld is.")
         return redirect(url_for("actie_detail", actie_id=actie_id))
+
+    # --- Klusjesmannen-beheer + vakman inschakelen (dubbele mail) ---
+
+    @app.route("/onderhoud/vakmannen", methods=["GET", "POST"])
+    @login_required
+    def vakmannen_beheer():
+        db = _comm_db()
+        if request.method == "POST":
+            naam = request.form.get("naam", "").strip()
+            if naam:
+                communicatie_db.voeg_vakman_toe(
+                    db, naam=naam, vak=request.form.get("vak", "").strip() or None,
+                    email=request.form.get("email", "").strip() or None,
+                    telefoon=request.form.get("telefoon", "").strip() or None,
+                )
+                flash("Klusjesman toegevoegd.")
+            else:
+                flash("Geef in elk geval een naam op.")
+            return redirect(url_for("vakmannen_beheer"))
+        return render_template(
+            "vakmannen.html", vakmannen=communicatie_db.lijst_vakmannen(db, alleen_actief=False)
+        )
+
+    @app.route("/onderhoud/vakmannen/<int:vakman_id>/actief", methods=["POST"])
+    @login_required
+    def vakman_actief(vakman_id: int):
+        db = _comm_db()
+        communicatie_db.zet_vakman_actief(db, vakman_id, request.form.get("actief") == "1")
+        return redirect(url_for("vakmannen_beheer"))
+
+    @app.route("/onderhoud/<int:klus_id>/vakman-inschakelen", methods=["POST"])
+    @login_required
+    def onderhoud_vakman_inschakelen(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        vakman = communicatie_db.get_vakman(db, request.form.get("vakman_id", type=int) or 0)
+        if vakman is None:
+            flash("Kies een klusjesman.")
+            return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+        pand = find_pand(_properties(), klus["pand_slug"])
+        contact = communicatie_db.get_contact(db, klus["contact_id"]) if klus["contact_id"] else None
+        huurder_naam = contact["naam"] if contact else "de huurder"
+        adres = (pand.naam if pand else klus["pand_slug"]) + (f" (kamer {klus['kamer']})" if klus["kamer"] else "")
+        reden = klus["titel"] + (f": {klus['omschrijving']}" if klus["omschrijving"] else "")
+        emails = communicatie_db.emails_van_contact(db, klus["contact_id"]) if klus["contact_id"] else []
+
+        # 1. Concept naar de huurder (met de vakman-info erin verwerkt).
+        vakman_contact = ", ".join(x for x in [vakman["telefoon"], vakman["email"]] if x)
+        extra = (
+            f"Laat de huurder weten dat {vakman['naam']}"
+            + (f" ({vakman['vak']})" if vakman["vak"] else "")
+            + " is ingeschakeld voor deze klus"
+            + (f" en rechtstreeks bereikbaar is op {vakman_contact}" if vakman_contact else "")
+            + ". De huurder mag zelf een afspraak maken."
+        )
+        try:
+            huurder_concept = communicatie_ai.genereer_antwoord(
+                config, pand_naam=pand.naam if pand else klus["pand_slug"],
+                huurder_naam=huurder_naam, berichten=communicatie_db.berichten_van_klus(db, klus_id),
+                extra_instructie=extra,
+            )
+            communicatie_db.maak_actie(
+                db, type="concept-huurder", concept_body=huurder_concept,
+                concept_onderwerp=f"Re: {klus['titel']}", contact_id=klus["contact_id"],
+                pand_slug=klus["pand_slug"], klus_id=klus_id, ontvanger=emails[0] if emails else None,
+            )
+        except communicatie_ai.CommunicatieAIError as exc:
+            flash(f"Het AI-concept voor de huurder is niet gelukt ({exc}); de mail aan de klusjesman staat wel klaar.")
+
+        # 2. Mail aan de klusjesman (vaste sjabloontekst met de vaste instructies).
+        vak_onderwerp, vak_body = communicatie_ai.bouw_vakman_mail(
+            vakman_naam=vakman["naam"], vak=vakman["vak"], huurder_naam=huurder_naam,
+            adres=adres, reden=reden, beheerder_telefoon=config.beheerder_telefoon,
+        )
+        communicatie_db.maak_actie(
+            db, type="concept-vakman", concept_body=vak_body, concept_onderwerp=vak_onderwerp,
+            contact_id=klus["contact_id"], pand_slug=klus["pand_slug"], klus_id=klus_id,
+            ontvanger=vakman["email"],
+        )
+        communicatie_db.koppel_vakman(db, klus_id, vakman["id"])
+        communicatie_db.zet_klus_status(db, klus_id, communicatie_db.KLUS_VAKMAN)
+        flash("Klusjesman ingeschakeld. Twee concepten staan klaar in Openstaande acties (huurder + klusjesman).")
+        return redirect(url_for("acties_overzicht"))
 
     # --- Goedkeuringswachtrij (openstaande acties: concepten die op jouw akkoord wachten) ---
 

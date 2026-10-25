@@ -132,6 +132,28 @@ def bouw_samenvatting_prompt(*, huurder_naam: str, geschiedenis_tekst: str) -> t
     return _SYSTEEM_SAMENVATTING, user
 
 
+def bouw_vakman_mail(
+    *, vakman_naam: str, vak: str | None, huurder_naam: str, adres: str, reden: str,
+    beheerder_telefoon: str = "",
+) -> tuple[str, str]:
+    """Bouwt de mail aan een klusjesman als vaste sjabloontekst (geen AI), zodat
+    de vaste instructies - factuur rechtstreeks naar de beheerder, en boven 150
+    euro eerst bellen - altijd exact kloppen. Geeft (onderwerp, body) terug; gaat
+    daarna net als elk concept eerst naar de goedkeuringswachtrij, dus je kunt 'm
+    nog aanpassen."""
+    aanhef = vakman_naam or "beste"
+    bel = f" Is het bedrag hoger dan 150 euro, bel me dan eerst even op {beheerder_telefoon}." if beheerder_telefoon \
+        else " Is het bedrag hoger dan 150 euro, bel me dan eerst even voordat je het werk doet."
+    body = (
+        f"Hoi {aanhef},\n\n"
+        f"Voor {adres} is er een klus: {reden}. {huurder_naam} neemt contact met je op om een "
+        f"afspraak te maken, of neem zelf even contact op.\n\n"
+        f"Graag de factuur rechtstreeks naar mij sturen.{bel}\n\n"
+        f"Alvast bedankt, groeten"
+    )
+    return f"Klus op {adres}", schoon_stijl(body)
+
+
 def genereer_antwoord(
     config: Config, *, pand_naam: str, huurder_naam: str, berichten,
     extra_instructie: str | None = None,

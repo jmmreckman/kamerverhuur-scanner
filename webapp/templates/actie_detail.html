@@ -4,7 +4,7 @@
 <div class="page-header">
   <h1>Concept goedkeuren</h1>
   <p class="muted">
-    Voor {{ contact.naam if contact else (actie.ontvanger or 'huurder') }}
+    {% if actie.type == 'concept-vakman' %}Mail aan de klusjesman{% else %}Bericht aan {{ contact.naam if contact else (actie.ontvanger or 'huurder') }}{% endif %}
     &middot; {{ pand.naam if pand else actie.pand_slug }}
     {% if actie.klus_id %}&middot; <a href="{{ url_for('onderhoud_detail', klus_id=actie.klus_id) }}">bij onderhoudsticket</a>{% endif %}
     {% if contact and contact.kamer and not actie.klus_id %}&middot; <a href="{{ url_for('huurder_communicatie', pand_slug=actie.pand_slug, kamer_naam=contact.kamer) }}">alle communicatie</a>{% endif %}

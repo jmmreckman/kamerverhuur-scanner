@@ -87,6 +87,28 @@ def test_bouw_antwoord_prompt_zonder_historie():
     assert "nog geen eerdere berichten" in user
 
 
+def test_bouw_vakman_mail_bevat_vaste_instructies():
+    onderwerp, body = ai.bouw_vakman_mail(
+        vakman_naam="Piet", vak="loodgieter", huurder_naam="Jane Doe",
+        adres="Mahoniestraat 15", reden="lekkage onder de wastafel",
+        beheerder_telefoon="06-44021086",
+    )
+    assert "Mahoniestraat 15" in onderwerp
+    assert "Jane Doe" in body and "lekkage onder de wastafel" in body
+    assert "factuur rechtstreeks naar mij" in body
+    assert "150 euro" in body and "06-44021086" in body
+    # stijlregels: geen puntkomma's/gedachtestreepjes
+    assert ";" not in body and "—" not in body
+
+
+def test_bouw_vakman_mail_zonder_telefoonnummer():
+    _onderwerp, body = ai.bouw_vakman_mail(
+        vakman_naam="Piet", vak=None, huurder_naam="Jane", adres="P 1", reden="x",
+    )
+    assert "150 euro" in body
+    assert "06-" not in body  # geen verzonnen nummer
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",

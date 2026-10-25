@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Klusjesmannen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Klusjesmannen</h1>
+  <p class="muted">Vakmensen die je bij een onderhoudsticket kunt inschakelen.</p>
+</div>
+
+<div class="card">
+  <h2>Toevoegen</h2>
+  <form method="post" action="{{ url_for('vakmannen_beheer') }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>Naam <input type="text" name="naam" required></label>
+      <label>Vak <input type="text" name="vak" placeholder="loodgieter / timmerman / ..."></label>
+      <label>E-mail <input type="email" name="email"></label>
+      <label>Telefoon <input type="text" name="telefoon"></label>
+    </span>
+    <div style="margin-top:.6rem"><button class="btn" type="submit">Toevoegen</button></div>
+  </form>
+</div>
+
+<div class="card">
+  {% if vakmannen %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Naam</th><th>Vak</th><th>E-mail</th><th>Telefoon</th><th></th></tr>
+    {% for v in vakmannen %}
+    <tr {% if not v.actief %}style="color:var(--muted)"{% endif %}>
+      <td>{{ v.naam }}{% if not v.actief %} <span class="pil pil-neutral">non-actief</span>{% endif %}</td>
+      <td>{{ v.vak or '-' }}</td>
+      <td>{% if v.email %}<a href="mailto:{{ v.email }}">{{ v.email }}</a>{% else %}-{% endif %}</td>
+      <td>{% if v.telefoon %}<a href="tel:{{ v.telefoon }}">{{ v.telefoon }}</a>{% else %}-{% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('vakman_actief', vakman_id=v.id) }}" style="display:inline">
+          <input type="hidden" name="actief" value="{{ '0' if v.actief else '1' }}">
+          <button class="btn btn-secondary btn-xs" type="submit">{{ 'Op non-actief' if v.actief else 'Heractiveren' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nog geen klusjesmannen. Voeg er hierboven een toe.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <a class="btn btn-secondary" href="{{ url_for('onderhoud_overzicht') }}">Terug naar onderhoud</a>
+</div>
+{% endblock %}
