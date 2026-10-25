@@ -146,7 +146,26 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   `google-service-account.json`). `service_account_email()` toont dat adres.
 - **Drive (documenten/contracten)** = via **rclone** op de eigen Google-login van de
   gebruiker (2 TB). Mappen: `Steenhub <pandnaam>/` (Huidige/Oude huurders), plus
-  `Steenhub getekende documenten`.
+  `Steenhub getekende documenten`. rclone-config (token) in `/app/data/rclone.conf`
+  (`RCLONE_CONFIG`), remotenaam `gdrive`, `RCLONE_REMOTE=gdrive:<hoofdmap>` — overleeft
+  deploys (ligt in het `./data`-volume).
+- **rclone draait sinds okt 2026 op een EIGEN Google-OAuth-client** (Google Cloud-project
+  `steenhub-drive2`, Desktop-app-client, consent screen **External + In production**), niet
+  meer op rclone's gedeelde `client_id` (die wordt "ergens in 2026" uitgezet). Production is
+  nodig: in *Testing* verlopen de Drive-tokens na 7 dagen. De eigen `client_id`/`client_secret`
+  staan in de Console (project `steenhub-drive2`) en in `rclone.conf` — **nooit in git**.
+  Opnieuw koppelen = `docker compose exec -it app rclone config` → edit `gdrive` → client_id/
+  secret invullen → "Use auto config?" **n** (VPS heeft geen browser) → de getoonde
+  `rclone authorize "drive" "..."` op een toestel mét browser draaien (bv. Termux op Android)
+  → JSON terugplakken. Zie README §rclone.
+- **Drive-mapnaam = letterlijk `Steenhub <pand.naam>`** (afgeleid van de *wijzigbare* pandnaam,
+  niet van de vaste slug — zie `drive_sync.pand_root`). Een pand hernoemen in de app hernoemt
+  daarom sinds okt 2026 ook de Drive-map automatisch mee (`drive_sync.hernoem_pand_map`, vanuit
+  `pand_bewerken`); vóór die fix "weesde" een hernoeming de hele map (WWSO-rapporten/huurders
+  onvindbaar). Handmatig een pandnaam wijzigen? Hernoem dan óók de Drive-map mee.
+- **WWSO-rapporten** staan per pand in `wwso/<jaartal>/<kamernaam>.pdf` (relatief t.o.v. de
+  pand-hoofdmap) en worden als bijlage bij het concept-contract gevoegd (`webapp/wwso.py`).
+  rclone/Drive-paden zijn **hoofdlettergevoelig**: de map moet exact `wwso` heten (niet `WWSO`).
 - **Waarom die splitsing:** het service account heeft **0 GB eigen Drive-opslag**
   (`storageQuotaExceeded`), dus het kan zelf geen bestanden/sheets bezitten. Daarom
   is "nieuw pand → sheet aanmaken" **half-automatisch**: gebruiker maakt zelf een
