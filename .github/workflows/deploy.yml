@@ -28,6 +28,6 @@ jobs:
             # service-lijst herbouwde voorheen elke app (gewicht, kansen, scanners,
             # caddy) parallel, wat het geheugen op de 2 GB-VPS opvrat en de server
             # platlegde. Met cache (geen --no-cache) zijn dit lichte builds.
-            docker compose build app dagelijkse-check winst-snapshot
-            docker compose up -d app dagelijkse-check winst-snapshot
+            docker compose build app dagelijkse-check winst-snapshot mail-inname
+            docker compose up -d app dagelijkse-check winst-snapshot mail-inname
           '

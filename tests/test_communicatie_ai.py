@@ -213,6 +213,35 @@ def test_beantwoord_vraag_roept_claude_met_vraagprompt(monkeypatch):
     assert "Wat is de huur?" in gezien["user"]
 
 
+def test_lees_beoordeling_ja_met_concept():
+    tekst = "ANTWOORD NODIG: ja\n\nHoi Nushka, we pakken het op. Groeten"
+    nodig, concept = ai._lees_beoordeling(tekst)
+    assert nodig is True
+    assert concept.startswith("Hoi Nushka")
+
+
+def test_lees_beoordeling_nee_geeft_geen_concept():
+    nodig, concept = ai._lees_beoordeling("ANTWOORD NODIG: nee")
+    assert nodig is False
+    assert concept is None
+
+
+def test_lees_beoordeling_ja_maar_leeg_concept_telt_als_nee():
+    # 'ja' zonder enige concepttekst eronder -> niets om te versturen.
+    nodig, concept = ai._lees_beoordeling("ANTWOORD NODIG: ja")
+    assert nodig is False and concept is None
+
+
+def test_bouw_beoordeling_prompt_bevat_mail_en_eerste_regel_instructie():
+    systeem, user = ai.bouw_beoordeling_prompt(
+        pand_naam="P", huurder_naam="Nushka", onderwerp="Lekkage",
+        mail_tekst="De kraan lekt.", samenvatting="Dossier met veel lekkages.",
+    )
+    assert "ANTWOORD NODIG" in systeem
+    assert "De kraan lekt." in user and "Lekkage" in user
+    assert "Dossier met veel lekkages." in user
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",

@@ -386,6 +386,17 @@ def voeg_bericht_toe(
     return int(cur.lastrowid)
 
 
+def bericht_met_message_id(conn: sqlite3.Connection, message_id: str) -> sqlite3.Row | None:
+    """Zoekt een bericht op zijn (niet-lege) Message-ID. Voor de dagelijkse
+    mail-inname: zo kan al vóór het aanmaken van een ticket gecheckt worden of
+    deze mail al eerder verwerkt is (idempotent, geen dubbele tickets)."""
+    if not message_id:
+        return None
+    return conn.execute(
+        "SELECT * FROM berichten WHERE message_id = ?", (message_id,)
+    ).fetchone()
+
+
 def berichten_van_contact(conn: sqlite3.Connection, contact_id: int) -> list[sqlite3.Row]:
     """Alle berichten van een contact, chronologisch (oudste eerst) - voor de
     tijdlijn op de huurderspagina."""
@@ -579,13 +590,22 @@ def get_actie(conn: sqlite3.Connection, actie_id: int) -> sqlite3.Row | None:
 
 
 def lijst_acties(
-    conn: sqlite3.Connection, pand_slugs: list[str] | None = None, status: str = ACTIE_OPEN
+    conn: sqlite3.Connection, pand_slugs: list[str] | None = None, status: str = ACTIE_OPEN,
+    inclusief_ongekoppeld: bool = False,
 ) -> list[sqlite3.Row]:
+    """Open acties, nieuwste bovenaan. `pand_slugs` beperkt tot panden waar de
+    gebruiker bij mag (None = geen beperking). `inclusief_ongekoppeld` neemt ook
+    acties zonder pand (pand_slug IS NULL) mee - bv. een binnengekomen mail die
+    niet aan een huurder gekoppeld kon worden; bedoeld voor volledige-toegang-
+    gebruikers die die handmatig afhandelen."""
     sql = "SELECT * FROM acties WHERE status = ?"
     params: list = [status]
     if pand_slugs is not None:
-        sql += f" AND pand_slug IN ({_plaatshouders(pand_slugs)})"
+        clausule = f"pand_slug IN ({_plaatshouders(pand_slugs)})"
         params.extend(pand_slugs)
+        if inclusief_ongekoppeld:
+            clausule = f"({clausule} OR pand_slug IS NULL)"
+        sql += f" AND {clausule}"
     sql += " ORDER BY aangemaakt DESC, id DESC"
     return conn.execute(sql, params).fetchall()
 
@@ -611,12 +631,18 @@ def zet_actie_status(conn: sqlite3.Connection, actie_id: int, status: str) -> No
     conn.commit()
 
 
-def tel_open_acties(conn: sqlite3.Connection, pand_slugs: list[str] | None = None) -> int:
+def tel_open_acties(
+    conn: sqlite3.Connection, pand_slugs: list[str] | None = None,
+    inclusief_ongekoppeld: bool = False,
+) -> int:
     sql = "SELECT COUNT(*) AS n FROM acties WHERE status = ?"
     params: list = [ACTIE_OPEN]
     if pand_slugs is not None:
-        sql += f" AND pand_slug IN ({_plaatshouders(pand_slugs)})"
+        clausule = f"pand_slug IN ({_plaatshouders(pand_slugs)})"
         params.extend(pand_slugs)
+        if inclusief_ongekoppeld:
+            clausule = f"({clausule} OR pand_slug IS NULL)"
+        sql += f" AND {clausule}"
     return int(conn.execute(sql, params).fetchone()["n"])
 
 

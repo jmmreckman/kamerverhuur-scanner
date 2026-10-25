@@ -260,6 +260,58 @@ def beantwoord_vraag(
     return _vraag_claude(config, systeem, user, max_tokens=1500).strip()
 
 
+_SYSTEEM_BEOORDELING = (
+    "Je bent de beheerder van studentenkamers (Steenhub). Er is een mail binnengekomen "
+    "van of over een huurder. Beoordeel of er een antwoord aan de huurder nodig is. "
+    "Antwoord ALTIJD met op de eerste regel exact 'ANTWOORD NODIG: ja' of 'ANTWOORD NODIG: nee'. "
+    "Is een antwoord nodig, schrijf daaronder (na een lege regel) het conceptantwoord: alleen de "
+    "mailtekst zelf, met een passende aanhef en afsluiting, geen onderwerp. Is er geen antwoord "
+    "nodig (bv. een bevestiging, bedankje of iets puur informatiefs), schrijf dan niets onder de "
+    "eerste regel.\n\n" + SYSTEEM_STIJL
+)
+
+
+def bouw_beoordeling_prompt(
+    *, pand_naam: str, huurder_naam: str, onderwerp: str | None, mail_tekst: str,
+    samenvatting: str | None = None,
+) -> tuple[str, str]:
+    """(systeemprompt, user-tekst) om een binnengekomen mail te beoordelen - pure
+    string-bouw, los testbaar."""
+    user = f"Pand: {pand_naam}\nHuurder: {huurder_naam}\n\n"
+    if samenvatting:
+        user += f"Achtergrond (samenvatting van het dossier):\n{samenvatting}\n\n"
+    user += f"Onderwerp: {onderwerp or '(geen)'}\n\nBinnengekomen mail:\n{mail_tekst}\n\n"
+    user += "Beoordeel of een antwoord nodig is en schrijf, zo ja, het concept."
+    return _SYSTEEM_BEOORDELING, user
+
+
+def _lees_beoordeling(tekst: str) -> tuple[bool, str | None]:
+    """Splitst het AI-antwoord in (antwoord_nodig, concept). Robuust: kijkt naar
+    'ja'/'nee' op de eerste regel; het concept is wat eronder staat."""
+    regels = (tekst or "").strip().splitlines()
+    if not regels:
+        return False, None
+    eerste = regels[0].lower()
+    nodig = "nodig" in eerste and "ja" in eerste.split(":", 1)[-1]
+    if not nodig:
+        return False, None
+    concept = "\n".join(regels[1:]).strip()
+    return (True, schoon_stijl(concept)) if concept else (False, None)
+
+
+def beoordeel_inkomende_mail(
+    config: Config, *, pand_naam: str, huurder_naam: str, onderwerp: str | None,
+    mail_tekst: str, samenvatting: str | None = None,
+) -> tuple[bool, str | None]:
+    """Laat de AI beoordelen of een binnengekomen mail een antwoord vraagt en
+    levert (antwoord_nodig, concept). Eén AI-aanroep. Bij 'nee' is concept None."""
+    systeem, user = bouw_beoordeling_prompt(
+        pand_naam=pand_naam, huurder_naam=huurder_naam, onderwerp=onderwerp,
+        mail_tekst=mail_tekst, samenvatting=samenvatting,
+    )
+    return _lees_beoordeling(_vraag_claude(config, systeem, user, max_tokens=1500))
+
+
 # Boven dit aantal tekens passen de berichten niet comfortabel in één
 # AI-aanroep; dan vatten we in stukken samen en voegen we die samen (map-reduce),
 # zodat ook een hele lange huurder-historie volledig meetelt.

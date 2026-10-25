@@ -92,6 +92,20 @@ class Config:
     gmail_imap_password: str | None = None
     gmail_eigen_adres: str | None = None
 
+    # Dagelijkse inname (Fase 2): twee eigen Steenhub-mailboxen die 1x per dag
+    # worden uitgelezen (zie scripts/mail_inname.py en webapp/mail_inname.py).
+    # onderhoud@ -> opent een onderhoudsticket, communicatie@ -> logt bij de
+    # huurder + laat de AI beoordelen of er een antwoord/taak nodig is (in de
+    # goedkeuringswachtrij). Optioneel: zonder user/password doet die mailbox
+    # niets. IMAP via Strato (imap.strato.com). Berichten worden aan de juiste
+    # huurder gekoppeld door in de mail te zoeken naar een bekend huurder-adres
+    # (werkt dus ook als jij een mail doorstuurt - dan is de afzender immers jij).
+    steenhub_imap_host: str = "imap.strato.com"
+    onderhoud_imap_user: str | None = None
+    onderhoud_imap_password: str | None = None
+    communicatie_imap_user: str | None = None
+    communicatie_imap_password: str | None = None
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -123,4 +137,9 @@ class Config:
             gmail_imap_user=os.environ.get("GMAIL_IMAP_USER", "").strip() or None,
             gmail_imap_password=os.environ.get("GMAIL_IMAP_PASSWORD", "").strip() or None,
             gmail_eigen_adres=os.environ.get("GMAIL_EIGEN_ADRES", "").strip() or None,
+            steenhub_imap_host=os.environ.get("STEENHUB_IMAP_HOST", "imap.strato.com").strip() or "imap.strato.com",
+            onderhoud_imap_user=os.environ.get("ONDERHOUD_IMAP_USER", "").strip() or None,
+            onderhoud_imap_password=os.environ.get("ONDERHOUD_IMAP_PASSWORD", "").strip() or None,
+            communicatie_imap_user=os.environ.get("COMMUNICATIE_IMAP_USER", "").strip() or None,
+            communicatie_imap_password=os.environ.get("COMMUNICATIE_IMAP_PASSWORD", "").strip() or None,
         )

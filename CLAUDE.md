@@ -132,16 +132,27 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   Gmail-IMAP-backfill; slaat al-samengevatte huurders over), `webapp/whatsapp_import.py`
   (parset een geëxporteerde WhatsApp-chat `.txt` → tijdlijn; per huurder zelf
   uploaden/plakken, géén WhatsApp-API; dedup via gesynthetiseerd message_id).
+  **Fase 2 — dagelijkse mail-inname** (okt 2026, slapend tot creds): `webapp/
+  mail_inname.py` + `scripts/mail_inname.py` (compose-service `mail-inname`, 1x/dag
+  ~07:00). Leest twee eigen Strato-mailboxen: `onderhoud@` opent een
+  onderhoudsticket bij de huurder + logt de mail; `communicatie@` logt bij de
+  huurder (kanaal communicatie) + AI beoordeelt of een antwoord nodig is -> concept
+  in de goedkeuringswachtrij. **Koppeling: de mail wordt doorzocht op een bekend
+  huurder-adres** (werkt dus ook bij doorsturen, waar jij de afzender bent); geen
+  match -> "nog koppelen"-actie (`type inkomend-ongekoppeld`, pand_slug NULL, alleen
+  zichtbaar voor volledige-toegang). Idempotent op Message-ID + \Seen-na-verwerking.
   Samenvatting-bijwerken is incrementeel (alleen nieuwe berichten invouwen) met een
   knop "Volledig opnieuw". AI-calls hebben een 45s-timeout (gunicorn-worker 120s).
   Schermen: communicatie per huurder (Huurders →
   Communicatie), centrale **Onderhoud**-tickets, **Openstaande acties**
   (goedkeuringswachtrij → versturen via de bestaande mailer), klusjesmannen-beheer,
   en "Wat vraagt aandacht" op de pandkiezer-startpagina. Alles respecteert de
-  pand-toegang per gebruiker. Nog te doen (wacht op inloggegevens): Gmail
-  app-wachtwoord voor de backfill; `onderhoud@` + IMAP voor de dagelijkse inname
-  (Fase 2). Nieuwe env: `BEHEERDER_TELEFOON` (vakman-mail), `GMAIL_IMAP_USER/
-  GMAIL_IMAP_PASSWORD/GMAIL_EIGEN_ADRES` (backfill). Plan: `docs/communicatie-onderhoud-plan.md`.
+  pand-toegang per gebruiker. Nog aan te zetten: de mailboxen `onderhoud@`/
+  `communicatie@` aanmaken (Strato) + hun IMAP-creds als env. Backfill was eenmalig
+  (Gmail app-wachtwoord mag ingetrokken). Nieuwe env: `BEHEERDER_TELEFOON`
+  (vakman-mail), `GMAIL_IMAP_USER/GMAIL_IMAP_PASSWORD/GMAIL_EIGEN_ADRES` (backfill),
+  `STEENHUB_IMAP_HOST` (default imap.strato.com), `ONDERHOUD_IMAP_USER/PASSWORD`,
+  `COMMUNICATIE_IMAP_USER/PASSWORD` (Fase 2). Plan: `docs/communicatie-onderhoud-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,

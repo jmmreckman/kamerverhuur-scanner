@@ -43,6 +43,21 @@ services:
       - ./data:/app/data
     command: ["python3", "-m", "scripts.winst_snapshot"]
 
+  # Leest 1x per dag de eigen Steenhub-mailboxen uit (onderhoud@ -> ticket,
+  # communicatie@ -> loggen + AI-beoordeling -> concept in de wachtrij). Zelfde
+  # image als 'app', ander opstartcommando. Zonder ONDERHOUD_IMAP_* /
+  # COMMUNICATIE_IMAP_* in app.env doet de service niets (slaapt). Zie
+  # scripts/mail_inname.py + webapp/mail_inname.py.
+  mail-inname:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "-m", "scripts.mail_inname"]
+
   # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
   # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
   # verder dan gedeelde hosting. Code + Dockerfile staan op een aparte

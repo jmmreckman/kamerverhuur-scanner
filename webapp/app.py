@@ -295,7 +295,8 @@ def create_app(config: Config | None = None) -> Flask:
             eigen_panden = [p for p in alle_panden if current_user.heeft_toegang(p.slug)]
             try:
                 open_acties_aantal = communicatie_db.tel_open_acties(
-                    _comm_db(), pand_slugs=[p.slug for p in eigen_panden]
+                    _comm_db(), pand_slugs=[p.slug for p in eigen_panden],
+                    inclusief_ongekoppeld=current_user.alle_panden,
                 )
             except Exception:
                 open_acties_aantal = 0
@@ -1701,12 +1702,16 @@ def create_app(config: Config | None = None) -> Flask:
         panden = _toegankelijke_panden()
         pand_namen = {p.slug: p.naam for p in panden}
         db = _comm_db()
-        acties = communicatie_db.lijst_acties(db, pand_slugs=[p.slug for p in panden])
+        acties = communicatie_db.lijst_acties(
+            db, pand_slugs=[p.slug for p in panden],
+            inclusief_ongekoppeld=current_user.alle_panden,
+        )
         rijen = []
         for a in acties:
             contact = communicatie_db.get_contact(db, a["contact_id"]) if a["contact_id"] else None
             rijen.append({
-                "actie": a, "pand_naam": pand_namen.get(a["pand_slug"], a["pand_slug"]),
+                "actie": a,
+                "pand_naam": pand_namen.get(a["pand_slug"], a["pand_slug"] or "Nog koppelen"),
                 "contact_naam": contact["naam"] if contact else None,
             })
         return render_template("acties_overzicht.html", rijen=rijen)

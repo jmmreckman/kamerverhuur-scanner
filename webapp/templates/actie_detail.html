@@ -4,7 +4,7 @@
 <div class="page-header">
   <h1>Concept goedkeuren</h1>
   <p class="muted">
-    {% if actie.type == 'concept-vakman' %}Mail aan de klusjesman{% else %}Bericht aan {{ contact.naam if contact else (actie.ontvanger or 'huurder') }}{% endif %}
+    {% if actie.type == 'inkomend-ongekoppeld' %}Binnengekomen mail (nog te koppelen){% elif actie.type == 'concept-vakman' %}Mail aan de klusjesman{% else %}Bericht aan {{ contact.naam if contact else (actie.ontvanger or 'huurder') }}{% endif %}
     &middot; {{ pand.naam if pand else actie.pand_slug }}
     {% if actie.klus_id %}&middot; <a href="{{ url_for('onderhoud_detail', klus_id=actie.klus_id) }}">bij onderhoudsticket</a>{% endif %}
     {% if contact and contact.kamer and not actie.klus_id %}&middot; <a href="{{ url_for('huurder_communicatie', pand_slug=actie.pand_slug, kamer_naam=contact.kamer) }}">alle communicatie</a>{% endif %}
@@ -12,7 +12,11 @@
 </div>
 
 <div class="card">
-  {% if actie.ontvanger %}
+  {% if actie.type == 'inkomend-ongekoppeld' %}
+  <div class="flash"><p>Deze mail kon niet automatisch aan een huurder gekoppeld worden. Lees 'm hieronder,
+    en log 'm daarna handmatig bij de juiste huurder (Huurders &rarr; Communicatie &rarr; Bericht loggen)
+    of open daar een ticket. Verwerp dit item als het is afgehandeld.</p></div>
+  {% elif actie.ontvanger %}
   <p>Wordt verstuurd naar <strong>{{ actie.ontvanger }}</strong>.</p>
   {% else %}
   <div class="flash"><p>Er is geen e-mailadres bekend voor deze huurder, dus versturen kan nog niet.
@@ -27,7 +31,9 @@
     <label>Onderwerp <input type="text" name="onderwerp" value="{{ actie.concept_onderwerp or '' }}"></label>
     <label>Bericht <textarea name="body" rows="12" style="width:100%;box-sizing:border-box">{{ actie.concept_body }}</textarea></label>
     <div style="margin-top:.7rem; display:flex; gap:.6rem; flex-wrap:wrap">
+      {% if actie.type != 'inkomend-ongekoppeld' %}
       <button class="btn" type="submit" formaction="{{ url_for('actie_versturen', actie_id=actie.id) }}">Goedkeuren &amp; versturen</button>
+      {% endif %}
       <button class="btn btn-secondary" type="submit">Wijzigingen opslaan</button>
     </div>
   </form>
