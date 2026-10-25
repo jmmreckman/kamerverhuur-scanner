@@ -12,9 +12,14 @@
   <form method="post" action="{{ url_for('onderhoud_nieuw') }}">
     <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <label>Pand
-        <select name="pand" required>
+        <select name="pand" id="nieuw-pand" required>
           <option value="">Kies een pand...</option>
           {% for p in panden %}<option value="{{ p.slug }}">{{ p.naam }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Huurder (optioneel)
+        <select name="kamer" id="nieuw-huurder">
+          <option value="">(geen specifieke huurder, pandbreed)</option>
         </select>
       </label>
       <label>Titel <input type="text" name="titel" placeholder="bv. Lekkage badkamer" required></label>
@@ -22,8 +27,30 @@
     <label>Omschrijving (optioneel) <textarea name="omschrijving" rows="3" style="width:100%;box-sizing:border-box"></textarea></label>
     <div style="margin-top:.6rem"><button class="btn" type="submit">Ticket aanmaken</button></div>
   </form>
-  <p class="muted" style="margin-top:.5rem">Tip: een ticket dat bij een specifieke huurder hoort,
-     maak je het makkelijkst via Huurders &rarr; Communicatie &rarr; "Onderhoudsticket aanmaken" (dan is 'ie meteen gekoppeld).</p>
+  <p class="muted" style="margin-top:.5rem">Kies een pand, dan kun je er direct een huurder bij kiezen.
+     Laat je de huurder leeg, dan is het een pandbreed ticket.</p>
+  <script>
+  (function () {
+    var pandSel = document.getElementById('nieuw-pand');
+    var huurderSel = document.getElementById('nieuw-huurder');
+    if (!pandSel || !huurderSel) return;
+    pandSel.addEventListener('change', function () {
+      huurderSel.innerHTML = '<option value="">(geen specifieke huurder, pandbreed)</option>';
+      if (!pandSel.value) return;
+      fetch('{{ url_for("onderhoud_kamers") }}?pand=' + encodeURIComponent(pandSel.value))
+        .then(function (r) { return r.json(); })
+        .then(function (rows) {
+          rows.forEach(function (k) {
+            var o = document.createElement('option');
+            o.value = k.kamer;
+            o.textContent = k.kamer + ' - ' + k.naam;
+            huurderSel.appendChild(o);
+          });
+        })
+        .catch(function () {});
+    });
+  })();
+  </script>
 </div>
 
 {# --- Filters ------------------------------------------------------------- #}

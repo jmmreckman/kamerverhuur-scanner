@@ -1230,6 +1230,25 @@ def create_app(config: Config | None = None) -> Flask:
             statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
         )
 
+    @app.route("/onderhoud/kamers")
+    @login_required
+    def onderhoud_kamers():
+        """JSON-lijstje huurders (kamer + naam) voor een pand - voor de
+        huurder-keuze in het 'nieuw ticket'-formulier (vult zich pas als je een
+        pand kiest, zodat de sheet alleen gelezen wordt wanneer nodig)."""
+        pand_slug = request.args.get("pand", "")
+        if not current_user.heeft_toegang(pand_slug):
+            return jsonify([])
+        pand = find_pand(_properties(), pand_slug)
+        if pand is None:
+            return jsonify([])
+        try:
+            kamers = SheetClient(config, pand).get_kamers()
+        except Exception:
+            app.logger.exception("Huurders ophalen voor onderhoud-ticket (pand %s) mislukt.", pand_slug)
+            return jsonify([])
+        return jsonify([{"kamer": k.kamer, "naam": k.naam} for k in kamers if k.naam])
+
     @app.route("/onderhoud/nieuw", methods=["POST"])
     @login_required
     def onderhoud_nieuw():
@@ -1239,13 +1258,30 @@ def create_app(config: Config | None = None) -> Flask:
             flash("Kies een pand en geef een korte titel op.")
             return redirect(url_for("onderhoud_overzicht"))
         db = _comm_db()
+        # Optioneel meteen aan een huurder koppelen (kamer uit het formulier).
+        contact_id, kamer_label = None, None
+        kamer_naam = request.form.get("kamer", "").strip()
+        if kamer_naam:
+            pand = find_pand(_properties(), pand_slug)
+            try:
+                for k in SheetClient(config, pand).get_kamers():
+                    if k.kamer == kamer_naam and k.naam:
+                        contact_id = communicatie_db.seed_contact(
+                            db, naam=k.naam, pand_slug=pand_slug, kamer=k.kamer,
+                            email=k.email, telefoon=k.telefoonnummer,
+                        )
+                        kamer_label = k.kamer
+                        break
+            except Exception:
+                app.logger.exception("Huurder koppelen aan nieuw ticket (pand %s) mislukt.", pand_slug)
         omschrijving = request.form.get("omschrijving", "").strip() or None
         klus_id = communicatie_db.maak_klus(
-            db, titel=titel, pand_slug=pand_slug, omschrijving=omschrijving,
+            db, titel=titel, pand_slug=pand_slug, contact_id=contact_id, kamer=kamer_label,
+            omschrijving=omschrijving,
         )
         if omschrijving:
             communicatie_db.voeg_bericht_toe(
-                db, contact_id=None, pand_slug=pand_slug, kanaal="onderhoud",
+                db, contact_id=contact_id, pand_slug=pand_slug, kanaal="onderhoud",
                 richting="in", body=omschrijving, bron="handmatig", klus_id=klus_id,
             )
         return redirect(url_for("onderhoud_detail", klus_id=klus_id))
