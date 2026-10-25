@@ -1206,18 +1206,35 @@ def create_app(config: Config | None = None) -> Flask:
         if not kamer.naam:
             abort(404)
         db, contact_id = _contact_voor_kamer(kamer)
-        berichten = communicatie_db.berichten_van_contact(db, contact_id)
-        if not berichten:
+        if not communicatie_db.berichten_van_contact(db, contact_id):
             flash("Er zijn nog geen berichten om samen te vatten.")
-        else:
+            return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        naam = kamer.naam
+
+        def _samenvatten_op_achtergrond():
+            # Eigen db-verbinding: de request-verbinding is bij terugkeer al gesloten.
+            eigen_db = communicatie_db.verbind(communicatie_db.pad(config.state_dir))
             try:
+                berichten = communicatie_db.berichten_van_contact(eigen_db, contact_id)
                 samenvatting = communicatie_ai.genereer_samenvatting(
-                    config, huurder_naam=kamer.naam, berichten=berichten
+                    config, huurder_naam=naam, berichten=berichten
                 )
-                communicatie_db.zet_samenvatting(db, contact_id, samenvatting)
-                flash("Samenvatting bijgewerkt.")
-            except communicatie_ai.CommunicatieAIError as exc:
-                flash(str(exc))
+                communicatie_db.zet_samenvatting(eigen_db, contact_id, samenvatting)
+            except Exception:
+                app.logger.exception("Samenvatting op de achtergrond is mislukt (contact %s).", contact_id)
+            finally:
+                eigen_db.close()
+
+        # Op de achtergrond draaien: bij een lange historie duurt het samenvatten
+        # (map-reduce, meerdere AI-aanroepen) te lang voor één request - dat zou de
+        # verbinding laten aflopen. Daarom teruggeven en het werk apart doen.
+        if app.testing:
+            _samenvatten_op_achtergrond()
+            flash("Samenvatting bijgewerkt.")
+        else:
+            threading.Thread(target=_samenvatten_op_achtergrond, daemon=True).start()
+            flash("De samenvatting wordt op de achtergrond opgesteld. Ververs over een halve "
+                  "minuut (bij een heel lange historie kan het een paar minuten duren).")
         return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/onderhoud-nieuw", methods=["POST"])
