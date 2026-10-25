@@ -156,6 +156,28 @@ def test_bouw_antwoord_prompt_met_relevante_oudere_berichten():
     assert "Rietdijk" in user
 
 
+def test_werk_samenvatting_bij_prompt_bevat_bestaand_en_nieuw(monkeypatch):
+    # Vang de AI-aanroep af en controleer dat de bestaande samenvatting en de
+    # nieuwe berichten allebei in de prompt zitten, met de juiste instructie.
+    gezien = {}
+
+    def nep_vraag(config, systeem, user, *, max_tokens):
+        gezien["systeem"], gezien["user"] = systeem, user
+        return "bijgewerkte samenvatting"
+
+    monkeypatch.setattr(ai, "_vraag_claude", nep_vraag)
+    uit = ai.werk_samenvatting_bij(
+        config=None, huurder_naam="Nushka",
+        bestaande_samenvatting="Lopende lekkage sinds 2022.",
+        nieuwe_berichten=[{"datum": "2026-10-01T10:00:00+00:00", "richting": "in",
+                           "van": "n@x.nl", "onderwerp": "Update", "body": "Rietdijk komt dinsdag."}],
+    )
+    assert uit == "bijgewerkte samenvatting"
+    assert "Lopende lekkage sinds 2022." in gezien["user"]
+    assert "Rietdijk komt dinsdag." in gezien["user"]
+    assert "EEN volledige" in gezien["user"]  # instructie: geen losse aanplak
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",

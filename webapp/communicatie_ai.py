@@ -241,7 +241,7 @@ def genereer_samenvatting(config: Config, *, huurder_naam: str, berichten) -> st
     volledig = formatteer_geschiedenis(berichten)
     if len(volledig) <= _MAX_CHARS_SAMENVATTING:
         systeem, user = bouw_samenvatting_prompt(huurder_naam=huurder_naam, geschiedenis_tekst=volledig)
-        return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=800))
+        return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=2000))
 
     deel_samenvattingen = []
     chunks = _chunk_berichten(berichten, _MAX_CHARS_SAMENVATTING)
@@ -250,7 +250,7 @@ def genereer_samenvatting(config: Config, *, huurder_naam: str, berichten) -> st
             huurder_naam=huurder_naam, geschiedenis_tekst=formatteer_geschiedenis(chunk),
         )
         user += f"\n\n(Dit is deel {i} van {len(chunks)} van de historie.)"
-        deel_samenvattingen.append(_vraag_claude(config, systeem, user, max_tokens=700))
+        deel_samenvattingen.append(_vraag_claude(config, systeem, user, max_tokens=900))
 
     combineer_user = (
         f"Hieronder staan {len(deel_samenvattingen)} deelsamenvattingen van de communicatie met "
@@ -259,7 +259,30 @@ def genereer_samenvatting(config: Config, *, huurder_naam: str, berichten) -> st
         "punten (met data of jaartallen waar relevant):\n\n"
         + "\n\n---\n\n".join(deel_samenvattingen)
     )
-    return schoon_stijl(_vraag_claude(config, _SYSTEEM_SAMENVATTING, combineer_user, max_tokens=1000))
+    # Ruime tokenlimiet: bij een zware huurder (bv. Nushka) wil de samenvatting
+    # langer zijn dan ~750 woorden - anders wordt het slot afgekapt.
+    return schoon_stijl(_vraag_claude(config, _SYSTEEM_SAMENVATTING, combineer_user, max_tokens=2500))
+
+
+def werk_samenvatting_bij(
+    config: Config, *, huurder_naam: str, bestaande_samenvatting: str, nieuwe_berichten
+) -> str:
+    """Werkt een bestaande samenvatting incrementeel bij met alleen de nieuwe
+    berichten (één AI-aanroep). Goedkoop en snel: de bestaande samenvatting gaat
+    als basis mee en de nieuwe ontwikkelingen worden erin verwerkt, zodat het
+    resultaat weer één volledige, samenhangende samenvatting is (geen losse
+    aanplakstrook). Voor een volledige herberekening: genereer_samenvatting."""
+    nieuw_tekst = formatteer_geschiedenis(nieuwe_berichten)
+    user = (
+        f"Hieronder staat de bestaande samenvatting van de communicatie met {huurder_naam}, "
+        "gevolgd door de nieuwe berichten die daarna zijn binnengekomen. Werk de samenvatting "
+        "bij: verwerk de nieuwe ontwikkelingen op de juiste plek, houd bestaande afspraken en "
+        "lopende zaken intact, en lever opnieuw EEN volledige, heldere samenvatting (dus geen "
+        "losse aanvulling onderaan en geen herhaling). Gebruik dezelfde opzet met kopjes.\n\n"
+        f"=== BESTAANDE SAMENVATTING ===\n{bestaande_samenvatting}\n\n"
+        f"=== NIEUWE BERICHTEN ===\n{nieuw_tekst}"
+    )
+    return schoon_stijl(_vraag_claude(config, _SYSTEEM_SAMENVATTING, user, max_tokens=2500))
 
 
 # --- intern -----------------------------------------------------------------

@@ -44,8 +44,18 @@ ACTIE_VERWORPEN = "verworpen"
 
 
 def _nu() -> str:
-    """Huidige tijd als ISO-8601 (UTC) string - sorteerbaar en ondubbelzinnig."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    """Huidige tijd als ISO-8601 (UTC) string - sorteerbaar en ondubbelzinnig.
+    Microseconde-resolutie, zodat een watermerk (voor het incrementeel bijwerken
+    van samenvattingen) en een vlak daarna toegevoegd bericht niet in dezelfde
+    'tik' vallen en de strikte vergelijking in berichten_sinds blijft kloppen."""
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def nu() -> str:
+    """Publieke variant van _nu() - zelfde ISO-UTC-formaat, zodat aanroepers een
+    watermerk (bv. vlak voor het samenvatten) kunnen vastleggen dat vergelijkbaar
+    is met de `aangemaakt`-kolommen in de database."""
+    return _nu()
 
 
 def pad(state_dir: str) -> str:
@@ -320,10 +330,17 @@ def lijst_contacten(
     return conn.execute(sql, params).fetchall()
 
 
-def zet_samenvatting(conn: sqlite3.Connection, contact_id: int, tekst: str) -> None:
+def zet_samenvatting(
+    conn: sqlite3.Connection, contact_id: int, tekst: str, bijgewerkt: str | None = None
+) -> None:
+    """Slaat de samenvatting op. `bijgewerkt` is het watermerk dat aangeeft tot
+    wanneer de samenvatting berichten meeneemt; standaard 'nu'. Geef een eerder
+    vastgelegd watermerk mee (vlak voor het samenvatten) zodat berichten die
+    tijdens het samenvatten binnenkomen de volgende keer alsnog worden meegenomen,
+    in plaats van tussen wal en schip te vallen."""
     conn.execute(
         "UPDATE contacten SET samenvatting = ?, samenvatting_bijgewerkt = ? WHERE id = ?",
-        (tekst, _nu(), contact_id),
+        (tekst, bijgewerkt or _nu(), contact_id),
     )
     conn.commit()
 
@@ -374,6 +391,20 @@ def berichten_van_contact(conn: sqlite3.Connection, contact_id: int) -> list[sql
     tijdlijn op de huurderspagina."""
     return conn.execute(
         "SELECT * FROM berichten WHERE contact_id = ? ORDER BY datum, id", (contact_id,)
+    ).fetchall()
+
+
+def berichten_sinds(
+    conn: sqlite3.Connection, contact_id: int, sinds: str
+) -> list[sqlite3.Row]:
+    """Berichten van een contact die NA `sinds` aan de database zijn toegevoegd
+    (vergelijk op `aangemaakt`, niet op de e-maildatum), chronologisch. Zo pakt
+    het incrementeel bijwerken van de samenvatting precies de berichten die sinds
+    de laatste samenvatting zijn binnengekomen - ongeacht hun oorspronkelijke
+    datum (bv. een laat teruggevonden oude mail telt ook als 'nieuw')."""
+    return conn.execute(
+        "SELECT * FROM berichten WHERE contact_id = ? AND aangemaakt > ? ORDER BY datum, id",
+        (contact_id, sinds),
     ).fetchall()
 
 

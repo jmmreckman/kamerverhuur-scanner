@@ -1224,15 +1224,48 @@ def create_app(config: Config | None = None) -> Flask:
             return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
         naam = kamer.naam
 
+        # Watermerk NU vastleggen (voor het samenvatten): berichten die tijdens het
+        # samenvatten binnenkomen vallen dan de volgende keer niet buiten de boot.
+        watermerk = communicatie_db.nu()
+        volledig_opnieuw = request.form.get("volledig") == "1"
+        contact = communicatie_db.get_contact(db, contact_id)
+        heeft_samenvatting = bool(contact and contact["samenvatting"]
+                                  and contact["samenvatting_bijgewerkt"])
+        incrementeel = heeft_samenvatting and not volledig_opnieuw
+        if incrementeel:
+            nieuwe = communicatie_db.berichten_sinds(db, contact_id, contact["samenvatting_bijgewerkt"])
+            if not nieuwe:
+                flash("De samenvatting is al bij: er zijn geen nieuwe berichten sinds de vorige keer.")
+                return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
         def _samenvatten_op_achtergrond():
             # Eigen db-verbinding: de request-verbinding is bij terugkeer al gesloten.
             eigen_db = communicatie_db.verbind(communicatie_db.pad(config.state_dir))
             try:
-                berichten = communicatie_db.berichten_van_contact(eigen_db, contact_id)
-                samenvatting = communicatie_ai.genereer_samenvatting(
-                    config, huurder_naam=naam, berichten=berichten
-                )
-                communicatie_db.zet_samenvatting(eigen_db, contact_id, samenvatting)
+                if incrementeel:
+                    nieuwe_b = communicatie_db.berichten_sinds(
+                        eigen_db, contact_id, contact["samenvatting_bijgewerkt"]
+                    )
+                    nieuw_tekst = communicatie_ai.formatteer_geschiedenis(nieuwe_b)
+                    # Veel nieuwe berichten (bv. lang niet bijgewerkt)? Dan toch een
+                    # volledige herberekening, anders incrementeel invouwen (1 call).
+                    if nieuwe_b and len(nieuw_tekst) <= communicatie_ai._MAX_CHARS_SAMENVATTING:
+                        samenvatting = communicatie_ai.werk_samenvatting_bij(
+                            config, huurder_naam=naam,
+                            bestaande_samenvatting=contact["samenvatting"],
+                            nieuwe_berichten=nieuwe_b,
+                        )
+                    else:
+                        berichten = communicatie_db.berichten_van_contact(eigen_db, contact_id)
+                        samenvatting = communicatie_ai.genereer_samenvatting(
+                            config, huurder_naam=naam, berichten=berichten
+                        )
+                else:
+                    berichten = communicatie_db.berichten_van_contact(eigen_db, contact_id)
+                    samenvatting = communicatie_ai.genereer_samenvatting(
+                        config, huurder_naam=naam, berichten=berichten
+                    )
+                communicatie_db.zet_samenvatting(eigen_db, contact_id, samenvatting, bijgewerkt=watermerk)
             except Exception:
                 app.logger.exception("Samenvatting op de achtergrond is mislukt (contact %s).", contact_id)
             finally:
@@ -1244,10 +1277,14 @@ def create_app(config: Config | None = None) -> Flask:
         if app.testing:
             _samenvatten_op_achtergrond()
             flash("Samenvatting bijgewerkt.")
+        elif incrementeel:
+            threading.Thread(target=_samenvatten_op_achtergrond, daemon=True).start()
+            flash(f"De samenvatting wordt op de achtergrond bijgewerkt met {len(nieuwe)} nieuw(e) "
+                  "bericht(en). Ververs over een halve minuut.")
         else:
             threading.Thread(target=_samenvatten_op_achtergrond, daemon=True).start()
-            flash("De samenvatting wordt op de achtergrond opgesteld. Ververs over een halve "
-                  "minuut (bij een heel lange historie kan het een paar minuten duren).")
+            flash("De samenvatting wordt volledig opnieuw opgesteld op de achtergrond. Ververs over "
+                  "een halve minuut (bij een heel lange historie kan het een paar minuten duren).")
         return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/onderhoud-nieuw", methods=["POST"])

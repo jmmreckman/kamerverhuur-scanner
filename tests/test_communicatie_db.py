@@ -92,6 +92,26 @@ def test_zet_samenvatting(conn):
     assert rij["samenvatting_bijgewerkt"]
 
 
+def test_zet_samenvatting_met_expliciet_watermerk(conn):
+    cid = db.upsert_contact(conn, "Jane", emails=["j@x.nl"])
+    db.zet_samenvatting(conn, cid, "x", bijgewerkt="2026-01-01T00:00:00+00:00")
+    assert db.get_contact(conn, cid)["samenvatting_bijgewerkt"] == "2026-01-01T00:00:00+00:00"
+
+
+def test_berichten_sinds_pakt_alleen_nieuw_toegevoegde(conn):
+    cid = db.upsert_contact(conn, "Jane", pand_slug="p1", emails=["j@x.nl"])
+    # Bestaand bericht, daarna een watermerk, daarna een nieuw bericht.
+    db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="communicatie",
+                        richting="in", body="oud", datum="2025-01-01T10:00:00+00:00")
+    watermerk = db.nu()
+    db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="communicatie",
+                        richting="in", body="nieuw", datum="2025-02-01T10:00:00+00:00")
+    nieuw = db.berichten_sinds(conn, cid, watermerk)
+    assert [b["body"] for b in nieuw] == ["nieuw"]
+    # Een watermerk in de toekomst levert niets op.
+    assert db.berichten_sinds(conn, cid, db.nu()) == []
+
+
 # --- berichten --------------------------------------------------------------
 
 def test_voeg_bericht_toe_en_tijdlijn_chronologisch(conn):
