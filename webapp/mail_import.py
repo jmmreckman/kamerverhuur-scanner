@@ -169,16 +169,19 @@ def _vind_all_mail(imap: imaplib.IMAP4_SSL) -> str:
 # vooraan de mail, bijlagen komen daarna. Zo downloaden we nooit dikke bijlagen
 # (die we toch niet opslaan) en blijft het ophalen snel, ook bij veel grote mails.
 _MAX_FETCH_BYTES = 200_000
+# Aantal berichten per IMAP-fetch. Bulk ophalen scheelt enorm omdat elke losse
+# fetch een trage heen-en-weer naar de server is; 50 tegelijk = ~10x minder
+# rondjes zonder het geheugen te overvragen (~10 MB per blok).
+_BATCH = 50
 
 
-def _eerste_bytes(blok) -> bytes | None:
-    """Haalt de ruwe berichtbytes uit een imaplib-fetch-respons."""
-    if not blok:
-        return None
-    for item in blok:
+def _berichten_uit_blok(blok):
+    """Levert de ruwe bytes van elk bericht uit een (bulk-)imaplib-fetch-respons.
+    imaplib geeft per bericht een tuple (headerregel, inhoud) terug, met wat
+    losse bytes (bv. b')') ertussen die we overslaan."""
+    for item in blok or ():
         if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
-            return bytes(item[1])
-    return None
+            yield bytes(item[1])
 
 
 def importeer_voor_adres(
@@ -197,28 +200,28 @@ def importeer_voor_adres(
     if status != "OK" or not data or not data[0]:
         logger.info("    0 berichten gevonden voor %s", adres)
         return 0
-    nums = data[0].split()
+    nums = [n.decode() if isinstance(n, (bytes, bytearray)) else str(n) for n in data[0].split()]
     totaal = len(nums)
     logger.info("    %d bericht(en) gevonden voor %s, ophalen...", totaal, adres)
 
     toegevoegd = 0
-    for i, num in enumerate(nums, 1):
+    for start in range(0, totaal, _BATCH):
+        batch = nums[start:start + _BATCH]
         try:
-            status, blok = imap.fetch(num, "(BODY.PEEK[]<0.%d>)" % _MAX_FETCH_BYTES)
+            status, blok = imap.fetch(",".join(batch), "(BODY.PEEK[]<0.%d>)" % _MAX_FETCH_BYTES)
         except (imaplib.IMAP4.error, OSError) as exc:
-            logger.warning("    bericht %s overslaan (ophalen mislukt: %s)", num, exc)
+            logger.warning("    blok vanaf %d overslaan (ophalen mislukt: %s)", start, exc)
             continue
-        raw = _eerste_bytes(blok)
-        if not raw:
+        if status != "OK" or not blok:
             continue
-        p = parse_email(raw, eigen_adres)
-        nieuw = communicatie_db.voeg_bericht_toe(
-            db, contact_id=contact_id, pand_slug=pand_slug, kanaal="gmail-historie",
-            richting=p["richting"], van=p["van"], naar=p["naar"], onderwerp=p["onderwerp"],
-            body=p["body"], datum=p["datum"], bron="gmail-backfill", message_id=p["message_id"],
-        )
-        if nieuw is not None:
-            toegevoegd += 1
-        if i % 50 == 0:
-            logger.info("    %d/%d verwerkt...", i, totaal)
+        for raw in _berichten_uit_blok(blok):
+            p = parse_email(raw, eigen_adres)
+            nieuw = communicatie_db.voeg_bericht_toe(
+                db, contact_id=contact_id, pand_slug=pand_slug, kanaal="gmail-historie",
+                richting=p["richting"], van=p["van"], naar=p["naar"], onderwerp=p["onderwerp"],
+                body=p["body"], datum=p["datum"], bron="gmail-backfill", message_id=p["message_id"],
+            )
+            if nieuw is not None:
+                toegevoegd += 1
+        logger.info("    %d/%d opgehaald...", min(start + _BATCH, totaal), totaal)
     return toegevoegd
