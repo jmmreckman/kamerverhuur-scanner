@@ -81,6 +81,17 @@ class Config:
     # Optioneel: zonder deze instelling doet die module gewoon niets.
     rclone_remote: str | None = None
 
+    # Gmail (IMAP) voor de eenmalige backfill van historische huurder-communicatie
+    # uit het persoonlijke Gmail-account (zie scripts/gmail_backfill.py en
+    # webapp/mail_import.py). Optioneel: zonder deze instellingen doet de backfill
+    # niets. Het wachtwoord is een Gmail app-wachtwoord (2FA aan), in te trekken na
+    # de eenmalige import. gmail_eigen_adres bepaalt de richting (verzonden vs
+    # ontvangen); valt terug op gmail_imap_user.
+    gmail_imap_host: str = "imap.gmail.com"
+    gmail_imap_user: str | None = None
+    gmail_imap_password: str | None = None
+    gmail_eigen_adres: str | None = None
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -108,4 +119,8 @@ class Config:
             anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip() or None,
             anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5").strip() or "claude-sonnet-5",
             rclone_remote=os.environ.get("RCLONE_REMOTE", "").strip() or None,
+            gmail_imap_host=os.environ.get("GMAIL_IMAP_HOST", "imap.gmail.com").strip() or "imap.gmail.com",
+            gmail_imap_user=os.environ.get("GMAIL_IMAP_USER", "").strip() or None,
+            gmail_imap_password=os.environ.get("GMAIL_IMAP_PASSWORD", "").strip() or None,
+            gmail_eigen_adres=os.environ.get("GMAIL_EIGEN_ADRES", "").strip() or None,
         )
