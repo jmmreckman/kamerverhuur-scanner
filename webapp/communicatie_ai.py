@@ -271,12 +271,23 @@ def _vraag_claude(config: Config, systeem: str, user: str, *, max_tokens: int) -
         )
     import anthropic  # lui geïmporteerd zodat de pure functies ook zonder de SDK testbaar zijn
 
+    # Expliciete timeout + hooguit 1 retry, zodat een trage of rate-gelimiteerde
+    # call ruim binnen de gunicorn-worker-timeout (120s) faalt met een nette
+    # foutmelding, in plaats van dat de worker wordt gekild en de browser een
+    # ERR_CONNECTION_ABORTED toont (geen antwoord). Worst case ~45+backoff+45s.
     try:
-        client = anthropic.Anthropic(api_key=config.anthropic_api_key)
+        client = anthropic.Anthropic(
+            api_key=config.anthropic_api_key, timeout=45.0, max_retries=1
+        )
         respons = client.messages.create(
             model=config.anthropic_model, max_tokens=max_tokens, system=systeem,
             messages=[{"role": "user", "content": user}],
         )
+    except anthropic.APITimeoutError as exc:
+        raise CommunicatieAIError(
+            "De AI reageerde niet op tijd. Dit gebeurt als de server het druk heeft "
+            "(bijvoorbeeld tijdens de Gmail-backfill). Probeer het zo nog eens."
+        ) from exc
     except anthropic.APIError as exc:
         raise CommunicatieAIError(f"AI-aanvraag is mislukt: {exc}") from exc
     return "".join(b.text for b in respons.content if b.type == "text").strip()
