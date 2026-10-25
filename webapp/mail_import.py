@@ -17,7 +17,6 @@ from __future__ import annotations
 import email
 import imaplib
 import logging
-import re
 from email.message import Message
 from email.utils import parseaddr, parsedate_to_datetime
 
@@ -166,37 +165,29 @@ def _vind_all_mail(imap: imaplib.IMAP4_SSL) -> str:
     return "[Gmail]/All Mail"
 
 
-_GROOTTE = re.compile(rb"(\d+)\s+\(RFC822\.SIZE\s+(\d+)\)")
+# Per bericht halen we alleen de eerste ~200 KB op: headers + de tekst-body zitten
+# vooraan de mail, bijlagen komen daarna. Zo downloaden we nooit dikke bijlagen
+# (die we toch niet opslaan) en blijft het ophalen snel, ook bij veel grote mails.
+_MAX_FETCH_BYTES = 200_000
 
 
-def _haal_groottes(imap: imaplib.IMAP4_SSL, nums: list[bytes]) -> dict[bytes, int]:
-    """Haalt in één aanroep de grootte van elk bericht op (goedkoop), zodat we
-    grote mails (dikke bijlagen) kunnen overslaan zonder ze te downloaden."""
-    if not nums:
-        return {}
-    try:
-        status, data = imap.fetch(b",".join(nums), "(RFC822.SIZE)")
-    except (imaplib.IMAP4.error, OSError):
-        return {}
-    if status != "OK":
-        return {}
-    groottes: dict[bytes, int] = {}
-    for item in data:
-        regel = item if isinstance(item, (bytes, bytearray)) else (item[0] if item else b"")
-        m = _GROOTTE.search(bytes(regel))
-        if m:
-            groottes[m.group(1)] = int(m.group(2))
-    return groottes
+def _eerste_bytes(blok) -> bytes | None:
+    """Haalt de ruwe berichtbytes uit een imaplib-fetch-respons."""
+    if not blok:
+        return None
+    for item in blok:
+        if isinstance(item, tuple) and len(item) >= 2 and isinstance(item[1], (bytes, bytearray)):
+            return bytes(item[1])
+    return None
 
 
 def importeer_voor_adres(
     db, imap: imaplib.IMAP4_SSL, *, contact_id: int, pand_slug: str, adres: str, eigen_adres: str,
-    max_bytes: int = 25_000_000,
 ) -> int:
-    """Zoekt in de geselecteerde map alle berichten van/aan `adres`, parseert ze en
-    zet ze in de communicatie-db (dedup op Message-ID). Geeft het aantal nieuw
-    toegevoegde berichten terug. Mails groter dan `max_bytes` (meestal dikke
-    bijlagen) worden overgeslagen; de voortgang wordt gelogd."""
+    """Zoekt in de geselecteerde map alle berichten van/aan `adres`, parseert de
+    tekst (eerste ~200 KB, dus zonder bijlagen te downloaden) en zet ze in de
+    communicatie-db (dedup op Message-ID). Geeft het aantal nieuw toegevoegde
+    berichten terug; logt de voortgang."""
     from . import communicatie_db
 
     adres = (adres or "").strip().lower()
@@ -209,24 +200,18 @@ def importeer_voor_adres(
     nums = data[0].split()
     totaal = len(nums)
     logger.info("    %d bericht(en) gevonden voor %s, ophalen...", totaal, adres)
-    groottes = _haal_groottes(imap, nums)
 
-    toegevoegd, overgeslagen = 0, 0
+    toegevoegd = 0
     for i, num in enumerate(nums, 1):
-        if groottes.get(num, 0) > max_bytes:
-            overgeslagen += 1
-            continue
         try:
-            status, blok = imap.fetch(num, "(BODY.PEEK[])")
+            status, blok = imap.fetch(num, "(BODY.PEEK[]<0.%d>)" % _MAX_FETCH_BYTES)
         except (imaplib.IMAP4.error, OSError) as exc:
             logger.warning("    bericht %s overslaan (ophalen mislukt: %s)", num, exc)
             continue
-        if status != "OK" or not blok or not blok[0] or not isinstance(blok[0], tuple):
+        raw = _eerste_bytes(blok)
+        if not raw:
             continue
-        raw = blok[0][1]
-        if not isinstance(raw, (bytes, bytearray)):
-            continue
-        p = parse_email(bytes(raw), eigen_adres)
+        p = parse_email(raw, eigen_adres)
         nieuw = communicatie_db.voeg_bericht_toe(
             db, contact_id=contact_id, pand_slug=pand_slug, kanaal="gmail-historie",
             richting=p["richting"], van=p["van"], naar=p["naar"], onderwerp=p["onderwerp"],
@@ -234,8 +219,6 @@ def importeer_voor_adres(
         )
         if nieuw is not None:
             toegevoegd += 1
-        if i % 25 == 0:
+        if i % 50 == 0:
             logger.info("    %d/%d verwerkt...", i, totaal)
-    if overgeslagen:
-        logger.info("    %d grote mail(s) overgeslagen (groter dan %d MB)", overgeslagen, max_bytes // 1_000_000)
     return toegevoegd
