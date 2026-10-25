@@ -91,7 +91,7 @@ def main(argv: list[str]) -> int:
             totaal_huurders += 1
             totaal_berichten += n
             logger.info("  %s (%s): %d nieuw(e) bericht(en)", kamer.naam, kamer.email, n)
-            _maak_samenvatting(config, db, contact_id, kamer.naam)
+            _maak_samenvatting(config, db, contact_id, kamer.naam, n)
 
     try:
         imap.logout()
@@ -103,15 +103,39 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-def _maak_samenvatting(config: Config, db, contact_id: int, naam: str) -> None:
+def _maak_samenvatting(config: Config, db, contact_id: int, naam: str, nieuw_aantal: int) -> None:
+    # Hervatbaar: wie al een samenvatting heeft en deze run geen nieuwe berichten
+    # kreeg, slaan we over. Zo is opnieuw draaien na een onderbreking goedkoop -
+    # alleen de nog niet (volledig) verwerkte huurders worden samengevat.
+    contact = communicatie_db.get_contact(db, contact_id)
+    if contact and contact["samenvatting"] and nieuw_aantal == 0:
+        logger.info("    samenvatting al aanwezig, overgeslagen")
+        return
     berichten = communicatie_db.berichten_van_contact(db, contact_id)
     if not berichten:
         return
-    logger.info("    samenvatten (%d bericht(en))...", len(berichten))
     try:
-        samenvatting = communicatie_ai.genereer_samenvatting(
-            config, huurder_naam=naam, berichten=berichten,
-        )
+        # Bestaande samenvatting + alleen nieuwe berichten erbij? Dan incrementeel
+        # invouwen (1 goedkope AI-aanroep). Anders de volledige historie samenvatten.
+        if contact and contact["samenvatting"] and contact["samenvatting_bijgewerkt"]:
+            nieuwe = communicatie_db.berichten_sinds(db, contact_id, contact["samenvatting_bijgewerkt"])
+            nieuw_tekst = communicatie_ai.formatteer_geschiedenis(nieuwe)
+            if nieuwe and len(nieuw_tekst) <= communicatie_ai._MAX_CHARS_SAMENVATTING:
+                logger.info("    samenvatting bijwerken (%d nieuw bericht(en))...", len(nieuwe))
+                samenvatting = communicatie_ai.werk_samenvatting_bij(
+                    config, huurder_naam=naam, bestaande_samenvatting=contact["samenvatting"],
+                    nieuwe_berichten=nieuwe,
+                )
+            else:
+                logger.info("    samenvatten (%d bericht(en))...", len(berichten))
+                samenvatting = communicatie_ai.genereer_samenvatting(
+                    config, huurder_naam=naam, berichten=berichten,
+                )
+        else:
+            logger.info("    samenvatten (%d bericht(en))...", len(berichten))
+            samenvatting = communicatie_ai.genereer_samenvatting(
+                config, huurder_naam=naam, berichten=berichten,
+            )
         communicatie_db.zet_samenvatting(db, contact_id, samenvatting)
     except communicatie_ai.CommunicatieAIError as exc:
         logger.warning("  samenvatting voor %s overgeslagen: %s", naam, exc)
