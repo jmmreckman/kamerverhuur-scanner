@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Openstaande acties{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Openstaande acties</h1>
+  <p class="muted">Concepten die op jouw akkoord wachten voordat ze de deur uit gaan. Niets wordt automatisch verstuurd.</p>
+</div>
+
+<div class="card">
+  {% if rijen %}
+    {% for r in rijen %}
+    <div class="item-box">
+      <p style="margin:0 0 .3rem 0">
+        <span class="pil pil-neutral">Concept</span>
+        <strong>{{ r.contact_naam or r.actie.ontvanger or 'Onbekende huurder' }}</strong>
+        <span class="muted">&middot; {{ r.pand_naam }} &middot; {{ (r.actie.aangemaakt or '')[:10] }}</span>
+        {% if not r.actie.ontvanger %}<span class="pil pil-neutral">geen e-mailadres</span>{% endif %}
+      </p>
+      {% if r.actie.concept_onderwerp %}<p style="margin:.1rem 0"><strong>{{ r.actie.concept_onderwerp }}</strong></p>{% endif %}
+      <p class="muted" style="margin:.2rem 0">{{ r.actie.concept_body|truncate(160) }}</p>
+      <div class="item-box-acties">
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('actie_detail', actie_id=r.actie.id) }}">Bekijken &amp; versturen</a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Geen openstaande acties. Concepten die je op een communicatie- of onderhoudspagina in de wachtrij zet, verschijnen hier.</p>
+  {% endif %}
+</div>
+{% endblock %}

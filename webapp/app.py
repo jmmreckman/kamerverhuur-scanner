@@ -289,12 +289,19 @@ def create_app(config: Config | None = None) -> Flask:
     def _template_context():
         eigen_panden = []
         alle_panden = []
+        open_acties_aantal = 0
         if current_user.is_authenticated:
             alle_panden = _properties()
             eigen_panden = [p for p in alle_panden if current_user.heeft_toegang(p.slug)]
+            try:
+                open_acties_aantal = communicatie_db.tel_open_acties(
+                    _comm_db(), pand_slugs=[p.slug for p in eigen_panden]
+                )
+            except Exception:
+                open_acties_aantal = 0
         return {
             "eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None),
-            "pand_wissel_url": _pand_wissel_url,
+            "pand_wissel_url": _pand_wissel_url, "open_acties_aantal": open_acties_aantal,
         }
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
@@ -1187,6 +1194,28 @@ def create_app(config: Config | None = None) -> Flask:
             )
         return redirect(url_for("onderhoud_detail", klus_id=klus_id))
 
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/wachtrij", methods=["POST"])
+    @login_required
+    def huurder_communicatie_wachtrij(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        body = request.form.get("body", "").strip()
+        if not body:
+            flash("Leeg concept, er is niets in de wachtrij gezet.")
+            return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        db, contact_id = _contact_voor_kamer(kamer)
+        actie_id = communicatie_db.maak_actie(
+            db, type="concept-huurder", concept_body=body,
+            concept_onderwerp=request.form.get("onderwerp", "").strip() or None,
+            contact_id=contact_id, pand_slug=pand_slug, ontvanger=kamer.email or None,
+        )
+        flash("Concept in de wachtrij gezet." if kamer.email else
+              "Concept in de wachtrij gezet. Let op: deze huurder heeft geen e-mailadres, "
+              "dus versturen kan pas als je dat invult.")
+        return redirect(url_for("actie_detail", actie_id=actie_id))
+
     # --- Onderhoud: centrale tickets over alle (toegankelijke) panden ---
 
     def _toegankelijke_panden() -> list:
@@ -1353,6 +1382,118 @@ def create_app(config: Config | None = None) -> Flask:
             communicatie_db.zet_klus_status(db, klus_id, nieuwe)
             flash("Status bijgewerkt.")
         return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+
+    @app.route("/onderhoud/<int:klus_id>/wachtrij", methods=["POST"])
+    @login_required
+    def onderhoud_wachtrij(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        body = request.form.get("body", "").strip()
+        if not body:
+            flash("Leeg concept, er is niets in de wachtrij gezet.")
+            return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+        emails = communicatie_db.emails_van_contact(db, klus["contact_id"]) if klus["contact_id"] else []
+        actie_id = communicatie_db.maak_actie(
+            db, type="concept-huurder", concept_body=body,
+            concept_onderwerp=request.form.get("onderwerp", "").strip() or None,
+            contact_id=klus["contact_id"], pand_slug=klus["pand_slug"], klus_id=klus_id,
+            ontvanger=emails[0] if emails else None,
+        )
+        flash("Concept in de wachtrij gezet." if emails else
+              "Concept in de wachtrij gezet. Let op: geen e-mailadres bekend voor deze huurder, "
+              "dus versturen kan pas als dat ingevuld is.")
+        return redirect(url_for("actie_detail", actie_id=actie_id))
+
+    # --- Goedkeuringswachtrij (openstaande acties: concepten die op jouw akkoord wachten) ---
+
+    def _actie_of_404(db, actie_id: int):
+        actie = communicatie_db.get_actie(db, actie_id)
+        if actie is None or not current_user.heeft_toegang(actie["pand_slug"]):
+            abort(404)
+        return actie
+
+    @app.route("/acties")
+    @login_required
+    def acties_overzicht():
+        panden = _toegankelijke_panden()
+        pand_namen = {p.slug: p.naam for p in panden}
+        db = _comm_db()
+        acties = communicatie_db.lijst_acties(db, pand_slugs=[p.slug for p in panden])
+        rijen = []
+        for a in acties:
+            contact = communicatie_db.get_contact(db, a["contact_id"]) if a["contact_id"] else None
+            rijen.append({
+                "actie": a, "pand_naam": pand_namen.get(a["pand_slug"], a["pand_slug"]),
+                "contact_naam": contact["naam"] if contact else None,
+            })
+        return render_template("acties_overzicht.html", rijen=rijen)
+
+    @app.route("/acties/<int:actie_id>")
+    @login_required
+    def actie_detail(actie_id: int):
+        db = _comm_db()
+        actie = _actie_of_404(db, actie_id)
+        contact = communicatie_db.get_contact(db, actie["contact_id"]) if actie["contact_id"] else None
+        return render_template(
+            "actie_detail.html", actie=actie, contact=contact,
+            pand=find_pand(_properties(), actie["pand_slug"]),
+            stopwoorden=communicatie_ai.vind_ai_stopwoorden(actie["concept_body"] or ""),
+        )
+
+    @app.route("/acties/<int:actie_id>/opslaan", methods=["POST"])
+    @login_required
+    def actie_opslaan(actie_id: int):
+        db = _comm_db()
+        _actie_of_404(db, actie_id)
+        communicatie_db.werk_actie_concept_bij(
+            db, actie_id, request.form.get("onderwerp", "").strip() or None,
+            request.form.get("body", "").strip(),
+        )
+        flash("Concept opgeslagen.")
+        return redirect(url_for("actie_detail", actie_id=actie_id))
+
+    @app.route("/acties/<int:actie_id>/versturen", methods=["POST"])
+    @login_required
+    def actie_versturen(actie_id: int):
+        db = _comm_db()
+        actie = _actie_of_404(db, actie_id)
+        onderwerp = request.form.get("onderwerp", "").strip()
+        body = request.form.get("body", "").strip()
+        ontvanger = (actie["ontvanger"] or "").strip()
+        if not ontvanger:
+            flash("Geen e-mailadres bekend, dus versturen kan niet. Vul het e-mailadres bij de "
+                  "huurder in (Huurders -> Bewerken) en zet daarna een nieuw concept in de wachtrij.")
+            return redirect(url_for("actie_detail", actie_id=actie_id))
+        if not body:
+            flash("Lege tekst, er is niets verstuurd.")
+            return redirect(url_for("actie_detail", actie_id=actie_id))
+        # De (eventueel aangepaste) tekst eerst vastleggen, dan pas versturen.
+        communicatie_db.werk_actie_concept_bij(db, actie_id, onderwerp or None, body)
+        try:
+            verstuur_email(config, ontvanger, onderwerp or "(geen onderwerp)", body, bcc=[])
+        except MailError as exc:
+            flash(f"Versturen is mislukt: {exc}")
+            return redirect(url_for("actie_detail", actie_id=actie_id))
+        kanaal = "onderhoud" if actie["klus_id"] else "communicatie"
+        communicatie_db.voeg_bericht_toe(
+            db, contact_id=actie["contact_id"], pand_slug=actie["pand_slug"], kanaal=kanaal,
+            richting="uit", naar=ontvanger, onderwerp=onderwerp or None, body=body,
+            bron="verzonden", klus_id=actie["klus_id"],
+        )
+        if actie["klus_id"]:
+            communicatie_db.raak_klus_aan(db, actie["klus_id"])
+        communicatie_db.zet_actie_status(db, actie_id, communicatie_db.ACTIE_VERZONDEN)
+        flash(f"Verstuurd naar {ontvanger}.")
+        return redirect(url_for("acties_overzicht"))
+
+    @app.route("/acties/<int:actie_id>/verwerpen", methods=["POST"])
+    @login_required
+    def actie_verwerpen(actie_id: int):
+        db = _comm_db()
+        _actie_of_404(db, actie_id)
+        communicatie_db.zet_actie_status(db, actie_id, communicatie_db.ACTIE_VERWORPEN)
+        flash("Concept verworpen.")
+        return redirect(url_for("acties_overzicht"))
 
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()

@@ -32,12 +32,14 @@
   {% if stopwoorden %}
   <div class="flash"><p>Let op, mogelijk te "AI-achtig" - gevonden: {{ stopwoorden|join(', ') }}. Pas de tekst gerust aan.</p></div>
   {% endif %}
-  <p class="muted">Controleer/pas aan en log het als verzonden bericht (versturen via de mail komt in een volgende stap).</p>
-  <form method="post" action="{{ url_for('huurder_communicatie_bericht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+  <p class="muted">Controleer/pas aan en zet het in de wachtrij; daar verstuur je het na je akkoord. Of log het alleen, zonder mail.</p>
+  <form method="post" action="{{ url_for('huurder_communicatie_wachtrij', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
     <input type="hidden" name="richting" value="uit">
+    <label>Onderwerp (optioneel) <input type="text" name="onderwerp" placeholder="bv. Re: je vraag"></label>
     <textarea name="body" rows="10" style="width:100%;box-sizing:border-box">{{ concept }}</textarea>
-    <div style="margin-top:.6rem">
-      <button class="btn" type="submit">Log als verzonden bericht</button>
+    <div style="margin-top:.6rem; display:flex; gap:.6rem; flex-wrap:wrap">
+      <button class="btn" type="submit">In wachtrij zetten voor versturen</button>
+      <button class="btn btn-secondary" type="submit" formaction="{{ url_for('huurder_communicatie_bericht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Alleen loggen (geen mail)</button>
     </div>
   </form>
 </div>
