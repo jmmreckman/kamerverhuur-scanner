@@ -1164,6 +1164,160 @@ def create_app(config: Config | None = None) -> Flask:
                 flash(str(exc))
         return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/onderhoud-nieuw", methods=["POST"])
+    @login_required
+    def huurder_onderhoud_nieuw(pand_slug: str, kamer_naam: str):
+        """Maakt een onderhoudsticket aan vanaf de communicatiepagina van een
+        huurder - meteen gekoppeld aan die huurder/kamer."""
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+        titel = request.form.get("titel", "").strip() or f"Onderhoud kamer {kamer.kamer}"
+        omschrijving = request.form.get("omschrijving", "").strip() or None
+        klus_id = communicatie_db.maak_klus(
+            db, titel=titel, pand_slug=pand_slug, contact_id=contact_id, kamer=kamer.kamer,
+            omschrijving=omschrijving,
+        )
+        if omschrijving:
+            communicatie_db.voeg_bericht_toe(
+                db, contact_id=contact_id, pand_slug=pand_slug, kanaal="onderhoud",
+                richting="in", body=omschrijving, bron="handmatig", klus_id=klus_id,
+            )
+        return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+
+    # --- Onderhoud: centrale tickets over alle (toegankelijke) panden ---
+
+    def _toegankelijke_panden() -> list:
+        return [p for p in _properties() if current_user.heeft_toegang(p.slug)]
+
+    def _klus_of_404(db, klus_id: int):
+        klus = communicatie_db.get_klus(db, klus_id)
+        if klus is None or not current_user.heeft_toegang(klus["pand_slug"]):
+            abort(404)
+        return klus
+
+    @app.route("/onderhoud")
+    @login_required
+    def onderhoud_overzicht():
+        panden = _toegankelijke_panden()
+        slugs = [p.slug for p in panden]
+        pand_namen = {p.slug: p.naam for p in panden}
+        db = _comm_db()
+        pand_filter = request.args.get("pand") or None
+        if pand_filter not in slugs:
+            pand_filter = None
+        status_filter = request.args.get("status") or None
+        if status_filter not in communicatie_db.ALLE_STATUSSEN:
+            status_filter = None
+        toon_afgerond = request.args.get("afgerond") == "1"
+        klussen = communicatie_db.lijst_klussen(
+            db, pand_slugs=[pand_filter] if pand_filter else slugs,
+            status=status_filter,
+            alleen_open=not toon_afgerond and status_filter is None,
+        )
+        rijen = []
+        for k in klussen:
+            contact = communicatie_db.get_contact(db, k["contact_id"]) if k["contact_id"] else None
+            rijen.append({
+                "klus": k, "pand_naam": pand_namen.get(k["pand_slug"], k["pand_slug"]),
+                "contact_naam": contact["naam"] if contact else None,
+            })
+        return render_template(
+            "onderhoud_overzicht.html", rijen=rijen, panden=panden,
+            pand_filter=pand_filter, status_filter=status_filter, toon_afgerond=toon_afgerond,
+            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
+        )
+
+    @app.route("/onderhoud/nieuw", methods=["POST"])
+    @login_required
+    def onderhoud_nieuw():
+        titel = request.form.get("titel", "").strip()
+        pand_slug = request.form.get("pand", "").strip()
+        if not titel or not current_user.heeft_toegang(pand_slug):
+            flash("Kies een pand en geef een korte titel op.")
+            return redirect(url_for("onderhoud_overzicht"))
+        db = _comm_db()
+        omschrijving = request.form.get("omschrijving", "").strip() or None
+        klus_id = communicatie_db.maak_klus(
+            db, titel=titel, pand_slug=pand_slug, omschrijving=omschrijving,
+        )
+        if omschrijving:
+            communicatie_db.voeg_bericht_toe(
+                db, contact_id=None, pand_slug=pand_slug, kanaal="onderhoud",
+                richting="in", body=omschrijving, bron="handmatig", klus_id=klus_id,
+            )
+        return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+
+    @app.route("/onderhoud/<int:klus_id>")
+    @login_required
+    def onderhoud_detail(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        return render_template(
+            "onderhoud_detail.html", klus=klus,
+            berichten=communicatie_db.berichten_van_klus(db, klus_id),
+            contact=communicatie_db.get_contact(db, klus["contact_id"]) if klus["contact_id"] else None,
+            pand=find_pand(_properties(), klus["pand_slug"]),
+            concept=None, stopwoorden=[],
+            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
+        )
+
+    @app.route("/onderhoud/<int:klus_id>/bericht", methods=["POST"])
+    @login_required
+    def onderhoud_bericht(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        body = request.form.get("body", "").strip()
+        if body:
+            datum = request.form.get("datum", "").strip()
+            datum_iso = f"{datum}T12:00:00+00:00" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", datum) else None
+            communicatie_db.voeg_bericht_toe(
+                db, contact_id=klus["contact_id"], pand_slug=klus["pand_slug"], kanaal="onderhoud",
+                richting="in" if request.form.get("richting") == "in" else "uit",
+                onderwerp=request.form.get("onderwerp", "").strip() or None,
+                body=body, datum=datum_iso, bron="handmatig", klus_id=klus_id,
+            )
+            communicatie_db.raak_klus_aan(db, klus_id)
+            flash("Bericht toegevoegd.")
+        return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+
+    @app.route("/onderhoud/<int:klus_id>/concept", methods=["POST"])
+    @login_required
+    def onderhoud_concept(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        berichten = communicatie_db.berichten_van_klus(db, klus_id)
+        contact = communicatie_db.get_contact(db, klus["contact_id"]) if klus["contact_id"] else None
+        pand = find_pand(_properties(), klus["pand_slug"])
+        concept, stopwoorden = None, []
+        try:
+            concept = communicatie_ai.genereer_antwoord(
+                config, pand_naam=pand.naam if pand else klus["pand_slug"],
+                huurder_naam=contact["naam"] if contact else "de huurder",
+                berichten=berichten, extra_instructie=request.form.get("instructie", "").strip() or None,
+            )
+            stopwoorden = communicatie_ai.vind_ai_stopwoorden(concept)
+        except communicatie_ai.CommunicatieAIError as exc:
+            flash(str(exc))
+        return render_template(
+            "onderhoud_detail.html", klus=klus, berichten=berichten, contact=contact, pand=pand,
+            concept=concept, stopwoorden=stopwoorden,
+            statussen=communicatie_db.ALLE_STATUSSEN, status_labels=communicatie_db.STATUS_LABELS,
+        )
+
+    @app.route("/onderhoud/<int:klus_id>/status", methods=["POST"])
+    @login_required
+    def onderhoud_status(klus_id: int):
+        db = _comm_db()
+        klus = _klus_of_404(db, klus_id)
+        nieuwe = request.form.get("status", "")
+        if nieuwe in communicatie_db.ALLE_STATUSSEN:
+            communicatie_db.zet_klus_status(db, klus_id, nieuwe)
+            flash("Status bijgewerkt.")
+        return redirect(url_for("onderhoud_detail", klus_id=klus_id))
+
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()
         servicekosten = form.get("servicekosten", "").strip()

@@ -99,6 +99,17 @@
   {% endif %}
 </div>
 
+{# --- Onderhoudsticket vanaf deze huurder -------------------------------- #}
+<div class="card">
+  <h2>Onderhoudsticket aanmaken</h2>
+  <p class="muted">Maakt een onderhoudsklus die meteen aan {{ kamer.naam }} is gekoppeld en in het centrale Onderhoud-overzicht komt.</p>
+  <form method="post" action="{{ url_for('huurder_onderhoud_nieuw', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <label>Titel <input type="text" name="titel" placeholder="bv. Lekkage badkamer"></label>
+    <label>Omschrijving (optioneel) <textarea name="omschrijving" rows="3" style="width:100%;box-sizing:border-box"></textarea></label>
+    <div style="margin-top:.6rem"><button class="btn btn-secondary" type="submit">Onderhoudsticket aanmaken</button></div>
+  </form>
+</div>
+
 <div class="card">
   <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Terug naar huurders</a>
 </div>

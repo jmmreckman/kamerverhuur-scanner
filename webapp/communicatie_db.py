@@ -29,6 +29,13 @@ KLUS_VAKMAN = "vakman-ingeschakeld"
 KLUS_WACHT_HUURDER = "wacht-op-huurder"
 KLUS_AFGEROND = "afgerond"
 KLUS_OPEN_STATUSSEN = (KLUS_OPEN, KLUS_VAKMAN, KLUS_WACHT_HUURDER)
+ALLE_STATUSSEN = (KLUS_OPEN, KLUS_VAKMAN, KLUS_WACHT_HUURDER, KLUS_AFGEROND)
+STATUS_LABELS = {
+    KLUS_OPEN: "Open",
+    KLUS_VAKMAN: "Vakman ingeschakeld",
+    KLUS_WACHT_HUURDER: "Wacht op huurder",
+    KLUS_AFGEROND: "Afgerond",
+}
 
 ACTIE_OPEN = "open"
 ACTIE_GOEDGEKEURD = "goedgekeurd"
