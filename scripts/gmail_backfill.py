@@ -50,11 +50,14 @@ def main(argv: list[str]) -> int:
     alleen_adres = (argv[1].strip().lower() if len(argv) > 1 else "") or None
     eigen_adres = config.gmail_eigen_adres or config.gmail_imap_user or ""
 
+    logger.info("Inloggen op Gmail (%s)...", config.gmail_imap_user)
     try:
         imap = mail_import.verbind_gmail(config)
     except mail_import.MailImportError as exc:
         logger.error("%s", exc)
         return 1
+    logger.info("Ingelogd. Huurders doorlopen%s...",
+                f" (alleen {alleen_adres})" if alleen_adres else "")
 
     db = communicatie_db.verbind(communicatie_db.pad(config.state_dir))
     try:
