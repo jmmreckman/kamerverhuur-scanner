@@ -79,7 +79,7 @@
 {# --- Bericht loggen ----------------------------------------------------- #}
 <div class="card">
   <h2>Bericht loggen</h2>
-  <p class="muted">Voeg handmatig een bericht toe aan de tijdlijn (bv. iets dat via WhatsApp of telefoon ging).</p>
+  <p class="muted">Voeg handmatig een los bericht toe aan de tijdlijn (bv. een enkel appje, telefoontje of iets dat mondeling ging).</p>
   <form method="post" action="{{ url_for('huurder_communicatie_bericht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
     <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
       <label>Richting
@@ -88,11 +88,37 @@
           <option value="uit">Verzonden aan huurder</option>
         </select>
       </label>
+      <label>Kanaal
+        <select name="kanaal">
+          <option value="communicatie">Notitie</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="telefoon">Telefoon</option>
+          <option value="info">E-mail</option>
+        </select>
+      </label>
       <label>Datum <input type="date" name="datum"></label>
     </span>
     <label>Onderwerp (optioneel) <input type="text" name="onderwerp"></label>
     <label>Bericht <textarea name="body" rows="4" style="width:100%;box-sizing:border-box" required></textarea></label>
     <div style="margin-top:.6rem"><button class="btn" type="submit">Bericht loggen</button></div>
+  </form>
+</div>
+
+{# --- WhatsApp-export importeren ----------------------------------------- #}
+<div class="card">
+  <h2>WhatsApp-chat importeren</h2>
+  <p class="muted">Exporteer in WhatsApp de chat met deze huurder (Chat openen &middot; menu &middot; Meer &middot; <strong>Chat exporteren &middot; Zonder media</strong>) en upload hier het .txt-bestand, of plak de tekst. Alle berichten komen in de tijdlijn. Opnieuw importeren voegt niets dubbel toe.</p>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('huurder_communicatie_whatsapp', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <label>Jouw naam zoals die in de chat staat (de rest wordt als de huurder gezien)
+      <input type="text" name="eigen_naam" value="{{ current_user.id }}" placeholder="bv. Jurian">
+    </label>
+    <label style="margin-top:.6rem;display:block">Exportbestand (.txt)
+      <input type="file" name="bestand" accept=".txt,text/plain">
+    </label>
+    <label style="margin-top:.6rem;display:block">...of plak de chat hier
+      <textarea name="tekst" rows="4" style="width:100%;box-sizing:border-box" placeholder="[25-10-2026, 14:12:33] Naam: bericht..."></textarea>
+    </label>
+    <div style="margin-top:.6rem"><button class="btn" type="submit">WhatsApp importeren</button></div>
   </form>
 </div>
 
@@ -108,7 +134,10 @@
         {% else %}
         <span class="pil status-betaald">Verzonden</span>
         {% endif %}
+        {% if b.kanaal == 'whatsapp' %}<span class="pil pil-neutral">WhatsApp</span>
+        {% elif b.kanaal == 'telefoon' %}<span class="pil pil-neutral">Telefoon</span>{% endif %}
         <span class="muted">{{ (b.datum or '')[:10] }}</span>
+        {% if b.van and b.kanaal == 'whatsapp' %}&middot; <span class="muted">{{ b.van }}</span>{% endif %}
         {% if b.onderwerp %}&middot; <strong>{{ b.onderwerp }}</strong>{% endif %}
       </p>
       <div class="breek-af" style="white-space:pre-wrap">{{ b.body }}</div>

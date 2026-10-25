@@ -126,8 +126,15 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (SQLite-opslag in `state_dir/communicatie.db`: contacten, berichten, klussen,
   vakmannen, acties — pure laag, los getest), `webapp/communicatie_ai.py`
   (AI-concept/samenvatting + stijl-nacheck tegen `;`/`—`/AI-stopwoorden + de
-  vaste vakman-mail), `webapp/mail_import.py` + `scripts/gmail_backfill.py`
-  (eenmalige Gmail-IMAP-backfill). Schermen: communicatie per huurder (Huurders →
+  vaste vakman-mail; óók `beantwoord_vraag` = interne vraag over het dossier
+  zonder mail, en `werk_samenvatting_bij` = incrementeel samenvatten), `webapp/
+  mail_import.py` + `scripts/gmail_backfill.py` (eenmalige, **hervatbare**
+  Gmail-IMAP-backfill; slaat al-samengevatte huurders over), `webapp/whatsapp_import.py`
+  (parset een geëxporteerde WhatsApp-chat `.txt` → tijdlijn; per huurder zelf
+  uploaden/plakken, géén WhatsApp-API; dedup via gesynthetiseerd message_id).
+  Samenvatting-bijwerken is incrementeel (alleen nieuwe berichten invouwen) met een
+  knop "Volledig opnieuw". AI-calls hebben een 45s-timeout (gunicorn-worker 120s).
+  Schermen: communicatie per huurder (Huurders →
   Communicatie), centrale **Onderhoud**-tickets, **Openstaande acties**
   (goedkeuringswachtrij → versturen via de bestaande mailer), klusjesmannen-beheer,
   en "Wat vraagt aandacht" op de pandkiezer-startpagina. Alles respecteert de

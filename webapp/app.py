@@ -42,7 +42,7 @@ from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import (
     ads, afwijzing, bezichtiging, communicatie_ai, communicatie_db, contracts,
-    documentverzoek, ondertekenen, tekenportaal, wwso,
+    documentverzoek, ondertekenen, tekenportaal, whatsapp_import, wwso,
 )
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
@@ -1165,13 +1165,59 @@ def create_app(config: Config | None = None) -> Flask:
             return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
         datum = request.form.get("datum", "").strip()
         datum_iso = f"{datum}T12:00:00+00:00" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", datum) else None
+        kanaal = request.form.get("kanaal", "communicatie").strip()
+        if kanaal not in {"communicatie", "whatsapp", "telefoon", "info"}:
+            kanaal = "communicatie"
         communicatie_db.voeg_bericht_toe(
-            db, contact_id=contact_id, pand_slug=pand_slug, kanaal="communicatie",
+            db, contact_id=contact_id, pand_slug=pand_slug, kanaal=kanaal,
             richting="in" if request.form.get("richting") == "in" else "uit",
             onderwerp=request.form.get("onderwerp", "").strip() or None,
             body=body, datum=datum_iso, bron="handmatig",
         )
         flash("Bericht gelogd.")
+        return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/whatsapp", methods=["POST"])
+    @login_required
+    def huurder_communicatie_whatsapp(pand_slug: str, kamer_naam: str):
+        """Importeert een geexporteerde WhatsApp-chat (.txt, geupload of geplakt)
+        in de tijdlijn van een huurder. Opnieuw importeren voegt niet dubbel toe
+        (gesynthetiseerd message_id)."""
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+
+        bestand = request.files.get("bestand")
+        if bestand and bestand.filename:
+            tekst = bestand.read().decode("utf-8", errors="replace")
+        else:
+            tekst = request.form.get("tekst", "")
+        if not tekst.strip():
+            flash("Geen WhatsApp-tekst ontvangen. Upload het geexporteerde .txt-bestand of plak de chat.")
+            return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+        eigen_namen = [n.strip() for n in request.form.get("eigen_naam", "").split(",") if n.strip()]
+        berichten = whatsapp_import.parse_whatsapp_export(tekst, eigen_namen=eigen_namen)
+        if not berichten:
+            flash("Geen berichten herkend in de export. Klopt het dat dit een WhatsApp-chat-export is?")
+            return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+        toegevoegd = 0
+        for b in berichten:
+            mid = whatsapp_import.synthetiseer_message_id(contact_id, b["datum"], b["afzender"], b["body"])
+            resultaat = communicatie_db.voeg_bericht_toe(
+                db, contact_id=contact_id, pand_slug=pand_slug, kanaal="whatsapp",
+                richting=b["richting"], van=b["afzender"], body=b["body"],
+                datum=b["datum"], bron="whatsapp-export", message_id=mid,
+            )
+            if resultaat is not None:
+                toegevoegd += 1
+        overgeslagen = len(berichten) - toegevoegd
+        flash(f"WhatsApp geimporteerd: {toegevoegd} bericht(en) toegevoegd"
+              + (f", {overgeslagen} al aanwezig (overgeslagen)." if overgeslagen else ".")
+              + " Werk eventueel de samenvatting bij zodat deze de WhatsApp meeneemt.")
         return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/concept", methods=["POST"])
