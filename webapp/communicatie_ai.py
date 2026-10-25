@@ -49,6 +49,16 @@ _SYSTEEM_SAMENVATTING = (
     "Verzin niets - gebruik alleen wat in de berichten staat.\n\n" + SYSTEEM_STIJL
 )
 
+_SYSTEEM_VRAAG = (
+    "Je bent de assistent van de beheerder van studentenkamers (Steenhub). Je beantwoordt een "
+    "interne vraag van de beheerder over het dossier van een specifieke huurder, op basis van de "
+    "meegegeven samenvatting en berichten. Baseer je uitsluitend op die informatie en verzin "
+    "niets. Staat het antwoord niet in het dossier, zeg dat dan eerlijk in plaats van te gissen. "
+    "Noem concrete data, bedragen en afspraken waar ze er zijn, en geef aan wanneer iets speelde. "
+    "Dit is een interne vraag, dus schrijf GEEN e-mail en geen aanhef, gewoon een direct, bondig "
+    "antwoord. Schrijf in het Nederlands."
+)
+
 # AI-stopwoorden/frases die we markeren (kleine, bewuste lijst om valse treffers
 # te voorkomen). Matcht hoofdletterongevoelig.
 _STOPWOORDEN = (
@@ -170,6 +180,25 @@ def bouw_samenvatting_prompt(*, huurder_naam: str, geschiedenis_tekst: str) -> t
     return _SYSTEEM_SAMENVATTING, user
 
 
+def bouw_vraag_prompt(
+    *, pand_naam: str, huurder_naam: str, geschiedenis_tekst: str, vraag: str,
+    samenvatting: str | None = None, relevante_tekst: str | None = None,
+) -> tuple[str, str]:
+    """Geeft (systeemprompt, user-tekst) voor het beantwoorden van een interne
+    vraag over het dossier terug - pure string-bouw, los testbaar."""
+    user = f"Pand: {pand_naam}\nHuurder: {huurder_naam}\n\n"
+    if samenvatting:
+        user += f"Samenvatting van het dossier:\n{samenvatting}\n\n"
+    if relevante_tekst:
+        user += (
+            "Mogelijk relevante oudere berichten (teruggezocht op de vraag):\n"
+            f"{relevante_tekst}\n\n"
+        )
+    user += f"Recente berichten (oudste eerst):\n{geschiedenis_tekst or '(nog geen berichten)'}\n\n"
+    user += f"Vraag van de beheerder: {vraag}\n\nBeantwoord de vraag op basis van het dossier."
+    return _SYSTEEM_VRAAG, user
+
+
 def bouw_vakman_mail(
     *, vakman_naam: str, vak: str | None, huurder_naam: str, adres: str, reden: str,
     beheerder_telefoon: str = "",
@@ -210,6 +239,25 @@ def genereer_antwoord(
         extra_instructie=extra_instructie, samenvatting=samenvatting, relevante_tekst=relevante_tekst,
     )
     return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=2048))
+
+
+def beantwoord_vraag(
+    config: Config, *, pand_naam: str, huurder_naam: str, berichten, vraag: str,
+    samenvatting: str | None = None, relevante_berichten=None,
+) -> str:
+    """Beantwoordt een interne vraag van de beheerder over het dossier van een
+    huurder (geen e-mail, geen stijl-nacheck - het is een intern antwoord).
+    Gebruikt dezelfde context als een conceptantwoord: de samenvatting + de
+    recentste berichten + gericht teruggezochte, mogelijk relevante oudere
+    berichten, zodat ook iets van langer geleden meegewogen wordt."""
+    recent = list(berichten)[-_RECENT_VOOR_ANTWOORD:]
+    relevante_tekst = formatteer_geschiedenis(relevante_berichten) if relevante_berichten else None
+    systeem, user = bouw_vraag_prompt(
+        pand_naam=pand_naam, huurder_naam=huurder_naam,
+        geschiedenis_tekst=formatteer_geschiedenis(recent), vraag=vraag,
+        samenvatting=samenvatting, relevante_tekst=relevante_tekst,
+    )
+    return _vraag_claude(config, systeem, user, max_tokens=1500).strip()
 
 
 # Boven dit aantal tekens passen de berichten niet comfortabel in één

@@ -1211,6 +1211,44 @@ def create_app(config: Config | None = None) -> Flask:
             berichten=berichten, concept=concept, stopwoorden=stopwoorden,
         )
 
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/vraag", methods=["POST"])
+    @login_required
+    def huurder_communicatie_vraag(pand_slug: str, kamer_naam: str):
+        """Interne vraag over het dossier van een huurder - geeft een AI-antwoord
+        op basis van samenvatting + berichten, zonder een conceptmail te maken."""
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+        berichten = communicatie_db.berichten_van_contact(db, contact_id)
+        contact = communicatie_db.get_contact(db, contact_id)
+        vraag = request.form.get("instructie", "").strip()
+        if not vraag:
+            flash("Typ eerst een vraag in het veld voordat je 'Vraag beantwoorden' klikt.")
+            return render_template(
+                "huurder_communicatie.html", kamer=kamer, contact=contact,
+                berichten=berichten, concept=None, stopwoorden=[],
+            )
+        # Zelfde gerichte retrieval als bij een concept, maar op de vraag.
+        recent_ids = {b["id"] for b in berichten[-communicatie_ai._RECENT_VOOR_ANTWOORD:]}
+        relevante = communicatie_db.zoek_berichten(
+            db, contact_id, communicatie_ai.zoektermen(vraag), limiet=15, uitsluiten_ids=recent_ids,
+        )
+        antwoord = None
+        try:
+            antwoord = communicatie_ai.beantwoord_vraag(
+                config, pand_naam=g.pand.naam, huurder_naam=kamer.naam, berichten=berichten,
+                vraag=vraag, samenvatting=contact["samenvatting"] if contact else None,
+                relevante_berichten=relevante,
+            )
+        except communicatie_ai.CommunicatieAIError as exc:
+            flash(str(exc))
+        return render_template(
+            "huurder_communicatie.html", kamer=kamer, contact=contact,
+            berichten=berichten, concept=None, stopwoorden=[], antwoord=antwoord, vraag=vraag,
+        )
+
     @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/samenvatting", methods=["POST"])
     @login_required
     def huurder_communicatie_samenvatting(pand_slug: str, kamer_naam: str):

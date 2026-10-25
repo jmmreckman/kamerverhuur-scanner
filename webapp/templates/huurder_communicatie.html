@@ -51,18 +51,30 @@
 </div>
 {% endif %}
 
-{# --- Antwoord opstellen ------------------------------------------------- #}
+{# --- AI-hulp: concept óf vraag ----------------------------------------- #}
 <div class="card">
-  <h2>Antwoord opstellen</h2>
+  <h2>AI-hulp</h2>
   <form method="post" action="{{ url_for('huurder_communicatie_concept', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
-    <label>Aanwijzing voor de AI (optioneel)
-      <input type="text" name="instructie" placeholder="bv. laat weten dat de loodgieter morgen komt">
+    <label>Aanwijzing voor een concept, of een vraag over het dossier
+      <input type="text" name="instructie" value="{{ vraag or '' }}" placeholder="bv. 'laat weten dat de loodgieter morgen komt' of 'wat is er afgesproken over de huurprijs?'">
     </label>
-    <div style="margin-top:.6rem">
+    <div style="margin-top:.6rem; display:flex; gap:.6rem; flex-wrap:wrap">
       <button class="btn btn-secondary" type="submit">Concept genereren</button>
+      <button class="btn btn-secondary" type="submit" formaction="{{ url_for('huurder_communicatie_vraag', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Vraag beantwoorden</button>
     </div>
   </form>
+  <p class="muted" style="margin-top:.4rem;font-size:.85em"><strong>Concept genereren</strong> schrijft een conceptmail aan de huurder. <strong>Vraag beantwoorden</strong> geeft je alleen een antwoord over het dossier (intern, wordt niet gelogd of verstuurd).</p>
 </div>
+
+{# --- Antwoord op een interne vraag (indien zojuist gesteld) ------------- #}
+{% if antwoord %}
+<div class="card">
+  <h2>Antwoord van de AI</h2>
+  {% if vraag %}<p class="muted">Op je vraag: "{{ vraag }}"</p>{% endif %}
+  <div class="breek-af" style="white-space:pre-wrap">{{ antwoord }}</div>
+  <p class="muted" style="margin-top:.5rem;font-size:.85em">Alleen voor jou. Dit wordt niet in de tijdlijn gelogd en niet naar de huurder gestuurd.</p>
+</div>
+{% endif %}
 
 {# --- Bericht loggen ----------------------------------------------------- #}
 <div class="card">

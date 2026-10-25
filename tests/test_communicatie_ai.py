@@ -178,6 +178,41 @@ def test_werk_samenvatting_bij_prompt_bevat_bestaand_en_nieuw(monkeypatch):
     assert "EEN volledige" in gezien["user"]  # instructie: geen losse aanplak
 
 
+def test_bouw_vraag_prompt_bevat_vraag_en_context():
+    systeem, user = ai.bouw_vraag_prompt(
+        pand_naam="Dordtselaan 181", huurder_naam="Nushka",
+        geschiedenis_tekst="[2026-07-01] Huurder: geluidsoverlast",
+        vraag="Wat is er afgesproken over de huurprijs?",
+        samenvatting="Huur is 515 kaal sinds april 2025.",
+        relevante_tekst="[2025-04-07] afspraak: huur blijft 515",
+    )
+    # Interne vraag: geen e-mailpersona, wel feitelijk op basis van het dossier.
+    assert "geen e-mail" in systeem.lower() or "geen aanhef" in systeem.lower()
+    assert "Dordtselaan 181" in user and "Nushka" in user
+    assert "Wat is er afgesproken over de huurprijs?" in user
+    assert "515 kaal" in user              # samenvatting meegegeven
+    assert "huur blijft 515" in user       # relevante oudere berichten
+    assert "geluidsoverlast" in user       # recente berichten
+
+
+def test_beantwoord_vraag_roept_claude_met_vraagprompt(monkeypatch):
+    gezien = {}
+
+    def nep_vraag(config, systeem, user, *, max_tokens):
+        gezien["user"] = user
+        return "De kale huur is 515 euro, afgesproken op 7 april 2025."
+
+    monkeypatch.setattr(ai, "_vraag_claude", nep_vraag)
+    uit = ai.beantwoord_vraag(
+        config=None, pand_naam="P", huurder_naam="Nushka",
+        berichten=[{"datum": "2026-07-01T10:00:00+00:00", "richting": "in",
+                    "van": "n@x.nl", "onderwerp": None, "body": "test"}],
+        vraag="Wat is de huur?", samenvatting="Huur 515.",
+    )
+    assert "515" in uit
+    assert "Wat is de huur?" in gezien["user"]
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",
