@@ -209,7 +209,7 @@ def genereer_antwoord(
         geschiedenis_tekst=formatteer_geschiedenis(recent),
         extra_instructie=extra_instructie, samenvatting=samenvatting, relevante_tekst=relevante_tekst,
     )
-    return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=1024))
+    return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=2048))
 
 
 # Boven dit aantal tekens passen de berichten niet comfortabel in één

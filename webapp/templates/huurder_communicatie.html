@@ -14,7 +14,7 @@
 <div class="card">
   <h2>Samenvatting</h2>
   {% if contact.samenvatting %}
-  <div style="white-space:pre-wrap">{{ contact.samenvatting }}</div>
+  <div class="breek-af" style="white-space:pre-wrap">{{ contact.samenvatting }}</div>
   <p class="muted" style="margin-top:.5rem">Bijgewerkt: {{ (contact.samenvatting_bijgewerkt or '')[:10] }}
     &middot; <em>snel overzicht; de berichten hieronder blijven het origineel.</em></p>
   {% else %}
@@ -93,7 +93,7 @@
         <span class="muted">{{ (b.datum or '')[:10] }}</span>
         {% if b.onderwerp %}&middot; <strong>{{ b.onderwerp }}</strong>{% endif %}
       </p>
-      <div style="white-space:pre-wrap">{{ b.body }}</div>
+      <div class="breek-af" style="white-space:pre-wrap">{{ b.body }}</div>
     </div>
     {% endfor %}
   {% else %}

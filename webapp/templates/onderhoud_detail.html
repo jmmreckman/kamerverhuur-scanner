@@ -22,7 +22,7 @@
     <noscript><button class="btn btn-secondary" type="submit">Opslaan</button></noscript>
   </form>
   {% if klus.omschrijving %}
-  <p style="margin-top:.6rem;white-space:pre-wrap">{{ klus.omschrijving }}</p>
+  <p class="breek-af" style="margin-top:.6rem;white-space:pre-wrap">{{ klus.omschrijving }}</p>
   {% endif %}
   {% if contact and klus.kamer %}
   <p class="muted" style="margin-top:.4rem"><a href="{{ url_for('huurder_communicatie', pand_slug=klus.pand_slug, kamer_naam=klus.kamer) }}">Bekijk alle communicatie met {{ contact.naam }}</a></p>
@@ -116,7 +116,7 @@
         <span class="muted">{{ (b.datum or '')[:10] }}</span>
         {% if b.onderwerp %}&middot; <strong>{{ b.onderwerp }}</strong>{% endif %}
       </p>
-      <div style="white-space:pre-wrap">{{ b.body }}</div>
+      <div class="breek-af" style="white-space:pre-wrap">{{ b.body }}</div>
     </div>
     {% endfor %}
   {% else %}
