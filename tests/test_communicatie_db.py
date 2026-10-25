@@ -117,6 +117,29 @@ def test_bericht_dedup_op_message_id(conn):
 
 # --- klussen ----------------------------------------------------------------
 
+def test_zoek_berichten_op_trefwoord_en_uitsluiten(conn):
+    cid = db.upsert_contact(conn, "Nushka", pand_slug="p1", emails=["n@x.nl"])
+    oud = db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="gmail-historie",
+                              richting="in", body="Dat ging toen over Rietdijk en de borg.",
+                              datum="2025-04-01T10:00:00+00:00")
+    recent = db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="communicatie",
+                                 richting="in", body="Ik begin weer over Rietdijk.",
+                                 datum="2026-10-01T10:00:00+00:00")
+    db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="communicatie",
+                        richting="in", body="Iets heel anders over de kraan.",
+                        datum="2026-10-02T10:00:00+00:00")
+    # zoek op 'Rietdijk', sluit het recente bericht uit -> alleen het oude
+    gevonden = db.zoek_berichten(conn, cid, ["Rietdijk"], uitsluiten_ids={recent})
+    assert [r["id"] for r in gevonden] == [oud]
+
+
+def test_zoek_berichten_zonder_termen_leeg(conn):
+    cid = db.upsert_contact(conn, "Jane", emails=["j@x.nl"])
+    db.voeg_bericht_toe(conn, contact_id=cid, pand_slug="p1", kanaal="communicatie",
+                        richting="in", body="hoi")
+    assert db.zoek_berichten(conn, cid, []) == []
+
+
 def test_maak_klus_en_lijst_nieuwste_boven(conn):
     k1 = db.maak_klus(conn, titel="Lekkage", pand_slug="p1")
     k2 = db.maak_klus(conn, titel="Kapotte deur", pand_slug="p1")

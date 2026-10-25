@@ -1184,12 +1184,24 @@ def create_app(config: Config | None = None) -> Flask:
         db, contact_id = _contact_voor_kamer(kamer)
         berichten = communicatie_db.berichten_van_contact(db, contact_id)
         contact = communicatie_db.get_contact(db, contact_id)
+        instructie = request.form.get("instructie", "").strip() or None
+        # Gericht relevante oudere berichten terughalen op het onderwerp van dit
+        # gesprek (jouw aanwijzing + het laatste inkomende bericht), zodat een
+        # onderwerp van langer geleden niet gemist wordt zonder alles mee te sturen.
+        laatste_in = next((b for b in reversed(berichten) if b["richting"] == "in"), None)
+        querytekst = " ".join(
+            t for t in [instructie, laatste_in["body"] if laatste_in else None] if t
+        )
+        recent_ids = {b["id"] for b in berichten[-communicatie_ai._RECENT_VOOR_ANTWOORD:]}
+        relevante = communicatie_db.zoek_berichten(
+            db, contact_id, communicatie_ai.zoektermen(querytekst), limiet=15, uitsluiten_ids=recent_ids,
+        )
         concept, stopwoorden = None, []
         try:
             concept = communicatie_ai.genereer_antwoord(
                 config, pand_naam=g.pand.naam, huurder_naam=kamer.naam, berichten=berichten,
-                extra_instructie=request.form.get("instructie", "").strip() or None,
-                samenvatting=contact["samenvatting"] if contact else None,
+                extra_instructie=instructie, samenvatting=contact["samenvatting"] if contact else None,
+                relevante_berichten=relevante,
             )
             stopwoorden = communicatie_ai.vind_ai_stopwoorden(concept)
         except communicatie_ai.CommunicatieAIError as exc:

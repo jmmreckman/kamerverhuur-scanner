@@ -383,6 +383,31 @@ def berichten_van_klus(conn: sqlite3.Connection, klus_id: int) -> list[sqlite3.R
     ).fetchall()
 
 
+def zoek_berichten(
+    conn: sqlite3.Connection, contact_id: int, termen, limiet: int = 15, uitsluiten_ids=(),
+) -> list[sqlite3.Row]:
+    """Berichten van een contact die een van de zoektermen bevatten (in body of
+    onderwerp) - voor het gericht terughalen van relevante oudere context bij een
+    conceptantwoord ("waar ging dat van vorig jaar ook alweer over"). Case-
+    insensitief via LIKE, geparametriseerd (dus veilig). Geeft de meest recente
+    treffers terug, afgekapt op `limiet`, zonder de al meegegeven recente
+    berichten (`uitsluiten_ids`)."""
+    termen = [t for t in (termen or []) if t and len(t) >= 3]
+    if not termen:
+        return []
+    deel = " OR ".join(["body LIKE ? OR onderwerp LIKE ?"] * len(termen))
+    params: list = [contact_id]
+    for t in termen:
+        like = f"%{t}%"
+        params.extend([like, like])
+    rijen = conn.execute(
+        f"SELECT * FROM berichten WHERE contact_id = ? AND ({deel}) ORDER BY datum, id", params
+    ).fetchall()
+    uit = set(uitsluiten_ids)
+    rijen = [r for r in rijen if r["id"] not in uit]
+    return rijen[-limiet:]
+
+
 # --- klussen (onderhoudstickets) -------------------------------------------
 
 def maak_klus(

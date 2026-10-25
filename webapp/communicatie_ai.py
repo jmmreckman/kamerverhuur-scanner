@@ -114,15 +114,46 @@ def formatteer_geschiedenis(berichten) -> str:
 _RECENT_VOOR_ANTWOORD = 25
 
 
+# Veelvoorkomende woorden die als zoekterm niks toevoegen (klein, bewust kort).
+_STOPWOORDEN_ZOEK = {
+    "deze", "dit", "dat", "voor", "maar", "niet", "ook", "naar", "over", "heeft",
+    "hebben", "wordt", "worden", "omdat", "zodat", "even", "graag", "nog", "wel",
+    "een", "het", "van", "met", "aan", "bij", "als", "dus", "wat", "hoi", "hallo",
+    "beste", "groet", "groeten", "alvast", "bedankt", "zou", "kunnen", "hierbij",
+    "mvg", "jullie", "onze", "jouw", "mijn",
+}
+
+
+def zoektermen(tekst: str, max_termen: int = 8) -> list[str]:
+    """Haalt de meest kenmerkende woorden uit een tekst om op te zoeken in de
+    historie: eigennamen (woord met hoofdletter, bv. 'Rietdijk') en langere
+    woorden, minus veelvoorkomende stopwoorden. Puur en los testbaar."""
+    termen: list[str] = []
+    for w in re.findall(r"[A-Za-zÀ-ÿ'’\-]{3,}", tekst or ""):
+        wl = w.lower()
+        if wl in _STOPWOORDEN_ZOEK:
+            continue
+        if w[:1].isupper() or len(w) >= 6:  # eigennaam of een langer, specifiek woord
+            if wl not in {t.lower() for t in termen}:
+                termen.append(w)
+    return termen[:max_termen]
+
+
 def bouw_antwoord_prompt(
     *, pand_naam: str, huurder_naam: str, geschiedenis_tekst: str,
     extra_instructie: str | None = None, samenvatting: str | None = None,
+    relevante_tekst: str | None = None,
 ) -> tuple[str, str]:
     """Geeft (systeemprompt, user-tekst) voor een conceptantwoord terug - pure
     string-bouw, los testbaar."""
     user = f"Pand: {pand_naam}\nHuurder: {huurder_naam}\n\n"
     if samenvatting:
         user += f"Achtergrond (samenvatting van de hele relatie met deze huurder):\n{samenvatting}\n\n"
+    if relevante_tekst:
+        user += (
+            "Mogelijk relevante oudere berichten (teruggezocht op het onderwerp van dit "
+            f"gesprek):\n{relevante_tekst}\n\n"
+        )
     user += f"Recente berichten (oudste eerst):\n{geschiedenis_tekst or '(nog geen eerdere berichten)'}\n\n"
     if extra_instructie:
         user += f"Extra aanwijzing voor dit antwoord: {extra_instructie}\n\n"
@@ -164,15 +195,19 @@ def bouw_vakman_mail(
 def genereer_antwoord(
     config: Config, *, pand_naam: str, huurder_naam: str, berichten,
     extra_instructie: str | None = None, samenvatting: str | None = None,
+    relevante_berichten=None,
 ) -> str:
     """Genereert een conceptantwoord (mailtekst) en past de stijl-nacheck toe.
-    Gebruikt de samenvatting als achtergrond + alleen de recentste berichten, zodat
-    de prompt klein en snel blijft, ook bij een huurder met honderden berichten."""
+    Gebruikt de samenvatting als achtergrond + de recentste berichten, en - indien
+    meegegeven - een set gericht teruggezochte, mogelijk relevante oudere berichten
+    (bv. dat onderwerp van een half jaar geleden). Zo blijft de prompt klein/snel,
+    maar wordt relevante oude context niet gemist."""
     recent = list(berichten)[-_RECENT_VOOR_ANTWOORD:]
+    relevante_tekst = formatteer_geschiedenis(relevante_berichten) if relevante_berichten else None
     systeem, user = bouw_antwoord_prompt(
         pand_naam=pand_naam, huurder_naam=huurder_naam,
         geschiedenis_tekst=formatteer_geschiedenis(recent),
-        extra_instructie=extra_instructie, samenvatting=samenvatting,
+        extra_instructie=extra_instructie, samenvatting=samenvatting, relevante_tekst=relevante_tekst,
     )
     return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=1024))
 

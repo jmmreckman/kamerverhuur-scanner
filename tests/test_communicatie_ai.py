@@ -135,6 +135,27 @@ def test_chunk_berichten_kort_blijft_een_stuk():
     assert len(ai._chunk_berichten(berichten, max_chars=40_000)) == 1
 
 
+def test_zoektermen_pakt_eigennamen_en_lange_woorden():
+    termen = ai.zoektermen("Nushka begint weer over Rietdijk en de servicekosten, graag even bellen")
+    laag = [t.lower() for t in termen]
+    assert "rietdijk" in laag          # eigennaam (hoofdletter)
+    assert "servicekosten" in laag     # lang, specifiek woord
+    assert "over" not in laag and "even" not in laag  # stopwoorden eruit
+
+
+def test_zoektermen_leeg():
+    assert ai.zoektermen("") == []
+
+
+def test_bouw_antwoord_prompt_met_relevante_oudere_berichten():
+    _s, user = ai.bouw_antwoord_prompt(
+        pand_naam="P", huurder_naam="H", geschiedenis_tekst="recent",
+        relevante_tekst="[2025-04-01] Huurder: vraag over Rietdijk",
+    )
+    assert "relevante oudere berichten" in user.lower()
+    assert "Rietdijk" in user
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",
