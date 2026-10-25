@@ -1183,18 +1183,19 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)
         db, contact_id = _contact_voor_kamer(kamer)
         berichten = communicatie_db.berichten_van_contact(db, contact_id)
+        contact = communicatie_db.get_contact(db, contact_id)
         concept, stopwoorden = None, []
         try:
             concept = communicatie_ai.genereer_antwoord(
                 config, pand_naam=g.pand.naam, huurder_naam=kamer.naam, berichten=berichten,
                 extra_instructie=request.form.get("instructie", "").strip() or None,
+                samenvatting=contact["samenvatting"] if contact else None,
             )
             stopwoorden = communicatie_ai.vind_ai_stopwoorden(concept)
         except communicatie_ai.CommunicatieAIError as exc:
             flash(str(exc))
         return render_template(
-            "huurder_communicatie.html", kamer=kamer,
-            contact=communicatie_db.get_contact(db, contact_id),
+            "huurder_communicatie.html", kamer=kamer, contact=contact,
             berichten=berichten, concept=concept, stopwoorden=stopwoorden,
         )
 

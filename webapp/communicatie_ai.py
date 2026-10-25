@@ -108,15 +108,22 @@ def formatteer_geschiedenis(berichten) -> str:
     return "\n\n".join(regels)
 
 
+# Voor een conceptantwoord gebruiken we niet de hele historie (bij een lange
+# relatie zijn dat honderden berichten - te groot/traag voor een request), maar
+# de samenvatting als achtergrond + de recentste berichten als directe context.
+_RECENT_VOOR_ANTWOORD = 25
+
+
 def bouw_antwoord_prompt(
-    *, pand_naam: str, huurder_naam: str, geschiedenis_tekst: str, extra_instructie: str | None = None
+    *, pand_naam: str, huurder_naam: str, geschiedenis_tekst: str,
+    extra_instructie: str | None = None, samenvatting: str | None = None,
 ) -> tuple[str, str]:
     """Geeft (systeemprompt, user-tekst) voor een conceptantwoord terug - pure
     string-bouw, los testbaar."""
-    user = (
-        f"Pand: {pand_naam}\nHuurder: {huurder_naam}\n\n"
-        f"Gesprekshistorie (oudste eerst):\n{geschiedenis_tekst or '(nog geen eerdere berichten)'}\n\n"
-    )
+    user = f"Pand: {pand_naam}\nHuurder: {huurder_naam}\n\n"
+    if samenvatting:
+        user += f"Achtergrond (samenvatting van de hele relatie met deze huurder):\n{samenvatting}\n\n"
+    user += f"Recente berichten (oudste eerst):\n{geschiedenis_tekst or '(nog geen eerdere berichten)'}\n\n"
     if extra_instructie:
         user += f"Extra aanwijzing voor dit antwoord: {extra_instructie}\n\n"
     user += "Schrijf nu het conceptantwoord aan de huurder."
@@ -156,13 +163,16 @@ def bouw_vakman_mail(
 
 def genereer_antwoord(
     config: Config, *, pand_naam: str, huurder_naam: str, berichten,
-    extra_instructie: str | None = None,
+    extra_instructie: str | None = None, samenvatting: str | None = None,
 ) -> str:
-    """Genereert een conceptantwoord (mailtekst) en past de stijl-nacheck toe."""
+    """Genereert een conceptantwoord (mailtekst) en past de stijl-nacheck toe.
+    Gebruikt de samenvatting als achtergrond + alleen de recentste berichten, zodat
+    de prompt klein en snel blijft, ook bij een huurder met honderden berichten."""
+    recent = list(berichten)[-_RECENT_VOOR_ANTWOORD:]
     systeem, user = bouw_antwoord_prompt(
         pand_naam=pand_naam, huurder_naam=huurder_naam,
-        geschiedenis_tekst=formatteer_geschiedenis(berichten),
-        extra_instructie=extra_instructie,
+        geschiedenis_tekst=formatteer_geschiedenis(recent),
+        extra_instructie=extra_instructie, samenvatting=samenvatting,
     )
     return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=1024))
 

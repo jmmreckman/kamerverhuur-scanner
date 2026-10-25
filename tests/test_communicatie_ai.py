@@ -80,6 +80,16 @@ def test_bouw_antwoord_prompt_bevat_context_en_stijlregels():
     assert "loodgieter morgen komt" in user
 
 
+def test_bouw_antwoord_prompt_met_samenvatting_als_achtergrond():
+    _systeem, user = ai.bouw_antwoord_prompt(
+        pand_naam="P", huurder_naam="H", geschiedenis_tekst="recent bericht",
+        samenvatting="Rustige huurder, betaalt altijd op tijd.",
+    )
+    assert "Achtergrond" in user
+    assert "betaalt altijd op tijd" in user
+    assert "recent bericht" in user
+
+
 def test_bouw_antwoord_prompt_zonder_historie():
     _systeem, user = ai.bouw_antwoord_prompt(
         pand_naam="P", huurder_naam="H", geschiedenis_tekst="",
