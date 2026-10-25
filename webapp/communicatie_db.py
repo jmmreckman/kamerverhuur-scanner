@@ -207,6 +207,64 @@ def upsert_contact(
     return contact_id
 
 
+def seed_contact(
+    conn: sqlite3.Connection,
+    *,
+    naam: str,
+    pand_slug: str,
+    kamer: str | None = None,
+    email: str | None = None,
+    telefoon: str | None = None,
+) -> int:
+    """Zorgt dat er precies één contact bestaat voor een huurder uit de
+    Huurders-sheet, en werkt de stamgegevens bij. Matcht eerst op e-mailadres
+    (de koppelsleutel); heeft de huurder geen e-mail in de sheet, dan op
+    pand+naam, zodat herhaald seeden/openen geen dubbele contacten oplevert.
+    Alleen niet-lege nieuwe waarden overschrijven bestaande (zodat handmatig
+    aangevulde gegevens blijven staan)."""
+    emails = _normaliseer_emails([email] if email else None)
+
+    contact_id = None
+    for e in emails:
+        rij = conn.execute(
+            "SELECT contact_id FROM contact_emails WHERE email = ?", (e,)
+        ).fetchone()
+        if rij is not None:
+            contact_id = int(rij["contact_id"])
+            break
+    if contact_id is None and not emails:
+        rij = conn.execute(
+            "SELECT id FROM contacten WHERE pand_slug IS ? AND naam = ? ORDER BY id LIMIT 1",
+            (pand_slug, naam),
+        ).fetchone()
+        if rij is not None:
+            contact_id = int(rij["id"])
+
+    if contact_id is None:
+        cur = conn.execute(
+            "INSERT INTO contacten (naam, pand_slug, kamer, telefoon, actief, aangemaakt) "
+            "VALUES (?, ?, ?, ?, 1, ?)",
+            (naam, pand_slug, kamer, telefoon, _nu()),
+        )
+        contact_id = int(cur.lastrowid)
+    else:
+        velden = {"naam": naam, "pand_slug": pand_slug, "kamer": kamer, "telefoon": telefoon}
+        zetten = {k: v for k, v in velden.items() if v}
+        if zetten:
+            kolommen = ", ".join(f"{k} = ?" for k in zetten)
+            conn.execute(
+                f"UPDATE contacten SET {kolommen} WHERE id = ?", (*zetten.values(), contact_id)
+            )
+
+    for e in emails:
+        conn.execute(
+            "INSERT OR IGNORE INTO contact_emails (contact_id, email) VALUES (?, ?)",
+            (contact_id, e),
+        )
+    conn.commit()
+    return contact_id
+
+
 def _normaliseer_emails(emails: list[str] | None) -> list[str]:
     schoon = []
     for e in emails or []:

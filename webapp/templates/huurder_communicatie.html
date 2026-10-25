@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Communicatie - {{ kamer.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Communicatie</h1>
+  <p class="muted">
+    {{ kamer.naam }} &middot; kamer {{ kamer.kamer }} &middot; {{ huidig_pand.naam }}
+    {% if kamer.email %}&middot; {{ kamer.email }}{% endif %}
+    {% if kamer.telefoonnummer %}&middot; {{ kamer.telefoonnummer }}{% endif %}
+  </p>
+</div>
+
+{# --- Samenvatting ------------------------------------------------------- #}
+<div class="card">
+  <h2>Samenvatting</h2>
+  {% if contact.samenvatting %}
+  <div style="white-space:pre-wrap">{{ contact.samenvatting }}</div>
+  <p class="muted" style="margin-top:.5rem">Bijgewerkt: {{ (contact.samenvatting_bijgewerkt or '')[:10] }}
+    &middot; <em>snel overzicht; de berichten hieronder blijven het origineel.</em></p>
+  {% else %}
+  <p class="muted">Nog geen samenvatting. Laat de AI er een opstellen uit de berichten hieronder.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('huurder_communicatie_samenvatting', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}" style="margin-top:.6rem">
+    <button class="btn btn-secondary" type="submit">{{ 'Samenvatting bijwerken' if contact.samenvatting else 'Samenvatting opstellen' }}</button>
+  </form>
+</div>
+
+{# --- AI-concept (indien zojuist gegenereerd) ---------------------------- #}
+{% if concept %}
+<div class="card">
+  <h2>Conceptantwoord</h2>
+  {% if stopwoorden %}
+  <div class="flash"><p>Let op, mogelijk te "AI-achtig" - gevonden: {{ stopwoorden|join(', ') }}. Pas de tekst gerust aan.</p></div>
+  {% endif %}
+  <p class="muted">Controleer/pas aan en log het als verzonden bericht (versturen via de mail komt in een volgende stap).</p>
+  <form method="post" action="{{ url_for('huurder_communicatie_bericht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <input type="hidden" name="richting" value="uit">
+    <textarea name="body" rows="10" style="width:100%;box-sizing:border-box">{{ concept }}</textarea>
+    <div style="margin-top:.6rem">
+      <button class="btn" type="submit">Log als verzonden bericht</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{# --- Antwoord opstellen ------------------------------------------------- #}
+<div class="card">
+  <h2>Antwoord opstellen</h2>
+  <form method="post" action="{{ url_for('huurder_communicatie_concept', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <label>Aanwijzing voor de AI (optioneel)
+      <input type="text" name="instructie" placeholder="bv. laat weten dat de loodgieter morgen komt">
+    </label>
+    <div style="margin-top:.6rem">
+      <button class="btn btn-secondary" type="submit">Concept genereren</button>
+    </div>
+  </form>
+</div>
+
+{# --- Bericht loggen ----------------------------------------------------- #}
+<div class="card">
+  <h2>Bericht loggen</h2>
+  <p class="muted">Voeg handmatig een bericht toe aan de tijdlijn (bv. iets dat via WhatsApp of telefoon ging).</p>
+  <form method="post" action="{{ url_for('huurder_communicatie_bericht', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>Richting
+        <select name="richting">
+          <option value="in">Ontvangen van huurder</option>
+          <option value="uit">Verzonden aan huurder</option>
+        </select>
+      </label>
+      <label>Datum <input type="date" name="datum"></label>
+    </span>
+    <label>Onderwerp (optioneel) <input type="text" name="onderwerp"></label>
+    <label>Bericht <textarea name="body" rows="4" style="width:100%;box-sizing:border-box" required></textarea></label>
+    <div style="margin-top:.6rem"><button class="btn" type="submit">Bericht loggen</button></div>
+  </form>
+</div>
+
+{# --- Tijdlijn ----------------------------------------------------------- #}
+<div class="card">
+  <h2>Tijdlijn</h2>
+  {% if berichten %}
+    {% for b in berichten|reverse %}
+    <div class="item-box">
+      <p style="margin:0 0 .3rem 0">
+        {% if b.richting == 'in' %}
+        <span class="pil pil-neutral">Ontvangen</span>
+        {% else %}
+        <span class="pil status-betaald">Verzonden</span>
+        {% endif %}
+        <span class="muted">{{ (b.datum or '')[:10] }}</span>
+        {% if b.onderwerp %}&middot; <strong>{{ b.onderwerp }}</strong>{% endif %}
+      </p>
+      <div style="white-space:pre-wrap">{{ b.body }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Nog geen berichten. Log hierboven een bericht, of straks komt dit automatisch uit de mailbox + de eenmalige Gmail-import.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Terug naar huurders</a>
+</div>
+{% endblock %}

@@ -65,6 +65,25 @@ def test_lijst_contacten_filtert_op_pand_en_actief(conn):
     assert db.lijst_contacten(conn, pand_slugs=[]) == []
 
 
+def test_seed_contact_matcht_op_email_niet_dubbel(conn):
+    a = db.seed_contact(conn, naam="Jane Doe", pand_slug="p1", kamer="BG", email="jane@x.nl")
+    b = db.seed_contact(conn, naam="Jane A. Doe", pand_slug="p1", kamer="BG", email="jane@x.nl",
+                        telefoon="0611")
+    assert a == b
+    assert db.get_contact(conn, a)["naam"] == "Jane A. Doe"
+    assert db.get_contact(conn, a)["telefoon"] == "0611"
+
+
+def test_seed_contact_zonder_email_matcht_op_pand_en_naam(conn):
+    # Huurder zonder e-mail: tweede keer openen mag geen tweede contact maken.
+    a = db.seed_contact(conn, naam="Piet Zonderemail", pand_slug="p1", kamer="1e")
+    b = db.seed_contact(conn, naam="Piet Zonderemail", pand_slug="p1", kamer="1e")
+    assert a == b
+    # Zelfde naam in een ánder pand is wél een ander contact.
+    c = db.seed_contact(conn, naam="Piet Zonderemail", pand_slug="p2", kamer="1e")
+    assert c != a
+
+
 def test_zet_samenvatting(conn):
     cid = db.upsert_contact(conn, "Jane", emails=["j@x.nl"])
     db.zet_samenvatting(conn, cid, "Rustige huurder, vroeg in mei 2025 om een nieuwe sleutel.")

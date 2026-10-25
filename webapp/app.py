@@ -40,7 +40,10 @@ from kamerverhuur_scanner.runner import (
 from kamerverhuur_scanner.sheet_client import SheetClient, service_account_email, sheet_id_uit_invoer
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
-from . import ads, afwijzing, bezichtiging, contracts, documentverzoek, ondertekenen, tekenportaal, wwso
+from . import (
+    ads, afwijzing, bezichtiging, communicatie_ai, communicatie_db, contracts,
+    documentverzoek, ondertekenen, tekenportaal, wwso,
+)
 from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
@@ -99,6 +102,23 @@ def create_app(config: Config | None = None) -> Flask:
             return load_properties(config.properties_file)
         except PropertiesError:
             return []
+
+    def _comm_db():
+        """Verbinding met de communicatie-/onderhoudsdatabase (SQLite in state_dir),
+        lui geopend per request en aan het eind van de request automatisch gesloten.
+        Alleen de communicatie-/onderhoudsroutes raken dit aan - andere pagina's
+        openen dus niets."""
+        db = getattr(g, "_comm_db_conn", None)
+        if db is None:
+            db = communicatie_db.verbind(communicatie_db.pad(config.state_dir))
+            g._comm_db_conn = db
+        return db
+
+    @app.teardown_appcontext
+    def _sluit_comm_db(_exc):
+        db = getattr(g, "_comm_db_conn", None)
+        if db is not None:
+            db.close()
 
     app.secret_key = config.flask_secret_key
 
@@ -1046,6 +1066,103 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "oude_huurder_detail.html", oud=oud, geschiedenis=list(reversed(geschiedenis)),
         )
+
+    # --- Huurderscommunicatie (Fase 1: tijdlijn + handmatig loggen + AI) ---
+
+    def _contact_voor_kamer(kamer: Tenant):
+        """Zorgt dat er een contact bestaat voor de huurder op deze kamer (geseed
+        uit de sheet) en geeft (db, contact_id) terug."""
+        db = _comm_db()
+        contact_id = communicatie_db.seed_contact(
+            db, naam=kamer.naam, pand_slug=g.pand.slug, kamer=kamer.kamer,
+            email=kamer.email, telefoon=kamer.telefoonnummer,
+        )
+        return db, contact_id
+
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie")
+    @login_required
+    def huurder_communicatie(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            flash("Deze kamer heeft nog geen huurder, dus er is geen communicatie om te tonen.")
+            return redirect(url_for("huurders", pand_slug=pand_slug))
+        db, contact_id = _contact_voor_kamer(kamer)
+        return render_template(
+            "huurder_communicatie.html", kamer=kamer,
+            contact=communicatie_db.get_contact(db, contact_id),
+            berichten=communicatie_db.berichten_van_contact(db, contact_id),
+            concept=None, stopwoorden=[],
+        )
+
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/bericht", methods=["POST"])
+    @login_required
+    def huurder_communicatie_bericht(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+        body = request.form.get("body", "").strip()
+        if not body:
+            flash("Het bericht was leeg, er is niets gelogd.")
+            return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+        datum = request.form.get("datum", "").strip()
+        datum_iso = f"{datum}T12:00:00+00:00" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", datum) else None
+        communicatie_db.voeg_bericht_toe(
+            db, contact_id=contact_id, pand_slug=pand_slug, kanaal="communicatie",
+            richting="in" if request.form.get("richting") == "in" else "uit",
+            onderwerp=request.form.get("onderwerp", "").strip() or None,
+            body=body, datum=datum_iso, bron="handmatig",
+        )
+        flash("Bericht gelogd.")
+        return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
+
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/concept", methods=["POST"])
+    @login_required
+    def huurder_communicatie_concept(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+        berichten = communicatie_db.berichten_van_contact(db, contact_id)
+        concept, stopwoorden = None, []
+        try:
+            concept = communicatie_ai.genereer_antwoord(
+                config, pand_naam=g.pand.naam, huurder_naam=kamer.naam, berichten=berichten,
+                extra_instructie=request.form.get("instructie", "").strip() or None,
+            )
+            stopwoorden = communicatie_ai.vind_ai_stopwoorden(concept)
+        except communicatie_ai.CommunicatieAIError as exc:
+            flash(str(exc))
+        return render_template(
+            "huurder_communicatie.html", kamer=kamer,
+            contact=communicatie_db.get_contact(db, contact_id),
+            berichten=berichten, concept=concept, stopwoorden=stopwoorden,
+        )
+
+    @app.route("/pand/<pand_slug>/huurders/<kamer_naam>/communicatie/samenvatting", methods=["POST"])
+    @login_required
+    def huurder_communicatie_samenvatting(pand_slug: str, kamer_naam: str):
+        sheet = SheetClient(config, g.pand)
+        kamer = _kamer_of_404(sheet, kamer_naam)
+        if not kamer.naam:
+            abort(404)
+        db, contact_id = _contact_voor_kamer(kamer)
+        berichten = communicatie_db.berichten_van_contact(db, contact_id)
+        if not berichten:
+            flash("Er zijn nog geen berichten om samen te vatten.")
+        else:
+            try:
+                samenvatting = communicatie_ai.genereer_samenvatting(
+                    config, huurder_naam=kamer.naam, berichten=berichten
+                )
+                communicatie_db.zet_samenvatting(db, contact_id, samenvatting)
+                flash("Samenvatting bijgewerkt.")
+            except communicatie_ai.CommunicatieAIError as exc:
+                flash(str(exc))
+        return redirect(url_for("huurder_communicatie", pand_slug=pand_slug, kamer_naam=kamer_naam))
 
     def _kamer_form_naar_velden(form) -> dict:
         kale_huurprijs = form.get("kale_huurprijs", "").strip()

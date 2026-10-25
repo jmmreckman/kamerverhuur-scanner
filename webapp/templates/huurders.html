@@ -23,7 +23,10 @@
       <td>{% if k.telefoonnummer %}<a href="tel:{{ k.telefoonnummer }}">{{ k.telefoonnummer }}</a>{% else %}-{% endif %}</td>
       <td>{{ k.verwacht_bedrag|eur }}</td>
       <td>{{ k.contract_einddatum or "-" }}</td>
-      <td><a href="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Bewerken</a></td>
+      <td>
+        {% if k.naam %}<a href="{{ url_for('huurder_communicatie', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Communicatie</a> &middot; {% endif %}
+        <a href="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">Bewerken</a>
+      </td>
     </tr>
     {% endfor %}
   </table>
