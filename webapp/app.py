@@ -408,7 +408,56 @@ def create_app(config: Config | None = None) -> Flask:
             return redirect(url_for("dashboard", pand_slug=eigen_panden[0].slug))
         volgorde = state.laad_pand_volgorde(current_user.id, config.state_dir)
         eigen_panden = state.sorteer_op_volgorde(eigen_panden, volgorde)
-        return render_template("pand_kiezer.html", panden=eigen_panden)
+        return render_template(
+            "pand_kiezer.html", panden=eigen_panden, aandacht=_aandacht_goedkope_signalen(eigen_panden),
+        )
+
+    def _aandacht_goedkope_signalen(panden: list) -> dict:
+        """De 'Wat vraagt aandacht'-signalen die goedkoop op te halen zijn (geen
+        Google Sheet nodig): concepten in de wachtrij + open onderhoudsklussen
+        (uit de lokale db) en betaalachterstanden (uit de opgeslagen betaal-
+        controle-state). Lege kamers/aflopende contracten komen apart en lui via
+        aandacht_sheet_signalen(), zodat de startpagina snel blijft."""
+        slugs = [p.slug for p in panden]
+        db = _comm_db()
+        betaal_achter = 0
+        for p in panden:
+            cache = state.load(p.slug, config.state_dir)
+            if cache:
+                betaal_achter += sum(
+                    1 for r in cache.get("resultaten", [])
+                    if r.get("status") in ("Nog niet ontvangen", "Te weinig ontvangen")
+                )
+        return {
+            "concepten": communicatie_db.tel_open_acties(db, pand_slugs=slugs),
+            "onderhoud_open": len(communicatie_db.lijst_klussen(db, pand_slugs=slugs, alleen_open=True)),
+            "betaal_achter": betaal_achter,
+        }
+
+    @app.route("/aandacht/sheet-signalen")
+    @login_required
+    def aandacht_sheet_signalen():
+        """JSON: lege kamers + binnenkort aflopende contracten per pand - leest de
+        Google Sheets, dus lui opgehaald (via AJAX) zodat de startpagina niet
+        wacht op alle sheets."""
+        uit = []
+        for p in _toegankelijke_panden():
+            try:
+                kamers = SheetClient(config, p).get_kamers()
+            except Exception:
+                app.logger.exception("Aandacht-signalen ophalen voor pand %s mislukt.", p.slug)
+                continue
+            leeg = [k.kamer for k in kamers if not k.naam]
+            aflopend = []
+            for k in kamers:
+                if not k.naam:
+                    continue
+                st = bereken_aanzeg_status(k.contract_einddatum)
+                if st and 0 <= st.dagen_tot_einddatum <= _AANZEG_TEGEL_DAGEN:
+                    aflopend.append({"kamer": k.kamer, "dagen": st.dagen_tot_einddatum})
+            if leeg or aflopend:
+                uit.append({"slug": p.slug, "naam": p.naam, "leeg": leeg, "aflopend": aflopend})
+        return jsonify(uit)
 
     @app.route("/pand-volgorde", methods=["POST"])
     @login_required

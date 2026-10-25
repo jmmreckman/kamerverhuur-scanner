@@ -7,6 +7,47 @@
 </div>
 
 {% if panden %}
+<div class="card" id="aandacht-card" style="margin-bottom:1.5rem">
+  <h2 style="margin-top:0">Wat vraagt aandacht</h2>
+  <ul id="aandacht-lijst" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem">
+    {% if aandacht.concepten %}<li><span class="pil pil-neutral">Communicatie</span> <a href="{{ url_for('acties_overzicht') }}">{{ aandacht.concepten }} concept(en) te keuren</a></li>{% endif %}
+    {% if aandacht.onderhoud_open %}<li><span class="pil pil-neutral">Onderhoud</span> <a href="{{ url_for('onderhoud_overzicht') }}">{{ aandacht.onderhoud_open }} openstaande klus(sen)</a></li>{% endif %}
+    {% if aandacht.betaal_achter %}<li><span class="pil pil-neutral">Betaling</span> {{ aandacht.betaal_achter }} kamer(s) met betaalachterstand</li>{% endif %}
+    <li id="aandacht-sheet"><span class="muted">Lege kamers en aflopende contracten laden&hellip;</span></li>
+  </ul>
+</div>
+<script>
+  (function () {
+    var lijst = document.getElementById("aandacht-lijst");
+    var sheetLi = document.getElementById("aandacht-sheet");
+    function escapeHtml(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+    function klaar() {
+      // Als er na het laden geen enkel punt over is: meld dat het rustig is.
+      if (lijst && lijst.querySelectorAll("li").length === 0) {
+        lijst.innerHTML = '<li class="muted">Niets dringends op dit moment.</li>';
+      }
+    }
+    fetch("{{ url_for('aandacht_sheet_signalen') }}")
+      .then(function (r) { return r.json(); })
+      .then(function (panden) {
+        var html = "";
+        panden.forEach(function (p) {
+          var naam = escapeHtml(p.naam);
+          if (p.leeg && p.leeg.length) {
+            html += '<li><span class="pil pil-neutral">Lege kamer</span> ' + naam + ': ' + escapeHtml(p.leeg.join(", ")) + '</li>';
+          }
+          if (p.aflopend && p.aflopend.length) {
+            var k = p.aflopend.map(function (a) { return a.kamer + " (" + a.dagen + " dagen)"; });
+            html += '<li><span class="pil pil-neutral">Contract loopt af</span> ' + naam + ': ' + escapeHtml(k.join(", ")) + '</li>';
+          }
+        });
+        if (sheetLi) { sheetLi.outerHTML = html; }
+        klaar();
+      })
+      .catch(function () { if (sheetLi) sheetLi.outerHTML = ""; klaar(); });
+  })();
+</script>
+
 <div class="grid" id="pand-grid">
   {% for pand in panden %}
   {% set tegelkleur = (pand.kleur|hexkleur) if current_user.kleurenherkenning else '' %}
