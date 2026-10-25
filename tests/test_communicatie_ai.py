@@ -109,6 +109,22 @@ def test_bouw_vakman_mail_zonder_telefoonnummer():
     assert "06-" not in body  # geen verzonnen nummer
 
 
+def test_chunk_berichten_splitst_en_behoudt_volgorde():
+    berichten = [{"body": "x" * 100} for _ in range(10)]  # ~220 tekens per bericht (incl. +120)
+    chunks = ai._chunk_berichten(berichten, max_chars=500)  # ~2 berichten per chunk
+    # alle berichten zitten erin, volgorde behouden
+    assert sum(len(c) for c in chunks) == 10
+    assert len(chunks) >= 4
+    # geen enkel (niet-eerste) chunk overschrijdt grof de grens
+    for c in chunks:
+        assert len(c) <= 3
+
+
+def test_chunk_berichten_kort_blijft_een_stuk():
+    berichten = [{"body": "kort"} for _ in range(3)]
+    assert len(ai._chunk_berichten(berichten, max_chars=40_000)) == 1
+
+
 def test_bouw_samenvatting_prompt():
     systeem, user = ai.bouw_samenvatting_prompt(
         huurder_naam="Jane Doe", geschiedenis_tekst="[2025-05-01] Huurder: kraan lekt",

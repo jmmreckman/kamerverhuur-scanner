@@ -191,7 +191,7 @@ def _haal_groottes(imap: imaplib.IMAP4_SSL, nums: list[bytes]) -> dict[bytes, in
 
 def importeer_voor_adres(
     db, imap: imaplib.IMAP4_SSL, *, contact_id: int, pand_slug: str, adres: str, eigen_adres: str,
-    max_bytes: int = 2_000_000,
+    max_bytes: int = 25_000_000,
 ) -> int:
     """Zoekt in de geselecteerde map alle berichten van/aan `adres`, parseert ze en
     zet ze in de communicatie-db (dedup op Message-ID). Geeft het aantal nieuw

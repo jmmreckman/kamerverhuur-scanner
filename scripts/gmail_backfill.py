@@ -36,8 +36,6 @@ from webapp import communicatie_ai, communicatie_db, mail_import
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("gmail_backfill")
 
-_MAX_BERICHTEN_SAMENVATTING = 120
-
 
 def main(argv: list[str]) -> int:
     load_dotenv()
@@ -109,9 +107,10 @@ def _maak_samenvatting(config: Config, db, contact_id: int, naam: str) -> None:
     berichten = communicatie_db.berichten_van_contact(db, contact_id)
     if not berichten:
         return
+    logger.info("    samenvatten (%d bericht(en))...", len(berichten))
     try:
         samenvatting = communicatie_ai.genereer_samenvatting(
-            config, huurder_naam=naam, berichten=berichten[-_MAX_BERICHTEN_SAMENVATTING:],
+            config, huurder_naam=naam, berichten=berichten,
         )
         communicatie_db.zet_samenvatting(db, contact_id, samenvatting)
     except communicatie_ai.CommunicatieAIError as exc:

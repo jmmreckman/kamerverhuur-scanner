@@ -167,11 +167,54 @@ def genereer_antwoord(
     return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=1024))
 
 
+# Boven dit aantal tekens passen de berichten niet comfortabel in één
+# AI-aanroep; dan vatten we in stukken samen en voegen we die samen (map-reduce),
+# zodat ook een hele lange huurder-historie volledig meetelt.
+_MAX_CHARS_SAMENVATTING = 40_000
+
+
+def _chunk_berichten(berichten, max_chars: int) -> list[list]:
+    """Hakt de berichtenlijst in opeenvolgende stukken waarvan de getekstte
+    historie elk ongeveer onder `max_chars` blijft (chronologie behouden)."""
+    chunks, huidig, lengte = [], [], 0
+    for b in berichten:
+        stuk = len(_veld(b, "body") or "") + 120  # +kop/overhead per bericht
+        if huidig and lengte + stuk > max_chars:
+            chunks.append(huidig)
+            huidig, lengte = [], 0
+        huidig.append(b)
+        lengte += stuk
+    if huidig:
+        chunks.append(huidig)
+    return chunks
+
+
 def genereer_samenvatting(config: Config, *, huurder_naam: str, berichten) -> str:
-    systeem, user = bouw_samenvatting_prompt(
-        huurder_naam=huurder_naam, geschiedenis_tekst=formatteer_geschiedenis(berichten),
+    """Samenvatting per huurder. Bij een korte historie één AI-aanroep; bij een
+    lange historie in stukken (deel-samenvattingen) die daarna tot één geheel
+    worden samengevoegd, zodat de volledige geschiedenis meetelt."""
+    volledig = formatteer_geschiedenis(berichten)
+    if len(volledig) <= _MAX_CHARS_SAMENVATTING:
+        systeem, user = bouw_samenvatting_prompt(huurder_naam=huurder_naam, geschiedenis_tekst=volledig)
+        return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=800))
+
+    deel_samenvattingen = []
+    chunks = _chunk_berichten(berichten, _MAX_CHARS_SAMENVATTING)
+    for i, chunk in enumerate(chunks, 1):
+        systeem, user = bouw_samenvatting_prompt(
+            huurder_naam=huurder_naam, geschiedenis_tekst=formatteer_geschiedenis(chunk),
+        )
+        user += f"\n\n(Dit is deel {i} van {len(chunks)} van de historie.)"
+        deel_samenvattingen.append(_vraag_claude(config, systeem, user, max_tokens=700))
+
+    combineer_user = (
+        f"Hieronder staan {len(deel_samenvattingen)} deelsamenvattingen van de communicatie met "
+        f"{huurder_naam}, in chronologische volgorde. Voeg ze samen tot een enkele, heldere "
+        "samenvatting zonder herhaling, met de lopende zaken, gemaakte afspraken en terugkerende "
+        "punten (met data of jaartallen waar relevant):\n\n"
+        + "\n\n---\n\n".join(deel_samenvattingen)
     )
-    return schoon_stijl(_vraag_claude(config, systeem, user, max_tokens=700))
+    return schoon_stijl(_vraag_claude(config, _SYSTEEM_SAMENVATTING, combineer_user, max_tokens=1000))
 
 
 # --- intern -----------------------------------------------------------------
