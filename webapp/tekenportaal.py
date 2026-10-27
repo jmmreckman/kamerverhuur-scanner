@@ -405,9 +405,16 @@ def genereer_getekend_pdf(state_dir: str, doc_id: str) -> tuple[str, bytes]:
                 # Ingevulde tekst (plaats, BSN, datum, ...) - lettergrootte schaalt
                 # mee met de veldhoogte, met een redelijke onder-/bovengrens.
                 fontsize = max(7.0, min(13.0, rect.height * 0.62))
+                # Centreren in het vak, zowel horizontaal (align) als verticaal
+                # (de tekstbox naar het midden schuiven). In de plaats-UI staat de
+                # tekst immers gecentreerd in het vak; anders landt 'ie linksboven
+                # i.p.v. waar je 'm hebt neergezet.
+                lijnhoogte = fontsize * 1.2
+                oy = max(0.0, (rect.height - lijnhoogte) / 2.0)
+                tekstrect = fitz.Rect(rect.x0, rect.y0 + oy, rect.x1, rect.y1)
                 page.insert_textbox(
-                    rect, veld.get("tekst", ""), fontsize=fontsize, fontname="helv",
-                    color=(0, 0, 0), align=0,
+                    tekstrect, veld.get("tekst", ""), fontsize=fontsize, fontname="helv",
+                    color=(0, 0, 0), align=fitz.TEXT_ALIGN_CENTER,
                 )
                 continue
             ondertekenaar = _ondertekenaar_voor_email(meta, veld["email"])
