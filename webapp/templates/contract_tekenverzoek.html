@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Verzoek tot tekenen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Verzoek tot tekenen</h1>
+</div>
+
+<div class="card">
+  <p>
+    <a href="{{ url_for('contract_bekijken', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}" target="_blank" rel="noopener">Bekijk contract</a>
+    - <a href="{{ url_for('contract_pdf', pand_slug=huidig_pand.slug, bestandsnaam=bestandsnaam) }}">Download als PDF</a>
+  </p>
+  <p class="muted">De huurder krijgt onderstaande mail met het betaalverzoek en de link om te tekenen.
+     Tegelijk krijgen ook onderstaande partijen automatisch (een korte, niet aan te passen) mail met
+     alleen hun eigen link om te tekenen:</p>
+  <ul class="muted">
+    {% for o in overige_ontvangers %}
+    <li>{{ o.naam }} ({{ o.rol }}){% if not o.email %} - <strong>geen e-mailadres bekend, wordt overgeslagen</strong>{% endif %}</li>
+    {% endfor %}
+  </ul>
+
+  <form method="post" onsubmit="return confirm('Ondertekenverzoek nu versturen naar alle partijen?');">
+    <label>Onderwerp (mail aan de huurder)
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst (mail aan de huurder)
+      <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
+    </label>
+
+    <div class="warning-box">
+      <label style="display:flex; align-items:center; gap:0.5rem">
+        <input type="checkbox" name="schrijf_terug_naar_sheet" checked style="width:auto">
+        Gegevens van dit contract ook meteen terugschrijven naar de Huurders-sheet
+        (kamer, naam, geboortedatum, borg, etc.) - zet uit als dat al gebeurd is of nog niet gewenst is.
+      </label>
+    </div>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

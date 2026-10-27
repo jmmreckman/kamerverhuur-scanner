@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Onderhoud - {{ klus.titel }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ klus.titel }}</h1>
+  <p class="muted">
+    {{ pand.naam if pand else klus.pand_slug }}
+    {% if klus.kamer %}&middot; kamer {{ klus.kamer }}{% endif %}
+    {% if contact %}&middot; {{ contact.naam }}{% endif %}
+    &middot; aangemaakt {{ (klus.aangemaakt or '')[:10] }}
+  </p>
+</div>
+
+{# --- Status ------------------------------------------------------------- #}
+<div class="card">
+  <form method="post" action="{{ url_for('onderhoud_status', klus_id=klus.id) }}">
+    <label>Status
+      <select name="status" onchange="this.form.submit()">
+        {% for s in statussen %}<option value="{{ s }}" {{ 'selected' if klus.status == s }}>{{ status_labels[s] }}</option>{% endfor %}
+      </select>
+    </label>
+    <noscript><button class="btn btn-secondary" type="submit">Opslaan</button></noscript>
+  </form>
+  {% if klus.omschrijving %}
+  <p class="breek-af" style="margin-top:.6rem;white-space:pre-wrap">{{ klus.omschrijving }}</p>
+  {% endif %}
+  {% if contact and klus.kamer %}
+  <p class="muted" style="margin-top:.4rem"><a href="{{ url_for('huurder_communicatie', pand_slug=klus.pand_slug, kamer_naam=klus.kamer) }}">Bekijk alle communicatie met {{ contact.naam }}</a></p>
+  {% endif %}
+</div>
+
+{# --- Klusjesman -------------------------------------------------------- #}
+<div class="card">
+  <h2>Klusjesman</h2>
+  {% if vakman %}
+  <p>Ingeschakeld: <strong>{{ vakman.naam }}</strong>{% if vakman.vak %} ({{ vakman.vak }}){% endif %}
+    {% if vakman.telefoon %}&middot; {{ vakman.telefoon }}{% endif %}
+    {% if vakman.email %}&middot; {{ vakman.email }}{% endif %}</p>
+  {% endif %}
+  {% if vakmannen %}
+  <form method="post" action="{{ url_for('onderhoud_vakman_inschakelen', klus_id=klus.id) }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>{{ 'Andere klusjesman inschakelen' if vakman else 'Klusjesman inschakelen' }}
+        <select name="vakman_id" required>
+          <option value="">Kies...</option>
+          {% for v in vakmannen %}<option value="{{ v.id }}">{{ v.naam }}{% if v.vak %} ({{ v.vak }}){% endif %}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="btn" type="submit">Inschakelen + concepten opstellen</button>
+    </span>
+  </form>
+  {% endif %}
+  <p class="muted" style="margin-top:.5rem">Dit zet twee concepten in Openstaande acties: een bericht aan de huurder (met de vakman-gegevens) en een mail aan de klusjesman (met je vaste instructies: factuur naar jou, boven 150 euro eerst bellen). Je verstuurt ze pas na je akkoord.
+    {% if not vakmannen %}Je hebt nog geen klusjesmannen. <a href="{{ url_for('vakmannen_beheer') }}">Voeg er eerst een toe.</a>{% else %}&middot; <a href="{{ url_for('vakmannen_beheer') }}">Klusjesmannen beheren</a>{% endif %}</p>
+</div>
+
+{# --- AI-concept (indien zojuist gegenereerd) ---------------------------- #}
+{% if concept %}
+<div class="card">
+  <h2>Conceptantwoord</h2>
+  {% if stopwoorden %}
+  <div class="flash"><p>Let op, mogelijk te "AI-achtig" - gevonden: {{ stopwoorden|join(', ') }}. Pas de tekst gerust aan.</p></div>
+  {% endif %}
+  <p class="muted">Controleer/pas aan en zet het in de wachtrij; daar verstuur je het na je akkoord. Of log het alleen, zonder mail.</p>
+  <form method="post" action="{{ url_for('onderhoud_wachtrij', klus_id=klus.id) }}">
+    <input type="hidden" name="richting" value="uit">
+    <label>Onderwerp (optioneel) <input type="text" name="onderwerp" placeholder="bv. Re: je melding"></label>
+    <textarea name="body" rows="10" style="width:100%;box-sizing:border-box">{{ concept }}</textarea>
+    <div style="margin-top:.6rem; display:flex; gap:.6rem; flex-wrap:wrap">
+      <button class="btn" type="submit">In wachtrij zetten voor versturen</button>
+      <button class="btn btn-secondary" type="submit" formaction="{{ url_for('onderhoud_bericht', klus_id=klus.id) }}">Alleen loggen (geen mail)</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{# --- Antwoord opstellen ------------------------------------------------- #}
+<div class="card">
+  <h2>Antwoord opstellen</h2>
+  <form method="post" action="{{ url_for('onderhoud_concept', klus_id=klus.id) }}">
+    <label>Aanwijzing voor de AI (optioneel)
+      <input type="text" name="instructie" placeholder="bv. laat weten dat de loodgieter morgen tussen 9 en 12 komt">
+    </label>
+    <div style="margin-top:.6rem"><button class="btn btn-secondary" type="submit">Concept genereren</button></div>
+  </form>
+</div>
+
+{# --- Bericht toevoegen -------------------------------------------------- #}
+<div class="card">
+  <h2>Bericht toevoegen</h2>
+  <form method="post" action="{{ url_for('onderhoud_bericht', klus_id=klus.id) }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>Richting
+        <select name="richting">
+          <option value="in">Ontvangen</option>
+          <option value="uit">Verzonden</option>
+        </select>
+      </label>
+      <label>Datum <input type="date" name="datum"></label>
+    </span>
+    <label>Onderwerp (optioneel) <input type="text" name="onderwerp"></label>
+    <label>Bericht <textarea name="body" rows="4" style="width:100%;box-sizing:border-box" required></textarea></label>
+    <div style="margin-top:.6rem"><button class="btn" type="submit">Toevoegen</button></div>
+  </form>
+</div>
+
+{# --- Tijdlijn ----------------------------------------------------------- #}
+<div class="card">
+  <h2>Historie</h2>
+  {% if berichten %}
+    {% for b in berichten|reverse %}
+    <div class="item-box">
+      <p style="margin:0 0 .3rem 0">
+        {% if b.richting == 'in' %}<span class="pil pil-neutral">Ontvangen</span>
+        {% else %}<span class="pil status-betaald">Verzonden</span>{% endif %}
+        <span class="muted">{{ (b.datum or '')[:10] }}</span>
+        {% if b.onderwerp %}&middot; <strong>{{ b.onderwerp }}</strong>{% endif %}
+      </p>
+      <div class="breek-af" style="white-space:pre-wrap">{{ b.body }}</div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Nog geen berichten bij dit ticket.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <a class="btn btn-secondary" href="{{ url_for('onderhoud_overzicht') }}">Terug naar onderhoud</a>
+</div>
+{% endblock %}

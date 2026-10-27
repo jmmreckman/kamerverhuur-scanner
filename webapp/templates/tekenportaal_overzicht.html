@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Documenten tekenen{% endblock %}
+{% block content %}
+<div class="page-header" style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+  <div>
+    <h1>Documenten tekenen</h1>
+    <p class="muted">Upload een PDF, wijs zelf aan waar handtekeningen moeten komen en stuur per plek een tekenverzoek. Getekende documenten gaan automatisch naar de Drive-map &ldquo;Steenhub getekende documenten&rdquo;.</p>
+  </div>
+  <a class="btn" href="{{ url_for('tekenportaal_nieuw') }}">+ Nieuw document</a>
+</div>
+
+{% if documenten %}
+<div class="card" style="padding:0; overflow:hidden;">
+  <table class="tabel" style="width:100%; border-collapse:collapse;">
+    <thead>
+      <tr>
+        <th style="text-align:left; padding:0.7rem 0.9rem;">Document</th>
+        <th style="text-align:left; padding:0.7rem 0.9rem;">Status</th>
+        <th style="text-align:left; padding:0.7rem 0.9rem;">Ondertekenaars</th>
+        <th style="text-align:left; padding:0.7rem 0.9rem;">Aangemaakt</th>
+        <th style="padding:0.7rem 0.9rem;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in documenten %}
+      {% set getekend = d.ondertekenaars | selectattr('ondertekend_op') | list | length %}
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:0.7rem 0.9rem;"><strong>{{ d.titel }}</strong><br><span class="muted" style="font-size:0.85em;">{{ d.origineel_bestandsnaam }}</span></td>
+        {% set kleur = '#8a6d00' if d.status == 'concept' else ('#1d6fb8' if d.status == 'verzonden' else '#1b7a43') %}
+        <td style="padding:0.7rem 0.9rem;">
+          <span style="display:inline-block; padding:0.15rem 0.55rem; border-radius:1rem; font-size:0.8em; color:#fff; background:{{ kleur }};">
+            {% if d.status == 'concept' %}Concept{% elif d.status == 'verzonden' %}Wacht op handtekeningen{% else %}Afgerond{% endif %}
+          </span>
+        </td>
+        <td style="padding:0.7rem 0.9rem;">{% if d.ondertekenaars %}{{ getekend }} / {{ d.ondertekenaars | length }} getekend{% else %}&mdash;{% endif %}</td>
+        <td style="padding:0.7rem 0.9rem;" class="muted">{{ (d.aangemaakt_op or '')[:16] | replace('T', ' ') }}</td>
+        <td style="padding:0.7rem 0.9rem; text-align:right; white-space:nowrap;">
+          {% if d.status == 'concept' %}
+            <a class="btn btn-secondary" href="{{ url_for('tekenportaal_velden', doc_id=d.doc_id) }}">Velden plaatsen</a>
+          {% else %}
+            <a class="btn btn-secondary" href="{{ url_for('tekenportaal_status', doc_id=d.doc_id) }}">Status</a>
+          {% endif %}
+          {% if d.status == 'afgerond' %}
+            <a class="btn" href="{{ url_for('tekenportaal_pdf', doc_id=d.doc_id) }}">Download</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><p class="muted">Nog geen documenten. Klik op &ldquo;Nieuw document&rdquo; om een PDF te uploaden en te laten tekenen.</p></div>
+{% endif %}
+{% endblock %}
