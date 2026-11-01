@@ -37,6 +37,12 @@
           <option value="jaar">Jaar</option>
         </select>
       </label>
+      <label>Meten in
+        <select id="meeteenheid-select">
+          <option value="vergunningen" selected>Aantal vergunningen</option>
+          <option value="kamers">Aantal kamers (personen)</option>
+        </select>
+      </label>
       <span class="grootte-toggles">
         <label class="checkbox-filter"><input type="checkbox" id="toon-4plus" checked> 4+ vergunningen</label>
         <label class="checkbox-filter"><input type="checkbox" id="toon-3kamer-analyse" checked> 3-kamer vergunningen</label>
@@ -57,8 +63,22 @@
     </section>
 
     <section class="grafiek-blok">
-      <h3>Vergunningen per wijk</h3>
+      <h3 id="wijk-titel">Vergunningen per wijk</h3>
       <div id="wijk-grafiek" class="grafiek"></div>
+    </section>
+
+    <section class="grafiek-blok">
+      <div class="toplijst-kop">
+        <h3 id="toplijst-titel">Grootste vergunningen</h3>
+        <label class="top-n-veld">Top
+          <input type="number" id="top-n-input" min="1" max="200" step="5" value="25">
+        </label>
+      </div>
+      <p class="muted" style="margin:0 0 0.5rem">
+        Gesorteerd op het vergunde aantal personen (≈ kamers), grootste eerst. Volgt de filters
+        hierboven; zonder datumfilter is dit aller-tijden. Klik een adres voor de bekendmaking.
+      </p>
+      <div id="toplijst" class="toplijst"></div>
     </section>
 
     <p id="laad-status" class="muted">Laden...</p>

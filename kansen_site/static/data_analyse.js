@@ -1,11 +1,12 @@
 // Data-analyse-dashboard voor de kamerverhuurvergunningen. Haalt de volledige lijst
 // op via /api/vergunningen en rekent alle aggregaten + grafieken client-side uit,
-// zodat de filters (wijk / afgelopen X dagen / groepering) meteen reageren zonder
-// extra server-calls. Grafieken zijn kale inline-SVG - geen externe library.
+// zodat de filters (wijk / afgelopen X dagen / groepering / meeteenheid) meteen
+// reageren zonder extra server-calls. Grafieken zijn kale inline-SVG - geen externe library.
 
 const wijkSelect = document.getElementById("wijk-select");
 const dagenInput = document.getElementById("dagen-input");
 const periodeSelect = document.getElementById("periode-select");
+const meeteenheidSelect = document.getElementById("meeteenheid-select");
 const toon4plusEl = document.getElementById("toon-4plus");
 const toon3kamerEl = document.getElementById("toon-3kamer-analyse");
 const toonRegulierEl = document.getElementById("toon-regulier");
@@ -16,6 +17,10 @@ const trendEl = document.getElementById("trend-grafiek");
 const trendLegendaEl = document.getElementById("trend-legenda");
 const trendTitelEl = document.getElementById("trend-titel");
 const wijkGrafiekEl = document.getElementById("wijk-grafiek");
+const wijkTitelEl = document.getElementById("wijk-titel");
+const topNInput = document.getElementById("top-n-input");
+const toplijstEl = document.getElementById("toplijst");
+const toplijstTitelEl = document.getElementById("toplijst-titel");
 const statusEl = document.getElementById("laad-status");
 const metaEl = document.getElementById("meta");
 
@@ -54,6 +59,27 @@ function isDrieKamer(v) {
   return v.aantal_personen === 3;
 }
 
+// Het vergunde aantal personen (≈ aantal kamers bij onzelfstandige kamerverhuur).
+// None/onbekend -> 0 voor de sommen (en apart geteld, zodat een kamer-som altijd
+// als ondergrens te lezen is).
+function aantalKamers(v) {
+  const n = v.aantal_personen;
+  return typeof n === "number" && n > 0 ? n : 0;
+}
+function heeftAantal(v) {
+  return typeof v.aantal_personen === "number" && v.aantal_personen > 0;
+}
+
+// Meeteenheid: tellen we vergunningen (gewicht 1) of kamers/personen (gewicht =
+// aantal_personen)? Eén 20-kamerpand weegt in de kamer-modus dus net zo zwaar als
+// vijf losse 4-kamerhuizen samen.
+function inKamers() {
+  return meeteenheidSelect.value === "kamers";
+}
+function weegFn() {
+  return inKamers() ? aantalKamers : () => 1;
+}
+
 // Regulier vs. legalisatie (overgangsbepaling), plus "onbekend" zolang een record
 // nog niet is her-geclassificeerd (soort === null tijdens de opbouw van de index).
 const SOORTEN = [
@@ -61,12 +87,14 @@ const SOORTEN = [
   { key: "overgangsbepaling", label: "legalisatie (overgangsbepaling)", kleur: "#ef6c00" },
   { key: "onbekend", label: "nog niet geclassificeerd", kleur: "#c4ccd4" },
 ];
-const SOORT_KLEUR = Object.fromEntries(SOORTEN.map((s) => [s.key, s.kleur]));
 
 function soortVan(v) {
   if (v.soort === "overgangsbepaling") return "overgangsbepaling";
   if (v.soort === "regulier") return "regulier";
   return "onbekend";
+}
+function soortLabel(v) {
+  return { regulier: "regulier", overgangsbepaling: "legalisatie", onbekend: "?" }[soortVan(v)];
 }
 
 // De actueel gefilterde selectie (wijk + afgelopen X dagen + grootte-toggles).
@@ -98,19 +126,20 @@ function gefilterd() {
   });
 }
 
-function telPer(vergunningen, sleutelFn) {
+// Aggregeer per sleutel met een gewichtsfunctie (telling of kamer-som).
+function aggregeerPer(vergunningen, sleutelFn, weeg) {
   const telling = new Map();
   for (const v of vergunningen) {
     const k = sleutelFn(v);
     if (k === null || k === undefined) continue;
-    telling.set(k, (telling.get(k) || 0) + 1);
+    telling.set(k, (telling.get(k) || 0) + weeg(v));
   }
   return telling;
 }
 
 // --- SVG-grafieken ---
 
-function gestapeldeBars(rijen) {
+function gestapeldeBars(rijen, eenheid) {
   // rijen: [[label, {regulier, overgangsbepaling, onbekend}], ...] chronologisch.
   // Elke staaf is gestapeld per soort, met het totaal als label erboven, zodat je
   // in één blik de legalisatie-hap (oranje) los ziet van de reguliere verlening.
@@ -142,7 +171,7 @@ function gestapeldeBars(rijen) {
       if (!aantal) continue;
       const h = (aantal / maxV) * plotH;
       onder -= h;
-      svg += `<rect x="${x}" y="${onder}" width="${barB}" height="${h}" fill="${so.kleur}"><title>${escapeHtml(r[0])} — ${escapeHtml(so.label)}: ${aantal}</title></rect>`;
+      svg += `<rect x="${x}" y="${onder}" width="${barB}" height="${h}" fill="${so.kleur}"><title>${escapeHtml(r[0])} — ${escapeHtml(so.label)}: ${aantal} ${escapeHtml(eenheid)}</title></rect>`;
     }
     svg += `<text x="${x + barB / 2}" y="${onder - 3}" text-anchor="middle" font-size="9" fill="#1c2126">${totaal}</text>`;
     if (i % labelElke === 0) {
@@ -178,11 +207,63 @@ function kaart(label, waarde) {
   return `<div class="kerncijfer"><span class="kerncijfer-waarde">${escapeHtml(waarde)}</span><span class="kerncijfer-label">${escapeHtml(label)}</span></div>`;
 }
 
+// Toplijst: de grootste vergunningen op aantal kamers/personen (aflopend), met
+// adres, soort, wijk en de datum waarop de vergunning is verleend (besluitdatum).
+function renderToplijst(selectie) {
+  let n = parseInt(topNInput.value, 10);
+  if (isNaN(n) || n < 1) n = 25;
+  n = Math.min(n, 200);
+
+  const gesorteerd = selectie
+    .slice()
+    .sort((a, b) => {
+      const pa = heeftAantal(a) ? a.aantal_personen : -1;
+      const pb = heeftAantal(b) ? b.aantal_personen : -1;
+      if (pb !== pa) return pb - pa;
+      // Gelijk aantal: nieuwste besluit eerst.
+      const da = a.besluitdatum || a.datum || "";
+      const db = b.besluitdatum || b.datum || "";
+      return db < da ? -1 : db > da ? 1 : 0;
+    })
+    .slice(0, n);
+
+  toplijstTitelEl.textContent = `Grootste vergunningen (top ${gesorteerd.length})`;
+
+  if (!gesorteerd.length) {
+    toplijstEl.innerHTML = '<p class="muted">Geen data in deze selectie.</p>';
+    return;
+  }
+
+  let html = '<table class="toplijst-tabel"><thead><tr>' +
+    '<th class="num">#</th><th>Adres</th><th class="num">Kamers</th>' +
+    '<th>Soort</th><th>Wijk</th><th>Verleend</th></tr></thead><tbody>';
+  gesorteerd.forEach((v, i) => {
+    const adres = escapeHtml(v.adres || "(adres onbekend)");
+    const adresCel = v.url
+      ? `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">${adres}</a>`
+      : adres;
+    const kamers = heeftAantal(v) ? v.aantal_personen : "?";
+    const verleend = v.besluitdatum || v.datum || "";
+    html += `<tr><td class="num">${i + 1}</td><td>${adresCel}</td>` +
+      `<td class="num">${escapeHtml(kamers)}</td>` +
+      `<td>${escapeHtml(soortLabel(v))}</td>` +
+      `<td>${escapeHtml(v.gebied || "Onbekend")}</td>` +
+      `<td>${escapeHtml(verleend)}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  toplijstEl.innerHTML = html;
+}
+
 function render() {
   const selectie = gefilterd();
   const periode = periodeSelect.value;
+  const kamers = inKamers();
+  const weeg = weegFn();
+  const eenheid = kamers ? "kamers" : "vergunningen";
+  const EenheidHoofd = kamers ? "Kamers" : "Vergunningen";
 
-  // Trend per periode (chronologisch), gestapeld per soort (regulier/legalisatie).
+  // Trend per periode (chronologisch), gestapeld per soort (regulier/legalisatie),
+  // gewogen naar de gekozen meeteenheid.
   const perPeriodeMap = new Map();
   for (const v of selectie) {
     const k = periodeKey(v.datum, periode);
@@ -192,28 +273,34 @@ function render() {
       t = { regulier: 0, overgangsbepaling: 0, onbekend: 0 };
       perPeriodeMap.set(k, t);
     }
-    t[soortVan(v)] += 1;
+    t[soortVan(v)] += weeg(v);
   }
   const perPeriode = [...perPeriodeMap.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const labelPeriode = { week: "week", maand: "maand", jaar: "jaar" }[periode];
-  trendTitelEl.textContent = `Vergunningen per ${labelPeriode}${wijkSelect.value ? " — " + wijkSelect.value : ""}`;
+  trendTitelEl.textContent = `${EenheidHoofd} per ${labelPeriode}${wijkSelect.value ? " — " + wijkSelect.value : ""}`;
   trendLegendaEl.innerHTML = SOORTEN.map(
     (s) => `<span class="legenda-item"><span class="legenda-vlak" style="background:${s.kleur}"></span>${escapeHtml(s.label)}</span>`
   ).join("");
-  trendEl.innerHTML = gestapeldeBars(perPeriode);
+  trendEl.innerHTML = gestapeldeBars(perPeriode, eenheid);
 
-  // Per wijk (desc).
-  const perWijk = [...telPer(selectie, (v) => v.gebied || "Onbekend").entries()].sort((a, b) => b[1] - a[1]);
+  // Per wijk (desc), gewogen naar de meeteenheid.
+  const perWijk = [...aggregeerPer(selectie, (v) => v.gebied || "Onbekend", weeg).entries()].sort((a, b) => b[1] - a[1]);
+  wijkTitelEl.textContent = `${EenheidHoofd} per wijk`;
   wijkGrafiekEl.innerHTML = horizontaleBars(perWijk, { kleur: "#1b7a43" });
 
+  // Toplijst (grootste vergunningen op aantal kamers).
+  renderToplijst(selectie);
+
   // Kerncijfers.
-  const totaal = selectie.length;
+  const nVergunningen = selectie.length;
+  const totaalKamers = selectie.reduce((s, v) => s + aantalKamers(v), 0);
+  const nZonderAantal = selectie.filter((v) => !heeftAantal(v)).length;
   const drukste = perWijk[0];
   const aantalWeken = perPeriode.length && periode === "week" ? perPeriode.length : null;
-  const gemPerWeek = periode === "week" && aantalWeken ? (totaal / aantalWeken).toFixed(1) : null;
-  // Aandeel legalisatie (overgangsbepaling), berekend over de wél geclassificeerde
-  // records - zodat het percentage niet vertekent door de "onbekend"-bak die tijdens
-  // het opbouwen van de index nog gevuld wordt.
+  const noemer = kamers ? totaalKamers : nVergunningen;
+  const gemPerWeek = periode === "week" && aantalWeken ? (noemer / aantalWeken).toFixed(1) : null;
+  // Aandeel legalisatie (overgangsbepaling), op aantal vergunningen - dat is de
+  // natuurlijke eenheid voor "welk deel van de besluiten is een legalisatie".
   let nOvergang = 0;
   let nRegulier = 0;
   let nOnbekend = 0;
@@ -225,13 +312,17 @@ function render() {
   }
   const geclassificeerd = nOvergang + nRegulier;
   const pct = geclassificeerd ? Math.round((nOvergang / geclassificeerd) * 100) : null;
+
   kerncijfersEl.innerHTML =
-    kaart("vergunningen in selectie", totaal) +
+    (kamers
+      ? kaart("kamers in selectie", totaalKamers) + kaart("vergunningen", nVergunningen)
+      : kaart("vergunningen in selectie", nVergunningen) + kaart("kamers (personen)", totaalKamers)) +
+    (kamers && nZonderAantal ? kaart("zonder bekend aantal", nZonderAantal) : "") +
     kaart("wijken", perWijk.length) +
     (drukste ? kaart("drukste wijk", `${drukste[0]} (${drukste[1]})`) : "") +
     (geclassificeerd ? kaart("waarvan legalisatie", `${nOvergang}${pct === null ? "" : ` (${pct}%)`}`) : "") +
     (nOnbekend ? kaart("nog te classificeren", nOnbekend) : "") +
-    (gemPerWeek ? kaart("gem. per week", gemPerWeek) : "");
+    (gemPerWeek ? kaart(`gem. ${eenheid}/week`, gemPerWeek) : "");
 }
 
 function vulWijkKeuze() {
@@ -264,7 +355,7 @@ async function laad() {
   }
 }
 
-for (const el of [wijkSelect, dagenInput, periodeSelect, toon4plusEl, toon3kamerEl, toonRegulierEl, toonOvergangEl]) {
+for (const el of [wijkSelect, dagenInput, periodeSelect, meeteenheidSelect, topNInput, toon4plusEl, toon3kamerEl, toonRegulierEl, toonOvergangEl]) {
   el.addEventListener("input", render);
   el.addEventListener("change", render);
 }
@@ -272,6 +363,8 @@ resetKnop.addEventListener("click", () => {
   wijkSelect.value = "";
   dagenInput.value = "";
   periodeSelect.value = "maand";
+  meeteenheidSelect.value = "vergunningen";
+  topNInput.value = "25";
   toon4plusEl.checked = true;
   toon3kamerEl.checked = true;
   toonRegulierEl.checked = true;

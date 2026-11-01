@@ -707,3 +707,19 @@ body {
 .grafiek svg { display: block; }
 
 .checkbox-sub { margin-left: 1.2rem; font-weight: 400; font-size: 0.9em; color: var(--tekst-zwak); }
+
+/* Toplijst grootste vergunningen */
+.toplijst-kop { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.toplijst-kop h3 { margin-bottom: 0.2rem; }
+.top-n-veld { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85em; color: var(--tekst-zwak); }
+.top-n-veld input { width: 4.5rem; padding: 0.25rem 0.4rem; border: 1px solid var(--rand); border-radius: 4px; }
+
+.toplijst { overflow-x: auto; border: 1px solid var(--rand); border-radius: 8px; background: white; }
+.toplijst-tabel { width: 100%; border-collapse: collapse; font-size: 0.88em; }
+.toplijst-tabel th, .toplijst-tabel td { padding: 0.45rem 0.7rem; text-align: left; border-bottom: 1px solid var(--rand); white-space: nowrap; }
+.toplijst-tabel thead th { position: sticky; top: 0; background: #f6f8fa; font-weight: 600; color: var(--tekst-zwak); }
+.toplijst-tabel tbody tr:last-child td { border-bottom: none; }
+.toplijst-tabel tbody tr:nth-child(odd) td { background: #fbfcfd; }
+.toplijst-tabel td.num, .toplijst-tabel th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.toplijst-tabel a { color: var(--accent, #1b7a43); text-decoration: none; }
+.toplijst-tabel a:hover { text-decoration: underline; }
