@@ -21,6 +21,7 @@ const wijkTitelEl = document.getElementById("wijk-titel");
 const topNInput = document.getElementById("top-n-input");
 const toplijstEl = document.getElementById("toplijst");
 const toplijstTitelEl = document.getElementById("toplijst-titel");
+const verdelingEl = document.getElementById("verdeling");
 const statusEl = document.getElementById("laad-status");
 const metaEl = document.getElementById("meta");
 
@@ -254,6 +255,22 @@ function renderToplijst(selectie) {
   toplijstEl.innerHTML = html;
 }
 
+// Verdeling: hoeveel vergunningen er zijn van elke grootte (aantal kamers/personen).
+// Aflopend op aantal kamers; onbekend-aantal onderaan.
+function renderVerdeling(selectie) {
+  const telling = new Map();
+  let onbekend = 0;
+  for (const v of selectie) {
+    if (heeftAantal(v)) telling.set(v.aantal_personen, (telling.get(v.aantal_personen) || 0) + 1);
+    else onbekend++;
+  }
+  const paren = [...telling.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([k, n]) => [`${k} kamers`, n]);
+  if (onbekend) paren.push(["onbekend aantal", onbekend]);
+  verdelingEl.innerHTML = horizontaleBars(paren, { kleur: "#1d6fb8" });
+}
+
 function render() {
   const selectie = gefilterd();
   const periode = periodeSelect.value;
@@ -290,6 +307,9 @@ function render() {
 
   // Toplijst (grootste vergunningen op aantal kamers).
   renderToplijst(selectie);
+
+  // Verdeling: aantal vergunningen per grootte.
+  renderVerdeling(selectie);
 
   // Kerncijfers.
   const nVergunningen = selectie.length;
