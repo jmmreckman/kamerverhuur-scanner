@@ -121,7 +121,20 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - `kamerverhuur_scanner/models.py` — dataclasses (`Pand`, `Tenant`, …).
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
 - `kamerverhuur_scanner/state.py` — kleine JSON-state in `state_dir` (laatste
-  resultaat, verzonden mails, winst-geschiedenis, **pand-volgorde per gebruiker**).
+  resultaat, verzonden mails, winst-geschiedenis, **pand-volgorde per gebruiker**,
+  handmatige huuroverzicht-regels).
+- **Huuroverzicht** ("bankview", nov 2026): `kamerverhuur_scanner/huuroverzicht.py`
+  (pure rekenlaag, los getest) + route `/huur-overzicht` (nav "Huuroverzicht") +
+  `webapp/templates/huur_overzicht.html`. Per huurder kale huur/servicekosten/totale
+  huur (live uit de Huurders-sheet, dus contract-gedreven), per pand + portefeuille-
+  totaal, plus **netto = kale huur − hypotheekrente** (bewust géén andere lasten),
+  **jouw aandeel** (netto ÷ aantal eigenaren) en **ICR = kale huur / rente** (groen
+  ≥1,25). Hypotheekrente/-last + `aantal_eigenaren` zijn nieuwe `Pand`-velden, in te
+  vullen bij "Panden beheren" → komen in **properties.json op de VPS, nooit in git**
+  (financiële data). `aantal_eigenaren` leeg = val terug op het account-gebaseerde
+  `_aantal_beheerders()`. Handmatige regels (oude huurders / nog niet in de sheet)
+  per pand toe te voegen op de pagina zelf (`state.*_huur_handmatig`). Print/PDF-knop
+  voor hypotheekverstrekkers.
 - **Communicatie-/onderhoudsmodule** (okt 2026): `webapp/communicatie_db.py`
   (SQLite-opslag in `state_dir/communicatie.db`: contacten, berichten, klussen,
   vakmannen, acties — pure laag, los getest), `webapp/communicatie_ai.py`

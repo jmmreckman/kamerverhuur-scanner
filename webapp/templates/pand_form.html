@@ -85,6 +85,21 @@
       <input type="text" name="belasting_per_maand"
              value="{{ pand.belasting_per_maand|eur if pand and pand.belasting_per_maand is not none else '' }}">
     </label>
+    <label>Hypotheekrente per maand (optioneel - voedt het <strong>Huuroverzicht</strong>: netto = kale huur
+      − rente, en ICR = kale huur / rente. Leeg = dit pand telt niet mee in netto/ICR.)
+      <input type="text" name="hypotheek_rente_per_maand"
+             value="{{ pand.hypotheek_rente_per_maand|eur if pand and pand.hypotheek_rente_per_maand is not none else '' }}">
+    </label>
+    <label>Totale hypotheeklast per maand (optioneel - rente + aflossing; staat puur ter info op het
+      Huuroverzicht, telt niet mee in de netto. Leeg = onbekend.)
+      <input type="text" name="hypotheek_last_per_maand"
+             value="{{ pand.hypotheek_last_per_maand|eur if pand and pand.hypotheek_last_per_maand is not none else '' }}">
+    </label>
+    <label>Aantal eigenaren (optioneel - waarover de netto van dit pand verdeeld wordt bij "jouw aandeel"
+      op het Huuroverzicht. Leeg = automatisch het aantal accounts met toegang tot dit pand.)
+      <input type="number" name="aantal_eigenaren" min="1" step="1"
+             value="{{ pand.aantal_eigenaren if pand and pand.aantal_eigenaren is not none else '' }}">
+    </label>
     <label>Sleutels (één per regel, bv. "Lips 961 zolder straatkant") - getoond op het
       Sleuteloverzicht van dit pand.
       <textarea name="sleutels" rows="4">{% if pand %}{% for s in pand.sleutels %}{{ s }}

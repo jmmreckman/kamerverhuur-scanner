@@ -24,7 +24,7 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import document_ai, drive_browse, drive_sync, mail_voorkeuren, state, winst
+from kamerverhuur_scanner import document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren, state, winst
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
@@ -584,6 +584,9 @@ def create_app(config: Config | None = None) -> Flask:
             "onderhoud_reserve_per_maand": form.get("onderhoud_reserve_per_maand", "").strip() or None,
             "energiekosten_per_maand": form.get("energiekosten_per_maand", "").strip() or None,
             "belasting_per_maand": form.get("belasting_per_maand", "").strip() or None,
+            "hypotheek_rente_per_maand": form.get("hypotheek_rente_per_maand", "").strip() or None,
+            "hypotheek_last_per_maand": form.get("hypotheek_last_per_maand", "").strip() or None,
+            "aantal_eigenaren": form.get("aantal_eigenaren", "").strip() or None,
             "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
             # Alleen een kleur opslaan als het vinkje "eigen kleur" aanstaat; een
             # <input type=color> levert altijd een geldige hex, maar we filteren
@@ -1043,6 +1046,89 @@ def create_app(config: Config | None = None) -> Flask:
         else:
             flash("Komende maand bijgewerkt.")
         return redirect(url_for("winst_overzicht"))
+
+    # --- Huuroverzicht ("bankview": kale huur / servicekosten / totale huur per
+    # huurder, + hypotheeklasten, netto (kale - rente), jouw aandeel en ICR). ---
+    def _huur_aandeel(pand) -> int:
+        """Aantal eigenaren waarover de netto van dit pand verdeeld wordt: de
+        handmatige override (pand.aantal_eigenaren) als die is ingevuld, anders het
+        aantal accounts met toegang tot het pand (_aantal_beheerders())."""
+        return pand.aantal_eigenaren or _aantal_beheerders(pand.slug)
+
+    def _bedrag_of_nul(waarde) -> Decimal:
+        if waarde in (None, ""):
+            return Decimal("0")
+        try:
+            return parse_bedrag(str(waarde))
+        except Exception:  # noqa: BLE001 - een rommelig handmatig bedrag mag de pagina niet breken
+            return Decimal("0")
+
+    def _bouw_huuroverzicht(pand) -> huuroverzicht.PandHuur:
+        """Bouwt het huuroverzicht van één pand: live kale/servicekosten per
+        bewoonde kamer uit de Huurders-sheet, plus de handmatig ingevoerde regels
+        (oude huurders / nog niet in de sheet), plus de hypotheekbedragen van het
+        pand. Een onleesbare sheet breekt de pagina niet (fout-veld + handmatige
+        regels blijven)."""
+        regels: list[huuroverzicht.HuurRegel] = []
+        fout = None
+        try:
+            for t in SheetClient(config, pand).get_kamers():
+                if not t.naam:
+                    continue  # lege kamer: geen huurder, geen huur
+                regels.append(huuroverzicht.HuurRegel(
+                    kamer=t.kamer, naam=t.naam,
+                    kale=t.kale_huurprijs or Decimal("0"),
+                    servicekosten=t.servicekosten or Decimal("0"),
+                ))
+        except Exception:  # noqa: BLE001 - externe Google-fouten zijn divers
+            logging.exception("Huurders-sheet lezen mislukt voor huuroverzicht pand %s", pand.slug)
+            fout = "De Huurders-sheet kon niet gelezen worden; alleen eventuele handmatige regels staan hieronder."
+        for r in state.laad_huur_handmatig(pand.slug, config.state_dir):
+            regels.append(huuroverzicht.HuurRegel(
+                kamer=r.get("kamer", ""), naam=r.get("naam", ""),
+                kale=_bedrag_of_nul(r.get("kale")), servicekosten=_bedrag_of_nul(r.get("servicekosten")),
+                handmatig=True, regel_id=int(r.get("id", 0)),
+            ))
+        return huuroverzicht.PandHuur(
+            slug=pand.slug, naam=pand.naam, regels=regels,
+            rente=pand.hypotheek_rente_per_maand, last=pand.hypotheek_last_per_maand,
+            aantal_eigenaren=_huur_aandeel(pand), fout=fout,
+        )
+
+    @app.route("/huur-overzicht")
+    @login_required
+    def huur_overzicht():
+        eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
+        overzichten = [_bouw_huuroverzicht(p) for p in eigen_panden]
+        totalen = huuroverzicht.totaliseer(overzichten)
+        return render_template("huur_overzicht.html", overzichten=overzichten, totalen=totalen)
+
+    @app.route("/huur-overzicht/<pand_slug>/regel", methods=["POST"])
+    @login_required
+    def huur_overzicht_regel_toevoegen(pand_slug: str):
+        pand = find_pand(_properties(), pand_slug)
+        if pand is None or not current_user.heeft_toegang(pand_slug):
+            abort(404)
+        kamer = request.form.get("kamer", "").strip()
+        naam = request.form.get("naam", "").strip()
+        kale = request.form.get("kale", "").strip()
+        servicekosten = request.form.get("servicekosten", "").strip()
+        if not (kamer or naam) or not kale:
+            flash("Vul minstens een kamer of naam én een kale huur in.")
+        else:
+            state.voeg_huur_handmatig_toe(pand_slug, kamer, naam, kale, servicekosten, config.state_dir)
+            flash("Handmatige huurregel toegevoegd.")
+        return redirect(url_for("huur_overzicht"))
+
+    @app.route("/huur-overzicht/<pand_slug>/regel/<int:regel_id>/verwijderen", methods=["POST"])
+    @login_required
+    def huur_overzicht_regel_verwijderen(pand_slug: str, regel_id: int):
+        pand = find_pand(_properties(), pand_slug)
+        if pand is None or not current_user.heeft_toegang(pand_slug):
+            abort(404)
+        state.verwijder_huur_handmatig(pand_slug, regel_id, config.state_dir)
+        flash("Handmatige huurregel verwijderd.")
+        return redirect(url_for("huur_overzicht"))
 
     @app.route("/pand/<pand_slug>/dashboard/aanzegging-afhandelen", methods=["POST"])
     @login_required

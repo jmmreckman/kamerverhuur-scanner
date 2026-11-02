@@ -18,6 +18,19 @@ def _parse_optioneel_bedrag(waarde) -> Decimal | None:
     return parse_bedrag(str(waarde))
 
 
+def _parse_optioneel_int(waarde) -> int | None:
+    """Positief geheel getal of None (leeg/ongeldig). Gebruikt voor
+    aantal_eigenaren; 0/negatief/onzin -> None (valt dan terug op het
+    account-gebaseerde aantal beheerders)."""
+    if waarde in (None, ""):
+        return None
+    try:
+        getal = int(str(waarde).strip())
+    except (TypeError, ValueError):
+        return None
+    return getal if getal > 0 else None
+
+
 class PropertiesError(RuntimeError):
     pass
 
@@ -123,6 +136,9 @@ def load_properties(path: str) -> list[Pand]:
                     onderhoud_reserve_per_maand=_parse_optioneel_bedrag(item.get("onderhoud_reserve_per_maand")),
                     energiekosten_per_maand=_parse_optioneel_bedrag(item.get("energiekosten_per_maand")),
                     belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
+                    hypotheek_rente_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_rente_per_maand")),
+                    hypotheek_last_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_last_per_maand")),
+                    aantal_eigenaren=_parse_optioneel_int(item.get("aantal_eigenaren")),
                     sleutels=_parse_sleutels(item.get("sleutels")),
                     kleur=_normaliseer_kleur(item.get("kleur")),
                 )

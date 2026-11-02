@@ -185,6 +185,42 @@ def laad_testaccount_logboek(state_dir: str = ".") -> list[dict]:
     return json.loads(p.read_text())
 
 
+def _huur_handmatig_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"huur_handmatig_{veilige_slug}.json"
+
+
+def laad_huur_handmatig(pand_slug: str, state_dir: str = ".") -> list[dict]:
+    """Handmatig ingevoerde huurregels voor het Huuroverzicht (bv. oude huurders of
+    kamers die nog niet in de Google Sheet staan). Elke regel: {id, kamer, naam,
+    kale, servicekosten} (bedragen als string). Leeg/onleesbaar -> lege lijst."""
+    p = _huur_handmatig_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def voeg_huur_handmatig_toe(
+    pand_slug: str, kamer: str, naam: str, kale: str, servicekosten: str, state_dir: str = "."
+) -> None:
+    rijen = laad_huur_handmatig(pand_slug, state_dir)
+    nieuw_id = max((int(r.get("id", 0)) for r in rijen), default=0) + 1
+    rijen.append({
+        "id": nieuw_id, "kamer": kamer, "naam": naam,
+        "kale": kale, "servicekosten": servicekosten,
+    })
+    _huur_handmatig_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(rijen, indent=2))
+
+
+def verwijder_huur_handmatig(pand_slug: str, regel_id: int, state_dir: str = ".") -> None:
+    rijen = [r for r in laad_huur_handmatig(pand_slug, state_dir) if int(r.get("id", 0)) != regel_id]
+    _huur_handmatig_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(rijen, indent=2))
+
+
 def _komende_maand_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
     return Path(state_dir) / f"komende_maand_{veilige_slug}.json"

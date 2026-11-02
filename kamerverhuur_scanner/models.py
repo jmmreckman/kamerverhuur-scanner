@@ -161,6 +161,18 @@ class Pand:
     # Handmatige override van de vaste belastingpost per maand. Leeg = de
     # standaard van winst.BELASTING_PER_MAAND (€75).
     belasting_per_maand: Decimal | None = None
+    # Hypotheekgegevens per maand, voor het Huuroverzicht ("bankview", zie
+    # kamerverhuur_scanner/huuroverzicht.py). Bewust financiële data -> leeft in
+    # properties.json op de VPS, NOOIT in git. `hypotheek_rente_per_maand` voedt
+    # de netto (kale huur - rente) en de ICR (kale huur / rente);
+    # `hypotheek_last_per_maand` (rente + aflossing) staat er puur ter info bij.
+    # Beide leeg = onbekend (pand telt dan niet mee in netto/ICR).
+    hypotheek_rente_per_maand: Decimal | None = None
+    hypotheek_last_per_maand: Decimal | None = None
+    # Aantal eigenaren/beheerders dat de winst van dit pand deelt, voor "jouw
+    # aandeel" op het Huuroverzicht. Leeg = val terug op het aantal accounts met
+    # toegang tot dit pand (webapp/app.py: _aantal_beheerders()).
+    aantal_eigenaren: int | None = None
     # Vrije lijst met sleutelomschrijvingen van dit pand (bv. "Lips 961 zolder
     # straatkant") - puur informatief, getoond op de Sleuteloverzicht-pagina.
     sleutels: list[str] = field(default_factory=list)
