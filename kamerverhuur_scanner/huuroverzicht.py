@@ -98,6 +98,39 @@ class PandHuur:
 
 
 @dataclass(frozen=True)
+class PersoonlijkeLening:
+    """Een lening buiten de hypotheken om (bv. een familielening bij vader), op
+    portefeuilleniveau. Puur bedoeld voor JOUW totale-rentedekkingscheck - dit
+    telt NIET mee in Domivest's eigen ICR (die kijkt alleen naar huur/hypotheek-
+    rente per onderpand; een familielening is voor Domivest 'eigen middelen')."""
+    omschrijving: str
+    bedrag: Decimal
+    jaarrente: Decimal  # procent per jaar, bv. Decimal("6") = 6%
+    lening_id: int = 0
+
+    @property
+    def maandrente(self) -> Decimal:
+        """Rente per maand = bedrag × jaarrente% / 12. Alleen rente (aflossing
+        is geen rentelast en hoort niet in een dekkingsratio)."""
+        if self.bedrag <= 0 or self.jaarrente <= 0:
+            return Decimal("0")
+        return _cent(self.bedrag * self.jaarrente / Decimal("1200"))
+
+
+def som_maandrente(leningen: list[PersoonlijkeLening]) -> Decimal:
+    return sum((lening.maandrente for lening in leningen), Decimal("0"))
+
+
+def rentedekking(kale_huur: Decimal, rentelast: Decimal | None) -> Decimal | None:
+    """Totale rentedekking = kale huur / rentelast. None als er geen (positieve)
+    rentelast is. Dit is JOUW huishoud-dekkingscheck (alle huur t.o.v. alle
+    rentelasten), niet Domivest's per-pand-ICR."""
+    if rentelast is None or rentelast <= 0:
+        return None
+    return _cent(kale_huur / rentelast)
+
+
+@dataclass(frozen=True)
 class Totalen:
     kale: Decimal
     service: Decimal

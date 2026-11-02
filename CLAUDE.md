@@ -134,7 +134,11 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (financiële data). `aantal_eigenaren` leeg = val terug op het account-gebaseerde
   `_aantal_beheerders()`. Handmatige regels (oude huurders / nog niet in de sheet)
   per pand toe te voegen op de pagina zelf (`state.*_huur_handmatig`). Print/PDF-knop
-  voor hypotheekverstrekkers.
+  voor hypotheekverstrekkers. Ook **persoonlijke lening(en)** (bv. familielening)
+  per gebruiker (`state.*_persoonlijke_leningen`, `huuroverzicht.PersoonlijkeLening`):
+  bedrag + jaarrente% → maandrente, meegeteld in een **totale rentedekking** (alle
+  kale huur ÷ álle rentelasten incl. lening) — bewust los van en náást de Domivest-
+  ICR getoond (zie §10: een familielening is voor Domivest eigen middelen, niet ICR).
 - **Communicatie-/onderhoudsmodule** (okt 2026): `webapp/communicatie_db.py`
   (SQLite-opslag in `state_dir/communicatie.db`: contacten, berichten, klussen,
   vakmannen, acties — pure laag, los getest), `webapp/communicatie_ai.py`
@@ -331,9 +335,19 @@ versie.)
   geldgever + **per bank overgemaakt** (geen cash). Max 3 schenkingen/leningen per
   aanvraag; schenking vrij van last/tegenprestatie. **Geen verplichte leningsvorm**
   (niet per se direct-opeisbaar/achtergesteld).
-- **ICR = kale huur / rente** (bruto, géén kostenafslag — die 70%/opex hoort in een
-  netto/DSCR-berekening, niet in de ICR). Normen (indicatief): DSCR-vloer ~1,05;
-  ICR-comfort ~175%; DSCR-comfort ~125%.
+- **ICR = huurwaarde / rente** (bruto, géén kostenafslag — die 70%/opex hoort in een
+  netto/DSCR-berekening, niet in de ICR). Verfijningen (bevestigd AV juli 2025 +
+  hypotheekgids, nov 2026):
+  - **Norm ICR ≥ 1,25**, en **ná aflossing niet lager dan vóór aflossing** (AV juli
+    2025). **Kamerverhuur: ICR ≥ 1,5 (150%)** (hypotheekgids) — strenger dan de 1,25.
+  - **Huurwaarde = het mínimum van (i) de getaxeerde huurwaarde en (ii) de werkelijke
+    kale huur** uit het contract (contracthuur boven taxatie telt niet mee).
+  - **Toetsrente = max(5-jaarsrente, werkelijke rente)** op aanvraagmoment — de ICR
+    wordt dus op een vaak iets hógere rente getoetst dan je werkelijk betaalt.
+  - Een **familielening telt NIET in de ICR**: dat is voor Domivest **eigen middelen**
+    (verlaagt juist de lening → hógere ICR). Wel Wwft-herkomst aantonen (getekende
+    overeenkomst + per bank). Normen (indicatief): DSCR-vloer ~1,05; ICR-comfort ~175%;
+    DSCR-comfort ~125%. LTV max 80%, min €100k/onderpand, alleen professionele partijen.
 
 ---
 

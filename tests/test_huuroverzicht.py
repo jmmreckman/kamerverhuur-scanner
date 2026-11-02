@@ -90,3 +90,33 @@ def test_lege_portefeuille():
     assert t.kale == Decimal("0")
     assert t.icr is None
     assert t.netto_vol is None
+
+
+def test_persoonlijke_lening_maandrente():
+    # 200.000 @ 6% = 12.000/jaar = 1.000/maand
+    lening = ho.PersoonlijkeLening(omschrijving="vader", bedrag=Decimal("200000"), jaarrente=Decimal("6"))
+    assert lening.maandrente == Decimal("1000.00")
+
+
+def test_persoonlijke_lening_nul_of_leeg():
+    assert ho.PersoonlijkeLening("x", Decimal("0"), Decimal("6")).maandrente == Decimal("0")
+    assert ho.PersoonlijkeLening("x", Decimal("100000"), Decimal("0")).maandrente == Decimal("0")
+
+
+def test_som_maandrente():
+    leningen = [
+        ho.PersoonlijkeLening("a", Decimal("200000"), Decimal("6")),   # 1000
+        ho.PersoonlijkeLening("b", Decimal("50000"), Decimal("4,8".replace(",", "."))),  # 200
+    ]
+    assert ho.som_maandrente(leningen) == Decimal("1200.00")
+    assert ho.som_maandrente([]) == Decimal("0")
+
+
+def test_rentedekking_zonder_en_met_lening():
+    # kale huur 2500/maand, hypotheekrente 1500/maand -> 1.67
+    assert ho.rentedekking(Decimal("2500"), Decimal("1500")) == Decimal("1.67")
+    # met familielening-rente 1000 erbij -> 2500 / 2500 = 1.00
+    assert ho.rentedekking(Decimal("2500"), Decimal("1500") + Decimal("1000")) == Decimal("1.00")
+    # geen rentelast -> None
+    assert ho.rentedekking(Decimal("2500"), Decimal("0")) is None
+    assert ho.rentedekking(Decimal("2500"), None) is None

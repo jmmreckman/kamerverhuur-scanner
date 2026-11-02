@@ -60,12 +60,66 @@
       <div class="waarde">
         {% if totalen.icr is not none %}<span class="{{ 'icr-goed' if totalen.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(totalen.icr) }}</span>{% else %}-{% endif %}
       </div>
-      <div class="label">ICR portefeuille</div>
+      <div class="label">ICR portefeuille (Domivest)</div>
+    </div>
+    {% if lening_rente and lening_rente > 0 %}
+    <div class="huur-kencijfer"><div class="waarde">{{ lening_rente|eur }}</div><div class="label">persoonlijke lening / maand</div></div>
+    {% endif %}
+    <div class="huur-kencijfer">
+      <div class="waarde">
+        {% if dekking_incl is not none %}<span class="{{ 'icr-goed' if dekking_incl >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(dekking_incl) }}</span>{% else %}-{% endif %}
+      </div>
+      <div class="label">
+        totale rentedekking{% if lening_rente and lening_rente > 0 %} incl. lening{% endif %}
+        {% if lening_rente and lening_rente > 0 and dekking_hyp is not none %}<br><span style="color:var(--muted)">{{ '%.2f'|format(dekking_hyp) }} zonder lening</span>{% endif %}
+      </div>
     </div>
   </div>
-  {% if totalen.icr is none %}
-  <p class="muted" style="margin-top:0.5rem">Vul bij minstens één pand de hypotheekrente in (Panden beheren) om netto en ICR te zien.</p>
+  <p class="muted" style="margin-top:0.5rem">
+    <strong>ICR portefeuille (Domivest)</strong> = kale huur ÷ hypotheekrente (zo toetst Domivest, norm ≥1,25;
+    voor kamerverhuur ≥1,5). Een familielening telt hier <em>niet</em> in mee — die is voor Domivest eigen middelen.
+    <strong>Totale rentedekking</strong> = al je kale huur ÷ ál je rentelasten (hypotheken + persoonlijke lening) —
+    jouw eigen check of je alles samen kunt dragen.
+    {% if totalen.icr is none %}<br>Vul bij minstens één pand de hypotheekrente in (Panden beheren) om netto en ICR te zien.{% endif %}
+  </p>
+</div>
+
+{# ---- Persoonlijke lening(en): familielening-check ---- #}
+<div class="card">
+  <h2>Persoonlijke lening(en)</h2>
+  <p class="muted">
+    Bv. een familielening bij je vader. De maandrente (bedrag × rente ÷ 12) telt mee in de
+    <strong>totale rentedekking</strong> hierboven — speel met bedrag/rente om te zien waar je nog veilig zit.
+    Dit staat los van Domivest's ICR (daar is zo'n lening je eigen middelen, mits getekende overeenkomst + per bank;
+    ≥6% rente is fiscaal veilig tegen een schenking).
+  </p>
+  {% if leningen %}
+  <div class="tabel-scroll">
+  <table class="huur-tabel">
+    <tr><th>Omschrijving</th><th class="num">Bedrag</th><th class="num">Rente</th><th class="num">Rente / maand</th><th></th></tr>
+    {% for l in leningen %}
+    <tr>
+      <td>{{ l.omschrijving or "Persoonlijke lening" }}</td>
+      <td class="num">{{ l.bedrag|eur }}</td>
+      <td class="num">{{ '%.2f'|format(l.jaarrente) }}%</td>
+      <td class="num">{{ l.maandrente|eur }}</td>
+      <td class="num">
+        <form method="post" action="{{ url_for('huur_overzicht_lening_verwijderen', lening_id=l.lening_id) }}" style="display:inline" onsubmit="return confirm('Deze lening verwijderen?')">
+          <button type="submit" class="verwijder-knop" title="Verwijderen">&times;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr class="totaal-rij"><td colspan="3">Totaal rente / maand</td><td class="num">{{ lening_rente|eur }}</td><td></td></tr>
+  </table>
+  </div>
   {% endif %}
+  <form method="post" action="{{ url_for('huur_overzicht_lening_toevoegen') }}" class="mini-form">
+    <label>Omschrijving<input type="text" name="omschrijving" placeholder="bv. Lening vader"></label>
+    <label>Bedrag<input type="text" name="bedrag" class="kort" placeholder="bv. 200.000"></label>
+    <label>Rente % per jaar<input type="text" name="jaarrente" class="kort" placeholder="bv. 6"></label>
+    <button type="submit" class="btn btn-secondary btn-xs">+ Lening</button>
+  </form>
 </div>
 
 {# ---- Per pand ---- #}

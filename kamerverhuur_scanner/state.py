@@ -221,6 +221,40 @@ def verwijder_huur_handmatig(pand_slug: str, regel_id: int, state_dir: str = "."
     _huur_handmatig_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(rijen, indent=2))
 
 
+def _persoonlijke_leningen_bestandsnaam(username: str, state_dir: str = ".") -> Path:
+    veilige = re.sub(r"[^a-z0-9_-]", "-", username.lower())
+    return Path(state_dir) / f"persoonlijke_leningen_{veilige}.json"
+
+
+def laad_persoonlijke_leningen(username: str, state_dir: str = ".") -> list[dict]:
+    """Persoonlijke leningen (bv. familielening) per gebruiker, voor de totale-
+    rentedekking op het Huuroverzicht. Elke regel: {id, omschrijving, bedrag,
+    jaarrente} (bedrag/jaarrente als string). Per gebruiker, want het is iemands
+    eigen financiering - niet gedeeld met mede-gebruikers."""
+    p = _persoonlijke_leningen_bestandsnaam(username, state_dir)
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def voeg_persoonlijke_lening_toe(
+    username: str, omschrijving: str, bedrag: str, jaarrente: str, state_dir: str = "."
+) -> None:
+    rijen = laad_persoonlijke_leningen(username, state_dir)
+    nieuw_id = max((int(r.get("id", 0)) for r in rijen), default=0) + 1
+    rijen.append({"id": nieuw_id, "omschrijving": omschrijving, "bedrag": bedrag, "jaarrente": jaarrente})
+    _persoonlijke_leningen_bestandsnaam(username, state_dir).write_text(json.dumps(rijen, indent=2))
+
+
+def verwijder_persoonlijke_lening(username: str, lening_id: int, state_dir: str = ".") -> None:
+    rijen = [r for r in laad_persoonlijke_leningen(username, state_dir) if int(r.get("id", 0)) != lening_id]
+    _persoonlijke_leningen_bestandsnaam(username, state_dir).write_text(json.dumps(rijen, indent=2))
+
+
 def _komende_maand_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
     return Path(state_dir) / f"komende_maand_{veilige_slug}.json"

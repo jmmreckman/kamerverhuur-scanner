@@ -1063,6 +1063,25 @@ def create_app(config: Config | None = None) -> Flask:
         except Exception:  # noqa: BLE001 - een rommelig handmatig bedrag mag de pagina niet breken
             return Decimal("0")
 
+    def _percentage_of_nul(waarde) -> Decimal:
+        """Parse een rentepercentage ('6', '6,0', '6%') naar een Decimal. Rommel -> 0."""
+        if waarde in (None, ""):
+            return Decimal("0")
+        tekst = str(waarde).replace("%", "").replace(",", ".").strip()
+        try:
+            return Decimal(tekst)
+        except Exception:  # noqa: BLE001
+            return Decimal("0")
+
+    def _persoonlijke_leningen() -> list:
+        return [
+            huuroverzicht.PersoonlijkeLening(
+                omschrijving=r.get("omschrijving", ""), bedrag=_bedrag_of_nul(r.get("bedrag")),
+                jaarrente=_percentage_of_nul(r.get("jaarrente")), lening_id=int(r.get("id", 0)),
+            )
+            for r in state.laad_persoonlijke_leningen(current_user.id, config.state_dir)
+        ]
+
     def _bouw_huuroverzicht(pand) -> huuroverzicht.PandHuur:
         """Bouwt het huuroverzicht van één pand: live kale/servicekosten per
         bewoonde kamer uit de Huurders-sheet, plus de handmatig ingevoerde regels
@@ -1101,7 +1120,38 @@ def create_app(config: Config | None = None) -> Flask:
         eigen_panden = [p for p in _properties() if current_user.heeft_toegang(p.slug)]
         overzichten = [_bouw_huuroverzicht(p) for p in eigen_panden]
         totalen = huuroverzicht.totaliseer(overzichten)
-        return render_template("huur_overzicht.html", overzichten=overzichten, totalen=totalen)
+        leningen = _persoonlijke_leningen()
+        lening_rente = huuroverzicht.som_maandrente(leningen)
+        # Totale rentedekking = alle kale huur t.o.v. alle rentelasten (JOUW
+        # huishoud-check, los van Domivest's per-pand-ICR): zonder en met de
+        # persoonlijke lening(en), zodat de impact meteen zichtbaar is.
+        dekking_hyp = huuroverzicht.rentedekking(totalen.kale, totalen.rente)
+        dekking_incl = huuroverzicht.rentedekking(totalen.kale, totalen.rente + lening_rente)
+        return render_template(
+            "huur_overzicht.html", overzichten=overzichten, totalen=totalen,
+            leningen=leningen, lening_rente=lening_rente,
+            dekking_hyp=dekking_hyp, dekking_incl=dekking_incl,
+        )
+
+    @app.route("/huur-overzicht/lening", methods=["POST"])
+    @login_required
+    def huur_overzicht_lening_toevoegen():
+        omschrijving = request.form.get("omschrijving", "").strip() or "Persoonlijke lening"
+        bedrag = request.form.get("bedrag", "").strip()
+        jaarrente = request.form.get("jaarrente", "").strip()
+        if not bedrag or not jaarrente:
+            flash("Vul zowel een leenbedrag als een rentepercentage in.")
+        else:
+            state.voeg_persoonlijke_lening_toe(current_user.id, omschrijving, bedrag, jaarrente, config.state_dir)
+            flash("Persoonlijke lening toegevoegd.")
+        return redirect(url_for("huur_overzicht"))
+
+    @app.route("/huur-overzicht/lening/<int:lening_id>/verwijderen", methods=["POST"])
+    @login_required
+    def huur_overzicht_lening_verwijderen(lening_id: int):
+        state.verwijder_persoonlijke_lening(current_user.id, lening_id, config.state_dir)
+        flash("Persoonlijke lening verwijderd.")
+        return redirect(url_for("huur_overzicht"))
 
     @app.route("/huur-overzicht/<pand_slug>/regel", methods=["POST"])
     @login_required
