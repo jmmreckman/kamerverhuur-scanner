@@ -367,6 +367,28 @@ def _is_buiten_werking(config, gebruiker: str) -> bool:
     return bool(gebruiker) and gebruiker in set(_laad_toegang(config).get("buiten_werking", []))
 
 
+def _kansen_gebruikers_pad(config) -> Path:
+    return Path(config.state_path).parent / "kansen_gebruikers.json"
+
+
+def _laad_kansen_gebruikers(config) -> dict:
+    """In-app aangemaakte kansen-only accounts, LOS van de env-accounts
+    (KANSEN_APP_USERS) én los van steenhub.nl. Per naam:
+    {'wachtwoord_hash': <werkzeug-hash>, 'beheerder': <bool>}. Opgeslagen naast de
+    state op de VPS (nooit in git). Zo'n account geeft GEEN toegang tot steenhub.nl:
+    die app leest dit bestand niet en heeft zijn eigen users.json."""
+    try:
+        with open(_kansen_gebruikers_pad(config), encoding="utf-8") as bestand:
+            data = json.load(bestand)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _schrijf_kansen_gebruikers(config, data: dict) -> None:
+    schrijf_json_atomisch(_kansen_gebruikers_pad(config), data)
+
+
 def _registreer_geblokkeerde_poging(config, gebruiker: str, wachtwoord_klopte: bool,
                                     ip: str | None, user_agent: str | None) -> None:
     """Telt (en verrijkt) een inlogpoging van een buiten-werking-gezet account, zodat
@@ -711,7 +733,17 @@ def _kloppend_wachtwoord(config: Config, gebruiker: str, wachtwoord: str) -> boo
         # Tijdsveilig vergelijken (hmac.compare_digest) i.p.v. == , zodat de
         # responstijd niets verraadt over hoeveel tekens van het wachtwoord kloppen.
         return True
-    # 2) Zelfde accounts als steenhub.nl (users.json met werkzeug-hashes), zodat je
+    # 2) In-app aangemaakte kansen-only accounts (werkzeug-hash in de state, los van
+    # steenhub). Elke poging leest het bestand opnieuw, zodat een net toegevoegd
+    # account meteen werkt zonder de container te herstarten. Altijd één hash-check
+    # (tegen de dummy-hash bij een onbekende naam) tegen timing-enumeratie.
+    eigen = _laad_kansen_gebruikers(config).get(gebruiker)
+    eigen_hash = eigen["wachtwoord_hash"] if (
+        isinstance(eigen, dict) and eigen.get("wachtwoord_hash")
+    ) else _DUMMY_HASH
+    if check_password_hash(eigen_hash, wachtwoord) and isinstance(eigen, dict) and eigen.get("wachtwoord_hash"):
+        return True
+    # 3) Zelfde accounts als steenhub.nl (users.json met werkzeug-hashes), zodat je
     # met je steenhub-login ook op de kaart-website kunt. Elke poging leest het
     # bestand opnieuw, zodat een nieuwe steenhub-gebruiker meteen werkt zonder de
     # kansen-container te herstarten.
@@ -799,11 +831,13 @@ def create_app(config: Config | None = None) -> Flask:
     if config is None:
         config = load_config()
 
-    if not config.kansen_app_users and not _steenhub_login_beschikbaar(config):
+    if (not config.kansen_app_users and not _steenhub_login_beschikbaar(config)
+            and not _laad_kansen_gebruikers(config)):
         raise SystemExit(
-            "Geen inlogbron: KANSEN_APP_USERS is leeg én er is geen bruikbaar STEENHUB_USERS_FILE "
-            "(users.json van steenhub.nl). Vul minstens 1 gebruiker:wachtwoord-paar in KANSEN_APP_USERS "
-            "in (zie .env.example) of koppel de steenhub-users.json in, anders zou de kaart zonder "
+            "Geen inlogbron: KANSEN_APP_USERS is leeg, er zijn geen in-app kansen-accounts, én er is "
+            "geen bruikbaar STEENHUB_USERS_FILE (users.json van steenhub.nl). Vul minstens 1 "
+            "gebruiker:wachtwoord-paar in KANSEN_APP_USERS in (zie .env.example), maak een account aan "
+            "via Toegangsbeheer, of koppel de steenhub-users.json in, anders zou de kaart zonder "
             "wachtwoord open staan."
         )
     if not config.kansen_app_secret_key:
@@ -843,9 +877,18 @@ def create_app(config: Config | None = None) -> Flask:
     # voorrang; anders de eigen env-accounts (KANSEN_APP_USERS) plus de vaste
     # eigenaar hieronder, zodat de eigenaar ook als hij met zijn steenhub-account
     # inlogt de beheerpagina ziet. De meelezende collega's horen hier niet bij.
-    beheerders = set(config.kansen_app_beheerders) or (
-        set(config.kansen_app_users) | _STANDAARD_BEHEERDERS
-    )
+    def huidige_beheerders() -> set:
+        # KANSEN_APP_BEHEERDERS (env) heeft voorrang; anders de eigen env-accounts
+        # (KANSEN_APP_USERS) plus de vaste eigenaar. In-app aangemaakte accounts die
+        # als beheerder zijn gemarkeerd komen er elke keer vers bij (geen herstart
+        # nodig); in-app "gebruiker"-accounts worden NOOIT automatisch beheerder.
+        basis = set(config.kansen_app_beheerders) or (
+            set(config.kansen_app_users) | _STANDAARD_BEHEERDERS
+        )
+        for naam, rec in _laad_kansen_gebruikers(config).items():
+            if isinstance(rec, dict) and rec.get("beheerder"):
+                basis.add(naam)
+        return basis
 
     def login_required(view):
         @wraps(view)
@@ -867,7 +910,7 @@ def create_app(config: Config | None = None) -> Flask:
         @wraps(view)
         @login_required
         def wrapped(*args, **kwargs):
-            if session.get("gebruiker") not in beheerders:
+            if session.get("gebruiker") not in huidige_beheerders():
                 abort(404)  # 404 i.p.v. 403: niet-beheerders merken niet dat de pagina bestaat.
             return view(*args, **kwargs)
 
@@ -922,7 +965,7 @@ def create_app(config: Config | None = None) -> Flask:
     def kaart():
         return render_template(
             "kaart.html", gebruiker=session["gebruiker"],
-            is_beheerder=session["gebruiker"] in beheerders,
+            is_beheerder=session["gebruiker"] in huidige_beheerders(),
         )
 
     @app.route("/api/kansen")
@@ -1931,9 +1974,11 @@ def create_app(config: Config | None = None) -> Flask:
     @app.route("/toegangsbeheer", methods=["GET", "POST"])
     @beheerder_required
     def toegangsbeheer():
-        # Beheerpagina: vink een account "buiten werking" aan (dan ziet het bij het
-        # inloggen enkel een storingspagina) en zie hoe vaak zo'n account het tóch
-        # nog probeert. Beheerders kunnen nooit zichzelf/elkaar buitensluiten.
+        # Beheerpagina: nieuwe kansen-only accounts aanmaken, een account "buiten
+        # werking" zetten (dan ziet het bij het inloggen enkel een storingspagina),
+        # en zien hoe vaak zo'n account het tóch nog probeert. Beheerders kunnen
+        # nooit zichzelf/elkaar buitensluiten.
+        beheerders = huidige_beheerders()
         data = _laad_toegang(config)
         if request.method == "POST":
             aangevinkt = set(request.form.getlist("buiten_werking"))
@@ -1944,23 +1989,83 @@ def create_app(config: Config | None = None) -> Flask:
 
         geblokkeerd = set(data.get("buiten_werking", []))
         pogingen = data.get("pogingen", {})
-        # Alle bekende accounts: eigen env-accounts + steenhub-collega's + al eerder
-        # geblokkeerde namen (die eventueel niet meer in een bron voorkomen).
-        namen = set(config.kansen_app_users) | geblokkeerd
-        if config.steenhub_users_file:
-            namen |= set(_laad_steenhub_users(config.steenhub_users_file))
+        eigen_users = _laad_kansen_gebruikers(config)
+        env_namen = set(config.kansen_app_users)
+        steenhub_namen = set(_laad_steenhub_users(config.steenhub_users_file)) if config.steenhub_users_file else set()
+        # Alle bekende accounts: in-app + eigen env-accounts + steenhub-collega's +
+        # al eerder geblokkeerde namen (die eventueel niet meer in een bron voorkomen).
+        namen = set(eigen_users) | env_namen | steenhub_namen | geblokkeerd
+
+        def _bron(naam: str) -> str:
+            if naam in eigen_users:
+                return "kansen (in-app)"
+            if naam in env_namen:
+                return "kansen (env)"
+            if naam in steenhub_namen:
+                return "steenhub"
+            return "onbekend"
+
         accounts = [
             {
                 "naam": naam,
                 "beheerder": naam in beheerders,
                 "buiten_werking": naam in geblokkeerd,
                 "poging": pogingen.get(naam),
+                "bron": _bron(naam),
+                # Alleen in-app accounts kunnen hier verwijderd worden; env- en
+                # steenhub-accounts beheer je elders (env / steenhub-app).
+                "verwijderbaar": naam in eigen_users,
             }
             for naam in sorted(namen)
         ]
         return render_template(
             "toegangsbeheer.html", accounts=accounts, gebruiker=session["gebruiker"],
         )
+
+    @app.route("/toegangsbeheer/gebruiker", methods=["POST"])
+    @beheerder_required
+    def toegangsbeheer_gebruiker_toevoegen():
+        # Maakt een kansen-only account aan (werkzeug-hash in de state). Standaard
+        # een gewone "gebruiker"; alleen met het vinkje wordt het een beheerder.
+        # Dit geeft GEEN toegang tot steenhub.nl (aparte app, eigen users.json).
+        naam = request.form.get("naam", "").strip()
+        wachtwoord = request.form.get("wachtwoord", "")
+        is_beheerder = request.form.get("beheerder") == "on"
+        bestaande = set(config.kansen_app_users) | set(_laad_kansen_gebruikers(config))
+        if config.steenhub_users_file:
+            bestaande |= set(_laad_steenhub_users(config.steenhub_users_file))
+        if not naam or not wachtwoord:
+            flash("Vul een gebruikersnaam én een wachtwoord in.")
+        elif not re.fullmatch(r"[A-Za-z0-9_.-]+", naam):
+            flash("Gebruikersnaam mag alleen letters, cijfers, punt, streepje en underscore bevatten.")
+        elif len(wachtwoord) < 8:
+            flash("Kies een wachtwoord van minstens 8 tekens.")
+        elif naam in bestaande:
+            flash(f"Er bestaat al een account met de naam '{naam}'.")
+        else:
+            users = _laad_kansen_gebruikers(config)
+            users[naam] = {
+                "wachtwoord_hash": generate_password_hash(wachtwoord),
+                "beheerder": is_beheerder,
+            }
+            _schrijf_kansen_gebruikers(config, users)
+            flash(f"Kansen-account '{naam}' aangemaakt ({'beheerder' if is_beheerder else 'gebruiker'}). "
+                  "Dit account werkt alleen op kansen.steenhub.nl.")
+        return redirect(url_for("toegangsbeheer"))
+
+    @app.route("/toegangsbeheer/gebruiker/<naam>/verwijderen", methods=["POST"])
+    @beheerder_required
+    def toegangsbeheer_gebruiker_verwijderen(naam: str):
+        users = _laad_kansen_gebruikers(config)
+        if naam in users:
+            del users[naam]
+            _schrijf_kansen_gebruikers(config, users)
+            # Een eventuele "buiten werking"-markering op deze naam mag blijven staan;
+            # hij doet geen kwaad en verdwijnt zodra 'ie niet meer in een bron voorkomt.
+            flash(f"Kansen-account '{naam}' verwijderd.")
+        else:
+            flash("Dit account bestaat niet (meer) als in-app account.")
+        return redirect(url_for("toegangsbeheer"))
 
     @app.route("/mail-voorkeuren", methods=["GET", "POST"])
     @login_required
@@ -2021,6 +2126,7 @@ def create_app(config: Config | None = None) -> Flask:
     def gebruikers():
         # Stil logboek per account (alleen voor beheerders): logins, tijd op de site,
         # meest bezochte pagina's en meest bekeken/doorgerekende woningen.
+        beheerders = huidige_beheerders()
         data = _laad_logboek(config)
         state = StateStore(config.state_path)
 

@@ -138,6 +138,15 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   `jmmreckman@gmail.com` (in SMTP-envelope, niet in headers). `send_mail(...,
   stille_bcc=False)` laat die BCC weg — gebruikt door de concurrentie-scan, waar de
   gebruiker zelf de ontvanger(s) kiest.
+- **Login/accounts (kansen):** drie bronnen, los van elkaar — (1) `KANSEN_APP_USERS`
+  (env, plat `naam:wachtwoord`), (2) **in-app kansen-only accounts** (nov 2026:
+  `state_dir/kansen_gebruikers.json`, werkzeug-hash + `beheerder`-bool; aan te maken op
+  **/toegangsbeheer** door een beheerder), (3) steenhub-users.json (gedeeld, read-only
+  ingekoppeld → steenhub-login werkt óók op kansen). Een **in-app kansen-account geeft
+  GEEN toegang tot steenhub.nl** (aparte app/users.json). Beheerders =
+  `KANSEN_APP_BEHEERDERS` (env) óf alle env-users + `jmmreckman`, plus in-app accounts
+  met `beheerder=true`; in-app "gebruiker"-accounts worden nooit automatisch beheerder.
+  `/toegangsbeheer` (beheerder) = accounts aanmaken/verwijderen + "buiten werking" zetten.
 - `rotterdam_scanner/opkoop_scan.py` — **concurrentie-scan** op de kaart (beheerder):
   trechter binnen 50 m rond een adres → 1) alle adressen (PDOK reverse, gepagineerd,
   rows max 100) 2) opkoopbescherming (WOZ per adres, alleen in een beschermde wijk)

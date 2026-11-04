@@ -21,6 +21,14 @@
     .toegang-detail { font-size: .78rem; opacity: .7; }
     .toegang-acties { padding: .5rem 0 2rem; }
     .toegang-form { padding: 0 1.5rem; }
+    .toegang-nieuw { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; padding-bottom: 2rem; }
+    .toegang-nieuw label { font-size: .85rem; }
+    .toegang-nieuw input[type=text] { display: block; margin-top: .2rem; padding: .35rem .5rem;
+      border: 1px solid rgba(128,128,128,.4); border-radius: .35rem; }
+    .toegang-nieuw .toegang-check { display: inline-flex; align-items: center; gap: .35rem; }
+    .toegang-verwijder { color: #b91c1c; background: none; border: 0; cursor: pointer;
+      font: inherit; padding: 0; text-decoration: underline; }
+    .toegang-scheiding { border: 0; border-top: 1px solid rgba(128,128,128,.25); margin: 1.5rem 1.5rem 0; }
   </style>
 </head>
 <body>
@@ -50,13 +58,24 @@
     {% endif %}
   {% endwith %}
 
-  <form method="post" class="toegang-form">
+  {# Losse formulieren buiten de tabel, zodat niets nest: de checkboxes en knoppen
+     in de tabel koppelen eraan via het HTML5 form=-attribuut. #}
+  <form method="post" id="bw-form"></form>
+  {% for account in accounts if account.verwijderbaar %}
+  <form method="post" id="del-{{ account.naam }}"
+        action="{{ url_for('toegangsbeheer_gebruiker_verwijderen', naam=account.naam) }}"
+        onsubmit="return confirm('Account {{ account.naam }} verwijderen? Deze persoon kan dan niet meer op kansen inloggen.');"></form>
+  {% endfor %}
+
+  <div class="toegang-form">
     <table class="toegang-tabel">
       <thead>
         <tr>
           <th>Account</th>
+          <th>Bron</th>
           <th>Buiten werking</th>
           <th>Inlogpogingen (geblokkeerd)</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -66,11 +85,12 @@
             {{ account.naam }}
             {% if account.beheerder %}<span class="toegang-badge">beheerder</span>{% endif %}
           </td>
+          <td class="toegang-detail">{{ account.bron }}</td>
           <td>
             {% if account.beheerder %}
               <span class="muted">&mdash;</span>
             {% else %}
-              <label><input type="checkbox" name="buiten_werking" value="{{ account.naam }}"
+              <label><input type="checkbox" form="bw-form" name="buiten_werking" value="{{ account.naam }}"
                      {% if account.buiten_werking %}checked{% endif %}> buiten werking</label>
             {% endif %}
           </td>
@@ -86,13 +106,40 @@
               <span class="muted">&mdash;</span>
             {% endif %}
           </td>
+          <td>
+            {% if account.verwijderbaar %}
+              <button type="submit" form="del-{{ account.naam }}" class="toegang-verwijder">verwijderen</button>
+            {% else %}
+              <span class="muted">&mdash;</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     <div class="toegang-acties">
-      <button type="submit" class="reken-knop-primair">Opslaan</button>
+      <button type="submit" form="bw-form" class="reken-knop-primair">Buiten-werking opslaan</button>
     </div>
+  </div>
+
+  <hr class="toegang-scheiding">
+  <div class="toegang-kop">
+    <h2>Kansen-account toevoegen</h2>
+    <p class="muted">
+      Maakt een account dat <strong>alleen</strong> op kansen.steenhub.nl werkt &mdash; géén toegang tot
+      steenhub.nl zelf. Laat het vinkje uit voor een gewone gebruiker (kan de kaart/rekentool gebruiken,
+      maar niet dit toegangsbeheer); zet het aan als deze persoon ook het beheer mag doen.
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('toegangsbeheer_gebruiker_toevoegen') }}" class="toegang-nieuw">
+    <label>Gebruikersnaam
+      <input type="text" name="naam" required pattern="[A-Za-z0-9_.-]+" autocomplete="off">
+    </label>
+    <label>Wachtwoord (min. 8 tekens)
+      <input type="text" name="wachtwoord" required minlength="8" autocomplete="new-password">
+    </label>
+    <label class="toegang-check"><input type="checkbox" name="beheerder"> beheerder</label>
+    <button type="submit" class="reken-knop-primair">Account aanmaken</button>
   </form>
 </body>
 </html>
