@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Afwijzing versturen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Afwijzing versturen</h1>
+  <p class="muted">Elke aanmelder hieronder krijgt een eigen mail (niet als groep). Pas de tekst zo nodig aan
+     voordat je verstuurt.</p>
+</div>
+
+<div class="card">
+  <h2>Ontvangers</h2>
+  <ul>
+    {% for a in aanmelders %}
+    <li>{{ a.naam }} ({{ a.email }})</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('afwijzing_versturen', pand_slug=huidig_pand.slug) }}"
+        onsubmit="return confirm('Afwijzingsmail versturen naar alle {{ aanmelders|length }} aanmelder(s) hierboven?');">
+    {% for r in ruwe_aanmelders %}
+    <input type="hidden" name="aanmelders" value="{{ r }}">
+    {% endfor %}
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="12" required>{{ tekst }}</textarea>
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

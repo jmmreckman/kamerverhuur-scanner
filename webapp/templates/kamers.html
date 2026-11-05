@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Kamers - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Kamers</h1>
+  <p class="muted">Klik op een kamer voor huurder, contract en betaalgeschiedenis</p>
+</div>
+<div class="grid">
+  {% for k in kamers %}
+  {% set cache_regel = (cache["resultaten"]|selectattr("kamer", "equalto", k.kamer)|first) if cache else none %}
+  <a class="card kamer-tile" href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=k.kamer) }}">
+    <h2>Kamer {{ k.kamer }}</h2>
+    {% if k.naam %}
+      <p>{{ k.naam }}</p>
+      <p class="muted">{{ k.verwacht_bedrag|eur }} / maand</p>
+      {% if cache_regel %}
+        <span class="pil {{ cache_regel['status']|status_klasse }}">{{ cache_regel["status"] }}</span>
+      {% else %}
+        <p class="muted">Nog niet gecontroleerd</p>
+      {% endif %}
+    {% else %}
+      <p class="muted">Leegstaand</p>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
