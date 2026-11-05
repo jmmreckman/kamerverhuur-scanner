@@ -12,8 +12,12 @@
   </div>
 {% endmacro %}
 
-{% macro actie_knoppen(kamer_naam, status, email) %}
-  {% if status != "Betaald" %}
+{% macro actie_knoppen(kamer_naam, status, email, handmatig) %}
+  {% if handmatig %}
+    <form method="post" action="{{ url_for('betaling_goedkeuren_ongedaan', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam) }}">
+      <button class="btn btn-secondary btn-xs" type="submit">Goedkeuring ongedaan maken</button>
+    </form>
+  {% elif status != "Betaald" %}
     {% if email %}
       <div style="display:flex; flex-direction:column; gap:0.35rem">
         {{ email_knop(kamer_naam, 'herinnering', 'Stuur herinnering', icon_inbox()) }}
@@ -22,7 +26,15 @@
     {% else %}
       <span class="muted" style="font-size:0.8rem">Geen e-mailadres bekend</span>
     {% endif %}
+    <form method="post" action="{{ url_for('betaling_goedkeuren', pand_slug=huidig_pand.slug, kamer_naam=kamer_naam) }}" style="margin-top:0.35rem"
+          onsubmit="return confirm('Kamer {{ kamer_naam }} handmatig op Betaald zetten? De automatische controle houdt hem dan groen tot je het ongedaan maakt.');">
+      <button class="btn btn-secondary btn-xs" type="submit">{{ icon_check() }} Handmatig goedkeuren</button>
+    </form>
   {% endif %}
+{% endmacro %}
+
+{% macro handmatig_badge(is_handmatig) %}
+  {% if is_handmatig %}<span class="pil status-betaald" style="font-size:0.7rem" title="Handmatig op Betaald gezet (niet automatisch gematcht)">handmatig</span>{% endif %}
 {% endmacro %}
 
 {% block content %}
@@ -63,8 +75,8 @@
       <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r.tenant.kamer) }}">{{ r.tenant.naam }}</a></td>
       <td data-label="Verwacht">{{ r.tenant.verwacht_bedrag|eur }}</td>
       <td data-label="Ontvangen">{{ r.ontvangen_bedrag|eur }}</td>
-      <td data-label="Status"><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span></td>
-      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email) }}</td>
+      <td data-label="Status"><span class="pil {{ r.status.value|status_klasse }}">{{ r.status.value }}</span> {{ handmatig_badge(r.tenant.kamer in handmatig_goedgekeurd) }}</td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r.tenant.kamer, r.status.value, r.tenant.email, r.tenant.kamer in handmatig_goedgekeurd) }}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -106,8 +118,8 @@
       <td data-label="Huurder"><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=r['kamer']) }}">{{ r["naam"] }}</a></td>
       <td data-label="Verwacht">{{ r["verwacht_bedrag"]|eur }}</td>
       <td data-label="Ontvangen">{{ r["ontvangen_bedrag"]|eur }}</td>
-      <td data-label="Status"><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span></td>
-      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None) }}</td>
+      <td data-label="Status"><span class="pil {{ r['status']|status_klasse }}">{{ r["status"] }}</span> {{ handmatig_badge(r["kamer"] in handmatig_goedgekeurd) }}</td>
+      <td data-label="Actie" class="tabel-cel-stapel">{{ actie_knoppen(r["kamer"], r["status"], tenants_by_kamer.get(r["kamer"]).email if tenants_by_kamer.get(r["kamer"]) else None, r["kamer"] in handmatig_goedgekeurd) }}</td>
     </tr>
     {% endfor %}
     </tbody>

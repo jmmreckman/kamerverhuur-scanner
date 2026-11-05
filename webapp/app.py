@@ -2100,7 +2100,34 @@ def create_app(config: Config | None = None) -> Flask:
             herken_oud_huurder=_oud_huurder,
             oud_huurder_signalen=oud_huurder_signalen,
             heeft_bunq_rekening=g.pand.heeft_bunq_rekening,
+            handmatig_goedgekeurd=state.goedgekeurde_kamers(pand_slug, huidige_maand, config.state_dir),
         )
+
+    @app.route("/pand/<pand_slug>/betalingen/<kamer_naam>/goedkeuren", methods=["POST"])
+    @login_required
+    def betaling_goedkeuren(pand_slug: str, kamer_naam: str):
+        # Zet een kamer handmatig op "Betaald" (groen) - handig bij huurderwissels /
+        # rommelige overboekingen. De automatische controle houdt 'm daarna groen
+        # (run_check overlay) tot je het ongedaan maakt. De origineel-status onthouden
+        # we voor "ongedaan maken".
+        maand = date.today().strftime("%Y-%m")
+        regel = state.status_voor_kamer(state.load(pand_slug, config.state_dir), kamer_naam)
+        origineel = (regel or {}).get("status") or Status.NIET_ONTVANGEN.value
+        state.zet_handmatig_betaald(pand_slug, kamer_naam, maand, origineel, config.state_dir)
+        state.overschrijf_status_in_cache(pand_slug, kamer_naam, Status.BETAALD.value, config.state_dir)
+        flash(f"Kamer '{kamer_naam}' handmatig op Betaald gezet. De automatische controle laat 'm nu groen "
+              "staan (geen herinneringen) tot je het ongedaan maakt.")
+        return redirect(url_for("betalingen", pand_slug=pand_slug))
+
+    @app.route("/pand/<pand_slug>/betalingen/<kamer_naam>/goedkeuren-ongedaan", methods=["POST"])
+    @login_required
+    def betaling_goedkeuren_ongedaan(pand_slug: str, kamer_naam: str):
+        maand = date.today().strftime("%Y-%m")
+        origineel = state.verwijder_handmatig_betaald(pand_slug, kamer_naam, maand, config.state_dir)
+        state.overschrijf_status_in_cache(pand_slug, kamer_naam, origineel or Status.NIET_ONTVANGEN.value, config.state_dir)
+        flash(f"Handmatige goedkeuring voor '{kamer_naam}' ongedaan gemaakt. Klik 'Nu controleren' voor de "
+              "actuele status uit bunq.")
+        return redirect(url_for("betalingen", pand_slug=pand_slug))
 
     @app.route("/pand/<pand_slug>/betalingen/geschiedenis-aanvullen", methods=["POST"])
     @login_required

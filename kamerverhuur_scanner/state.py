@@ -75,6 +75,67 @@ def status_voor_kamer(cache: dict | None, kamer: str) -> dict | None:
     return None
 
 
+# --- Handmatige betaal-goedkeuring (override op de automatische controle) ------
+# Per pand, per maand (jjjj-mm): {kamer: origineel_status}. Zet een kamer handmatig
+# op "Betaald" (groen), los van wat bunq zegt - handig bij huurderwissels of een
+# rommelige overboeking. De origineel-status onthouden we zodat "ongedaan maken" de
+# echte status weer terug kan zetten. run_check() houdt goedgekeurde kamers groen
+# (zie kamerverhuur_scanner/runner.py), zodat een verse controle 'm niet omgooit.
+def _handmatig_betaald_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
+    veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
+    return Path(state_dir) / f"handmatig_betaald_{veilige_slug}.json"
+
+
+def _laad_handmatig_betaald_alles(pand_slug: str, state_dir: str = ".") -> dict:
+    p = _handmatig_betaald_bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def goedgekeurde_kamers(pand_slug: str, maand: str, state_dir: str = ".") -> set[str]:
+    """Kamers die voor `maand` (jjjj-mm) handmatig op 'Betaald' zijn gezet."""
+    per_maand = _laad_handmatig_betaald_alles(pand_slug, state_dir).get(maand)
+    return set(per_maand) if isinstance(per_maand, dict) else set()
+
+
+def zet_handmatig_betaald(pand_slug: str, kamer: str, maand: str, origineel_status: str, state_dir: str = ".") -> None:
+    data = _laad_handmatig_betaald_alles(pand_slug, state_dir)
+    data.setdefault(maand, {})[kamer] = origineel_status
+    _handmatig_betaald_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+
+
+def verwijder_handmatig_betaald(pand_slug: str, kamer: str, maand: str, state_dir: str = ".") -> str | None:
+    """Haalt de handmatige goedkeuring weg; geeft de onthouden origineel-status terug (of None)."""
+    data = _laad_handmatig_betaald_alles(pand_slug, state_dir)
+    origineel = data.get(maand, {}).pop(kamer, None)
+    if maand in data and not data[maand]:
+        del data[maand]
+    _handmatig_betaald_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+    return origineel
+
+
+def overschrijf_status_in_cache(pand_slug: str, kamer: str, nieuwe_status: str, state_dir: str = ".") -> None:
+    """Zet de status van één kamer in de laatst-opgeslagen betaalcache direct om,
+    zodat de betaalpagina meteen de nieuwe status toont zonder een nieuwe
+    bunq-controle. Doet niets als er nog geen cache is."""
+    p = _bestandsnaam(pand_slug, state_dir)
+    if not p.exists():
+        return
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return
+    for regel in data.get("resultaten", []):
+        if regel.get("kamer") == kamer:
+            regel["status"] = nieuwe_status
+    p.write_text(json.dumps(data, indent=2))
+
+
 def _verzonden_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
     veilige_slug = re.sub(r"[^a-z0-9_-]", "-", pand_slug.lower())
     return Path(state_dir) / f"verzonden_mails_{veilige_slug}.json"

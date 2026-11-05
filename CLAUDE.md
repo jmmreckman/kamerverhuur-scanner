@@ -113,7 +113,16 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   Aanmeldingen, Bezichtigingen, Vertrokken). `sheet_id_uit_invoer()` haalt het ID uit
   een geplakte link.
 - `kamerverhuur_scanner/runner.py` — `run_check()` (betaalcontrole),
-  `bereken_winstoverzicht()`, `backfill_geschiedenis()`.
+  `bereken_winstoverzicht()`, `backfill_geschiedenis()`. **Handmatig goedkeuren**
+  (nov 2026): op de Betalingen-pagina kun je een kamer per knop handmatig op
+  "Betaald" (groen) zetten — handig bij huurderwissels/rommelige overboekingen.
+  Opslag per pand+maand in `state.*_handmatig_betaald` (`handmatig_betaald_<slug>.json`,
+  onthoudt de origineel-status voor "ongedaan maken"). `run_check()` overlayt
+  goedgekeurde kamers → `Status.BETAALD` vóór de side-effects, dus het werkt door
+  naar sheet, Historie, cache én de "alles betaald"-melding; herinneringen vallen
+  weg. Klikken patcht direct de cache (`overschrijf_status_in_cache`) zodat de
+  pagina meteen groen toont zonder nieuwe bunq-controle. Geldt per kalendermaand
+  (nieuwe maand = opnieuw).
 - `kamerverhuur_scanner/bunq_client.py` — bunq-API (betalingen ophalen).
 - `kamerverhuur_scanner/drive_sync.py` + `drive_browse.py` — Drive via **rclone**.
 - `webapp/tekenportaal.py` + `handtekening.py` + `ondertekenen.py` + `contracts.py`

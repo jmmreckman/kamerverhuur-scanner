@@ -376,6 +376,17 @@ def run_check(
         tenants_voor_match, payments, config.bedrag_tolerantie, instapmaand_kamers, openstaand_tekort
     )
 
+    # Handmatig goedgekeurde kamers (deze maand) altijd op "Betaald" zetten, zodat
+    # een huurderwissel of een rommelige overboeking niet telkens als 'te weinig/te
+    # veel ontvangen' terugkomt. Dit werkt door naar de sheet, de Historie
+    # (betrouwbaarheid), de state-cache en de "alles betaald"-melding hieronder - de
+    # goedkeuring zet dus echt alles op betaald. Zie webapp: "Handmatig goedkeuren".
+    goedgekeurd = state.goedgekeurde_kamers(pand.slug, vandaag.strftime("%Y-%m"), config.state_dir)
+    if goedgekeurd:
+        for r in results:
+            if r.tenant.kamer in goedgekeurd:
+                r.status = Status.BETAALD
+
     if not dry_run:
         maand = vandaag.strftime("%Y-%m")
         sheet.write_results(results)
