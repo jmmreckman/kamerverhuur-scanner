@@ -3023,11 +3023,24 @@ def create_app(config: Config | None = None) -> Flask:
             # vertrekkende huurder nog even (zie Huurders-pagina).
             sheet.archiveer_vertrokken_huurder(bestaande)
             drive_sync.verhuis_naar_oude_huurders(config, g.pand, bestaande.naam)
-        if nieuwe_naam and nieuwe_naam != bestaande.naam:
+        nieuwe_huurder = bool(nieuwe_naam) and nieuwe_naam != bestaande.naam
+        if nieuwe_huurder:
             drive_sync.maak_huurder_map(config, g.pand, nieuwe_naam)
         kale = velden.get("kale_huurprijs", "").strip()
         service = velden.get("servicekosten", "").strip()
         borg = velden.get("borg", "").strip()
+        # Einddatum consistent wegschrijven als dd-mm-jjjj (canoniek formaat van
+        # kolom F; zo kan de aanzeg-/"kamer komt leeg"-logica 'm parsen). De HTML
+        # date-input levert "jjjj-mm-dd"; contractmetadata is al omgezet -
+        # _datum_lang is idempotent, dus beide paden kloppen.
+        einddatum_in = contracts._datum_lang(velden.get("einddatum", "").strip())
+        if nieuwe_huurder:
+            # Nieuwe huurder in deze kamer: de einddatum van de vertrokken huurder
+            # mag NIET blijven staan, anders blijft de "kamer komt leeg"-aanzegging
+            # onterecht afgaan. Leeg = onbepaalde tijd -> kolom F wordt geleegd.
+            nieuwe_einddatum = einddatum_in
+        else:
+            nieuwe_einddatum = einddatum_in or bestaande.contract_einddatum
         sheet.update_kamer(
             row_index=bestaande.row_index,
             naam=nieuwe_naam or bestaande.naam,
@@ -3037,7 +3050,7 @@ def create_app(config: Config | None = None) -> Flask:
             zoekwoord=bestaande.zoekwoord,
             kale_huurprijs=parse_bedrag(kale) if kale else bestaande.kale_huurprijs,
             servicekosten=parse_bedrag(service) if service else bestaande.servicekosten,
-            contract_einddatum=velden.get("einddatum", "").strip() or bestaande.contract_einddatum,
+            contract_einddatum=nieuwe_einddatum,
             opmerking=bestaande.opmerking,
             email=velden.get("email", "").strip() or bestaande.email,
             telefoonnummer=bestaande.telefoonnummer,
