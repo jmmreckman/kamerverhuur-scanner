@@ -47,8 +47,9 @@ Tegen de officiële Tado REST-API, met een los testscript:
   - `DELETE /homes/{home}/zones/{zone}/overlay` → terug naar schema.
   - Getest op een eigen-huis-kamer: overlay gezet én daarna exact de
     oorspronkelijke stand hersteld. Non-destructief patroon werkt.
-- **Child-lock**: per device uitleesbaar (`childLockEnabled`). Schrijven nog te
-  testen, maar zelfde patroon (`PUT …/devices/{serial}/childLock`).
+- **Child-lock**: per device uitleesbaar (`childLockEnabled`). We zetten 'm
+  bewust **NIET** aan — dat blokkeert de fysieke knop, en huurders draaien juist
+  uitsluitend aan die knop (zie §7).
 
 ## 3. Architectuur
 
@@ -99,12 +100,24 @@ Per zone, instelbaar door de eigenaar (niet door de huurder):
   tegel op "Wat vraagt aandacht". Hergebruik van het goedkeuringswachtrij-patroon
   uit de communicatiemodule waar nuttig.
 
-## 7. Eigenaar-only controle
+## 7. Eigenaar-controle — zónder de knop te blokkeren
 
-Child-lock (AAN) op de fysieke knoppen, zodat de huurder lokaal niet kan
-overrulen en de service de enige schrijver is. Overweeg de **band-benadering**
-(huurder mag binnen bv. 15-23° instellen, extreme standen bouwen automatisch af)
-boven een harde lockout — relationeel/juridisch verstandiger.
+**Child-lock gebruiken we NIET.** Dat zet de fysieke knop van de thermostaat
+volledig vast (tegen kinderen). Huurders gebruiken geen app en draaien uitsluitend
+aan die knop, dus die moet blijven werken.
+
+In plaats daarvan: de knop blijft vrij, en de service **corrigeert achteraf via de
+API**. Draait een huurder naar bv. 25°, dan ontstaat een MANUAL-overlay op die
+zone; de volgende polling-ronde past `verwarming-check` de regel toe (cap terug,
+afbouw starten, of alleen alerten). We voorkomen het draaien dus niet, we
+corrigeren het — de knop blijft altijd werken.
+
+Eerlijke consequentie: het werkt met de polling-tik mee (tot ~10-15 min), dus een
+huurder krijgt kortstondig zijn hoge stand voordat de regel ingrijpt. Dichter
+pollen verkleint dat raam (meer API-calls). Een harde cap die telkens terugdraait
+voelt vijandig; **afbouw** (langzaam zakken na X uur hoog) is gebruiksvriendelijker
+en meestal genoeg, met transparantie + mail erbij. (Tado kent voor zover bekend
+geen harde max-stand op de knop zelf — te verifiëren bij het bouwen.)
 
 ## 8. Secrets & randvoorwaarden
 
@@ -122,11 +135,13 @@ boven een harde lockout — relationeel/juridisch verstandiger.
 3. **`verwarming-check`-service** + compose-entry + poll-loop + regels + mail.
 4. **Web-UI**: mapping-scherm, per-pand verwarmingspagina met historie-grafiek,
    regel-instellingen; "Wat vraagt aandacht"-tegel. Pand-toegang respecteren.
-5. **Child-lock schrijven** testen + aanzetten per pand.
+5. Fijnafstelling: polling-frequentie vs. correctie-latency per pand afstemmen.
 
 ## 10. Open punten / nog te testen
 
-- Child-lock **schrijven** (`PUT …/devices/{serial}/childLock`) in de praktijk.
+- Correctie-latency: hoe snel pollen zodat caps/afbouw op tijd ingrijpen zonder
+  te veel API-calls (en of een huurder die telkens terugdraait een praktijk-
+  probleem is of een gespreksonderwerp).
 - Gedrag van overlay-`TIMER` samen met bestaande handmatige overlays van huurders.
 - Exacte retentie/aggregatie van de timeseries.
 - Of we per pand één Tado-account hebben of meerdere (config moet beide aankunnen).
