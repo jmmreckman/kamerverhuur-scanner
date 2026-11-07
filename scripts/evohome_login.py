@@ -21,6 +21,21 @@ from dotenv import load_dotenv
 from evohomeasync2 import AbstractTokenManager, EvohomeClient
 
 
+def _fault_type(f):
+    """Haalt het fault-type robuust uit een active-fault (dict of object)."""
+    if isinstance(f, dict):
+        return f.get("faultType") or f.get("fault_type") or f.get("type")
+    return getattr(f, "fault_type", None) or getattr(f, "faultType", None)
+
+
+def _storingen(active_faults) -> str:
+    faults = list(active_faults or [])
+    if not faults:
+        return ""
+    typen = [str(_fault_type(f) or "onbekend") for f in faults]
+    return "  STORING: " + ", ".join(typen)
+
+
 class SpikeTokenManager(AbstractTokenManager):
     """Minimale token-manager voor de spike: logt in met e-mail/wachtwoord en
     bewaart het token niet (eenmalige login). De echte client krijgt later wel
@@ -47,8 +62,7 @@ async def _main() -> None:
             for gwy in loc.gateways:
                 for tcs in gwy.systems:
                     for z in tcs.zones:
-                        faults = [f.get("faultType") for f in (z.active_faults or [])]
-                        storing = ("  STORING: " + ",".join(faults)) if faults else ""
+                        storing = _storingen(z.active_faults)
                         print("  [%s] %-22s nu %s  doel %s  modus %s%s" % (
                             z.id, z.name, z.temperature, z.target_heat_temperature,
                             z.mode, storing))
