@@ -24,7 +24,10 @@ from flask_login import LoginManager, current_user, login_required, login_user, 
 from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from kamerverhuur_scanner import document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren, state, winst
+from kamerverhuur_scanner import (
+    document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren, state,
+    verwarming_db, verwarming_regels, winst,
+)
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
@@ -117,6 +120,22 @@ def create_app(config: Config | None = None) -> Flask:
     @app.teardown_appcontext
     def _sluit_comm_db(_exc):
         db = getattr(g, "_comm_db_conn", None)
+        if db is not None:
+            db.close()
+
+    def _verwarming_db():
+        """Verbinding met de verwarmingsdatabase (SQLite in state_dir), lui
+        geopend per request en aan het eind automatisch gesloten. Alleen de
+        verwarmingsroutes raken dit aan."""
+        db = getattr(g, "_verw_db_conn", None)
+        if db is None:
+            db = verwarming_db.verbind(verwarming_db.pad(config.state_dir))
+            g._verw_db_conn = db
+        return db
+
+    @app.teardown_appcontext
+    def _sluit_verwarming_db(_exc):
+        db = getattr(g, "_verw_db_conn", None)
         if db is not None:
             db.close()
 
@@ -3000,6 +3019,110 @@ def create_app(config: Config | None = None) -> Flask:
         if mislukt:
             flash("Mislukt voor: " + ", ".join(mislukt) + " - controleer het e-mailadres en probeer het opnieuw.")
         return redirect(url_for("aanmeldingen_overzicht", pand_slug=pand_slug))
+
+    # --- Verwarming (Tado-monitoring + terugschakeling) ---
+
+    def _verwarming_kamers(pand) -> list:
+        """Kamernamen van een pand (voor het koppelscherm). Faalt de sheet, dan
+        een lege lijst - koppelen kan dan nog met vrije tekst."""
+        try:
+            return [k.kamer for k in SheetClient(config, pand).get_kamers()]
+        except Exception:
+            app.logger.exception("Kamers ophalen voor verwarming-koppeling mislukt (%s).", pand.slug)
+            return []
+
+    def _verwarming_spark(hist, breedte=640, hoogte=160, marge=22) -> dict:
+        """Bouwt de twee polyline-puntenreeksen (binnentemp + setpoint) voor een
+        mini-grafiekje. Puur reken-, geen template-werk."""
+        waarden = [h for h in hist if h["inside"] is not None or h["setpoint"] is not None]
+        if len(waarden) < 2:
+            return {"heeft": False}
+        alle = [h["inside"] for h in waarden if h["inside"] is not None]
+        alle += [h["setpoint"] for h in waarden if h["setpoint"] is not None]
+        lo, hi = min(alle), max(alle)
+        span = (hi - lo) or 1
+        stap = (breedte - 2 * marge) / (len(waarden) - 1)
+
+        def x(i):
+            return round(marge + i * stap, 1)
+
+        def y(v):
+            return round(hoogte - marge - ((v - lo) / span) * (hoogte - 2 * marge), 1)
+
+        inside = " ".join("%s,%s" % (x(i), y(h["inside"])) for i, h in enumerate(waarden) if h["inside"] is not None)
+        setp = " ".join("%s,%s" % (x(i), y(h["setpoint"])) for i, h in enumerate(waarden) if h["setpoint"] is not None)
+        return {"heeft": True, "inside": inside, "setpoint": setp, "breedte": breedte,
+                "hoogte": hoogte, "lo": round(lo, 1), "hi": round(hi, 1),
+                "van": waarden[0]["ts"], "tot": waarden[-1]["ts"]}
+
+    @app.route("/pand/<pand_slug>/verwarming")
+    @login_required
+    def verwarming_overzicht(pand_slug: str):
+        db = _verwarming_db()
+        rijen = []
+        for z in verwarming_db.lijst_zones(db, pand_slug):
+            laatste = verwarming_db.laatste_sample(db, z["provider"], z["home_id"], z["zone_id"])
+            rijen.append({"zone": z, "laatste": laatste})
+        ongekoppeld = [z for z in verwarming_db.lijst_zones(db) if not z["pand_slug"]]
+        tado_ingelogd = Path(config.tado_token_pad()).exists()
+        return render_template("verwarming_overzicht.html", rijen=rijen,
+                               ongekoppeld=ongekoppeld, tado_ingelogd=tado_ingelogd)
+
+    @app.route("/pand/<pand_slug>/verwarming/koppelen", methods=["GET", "POST"])
+    @login_required
+    def verwarming_koppelen(pand_slug: str):
+        db = _verwarming_db()
+        if request.method == "POST":
+            for z in verwarming_db.lijst_zones(db, pand_slug, inclusief_ongekoppeld=True):
+                sleutel = "%s|%s|%s" % (z["provider"], z["home_id"], z["zone_id"])
+                if ("kamer__" + sleutel) not in request.form and ("pand__" + sleutel) not in request.form:
+                    continue
+                bij_dit_pand = request.form.get("pand__" + sleutel) == "on"
+                kamer = request.form.get("kamer__" + sleutel, "").strip()
+                if bij_dit_pand:
+                    verwarming_db.zet_koppeling(db, z["provider"], z["home_id"], z["zone_id"], pand_slug, kamer or None)
+                elif z["pand_slug"] == pand_slug:
+                    verwarming_db.zet_koppeling(db, z["provider"], z["home_id"], z["zone_id"], None, None)
+            flash("Koppeling opgeslagen.")
+            return redirect(url_for("verwarming_overzicht", pand_slug=pand_slug))
+        zones = verwarming_db.lijst_zones(db, pand_slug, inclusief_ongekoppeld=True)
+        return render_template("verwarming_koppelen.html", zones=zones, kamers=_verwarming_kamers(g.pand))
+
+    @app.route("/pand/<pand_slug>/verwarming/zone/<home_id>/<int:zone_id>")
+    @login_required
+    def verwarming_zone(pand_slug: str, home_id: str, zone_id: int):
+        db = _verwarming_db()
+        z = verwarming_db.zone(db, "tado", home_id, zone_id)
+        if z is None:
+            abort(404, "Zone niet gevonden.")
+        hist = verwarming_db.historie(db, "tado", home_id, zone_id, limiet=300)
+        concl = verwarming_db.conclusies(db, "tado", home_id, zone_id)
+        return render_template("verwarming_zone.html", z=z, hist=list(reversed(hist)),
+                               concl=concl, spark=_verwarming_spark(hist),
+                               std=verwarming_regels.Regel())
+
+    @app.route("/pand/<pand_slug>/verwarming/zone/<home_id>/<int:zone_id>/regel", methods=["POST"])
+    @login_required
+    def verwarming_regel_opslaan(pand_slug: str, home_id: str, zone_id: int):
+        db = _verwarming_db()
+        f = request.form
+
+        def _num(key):
+            v = f.get(key, "").strip().replace(",", ".")
+            return float(v) if v else None
+
+        def _int(key):
+            v = f.get(key, "").strip()
+            return int(v) if v else None
+
+        verwarming_db.zet_regel(
+            db, "tado", home_id, zone_id,
+            regel_actief=f.get("regel_actief") == "on",
+            max_temp=_num("max_temp"), stap=_num("stap"), interval_min=_int("interval_min"),
+            vloer_temp=_num("vloer_temp"), na_uren=_int("na_uren"), nacht_temp=_num("nacht_temp"),
+        )
+        flash("Terugschakel-regel opgeslagen.")
+        return redirect(url_for("verwarming_zone", pand_slug=pand_slug, home_id=home_id, zone_id=zone_id))
 
     # --- Contracten ---
 

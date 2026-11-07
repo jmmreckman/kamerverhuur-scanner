@@ -40,6 +40,7 @@
         <a class="nav-link {{ 'actief' if ep.startswith('kamer') }}" href="{{ url_for('kamers_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_kamers() }} Kamers</a>
         <a class="nav-link {{ 'actief' if ep.startswith('huurder') }}" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">{{ icon_huurders() }} Huurders</a>
         <a class="nav-link {{ 'actief' if ep == 'betalingen' }}" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">{{ icon_betalingen() }} Betalingen</a>
+        <a class="nav-link {{ 'actief' if ep.startswith('verwarming') }}" href="{{ url_for('verwarming_overzicht', pand_slug=huidig_pand.slug) }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-.12em"><path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"/></svg> Verwarming</a>
         <a class="nav-link {{ 'actief' if ep.startswith('contract') }}" href="{{ url_for('contracten_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_contracten() }} Contracten</a>
         <a class="nav-link {{ 'actief' if ep.startswith('documenten') }}" href="{{ url_for('documenten', pand_slug=huidig_pand.slug) }}">{{ icon_documenten() }} Documenten</a>
         <a class="nav-link {{ 'actief' if ep.startswith('aanmeldingen') }}" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">{{ icon_inbox() }} Aanmeldingen</a>

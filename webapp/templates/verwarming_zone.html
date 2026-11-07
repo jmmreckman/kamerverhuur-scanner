@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ z.kamer or z.zone_naam }} - Verwarming{% endblock %}
+
+{% macro temp(v) %}{% if v is not none %}{{ "%.1f"|format(v) }}&deg;{% else %}<span class="muted">-</span>{% endif %}{% endmacro %}
+{% macro tegel(label, waarde) %}
+<div style="flex:1 1 120px; min-width:120px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.7rem 0.9rem">
+  <div class="muted" style="font-size:0.78rem">{{ label }}</div>
+  <div style="font-size:1.3rem; font-weight:600">{{ waarde|safe }}</div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ z.kamer or z.zone_naam or ('zone ' ~ z.zone_id) }}</h1>
+  <a class="btn btn-secondary" href="{{ url_for('verwarming_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar overzicht</a>
+</div>
+<p class="muted" style="margin-top:-0.5rem">Knop: {{ z.zone_naam or '-' }} &middot; huis: {{ z.home_naam or z.home_id }}</p>
+
+<div class="card">
+  <h2>Conclusies</h2>
+  {% if concl.aantal %}
+  <div style="display:flex; flex-wrap:wrap; gap:0.6rem">
+    {{ tegel("Metingen", concl.aantal) }}
+    {{ tegel("Gem. binnen", temp(concl.gem_binnen)) }}
+    {{ tegel("Gem. ingesteld", temp(concl.gem_setpoint)) }}
+    {{ tegel("Hoogst ingesteld", temp(concl.max_setpoint)) }}
+    {{ tegel("Deel ≥ %.0f°"|format(concl.drempel), concl.aandeel_boven ~ '%') }}
+  </div>
+  <p class="muted" style="margin:0.6rem 0 0; font-size:0.85rem">Periode: {{ concl.van[:16]|replace('T',' ') }} t/m {{ concl.tot[:16]|replace('T',' ') }}</p>
+  {% else %}
+  <p class="muted">Nog geen metingen. Zodra de uitlezing draait, vullen de cijfers zich vanzelf.</p>
+  {% endif %}
+</div>
+
+{% if spark.heeft %}
+<div class="card">
+  <h2>Verloop</h2>
+  <svg viewBox="0 0 {{ spark.breedte }} {{ spark.hoogte }}" style="width:100%; height:auto; max-width:{{ spark.breedte }}px" role="img" aria-label="Temperatuurverloop">
+    <polyline fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" points="{{ spark.setpoint }}"/>
+    <polyline fill="none" stroke="var(--ok, #16a34a)" stroke-width="2" stroke-linejoin="round" stroke-dasharray="1 0" opacity="0.8" points="{{ spark.inside }}"/>
+  </svg>
+  <div class="muted" style="display:flex; gap:1.2rem; font-size:0.85rem; flex-wrap:wrap">
+    <span><span style="color:var(--primary)">&#9644;</span> ingesteld</span>
+    <span><span style="color:var(--ok,#16a34a)">&#9644;</span> gemeten binnen</span>
+    <span style="margin-left:auto">{{ spark.lo }}&deg; - {{ spark.hi }}&deg;</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Terugschakel-regel</h2>
+  <p class="muted" style="margin-top:0">Vriendelijk afbouwen bij grootverbruik. <strong>Standaard uit</strong> - de knop van de
+     huurder blijft altijd werken; dit corrigeert alleen achteraf. Voorbeeld: vanaf {{ std.max_temp|round|int }}&deg; elke
+     {{ std.interval_min }} min een graad eraf tot {{ std.vloer_temp|round|int }}&deg;, en na {{ std.na_uren }} uur naar {{ std.nacht_temp|round|int }}&deg;.</p>
+  <form method="post" action="{{ url_for('verwarming_regel_opslaan', pand_slug=huidig_pand.slug, home_id=z.home_id, zone_id=z.zone_id) }}">
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="regel_actief" {{ 'checked' if z.regel_actief }} style="width:auto">
+      Terugschakeling aan voor deze kamer
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-top:0.6rem">
+      <label style="flex:1 1 140px">Plafond (&deg;C)
+        <input type="number" step="0.5" name="max_temp" value="{{ z.max_temp if z.max_temp is not none else std.max_temp }}">
+      </label>
+      <label style="flex:1 1 140px">Graden per stap
+        <input type="number" step="0.5" name="stap" value="{{ z.stap if z.stap is not none else std.stap }}">
+      </label>
+      <label style="flex:1 1 140px">Interval (min)
+        <input type="number" step="1" name="interval_min" value="{{ z.interval_min if z.interval_min is not none else std.interval_min }}">
+      </label>
+      <label style="flex:1 1 140px">Vloer (&deg;C)
+        <input type="number" step="0.5" name="vloer_temp" value="{{ z.vloer_temp if z.vloer_temp is not none else std.vloer_temp }}">
+      </label>
+      <label style="flex:1 1 140px">Na ... uur hoog
+        <input type="number" step="1" name="na_uren" value="{{ z.na_uren if z.na_uren is not none else std.na_uren }}">
+      </label>
+      <label style="flex:1 1 140px">Nachttemp (&deg;C)
+        <input type="number" step="0.5" name="nacht_temp" value="{{ z.nacht_temp if z.nacht_temp is not none else std.nacht_temp }}">
+      </label>
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Regel opslaan</button>
+  </form>
+</div>
+
+{% if hist %}
+<div class="card">
+  <h2>Recente metingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Tijd</th><th>Binnen</th><th>Ingesteld</th><th>Stookt</th><th>Stand</th></tr></thead>
+    <tbody>
+    {% for h in hist[:60] %}
+    <tr>
+      <td data-label="Tijd"><span class="muted">{{ h.ts[:16]|replace('T',' ') }}</span></td>
+      <td data-label="Binnen">{{ temp(h.inside) }}</td>
+      <td data-label="Ingesteld">{% if h.power == 'OFF' %}<span class="muted">uit</span>{% else %}{{ temp(h.setpoint) }}{% endif %}</td>
+      <td data-label="Stookt">{% if h.heating_pct is not none %}{{ h.heating_pct|round|int }}%{% else %}-{% endif %}</td>
+      <td data-label="Stand">{{ h.overlay_type or 'schema' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

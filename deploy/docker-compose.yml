@@ -58,6 +58,23 @@ services:
       - ./data:/app/data
     command: ["python3", "-m", "scripts.mail_inname"]
 
+  # Leest elk kwartier alle Tado-zones uit (binnentemperatuur, setpoint,
+  # stookvermogen) en bewaart ze als tijdreeks in verwarming.db - voor het
+  # verwarmingsoverzicht op de site. Staat voor een zone een terugschakel-regel
+  # 'actief' aan, dan bouwt deze service die ook af via een overlay. Zelfde
+  # image als 'app', ander opstartcommando. Zonder ingelogd Tado-account doet de
+  # service niets (slaapt) - inloggen via scripts.verwarming_login (eenmalig).
+  # Zie scripts/verwarming_check.py + kamerverhuur_scanner/tado_client.py.
+  verwarming-check:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ./app.env
+    volumes:
+      - ./data:/app/data
+    command: ["python3", "-m", "scripts.verwarming_check"]
+
   # Los, ander project (gewicht-tracker, https://gewicht.steenhub.nl) dat
   # meelift op dezelfde VPS/Caddy - geen relatie met de kamerverhuur-app
   # verder dan gedeelde hosting. Code + Dockerfile staan op een aparte

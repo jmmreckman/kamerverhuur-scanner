@@ -86,7 +86,8 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - **Geen `--no-cache`** en **niet álle services tegelijk** herbouwen. Per push alleen
   de services van de app die je uitrolt, mét laag-cache:
   - **steenhub-deploy:** git pull op VPS, dan `docker compose build app
-    dagelijkse-check winst-snapshot` + `up -d` van diezelfde drie (ze delen één image).
+    dagelijkse-check winst-snapshot mail-inname verwarming-check` + `up -d` van diezelfde
+    services (ze delen één image).
   - **kansen-deploy:** bouwt `fundazoeker kansen beschikbaarheid-check
     vergunningen-index` vanaf een remote git-context (kortlevende `GITHUB_TOKEN` via
     tijdelijke `docker-compose.override.yml`), mét cache.
@@ -179,6 +180,25 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (vakman-mail), `GMAIL_IMAP_USER/GMAIL_IMAP_PASSWORD/GMAIL_EIGEN_ADRES` (backfill),
   `STEENHUB_IMAP_HOST` (default imap.strato.com), `ONDERHOUD_IMAP_USER/PASSWORD`,
   `COMMUNICATIE_IMAP_USER/PASSWORD` (Fase 2). Plan: `docs/communicatie-onderhoud-plan.md`.
+- **Verwarmingsmodule (Tado)** (nov 2026): monitoring + vriendelijke terugschakeling
+  per kamer. Pure lagen los getest: `kamerverhuur_scanner/verwarming_db.py` (SQLite
+  `verwarming.db` in state_dir: `zone_config` = ontdekte Tado-zones + door de gebruiker
+  gezette koppeling pand/kamer + regel-velden; `sample` = tijdreeks per zone;
+  `terugschakeling` = engine-state), `kamerverhuur_scanner/verwarming_regels.py`
+  (regel-engine `beslis()`: vanaf plafond elke `interval_min` een `stap` graad eraf tot
+  `vloer_temp`, na `na_uren` uur naar `nacht_temp`; `sensor_ok()` negeert onzin-sensorwaarden;
+  laat los zodra de huurder zélf lager zet - de fysieke knop blijft dus altijd werken,
+  child-lock gebruiken we bewust NIET), `kamerverhuur_scanner/tado_client.py` (OAuth2
+  device-flow + refresh, read zones/state, overlay set/clear; alleen urllib, providerlaag
+  voorbereid - evohome is nog een TODO). Poll-service `scripts/verwarming_check.py`
+  (compose-service **verwarming-check**, elk kwartier uitlezen -> sample; past de regel
+  alleen toe als die per zone 'actief' staat, anders puur monitoren). Eenmalige login op
+  de VPS: `docker compose run --rm verwarming-check python3 -m scripts.verwarming_login`
+  (device-flow; refresh-token in `<state_dir>/tado_token.json`, **nooit in git**).
+  Web-UI in `webapp/app.py` (nav "Verwarming", per pand): overzicht (live + historie +
+  conclusies), koppelscherm (zone<->kamer handmatig), en per zone de terugschakel-regel
+  (standaard UIT). Nieuwe env: `TADO_TOKEN_FILE` (optioneel; default `<state_dir>/tado_token.json`).
+  Zonder ingelogd account slaapt de service netjes. Plan: `docs/verwarming-tado-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,

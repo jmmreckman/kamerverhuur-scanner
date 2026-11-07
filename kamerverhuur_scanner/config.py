@@ -106,6 +106,11 @@ class Config:
     communicatie_imap_user: str | None = None
     communicatie_imap_password: str | None = None
 
+    # Verwarmingsmodule (Tado): pad naar het refresh-token-bestand (device-flow,
+    # zie scripts/verwarming_login.py). Leeg = <state_dir>/tado_token.json. Het
+    # token zelf staat op de VPS (data-volume), nooit in git.
+    tado_token_file: str | None = None
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -142,4 +147,9 @@ class Config:
             onderhoud_imap_password=os.environ.get("ONDERHOUD_IMAP_PASSWORD", "").strip() or None,
             communicatie_imap_user=os.environ.get("COMMUNICATIE_IMAP_USER", "").strip() or None,
             communicatie_imap_password=os.environ.get("COMMUNICATIE_IMAP_PASSWORD", "").strip() or None,
+            tado_token_file=os.environ.get("TADO_TOKEN_FILE", "").strip() or None,
         )
+
+    def tado_token_pad(self) -> str:
+        """Pad naar het Tado-refresh-token - expliciet ingesteld of standaard in state_dir."""
+        return self.tado_token_file or os.path.join(self.state_dir, "tado_token.json")
