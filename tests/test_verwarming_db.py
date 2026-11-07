@@ -60,6 +60,34 @@ def test_samples_en_conclusies():
     assert c["aandeel_boven"] == 50  # 2 van 4 metingen >= 22
 
 
+def test_conclusies_negeert_offline_metingen():
+    conn = _verbind()
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "BG straat")
+    # drie normale metingen rond 20-21, plus een bevroren offline-meting van 31.4
+    for i, sp in enumerate([20, 21, 20]):
+        vdb.bewaar_sample(conn, "tado", 1, 5, inside=float(sp), setpoint=sp, power="ON",
+                          heating_pct=0.0, overlay_type=None, online=True,
+                          ts="2026-11-07T0%d:00:00+00:00" % i)
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=31.4, setpoint=19, power="ON",
+                      heating_pct=0.0, overlay_type="MANUAL", online=False,
+                      ts="2026-11-07T09:00:00+00:00")
+    c = vdb.conclusies(conn, "tado", 1, 5)
+    assert c["aantal"] == 3                 # offline-meting telt niet mee
+    assert c["max_setpoint"] == 21          # niet de bevroren 19/31.4-regel
+    assert c["gem_binnen"] and c["gem_binnen"] < 22   # niet opgeblazen door 31.4
+
+
+def test_online_wordt_opgeslagen_als_0_1_null():
+    conn = _verbind()
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
+                      heating_pct=0.0, overlay_type=None, online=False)
+    assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] == 0
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
+                      heating_pct=0.0, overlay_type=None, online=None)
+    assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] is None
+
+
 def test_prune_verwijdert_oude_samples():
     conn = _verbind()
     vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
@@ -70,6 +98,25 @@ def test_prune_verwijdert_oude_samples():
     verwijderd = vdb.prune_samples(conn, ouder_dan_dagen=120)
     assert verwijderd == 1
     assert len(vdb.historie(conn, "tado", 1, 5)) == 1
+
+
+def test_migratie_voegt_online_kolom_toe_aan_oude_db():
+    import sqlite3
+    tmp = tempfile.mkdtemp()
+    pad = os.path.join(tmp, "verwarming.db")
+    # oude sample-tabel zonder 'online'-kolom
+    oud = sqlite3.connect(pad)
+    oud.execute("CREATE TABLE sample (provider TEXT, home_id TEXT, zone_id INTEGER, ts TEXT,"
+                " inside REAL, setpoint REAL, power TEXT, heating_pct REAL, overlay_type TEXT)")
+    oud.commit(); oud.close()
+    # verbind() moet de kolom toevoegen en daarna gewoon werken
+    conn = vdb.verbind(pad)
+    kolommen = [r[1] for r in conn.execute("PRAGMA table_info(sample)").fetchall()]
+    assert "online" in kolommen
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
+                      heating_pct=0.0, overlay_type=None, online=True)
+    assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] == 1
 
 
 def test_terugschakel_status_schrijven_lezen_wissen():

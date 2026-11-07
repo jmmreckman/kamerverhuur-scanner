@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS sample (
     setpoint REAL,
     power TEXT,
     heating_pct REAL,
-    overlay_type TEXT
+    overlay_type TEXT,
+    online INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_sample_zone_ts
     ON sample (provider, home_id, zone_id, ts);
@@ -108,6 +109,11 @@ CREATE TABLE IF NOT EXISTS terugschakeling (
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    # Migratie: 'online' is later toegevoegd - voeg de kolom toe aan een
+    # bestaande sample-tabel (CREATE IF NOT EXISTS raakt een bestaande tabel niet).
+    kolommen = [r[1] for r in conn.execute("PRAGMA table_info(sample)").fetchall()]
+    if "online" not in kolommen:
+        conn.execute("ALTER TABLE sample ADD COLUMN online INTEGER")
     conn.commit()
 
 
@@ -180,12 +186,14 @@ def lijst_zones(conn, pand_slug=None, inclusief_ongekoppeld=False):
 # --- metingen ---------------------------------------------------------------
 
 def bewaar_sample(conn, provider, home_id, zone_id, *, inside, setpoint, power,
-                  heating_pct, overlay_type, ts=None) -> None:
+                  heating_pct, overlay_type, online=None, ts=None) -> None:
+    # online: True->1, False->0, None->NULL (onbekend).
+    online_val = None if online is None else (1 if online else 0)
     conn.execute(
         "INSERT INTO sample (provider, home_id, zone_id, ts, inside, setpoint, power,"
-        " heating_pct, overlay_type) VALUES (?,?,?,?,?,?,?,?,?)",
+        " heating_pct, overlay_type, online) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (provider, str(home_id), int(zone_id), ts or _nu(), inside, setpoint, power,
-         heating_pct, overlay_type),
+         heating_pct, overlay_type, online_val),
     )
     conn.commit()
 
@@ -217,7 +225,8 @@ def historie(conn, provider, home_id, zone_id, sinds=None, limiet=500):
 def conclusies(conn, provider, home_id, zone_id, sinds=None, drempel=22.0):
     """Samenvattende cijfers over een periode: gemiddelde binnentemp/setpoint,
     hoogste setpoint, aandeel metingen met setpoint >= drempel, aantal metingen."""
-    waar = "provider=? AND home_id=? AND zone_id=?"
+    # Offline (bevroren) metingen tellen niet mee in de conclusies.
+    waar = "provider=? AND home_id=? AND zone_id=? AND (online IS NULL OR online=1)"
     args = [provider, str(home_id), int(zone_id)]
     if sinds:
         waar += " AND ts>=?"; args.append(sinds)

@@ -16,6 +16,14 @@
 </div>
 <p class="muted" style="margin-top:-0.5rem">Knop: {{ z.zone_naam or '-' }} &middot; huis: {{ z.home_naam or z.home_id }}</p>
 
+{% if hist and hist[0].online == 0 %}
+<div class="warning-box">
+  <p><strong>Deze knop is offline.</strong> Tado geeft dan nog wel de laatst bekende (bevroren) meting
+     en de ingestelde temperatuur terug, maar die is verouderd - loop de batterij/plaatsing even na.
+     Offline metingen tellen niet mee in de conclusies, en er wordt niet op gestuurd.</p>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>Conclusies</h2>
   {% if concl.aantal %}
@@ -90,8 +98,8 @@
     <tbody>
     {% for h in hist[:60] %}
     <tr>
-      <td data-label="Tijd"><span class="muted">{{ h.ts[:16]|replace('T',' ') }}</span></td>
-      <td data-label="Binnen">{{ temp(h.inside) }}</td>
+      <td data-label="Tijd"><span class="muted">{{ h.ts[:16]|replace('T',' ') }}</span>{% if h.online == 0 %} <span class="muted" style="font-size:0.72rem">offline</span>{% endif %}</td>
+      <td data-label="Binnen">{% if h.online == 0 %}<span class="muted">{{ temp(h.inside) }}</span>{% else %}{{ temp(h.inside) }}{% endif %}</td>
       <td data-label="Ingesteld">{% if h.power == 'OFF' %}<span class="muted">uit</span>{% else %}{{ temp(h.setpoint) }}{% endif %}</td>
       <td data-label="Stookt">{% if h.heating_pct is not none %}{{ h.heating_pct|round|int }}%{% else %}-{% endif %}</td>
       <td data-label="Stand">{{ h.overlay_type or 'schema' }}</td>

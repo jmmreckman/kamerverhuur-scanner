@@ -47,6 +47,9 @@ def _serial(zone: dict):
 
 def _pas_regel_toe(conn, client: TadoClient, home_id, zone_id, zc, verwerkt) -> None:
     """Past de terugschakel-regel toe voor één zone (alleen als 'actief')."""
+    if verwerkt.get("online") is False:
+        logger.info("[%s/%s] Knop offline - niet sturen (meting is verouderd).", home_id, zone_id)
+        return
     if not sensor_ok(verwerkt.get("inside")):
         logger.info("[%s/%s] Sensorwaarde onbetrouwbaar (%.1f?) - niet sturen.",
                     home_id, zone_id, verwerkt.get("inside") or -1)
@@ -109,7 +112,8 @@ def _draai_een_ronde(config: Config, client: TadoClient) -> None:
             v = tado_client.verwerk_state(state)
             vdb.bewaar_sample(conn, PROVIDER, home_id, zone_id,
                               inside=v["inside"], setpoint=v["setpoint"], power=v["power"],
-                              heating_pct=v["heating_pct"], overlay_type=v["overlay_type"])
+                              heating_pct=v["heating_pct"], overlay_type=v["overlay_type"],
+                              online=v["online"])
             zc = vdb.zone(conn, PROVIDER, home_id, zone_id)
             if zc and zc["regel_actief"]:
                 try:

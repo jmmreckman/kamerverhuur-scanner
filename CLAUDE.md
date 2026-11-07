@@ -186,7 +186,9 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   gezette koppeling pand/kamer + regel-velden; `sample` = tijdreeks per zone;
   `terugschakeling` = engine-state), `kamerverhuur_scanner/verwarming_regels.py`
   (regel-engine `beslis()`: vanaf plafond elke `interval_min` een `stap` graad eraf tot
-  `vloer_temp`, na `na_uren` uur naar `nacht_temp`; `sensor_ok()` negeert onzin-sensorwaarden;
+  `vloer_temp`, na `na_uren` uur naar `nacht_temp`; `sensor_ok()` negeert onzin-sensorwaarden,
+  en een **offline** knop (Tado `link.state`) wordt gemarkeerd + overgeslagen in conclusies/sturing
+  (de API blijft dan nl. de laatste bevroren meting teruggeven);
   laat los zodra de huurder zélf lager zet - de fysieke knop blijft dus altijd werken,
   child-lock gebruiken we bewust NIET), `kamerverhuur_scanner/tado_client.py` (OAuth2
   device-flow + refresh, read zones/state, overlay set/clear; alleen urllib, providerlaag

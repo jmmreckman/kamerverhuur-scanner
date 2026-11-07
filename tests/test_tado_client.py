@@ -13,10 +13,27 @@ def test_verwerk_state_handmatig():
         "sensorDataPoints": {"insideTemperature": {"celsius": 24.97}},
         "activityDataPoints": {"heatingPower": {"percentage": 30.0}},
         "overlay": {"termination": {"type": "TIMER", "remainingTimeInSeconds": 120}},
+        "link": {"state": "ONLINE"},
     }
     r = tc.verwerk_state(state)
     assert r == {"inside": 24.97, "setpoint": 24.0, "power": "ON",
-                 "heating_pct": 30.0, "overlay_type": "TIMER"}
+                 "heating_pct": 30.0, "overlay_type": "TIMER", "online": True}
+
+
+def test_verwerk_state_offline_knop():
+    # Offline knop: Tado geeft nog de bevroren meting + setpoint, maar link=OFFLINE.
+    state = {
+        "setting": {"type": "HEATING", "power": "ON", "temperature": {"celsius": 19.0}},
+        "sensorDataPoints": {"insideTemperature": {"celsius": 31.4}},
+        "link": {"state": "OFFLINE"},
+    }
+    r = tc.verwerk_state(state)
+    assert r["online"] is False
+    assert r["setpoint"] == 19.0 and r["inside"] == 31.4
+
+
+def test_verwerk_state_zonder_link_is_online_onbekend():
+    assert tc.verwerk_state({})["online"] is None
 
 
 def test_verwerk_state_uit_en_op_schema():

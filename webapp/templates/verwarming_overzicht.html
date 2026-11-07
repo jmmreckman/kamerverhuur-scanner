@@ -31,9 +31,10 @@
       <td data-label="Kamer">
         <a href="{{ url_for('verwarming_zone', pand_slug=huidig_pand.slug, home_id=z.home_id, zone_id=z.zone_id) }}">
           {{ z.kamer or z.zone_naam or ('zone ' ~ z.zone_id) }}</a>
+        {% if s and s.online == 0 %}<span class="pil" style="background:var(--warn-soft);color:var(--warn)" title="Knop offline - laatste meting is verouderd">offline</span>{% endif %}
       </td>
       <td data-label="Knop">{{ z.zone_naam or '-' }}</td>
-      <td data-label="Nu">{% if s %}{{ temp(s.inside) }}{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td data-label="Nu">{% if s %}{% if s.online == 0 %}<span class="muted" title="verouderd (knop offline)">{{ temp(s.inside) }}</span>{% else %}{{ temp(s.inside) }}{% endif %}{% else %}<span class="muted">-</span>{% endif %}</td>
       <td data-label="Ingesteld">
         {% if s %}{% if s.power == 'OFF' %}<span class="muted">uit</span>{% else %}{{ temp(s.setpoint) }}{% endif %}{% else %}<span class="muted">-</span>{% endif %}
       </td>

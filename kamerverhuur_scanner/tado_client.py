@@ -36,7 +36,13 @@ class TadoError(RuntimeError):
 # --- pure parsing (los testbaar) --------------------------------------------
 
 def verwerk_state(state: dict) -> dict:
-    """Haalt uit een zone-state-antwoord de velden die wij bewaren/gebruiken."""
+    """Haalt uit een zone-state-antwoord de velden die wij bewaren/gebruiken.
+
+    `online`: of de knop volgens Tado verbonden is (`link.state == "ONLINE"`).
+    Bij een offline knop blijft de API wel de laatst bekende (bevroren) meting en
+    de ingestelde temperatuur teruggeven - die moeten we dus apart herkennen,
+    zodat we er niet op sturen en ze niet in de conclusies meetellen. None =
+    onbekend (geen link-info in het antwoord)."""
     setting = state.get("setting") or {}
     temp = setting.get("temperature") or {}
     sensor = state.get("sensorDataPoints") or {}
@@ -47,12 +53,15 @@ def verwerk_state(state: dict) -> dict:
     overlay_type = None
     if overlay:
         overlay_type = (overlay.get("termination") or {}).get("type") or "MANUAL"
+    link_state = (state.get("link") or {}).get("state")
+    online = None if link_state is None else (link_state == "ONLINE")
     return {
         "inside": binnen.get("celsius"),
         "setpoint": temp.get("celsius"),
         "power": setting.get("power"),
         "heating_pct": verwarmt.get("percentage"),
         "overlay_type": overlay_type,
+        "online": online,
     }
 
 
