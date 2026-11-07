@@ -111,6 +111,14 @@ class Config:
     # token zelf staat op de VPS (data-volume), nooit in git.
     tado_token_file: str | None = None
 
+    # Verwarmingsmodule (evohome/Honeywell): gewone Total Connect Comfort-inlog.
+    # Leeg = evohome uit. evohome_skip_locaties = komma-gescheiden locatie-namen
+    # of -id's die we negeren (bv. een verkocht pand).
+    evohome_username: str | None = None
+    evohome_password: str | None = None
+    evohome_token_file: str | None = None
+    evohome_skip_locaties: str = ""
+
     @staticmethod
     def load() -> "Config":
         return Config(
@@ -148,8 +156,16 @@ class Config:
             communicatie_imap_user=os.environ.get("COMMUNICATIE_IMAP_USER", "").strip() or None,
             communicatie_imap_password=os.environ.get("COMMUNICATIE_IMAP_PASSWORD", "").strip() or None,
             tado_token_file=os.environ.get("TADO_TOKEN_FILE", "").strip() or None,
+            evohome_username=os.environ.get("EVOHOME_USERNAME", "").strip() or None,
+            evohome_password=os.environ.get("EVOHOME_PASSWORD", "").strip() or None,
+            evohome_token_file=os.environ.get("EVOHOME_TOKEN_FILE", "").strip() or None,
+            evohome_skip_locaties=os.environ.get("EVOHOME_SKIP_LOCATIES", "").strip(),
         )
 
     def tado_token_pad(self) -> str:
         """Pad naar het Tado-refresh-token - expliciet ingesteld of standaard in state_dir."""
         return self.tado_token_file or os.path.join(self.state_dir, "tado_token.json")
+
+    def evohome_token_pad(self) -> str:
+        """Pad naar het evohome-token - expliciet ingesteld of standaard in state_dir."""
+        return self.evohome_token_file or os.path.join(self.state_dir, "evohome_token.json")

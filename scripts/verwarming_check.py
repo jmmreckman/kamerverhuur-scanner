@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
-from kamerverhuur_scanner import tado_client, verwarming_db as vdb
+from kamerverhuur_scanner import evohome_client, tado_client, verwarming_db as vdb
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.tado_client import PROVIDER, TadoError, TadoClient
 from kamerverhuur_scanner.verwarming_regels import Regel, beslis, sensor_ok
@@ -145,7 +145,19 @@ def main() -> None:
             try:
                 _draai_een_ronde(config, client)
             except Exception:
-                logger.exception("Verwarming-ronde mislukt - volgende kwartier opnieuw.")
+                logger.exception("Tado-ronde mislukt - volgende kwartier opnieuw.")
+
+        # Evohome (tweede provider) - alleen als TCC-inlog is ingesteld.
+        if evohome_client.is_geconfigureerd(config):
+            conn = vdb.verbind(vdb.pad(config.state_dir))
+            try:
+                aantal = evohome_client.draai_ronde(config, conn)
+                logger.info("[evohome] %d zones uitgelezen.", aantal)
+            except Exception:
+                logger.exception("Evohome-ronde mislukt - volgende kwartier opnieuw.")
+            finally:
+                conn.close()
+
         wacht = _seconden_tot_volgend_kwartier()
         logger.info("Volgende uitlezing over %.0f minuten.", wacht / 60)
         time.sleep(wacht)

@@ -3088,22 +3088,22 @@ def create_app(config: Config | None = None) -> Flask:
         zones = verwarming_db.lijst_zones(db, pand_slug, inclusief_ongekoppeld=True)
         return render_template("verwarming_koppelen.html", zones=zones, kamers=_verwarming_kamers(g.pand))
 
-    @app.route("/pand/<pand_slug>/verwarming/zone/<home_id>/<int:zone_id>")
+    @app.route("/pand/<pand_slug>/verwarming/zone/<provider>/<home_id>/<int:zone_id>")
     @login_required
-    def verwarming_zone(pand_slug: str, home_id: str, zone_id: int):
+    def verwarming_zone(pand_slug: str, provider: str, home_id: str, zone_id: int):
         db = _verwarming_db()
-        z = verwarming_db.zone(db, "tado", home_id, zone_id)
+        z = verwarming_db.zone(db, provider, home_id, zone_id)
         if z is None:
             abort(404, "Zone niet gevonden.")
-        hist = verwarming_db.historie(db, "tado", home_id, zone_id, limiet=300)
-        concl = verwarming_db.conclusies(db, "tado", home_id, zone_id)
+        hist = verwarming_db.historie(db, provider, home_id, zone_id, limiet=300)
+        concl = verwarming_db.conclusies(db, provider, home_id, zone_id)
         return render_template("verwarming_zone.html", z=z, hist=list(reversed(hist)),
                                concl=concl, spark=_verwarming_spark(hist),
                                std=verwarming_regels.Regel())
 
-    @app.route("/pand/<pand_slug>/verwarming/zone/<home_id>/<int:zone_id>/regel", methods=["POST"])
+    @app.route("/pand/<pand_slug>/verwarming/zone/<provider>/<home_id>/<int:zone_id>/regel", methods=["POST"])
     @login_required
-    def verwarming_regel_opslaan(pand_slug: str, home_id: str, zone_id: int):
+    def verwarming_regel_opslaan(pand_slug: str, provider: str, home_id: str, zone_id: int):
         db = _verwarming_db()
         f = request.form
 
@@ -3116,13 +3116,14 @@ def create_app(config: Config | None = None) -> Flask:
             return int(v) if v else None
 
         verwarming_db.zet_regel(
-            db, "tado", home_id, zone_id,
+            db, provider, home_id, zone_id,
             regel_actief=f.get("regel_actief") == "on",
             max_temp=_num("max_temp"), stap=_num("stap"), interval_min=_int("interval_min"),
             vloer_temp=_num("vloer_temp"), na_uren=_int("na_uren"), nacht_temp=_num("nacht_temp"),
         )
         flash("Terugschakel-regel opgeslagen.")
-        return redirect(url_for("verwarming_zone", pand_slug=pand_slug, home_id=home_id, zone_id=zone_id))
+        return redirect(url_for("verwarming_zone", pand_slug=pand_slug, provider=provider,
+                                home_id=home_id, zone_id=zone_id))
 
     # --- Contracten ---
 

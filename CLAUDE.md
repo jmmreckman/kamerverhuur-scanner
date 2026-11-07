@@ -191,16 +191,26 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (de API blijft dan nl. de laatste bevroren meting teruggeven);
   laat los zodra de huurder zélf lager zet - de fysieke knop blijft dus altijd werken,
   child-lock gebruiken we bewust NIET), `kamerverhuur_scanner/tado_client.py` (OAuth2
-  device-flow + refresh, read zones/state, overlay set/clear; alleen urllib, providerlaag
-  voorbereid - evohome is nog een TODO). Poll-service `scripts/verwarming_check.py`
-  (compose-service **verwarming-check**, elk kwartier uitlezen -> sample; past de regel
-  alleen toe als die per zone 'actief' staat, anders puur monitoren). Eenmalige login op
-  de VPS: `docker compose run --rm verwarming-check python3 -m scripts.verwarming_login`
-  (device-flow; refresh-token in `<state_dir>/tado_token.json`, **nooit in git**).
-  Web-UI in `webapp/app.py` (nav "Verwarming", per pand): overzicht (live + historie +
-  conclusies), koppelscherm (zone<->kamer handmatig), en per zone de terugschakel-regel
-  (standaard UIT). Nieuwe env: `TADO_TOKEN_FILE` (optioneel; default `<state_dir>/tado_token.json`).
-  Zonder ingelogd account slaapt de service netjes. Plan: `docs/verwarming-tado-plan.md`.
+  device-flow + refresh, read zones/state, overlay set/clear; alleen urllib). **Tweede
+  provider: evohome** (`kamerverhuur_scanner/evohome_client.py`, Honeywell/Resideo via
+  de library `evohome-async==1.0.6` - let op: 2.x/3.x eist Python 3.13, image draait 3.12;
+  1.0.6 gebruikt al het nieuwe tccna.resideo.com-endpoint). De DB/regels/UI zijn
+  provider-neutraal (kolom `provider`, URL's `/verwarming/zone/<provider>/<home>/<zone>`).
+  Poll-service `scripts/verwarming_check.py` (compose-service **verwarming-check**, elk
+  kwartier Tado **en** evohome uitlezen -> sample; past de regel alleen toe als die per
+  zone 'actief' staat, anders puur monitoren). Login op de VPS: Tado via
+  `docker compose run --rm verwarming-check python3 -m scripts.verwarming_login` (device-flow,
+  token in `<state_dir>/tado_token.json`); evohome via EVOHOME_USERNAME/PASSWORD in app.env
+  (eerst checken met `... python3 -m scripts.evohome_login`; token in
+  `<state_dir>/evohome_token.json`). Beide tokens **nooit in git**. Web-UI in `webapp/app.py`
+  (nav "Verwarming", per pand): overzicht (live + historie + conclusies), koppelscherm
+  (zone<->kamer handmatig; meerdere knoppen aan één kamer = zelfde kamernaam), per zone de
+  terugschakel-regel (standaard UIT). Env: `TADO_TOKEN_FILE`, `EVOHOME_USERNAME/PASSWORD`,
+  `EVOHOME_SKIP_LOCATIES` (namen/id's van te negeren locaties, bv. een verkocht pand),
+  `EVOHOME_TOKEN_FILE` (alle optioneel). Zonder ingelogd account slaapt de betreffende
+  provider netjes. **Let op:** de evohome-schrijf-/terugschakel-kant is nog niet live getest
+  (geen eigen-huis-zone om veilig op te testen) - monitoring is bewezen; test een override
+  op een lege/veilige zone vóór je een evohome-regel aanzet. Plan: `docs/verwarming-tado-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,

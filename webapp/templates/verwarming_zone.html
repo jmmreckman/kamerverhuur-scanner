@@ -60,7 +60,7 @@
   <p class="muted" style="margin-top:0">Vriendelijk afbouwen bij grootverbruik. <strong>Standaard uit</strong> - de knop van de
      huurder blijft altijd werken; dit corrigeert alleen achteraf. Voorbeeld: vanaf {{ std.max_temp|round|int }}&deg; elke
      {{ std.interval_min }} min een graad eraf tot {{ std.vloer_temp|round|int }}&deg;, en na {{ std.na_uren }} uur naar {{ std.nacht_temp|round|int }}&deg;.</p>
-  <form method="post" action="{{ url_for('verwarming_regel_opslaan', pand_slug=huidig_pand.slug, home_id=z.home_id, zone_id=z.zone_id) }}">
+  <form method="post" action="{{ url_for('verwarming_regel_opslaan', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id) }}">
     <label style="display:flex; align-items:center; gap:0.5rem">
       <input type="checkbox" name="regel_actief" {{ 'checked' if z.regel_actief }} style="width:auto">
       Terugschakeling aan voor deze kamer
