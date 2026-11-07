@@ -41,8 +41,12 @@ def verwerk_zone(temperature, target, mode, active_faults) -> dict:
     een waarschuwing, geen offline.
     """
     fault_types = [str(_fault_type(f)) for f in (active_faults or []) if _fault_type(f)]
-    comms_lost = any("CommunicationLost" in ft for ft in fault_types)
-    online = (temperature is not None) and not comms_lost
+    # Twee soorten storing: de SENSOR kwijt -> temperatuur onbetrouwbaar -> offline;
+    # alleen de ACTUATOR (kraan) kwijt -> meting klopt nog, maar niet aanstuurbaar.
+    sensor_lost = any("SensorCommunicationLost" in ft for ft in fault_types)
+    actuator_lost = any("ActuatorCommunicationLost" in ft for ft in fault_types)
+    online = (temperature is not None) and not sensor_lost
+    stuurbaar = online and not actuator_lost
 
     mode_str = str(mode or "")
     if "FollowSchedule" in mode_str:
@@ -61,6 +65,7 @@ def verwerk_zone(temperature, target, mode, active_faults) -> dict:
         "heating_pct": None,          # evohome geeft geen stookvermogen per zone
         "overlay_type": overlay_type,
         "online": online,
+        "stuurbaar": stuurbaar,
         "faults": fault_types,
     }
 
@@ -146,8 +151,8 @@ async def _ronde_async(config, conn) -> int:
 
 
 async def _pas_regel_toe(conn, home_id, zone, verwerkt) -> None:
-    if verwerkt.get("online") is False:
-        logger.info("[evohome %s] Zone offline/storing - niet sturen.", zone.id)
+    if not verwerkt.get("stuurbaar"):
+        logger.info("[evohome %s] Zone niet-stuurbaar (offline/kraan-storing) - niet sturen.", zone.id)
         return
     if not sensor_ok(verwerkt.get("inside")):
         return

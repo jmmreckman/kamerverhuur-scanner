@@ -17,10 +17,19 @@ def test_normale_online_zone():
     assert v["overlay_type"] is None       # volgt schema
 
 
-def test_communicatiestoring_is_offline():
-    v = verwerk_zone(19.0, 19.0, "FollowSchedule", [{"faultType": "TempZoneActuatorCommunicationLost"}])
-    assert v["online"] is False
-    assert "TempZoneActuatorCommunicationLost" in v["faults"]
+def test_sensor_communicatie_kwijt_is_offline():
+    v = verwerk_zone(19.0, 19.0, "FollowSchedule", [{"faultType": "TempZoneSensorCommunicationLost"}])
+    assert v["online"] is False            # temperatuur onbetrouwbaar
+    assert v["stuurbaar"] is False
+
+
+def test_alleen_kraan_kwijt_is_online_maar_niet_stuurbaar():
+    # Actuator (kraan) kwijt, maar de sensor meet nog -> meting telt mee,
+    # maar sturen heeft geen zin.
+    v = verwerk_zone(20.0, 16.0, "FollowSchedule", [{"faultType": "TempZoneActuatorCommunicationLost"}])
+    assert v["online"] is True
+    assert v["stuurbaar"] is False
+    assert v["inside"] == 20.0
 
 
 def test_geen_temperatuur_is_offline():
