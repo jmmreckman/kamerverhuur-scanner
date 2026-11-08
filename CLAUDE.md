@@ -208,9 +208,9 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   terugschakel-regel (standaard UIT). Env: `TADO_TOKEN_FILE`, `EVOHOME_USERNAME/PASSWORD`,
   `EVOHOME_SKIP_LOCATIES` (namen/id's van te negeren locaties, bv. een verkocht pand),
   `EVOHOME_TOKEN_FILE` (alle optioneel). Zonder ingelogd account slaapt de betreffende
-  provider netjes. **Let op:** de evohome-schrijf-/terugschakel-kant is nog niet live getest
-  (geen eigen-huis-zone om veilig op te testen) - monitoring is bewezen; test een override
-  op een lege/veilige zone vóór je een evohome-regel aanzet. Plan: `docs/verwarming-tado-plan.md`.
+  provider netjes. De evohome-schrijf-/terugschakel-kant is **live getest** (override 13° +
+  gegarandeerd herstel op een studio-zone, nov 2026) en werkt; `scripts/evohome_overlay_test.py`
+  is dat veilige testscript (naam-check + herstel in een finally). Plan: `docs/verwarming-tado-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,
