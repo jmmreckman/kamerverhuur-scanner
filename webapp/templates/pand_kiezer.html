@@ -13,6 +13,11 @@
     {% if aandacht.concepten %}<li><span class="pil pil-neutral">Communicatie</span> <a href="{{ url_for('acties_overzicht') }}">{{ aandacht.concepten }} concept(en) te keuren</a></li>{% endif %}
     {% if aandacht.onderhoud_open %}<li><span class="pil pil-neutral">Onderhoud</span> <a href="{{ url_for('onderhoud_overzicht') }}">{{ aandacht.onderhoud_open }} openstaande klus(sen)</a></li>{% endif %}
     {% if aandacht.betaal_achter %}<li><span class="pil pil-neutral">Betaling</span> {{ aandacht.betaal_achter }} kamer(s) met betaalachterstand</li>{% endif %}
+    {% for w in aandacht.verwarming_warm %}
+    <li><span class="pil pil-neutral">Verwarming</span>
+      <a href="{{ url_for('verwarming_zone', pand_slug=w.pand_slug, provider=w.provider, home_id=w.home_id, zone_id=w.zone_id) }}">{{ w.pand_naam }} &middot; {{ w.kamer }}</a>
+      stookt al dagen hoog (gem. {{ w.gem }}&deg;) &mdash; overweeg een terugschakel-regel</li>
+    {% endfor %}
     <li id="aandacht-sheet"><span class="muted">Lege kamers en aflopende contracten laden&hellip;</span></li>
   </ul>
 </div>

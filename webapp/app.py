@@ -452,7 +452,31 @@ def create_app(config: Config | None = None) -> Flask:
             "concepten": communicatie_db.tel_open_acties(db, pand_slugs=slugs),
             "onderhoud_open": len(communicatie_db.lijst_klussen(db, pand_slugs=slugs, alleen_open=True)),
             "betaal_achter": betaal_achter,
+            "verwarming_warm": _verwarming_aandacht(panden),
+            "verwarming_drempel": 22,
         }
+
+    def _verwarming_aandacht(panden: list, drempel: float = 22.0, dagen: float = 2) -> list:
+        """Kamers die al `dagen` lang gemiddeld >= `drempel` gemeten zijn én nog geen
+        terugschakel-regel hebben - een hint om er misschien een in te stellen."""
+        db = _verwarming_db()
+        nu = datetime.now(timezone.utc)
+        sinds = (nu - timedelta(days=dagen)).isoformat(timespec="seconds")
+        span = (nu - timedelta(days=dagen * 0.75)).isoformat(timespec="seconds")
+        min_n = max(3, int(dagen * 24 * 0.5))   # genoeg metingen over het venster
+        items = []
+        for p in panden:
+            try:
+                for r in verwarming_db.lang_warme_zones(db, p.slug, sinds, span, drempel, min_n):
+                    items.append({
+                        "pand_slug": p.slug, "pand_naam": p.naam, "provider": r["p"],
+                        "home_id": r["h"], "zone_id": r["z"],
+                        "kamer": r["kamer"] or r["zn"] or ("zone %s" % r["z"]),
+                        "gem": round(r["gem"], 1),
+                    })
+            except Exception:
+                app.logger.exception("Verwarming-aandachtsignaal mislukt voor %s.", p.slug)
+        return items
 
     @app.route("/aandacht/sheet-signalen")
     @login_required

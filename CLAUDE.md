@@ -221,7 +221,9 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   DB: `aanwezigheid`-tabel + `setback_*`-kolommen op zone_config (migratie). UI: aanwezigheids-
   badge in het overzicht + per zone een setback-regel (standaard UIT) + de **Verloop-grafiek
   met tijd-as en 24u/5d/maand-knoppen** (venster geldt ook voor de conclusies). Setback
-  standaard uit → stuurt pas na aanzetten. **Fase 2 = Bold (slimme sloten)** als tweede
+  standaard uit → stuurt pas na aanzetten. Op **"Wat vraagt aandacht"** (pandkiezer) een
+  seintje bij een kamer die al dagen gemiddeld ≥22° stookt én nog geen terugschakel-regel
+  heeft (`verwarming_db.lang_warme_zones`) - hint om er een in te stellen. **Fase 2 = Bold (slimme sloten)** als tweede
   aanwezigheidsbron + toegangsoverzicht per huurder + historie-dashboard: Bold heeft een
   Web Portal waar je zelf een **API-key** genereert (OAuth2, `api.boldsmartlock.com`; vereist
   mogelijk een Bold Connect-bridge per pand). Plan: `docs/verwarming-tado-plan.md`.

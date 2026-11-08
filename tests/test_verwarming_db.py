@@ -88,6 +88,32 @@ def test_online_wordt_opgeslagen_als_0_1_null():
     assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] is None
 
 
+def test_lang_warme_zones_signaal():
+    conn = _verbind()
+    # kamer A: al dagen warm (23-24), geen regel -> moet getriggerd worden
+    vdb.registreer_zone(conn, "tado", 1, "H", 1, "Kamer A")
+    vdb.zet_koppeling(conn, "tado", 1, 1, "pandx", "Kamer A")
+    # kamer B: warm maar heeft al een terugschakel-regel -> niet triggeren
+    vdb.registreer_zone(conn, "tado", 1, "H", 2, "Kamer B")
+    vdb.zet_koppeling(conn, "tado", 1, 2, "pandx", "Kamer B")
+    vdb.zet_regel(conn, "tado", 1, 2, regel_actief=True, max_temp=25, stap=1,
+                  interval_min=15, vloer_temp=20, na_uren=3, nacht_temp=18)
+    # kamer C: koel -> niet triggeren
+    vdb.registreer_zone(conn, "tado", 1, "H", 3, "Kamer C")
+    vdb.zet_koppeling(conn, "tado", 1, 3, "pandx", "Kamer C")
+    # metingen over ~3 dagen (elke 12 uur eentje)
+    for u in range(0, 72, 12):
+        ts = "2026-11-%02dT%02d:00:00+00:00" % (1 + u // 24, u % 24)
+        vdb.bewaar_sample(conn, "tado", 1, 1, inside=23.5, setpoint=24, power="ON", heating_pct=0, overlay_type="MANUAL", online=True, ts=ts)
+        vdb.bewaar_sample(conn, "tado", 1, 2, inside=24.0, setpoint=24, power="ON", heating_pct=0, overlay_type="MANUAL", online=True, ts=ts)
+        vdb.bewaar_sample(conn, "tado", 1, 3, inside=19.0, setpoint=19, power="ON", heating_pct=0, overlay_type=None, online=True, ts=ts)
+    sinds = "2026-10-30T00:00:00+00:00"   # ruim venster
+    span = "2026-11-10T00:00:00+00:00"    # data moet vóór dit moment beginnen (alles)
+    warm = vdb.lang_warme_zones(conn, "pandx", sinds, span, drempel=22.0, min_n=3)
+    zone_ids = {r["z"] for r in warm}
+    assert zone_ids == {1}                 # alleen Kamer A (B heeft regel, C is koel)
+
+
 def test_prune_verwijdert_oude_samples():
     conn = _verbind()
     vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")

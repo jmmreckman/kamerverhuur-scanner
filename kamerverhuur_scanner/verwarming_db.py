@@ -274,6 +274,24 @@ def conclusies(conn, provider, home_id, zone_id, sinds=None, drempel=22.0):
     }
 
 
+def lang_warme_zones(conn, pand_slug, sinds_iso, span_iso, drempel=22.0, min_n=1):
+    """Zones van een pand die over het venster (sinds_iso .. nu) gemiddeld >= drempel
+    zijn gemeten, die nog GEEN terugschakel-regel hebben, en waarvan de data ook echt
+    ver genoeg terugreikt (MIN(ts) <= span_iso). Voor het 'Wat vraagt aandacht'-signaal:
+    'deze kamer stookt al dagen hoog - overweeg een terugschakel-regel'."""
+    return conn.execute(
+        "SELECT zc.provider p, zc.home_id h, zc.zone_id z, zc.kamer kamer, zc.zone_naam zn,"
+        " AVG(s.inside) gem, COUNT(*) n, MIN(s.ts) van"
+        " FROM zone_config zc JOIN sample s"
+        "  ON s.provider=zc.provider AND s.home_id=zc.home_id AND s.zone_id=zc.zone_id"
+        " WHERE zc.pand_slug=? AND zc.regel_actief=0 AND s.ts>=?"
+        "  AND (s.online IS NULL OR s.online=1) AND s.inside IS NOT NULL"
+        " GROUP BY zc.provider, zc.home_id, zc.zone_id"
+        " HAVING AVG(s.inside) >= ? AND COUNT(*) >= ? AND MIN(s.ts) <= ?",
+        (pand_slug, sinds_iso, drempel, min_n, span_iso),
+    ).fetchall()
+
+
 def prune_samples(conn, ouder_dan_dagen=120) -> int:
     """Verwijdert ruwe metingen ouder dan N dagen (retentie). Geeft het aantal
     verwijderde rijen terug."""
