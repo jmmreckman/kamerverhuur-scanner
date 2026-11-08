@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS zone_config (
     vloer_temp REAL,
     na_uren INTEGER,
     nacht_temp REAL,
+    -- inactiviteit-setback-probe (Fase 1, standaard uit):
+    setback_actief INTEGER NOT NULL DEFAULT 0,
+    setback_na_dagen REAL,
+    setback_drempel REAL,
+    setback_temp REAL,
     PRIMARY KEY (provider, home_id, zone_id)
 );
 
@@ -104,6 +109,17 @@ CREATE TABLE IF NOT EXISTS terugschakeling (
     laatste_doel REAL,
     PRIMARY KEY (provider, home_id, zone_id)
 );
+
+-- Aanwezigheid per zone (Fase 1: afgeleid uit thermostaat-interactie).
+CREATE TABLE IF NOT EXISTS aanwezigheid (
+    provider TEXT NOT NULL DEFAULT 'tado',
+    home_id TEXT NOT NULL,
+    zone_id INTEGER NOT NULL,
+    laatste_interactie TEXT,
+    setback_sinds TEXT,
+    setback_doel REAL,
+    PRIMARY KEY (provider, home_id, zone_id)
+);
 """
 
 
@@ -114,6 +130,14 @@ def init_db(conn: sqlite3.Connection) -> None:
     kolommen = [r[1] for r in conn.execute("PRAGMA table_info(sample)").fetchall()]
     if "online" not in kolommen:
         conn.execute("ALTER TABLE sample ADD COLUMN online INTEGER")
+    # Migratie: setback-kolommen later toegevoegd aan een bestaande zone_config.
+    zc_kol = [r[1] for r in conn.execute("PRAGMA table_info(zone_config)").fetchall()]
+    for kol, definitie in (("setback_actief", "INTEGER NOT NULL DEFAULT 0"),
+                           ("setback_na_dagen", "REAL"),
+                           ("setback_drempel", "REAL"),
+                           ("setback_temp", "REAL")):
+        if kol not in zc_kol:
+            conn.execute(f"ALTER TABLE zone_config ADD COLUMN {kol} {definitie}")
     conn.commit()
 
 
@@ -284,5 +308,38 @@ def wis_terugschakeling(conn, provider, home_id, zone_id) -> None:
     conn.execute(
         "DELETE FROM terugschakeling WHERE provider=? AND home_id=? AND zone_id=?",
         (provider, str(home_id), int(zone_id)),
+    )
+    conn.commit()
+
+
+# --- aanwezigheid + setback-regel -------------------------------------------
+
+def zet_setback_regel(conn, provider, home_id, zone_id, *, setback_actief,
+                      na_dagen, drempel, setback_temp) -> None:
+    conn.execute(
+        "UPDATE zone_config SET setback_actief=?, setback_na_dagen=?, setback_drempel=?,"
+        " setback_temp=? WHERE provider=? AND home_id=? AND zone_id=?",
+        (1 if setback_actief else 0, na_dagen, drempel, setback_temp,
+         provider, str(home_id), int(zone_id)),
+    )
+    conn.commit()
+
+
+def lees_aanwezigheid(conn, provider, home_id, zone_id):
+    return conn.execute(
+        "SELECT * FROM aanwezigheid WHERE provider=? AND home_id=? AND zone_id=?",
+        (provider, str(home_id), int(zone_id)),
+    ).fetchone()
+
+
+def schrijf_aanwezigheid(conn, provider, home_id, zone_id, laatste_interactie,
+                         setback_sinds, setback_doel) -> None:
+    conn.execute(
+        "INSERT INTO aanwezigheid (provider, home_id, zone_id, laatste_interactie,"
+        " setback_sinds, setback_doel) VALUES (?,?,?,?,?,?)"
+        " ON CONFLICT(provider, home_id, zone_id) DO UPDATE SET"
+        " laatste_interactie=excluded.laatste_interactie, setback_sinds=excluded.setback_sinds,"
+        " setback_doel=excluded.setback_doel",
+        (provider, str(home_id), int(zone_id), laatste_interactie, setback_sinds, setback_doel),
     )
     conn.commit()

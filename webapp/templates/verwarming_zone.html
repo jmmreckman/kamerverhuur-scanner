@@ -24,6 +24,24 @@
 </div>
 {% endif %}
 
+<div class="card" style="padding:0.6rem 0.9rem">
+  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+    <span class="muted" style="font-size:0.85rem">Periode:</span>
+    {% for key, info in bereiken.items() %}
+    <a class="btn btn-xs {{ 'btn' if key == bereik else 'btn-secondary' }}"
+       href="{{ url_for('verwarming_zone', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id, bereik=key) }}">{{ info[1] }}</a>
+    {% endfor %}
+    <span style="margin-left:auto; font-size:0.85rem" class="muted">aanwezigheid:
+      {% set aw = aanwezig.status %}
+      {% if aw == 'thuis' %}<span class="pil status-betaald">thuis</span>
+      {% elif aw == 'afwezig' %}<span class="pil" style="background:var(--border);color:var(--muted)">afwezig</span>
+      {% else %}<span class="pil" style="background:var(--warn-soft);color:var(--warn)">onzeker?</span>{% endif %}
+    </span>
+  </div>
+  <p class="muted" style="margin:0.4rem 0 0; font-size:0.78rem">Aanwezigheid is geschat uit thermostaat-activiteit
+    {% if aanwezig.laatste_interactie %}(laatst actief: {{ aanwezig.laatste_interactie[:16]|replace('T',' ') }}){% else %}(nog geen activiteit gezien){% endif %}. Bold-deursignaal volgt.</p>
+</div>
+
 <div class="card">
   <h2>Conclusies</h2>
   {% if concl.aantal %}
@@ -44,13 +62,22 @@
 <div class="card">
   <h2>Verloop</h2>
   <svg viewBox="0 0 {{ spark.breedte }} {{ spark.hoogte }}" style="width:100%; height:auto; max-width:{{ spark.breedte }}px" role="img" aria-label="Temperatuurverloop">
+    {# y-as labels #}
+    <text x="2" y="{{ spark.marge }}" font-size="11" fill="currentColor" opacity="0.55">{{ spark.hi }}&deg;</text>
+    <text x="2" y="{{ spark.hoogte - spark.marge + 10 }}" font-size="11" fill="currentColor" opacity="0.55">{{ spark.lo }}&deg;</text>
+    {# tijd-as #}
+    <line x1="{{ spark.marge }}" y1="{{ spark.hoogte - spark.marge }}" x2="{{ spark.breedte - spark.marge }}" y2="{{ spark.hoogte - spark.marge }}" stroke="currentColor" opacity="0.15"/>
+    {% for t in spark.ticks %}
+    <line x1="{{ t.x }}" y1="{{ spark.hoogte - spark.marge }}" x2="{{ t.x }}" y2="{{ spark.hoogte - spark.marge + 4 }}" stroke="currentColor" opacity="0.3"/>
+    <text x="{{ t.x }}" y="{{ spark.hoogte - 8 }}" font-size="11" fill="currentColor" opacity="0.6" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
     <polyline fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" points="{{ spark.setpoint }}"/>
-    <polyline fill="none" stroke="var(--ok, #16a34a)" stroke-width="2" stroke-linejoin="round" stroke-dasharray="1 0" opacity="0.8" points="{{ spark.inside }}"/>
+    <polyline fill="none" stroke="var(--ok, #16a34a)" stroke-width="2" stroke-linejoin="round" opacity="0.85" points="{{ spark.inside }}"/>
   </svg>
   <div class="muted" style="display:flex; gap:1.2rem; font-size:0.85rem; flex-wrap:wrap">
     <span><span style="color:var(--primary)">&#9644;</span> ingesteld</span>
     <span><span style="color:var(--ok,#16a34a)">&#9644;</span> gemeten binnen</span>
-    <span style="margin-left:auto">{{ spark.lo }}&deg; - {{ spark.hi }}&deg;</span>
+    <span style="margin-left:auto">{{ spark.van[:16]|replace('T',' ') }} &rarr; {{ spark.tot[:16]|replace('T',' ') }}</span>
   </div>
 </div>
 {% endif %}
@@ -86,6 +113,32 @@
       </label>
     </div>
     <button class="btn" type="submit" style="margin-top:0.8rem">Regel opslaan</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Afwezigheid-setback</h2>
+  <p class="muted" style="margin-top:0">Zachte probe bij vermoedelijke afwezigheid. <strong>Standaard uit.</strong>
+     Als deze kamer <strong>{{ setback_std.na_dagen|round|int }} dagen</strong> geen thermostaat-activiteit had én nog op/boven
+     {{ setback_std.drempel|round|int }}&deg; staat, wordt 'ie één keer zacht teruggezet naar {{ setback_std.setback_temp|round|int }}&deg;.
+     Draait de huurder 'm terug &rarr; dat telt meteen als "thuis" en de setback wordt losgelaten. Mild en zelf-corrigerend.</p>
+  <form method="post" action="{{ url_for('verwarming_setback_opslaan', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id) }}">
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="setback_actief" {{ 'checked' if z.setback_actief }} style="width:auto">
+      Afwezigheid-setback aan voor deze kamer
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-top:0.6rem">
+      <label style="flex:1 1 140px">Na ... dagen stil
+        <input type="number" step="0.5" name="setback_na_dagen" value="{{ z.setback_na_dagen if z.setback_na_dagen is not none else setback_std.na_dagen }}">
+      </label>
+      <label style="flex:1 1 140px">Alleen boven (&deg;C)
+        <input type="number" step="0.5" name="setback_drempel" value="{{ z.setback_drempel if z.setback_drempel is not none else setback_std.drempel }}">
+      </label>
+      <label style="flex:1 1 140px">Terugzetten naar (&deg;C)
+        <input type="number" step="0.5" name="setback_temp" value="{{ z.setback_temp if z.setback_temp is not none else setback_std.setback_temp }}">
+      </label>
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Setback opslaan</button>
   </form>
 </div>
 

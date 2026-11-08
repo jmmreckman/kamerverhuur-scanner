@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
-from kamerverhuur_scanner import evohome_client, tado_client, verwarming_db as vdb
+from kamerverhuur_scanner import evohome_client, tado_client, verwarming_db as vdb, verwarming_poll
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.tado_client import PROVIDER, TadoError, TadoClient
 from kamerverhuur_scanner.verwarming_regels import Regel, beslis, sensor_ok
@@ -26,6 +26,9 @@ from kamerverhuur_scanner.verwarming_regels import Regel, beslis, sensor_ok
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
 _KWARTIER_MIN = 15
 _RETENTIE_DAGEN = 120
+# Setback-overlay met een TIMER die ruim langer is dan het poll-interval (fail-safe:
+# valt vanzelf terug op het schema als de service stilvalt).
+_SETBACK_HOLD_MIN = 45
 
 logger = logging.getLogger(__name__)
 
@@ -110,11 +113,23 @@ def _draai_een_ronde(config: Config, client: TadoClient) -> None:
                 logger.exception("[%s/%s] State ophalen mislukt.", home_id, zone_id)
                 continue
             v = tado_client.verwerk_state(state)
+            vorige = vdb.laatste_sample(conn, PROVIDER, home_id, zone_id)
+            vorig_setpoint = vorige["setpoint"] if vorige else None
             vdb.bewaar_sample(conn, PROVIDER, home_id, zone_id,
                               inside=v["inside"], setpoint=v["setpoint"], power=v["power"],
                               heating_pct=v["heating_pct"], overlay_type=v["overlay_type"],
                               online=v["online"])
             zc = vdb.zone(conn, PROVIDER, home_id, zone_id)
+            nu = datetime.now(timezone.utc)
+            try:
+                setback_doel = verwarming_poll.verwerk_aanwezigheid_en_setback(
+                    conn, PROVIDER, home_id, zone_id, vorig_setpoint, v, zc, nu)
+                if setback_doel is not None:
+                    client.set_overlay(home_id, zone_id, setback_doel,
+                                       duur_seconden=_SETBACK_HOLD_MIN * 60)
+                    logger.info("[%s/%s] Setback (afwezig) -> %.1f", home_id, zone_id, setback_doel)
+            except Exception:
+                logger.exception("[%s/%s] Aanwezigheid/setback mislukt.", home_id, zone_id)
             if zc and zc["regel_actief"]:
                 try:
                     _pas_regel_toe(conn, client, home_id, zone_id, zc, v)

@@ -17,12 +17,13 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from . import verwarming_db as vdb
+from . import verwarming_db as vdb, verwarming_poll
 from .verwarming_regels import Regel, beslis, sensor_ok
 
 logger = logging.getLogger(__name__)
 
 PROVIDER = "evohome"
+_SETBACK_HOLD_MIN = 45
 
 
 # --- pure verwerking (los testbaar) -----------------------------------------
@@ -136,12 +137,24 @@ async def _ronde_async(config, conn) -> int:
                         v = verwerk_zone(z.temperature, z.target_heat_temperature,
                                          z.mode, z.active_faults)
                         vdb.registreer_zone(conn, PROVIDER, loc.id, loc.name, z.id, z.name, None)
+                        vorige = vdb.laatste_sample(conn, PROVIDER, loc.id, z.id)
+                        vorig_setpoint = vorige["setpoint"] if vorige else None
                         vdb.bewaar_sample(conn, PROVIDER, loc.id, z.id,
                                           inside=v["inside"], setpoint=v["setpoint"],
                                           power=v["power"], heating_pct=v["heating_pct"],
                                           overlay_type=v["overlay_type"], online=v["online"])
                         aantal += 1
                         zc = vdb.zone(conn, PROVIDER, loc.id, z.id)
+                        nu = datetime.now(timezone.utc)
+                        try:
+                            setback_doel = verwarming_poll.verwerk_aanwezigheid_en_setback(
+                                conn, PROVIDER, loc.id, z.id, vorig_setpoint, v, zc, nu)
+                            if setback_doel is not None:
+                                tot = nu + timedelta(minutes=_SETBACK_HOLD_MIN)
+                                await z.set_temperature(setback_doel, until=tot)
+                                logger.info("[evohome %s] Setback (afwezig) -> %.1f", z.id, setback_doel)
+                        except Exception:
+                            logger.exception("[evohome %s] Aanwezigheid/setback mislukt.", z.id)
                         if zc and zc["regel_actief"]:
                             try:
                                 await _pas_regel_toe(conn, loc.id, z, v)

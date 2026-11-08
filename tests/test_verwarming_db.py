@@ -119,6 +119,42 @@ def test_migratie_voegt_online_kolom_toe_aan_oude_db():
     assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] == 1
 
 
+def test_setback_regel_en_aanwezigheid():
+    conn = _verbind()
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "Kamer")
+    vdb.zet_setback_regel(conn, "tado", 1, 5, setback_actief=True, na_dagen=2,
+                          drempel=20, setback_temp=15)
+    z = vdb.zone(conn, "tado", 1, 5)
+    assert z["setback_actief"] == 1 and z["setback_drempel"] == 20 and z["setback_temp"] == 15
+    # aanwezigheid upsert
+    assert vdb.lees_aanwezigheid(conn, "tado", 1, 5) is None
+    vdb.schrijf_aanwezigheid(conn, "tado", 1, 5, "2026-11-08T10:00:00+00:00", None, None)
+    assert vdb.lees_aanwezigheid(conn, "tado", 1, 5)["laatste_interactie"].startswith("2026-11-08")
+    vdb.schrijf_aanwezigheid(conn, "tado", 1, 5, "2026-11-08T10:00:00+00:00",
+                             "2026-11-08T11:00:00+00:00", 15.0)
+    r = vdb.lees_aanwezigheid(conn, "tado", 1, 5)
+    assert r["setback_sinds"].startswith("2026-11-08T11") and r["setback_doel"] == 15.0
+
+
+def test_migratie_voegt_setback_kolommen_toe_aan_oude_zone_config():
+    import sqlite3
+    tmp = tempfile.mkdtemp()
+    pad = os.path.join(tmp, "verwarming.db")
+    oud = sqlite3.connect(pad)
+    # oude zone_config zoals vóór de setback-kolommen (wel home_naam/device_serial/etc.)
+    oud.execute("CREATE TABLE zone_config (provider TEXT, home_id TEXT, home_naam TEXT,"
+                " zone_id INTEGER, zone_naam TEXT, device_serial TEXT, laatst_gezien TEXT,"
+                " pand_slug TEXT, kamer TEXT, regel_actief INTEGER,"
+                " PRIMARY KEY (provider, home_id, zone_id))")
+    oud.commit(); oud.close()
+    conn = vdb.verbind(pad)
+    kol = [r[1] for r in conn.execute("PRAGMA table_info(zone_config)").fetchall()]
+    assert "setback_actief" in kol and "setback_temp" in kol
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
+    vdb.zet_setback_regel(conn, "tado", 1, 5, setback_actief=True, na_dagen=2, drempel=20, setback_temp=15)
+    assert vdb.zone(conn, "tado", 1, 5)["setback_actief"] == 1
+
+
 def test_terugschakel_status_schrijven_lezen_wissen():
     conn = _verbind()
     assert vdb.lees_terugschakeling(conn, "tado", 1, 5) is None

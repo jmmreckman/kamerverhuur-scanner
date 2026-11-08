@@ -13,7 +13,7 @@ import logging
 import mimetypes
 import re
 import threading
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from functools import wraps
 from pathlib import Path
@@ -25,8 +25,8 @@ from werkzeug.datastructures import ImmutableMultiDict
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from kamerverhuur_scanner import (
-    document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren, state,
-    verwarming_db, verwarming_regels, winst,
+    aanwezigheid, document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren,
+    state, verwarming_db, verwarming_regels, winst,
 )
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
@@ -3031,9 +3031,10 @@ def create_app(config: Config | None = None) -> Flask:
             app.logger.exception("Kamers ophalen voor verwarming-koppeling mislukt (%s).", pand.slug)
             return []
 
-    def _verwarming_spark(hist, breedte=640, hoogte=160, marge=22) -> dict:
-        """Bouwt de twee polyline-puntenreeksen (binnentemp + setpoint) voor een
-        mini-grafiekje. Puur reken-, geen template-werk."""
+    def _verwarming_spark(hist, breedte=680, hoogte=180, marge=30, kort=True) -> dict:
+        """Bouwt de twee polyline-puntenreeksen (binnentemp + setpoint) + tijd-ticks
+        voor een mini-grafiekje. Puur reken-, geen template-werk. `kort`=True toont
+        klok-tijden op de as (24u-venster), anders datums (langere vensters)."""
         waarden = [h for h in hist if h["inside"] is not None or h["setpoint"] is not None]
         if len(waarden) < 2:
             return {"heeft": False}
@@ -3041,7 +3042,8 @@ def create_app(config: Config | None = None) -> Flask:
         alle += [h["setpoint"] for h in waarden if h["setpoint"] is not None]
         lo, hi = min(alle), max(alle)
         span = (hi - lo) or 1
-        stap = (breedte - 2 * marge) / (len(waarden) - 1)
+        n = len(waarden)
+        stap = (breedte - 2 * marge) / (n - 1)
 
         def x(i):
             return round(marge + i * stap, 1)
@@ -3049,11 +3051,43 @@ def create_app(config: Config | None = None) -> Flask:
         def y(v):
             return round(hoogte - marge - ((v - lo) / span) * (hoogte - 2 * marge), 1)
 
+        def _label(ts):
+            try:
+                d = datetime.fromisoformat(ts)
+            except Exception:
+                return (ts or "")[:16]
+            return d.strftime("%H:%M") if kort else d.strftime("%d-%m")
+
         inside = " ".join("%s,%s" % (x(i), y(h["inside"])) for i, h in enumerate(waarden) if h["inside"] is not None)
         setp = " ".join("%s,%s" % (x(i), y(h["setpoint"])) for i, h in enumerate(waarden) if h["setpoint"] is not None)
+        aantal_ticks = min(6, n)
+        ticks = []
+        for k in range(aantal_ticks):
+            i = round(k * (n - 1) / (aantal_ticks - 1)) if aantal_ticks > 1 else 0
+            ticks.append({"x": x(i), "label": _label(waarden[i]["ts"])})
         return {"heeft": True, "inside": inside, "setpoint": setp, "breedte": breedte,
-                "hoogte": hoogte, "lo": round(lo, 1), "hi": round(hi, 1),
-                "van": waarden[0]["ts"], "tot": waarden[-1]["ts"]}
+                "hoogte": hoogte, "marge": marge, "lo": round(lo, 1), "hi": round(hi, 1),
+                "ticks": ticks, "van": waarden[0]["ts"], "tot": waarden[-1]["ts"]}
+
+    _VERWARMING_BEREIKEN = {"24u": (1, "24 uur"), "5d": (5, "5 dagen"), "maand": (30, "maand")}
+
+    def _bereik_sinds(bereik: str):
+        dagen = _VERWARMING_BEREIKEN.get(bereik, _VERWARMING_BEREIKEN["5d"])[0]
+        sinds = datetime.now(timezone.utc) - timedelta(days=dagen)
+        return sinds.isoformat(timespec="seconds"), dagen
+
+    def _verwarming_aanwezigheid(db, z) -> dict:
+        """Aanwezigheidsstatus (thuis/onzeker/afwezig) + laatste interactie voor een zone,
+        geschat uit de thermostaat-interactie (Fase 1)."""
+        aanw = verwarming_db.lees_aanwezigheid(db, z["provider"], z["home_id"], z["zone_id"])
+        li = None
+        if aanw and aanw["laatste_interactie"]:
+            try:
+                li = datetime.fromisoformat(aanw["laatste_interactie"])
+            except ValueError:
+                li = None
+        return {"status": aanwezigheid.status(li, datetime.now(timezone.utc)),
+                "laatste_interactie": aanw["laatste_interactie"] if aanw else None}
 
     @app.route("/pand/<pand_slug>/verwarming")
     @login_required
@@ -3062,7 +3096,8 @@ def create_app(config: Config | None = None) -> Flask:
         rijen = []
         for z in verwarming_db.lijst_zones(db, pand_slug):
             laatste = verwarming_db.laatste_sample(db, z["provider"], z["home_id"], z["zone_id"])
-            rijen.append({"zone": z, "laatste": laatste})
+            rijen.append({"zone": z, "laatste": laatste,
+                          "aanwezig": _verwarming_aanwezigheid(db, z)})
         ongekoppeld = [z for z in verwarming_db.lijst_zones(db) if not z["pand_slug"]]
         tado_ingelogd = Path(config.tado_token_pad()).exists()
         return render_template("verwarming_overzicht.html", rijen=rijen,
@@ -3095,11 +3130,18 @@ def create_app(config: Config | None = None) -> Flask:
         z = verwarming_db.zone(db, provider, home_id, zone_id)
         if z is None:
             abort(404, "Zone niet gevonden.")
-        hist = verwarming_db.historie(db, provider, home_id, zone_id, limiet=300)
-        concl = verwarming_db.conclusies(db, provider, home_id, zone_id)
-        return render_template("verwarming_zone.html", z=z, hist=list(reversed(hist)),
-                               concl=concl, spark=_verwarming_spark(hist),
-                               std=verwarming_regels.Regel())
+        bereik = request.args.get("bereik", "5d")
+        if bereik not in _VERWARMING_BEREIKEN:
+            bereik = "5d"
+        sinds, dagen = _bereik_sinds(bereik)
+        hist = verwarming_db.historie(db, provider, home_id, zone_id, sinds=sinds, limiet=3000)
+        concl = verwarming_db.conclusies(db, provider, home_id, zone_id, sinds=sinds)
+        return render_template(
+            "verwarming_zone.html", z=z, hist=list(reversed(hist)), concl=concl,
+            spark=_verwarming_spark(hist, kort=(bereik == "24u")),
+            std=verwarming_regels.Regel(), setback_std=aanwezigheid.SetbackRegel(),
+            aanwezig=_verwarming_aanwezigheid(db, z),
+            bereik=bereik, bereiken=_VERWARMING_BEREIKEN)
 
     @app.route("/pand/<pand_slug>/verwarming/zone/<provider>/<home_id>/<int:zone_id>/regel", methods=["POST"])
     @login_required
@@ -3122,6 +3164,26 @@ def create_app(config: Config | None = None) -> Flask:
             vloer_temp=_num("vloer_temp"), na_uren=_int("na_uren"), nacht_temp=_num("nacht_temp"),
         )
         flash("Terugschakel-regel opgeslagen.")
+        return redirect(url_for("verwarming_zone", pand_slug=pand_slug, provider=provider,
+                                home_id=home_id, zone_id=zone_id))
+
+    @app.route("/pand/<pand_slug>/verwarming/zone/<provider>/<home_id>/<int:zone_id>/setback", methods=["POST"])
+    @login_required
+    def verwarming_setback_opslaan(pand_slug: str, provider: str, home_id: str, zone_id: int):
+        db = _verwarming_db()
+        f = request.form
+
+        def _num(key):
+            v = f.get(key, "").strip().replace(",", ".")
+            return float(v) if v else None
+
+        verwarming_db.zet_setback_regel(
+            db, provider, home_id, zone_id,
+            setback_actief=f.get("setback_actief") == "on",
+            na_dagen=_num("setback_na_dagen"), drempel=_num("setback_drempel"),
+            setback_temp=_num("setback_temp"),
+        )
+        flash("Afwezigheid-setback opgeslagen.")
         return redirect(url_for("verwarming_zone", pand_slug=pand_slug, provider=provider,
                                 home_id=home_id, zone_id=zone_id))
 

@@ -210,7 +210,21 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   `EVOHOME_TOKEN_FILE` (alle optioneel). Zonder ingelogd account slaapt de betreffende
   provider netjes. De evohome-schrijf-/terugschakel-kant is **live getest** (override 13° +
   gegarandeerd herstel op een studio-zone, nov 2026) en werkt; `scripts/evohome_overlay_test.py`
-  is dat veilige testscript (naam-check + herstel in een finally). Plan: `docs/verwarming-tado-plan.md`.
+  is dat veilige testscript (naam-check + herstel in een finally).
+  **Aanwezigheid + afwezigheid-setback (nov 2026, Fase 1 — alleen thermostaatsignaal):**
+  `kamerverhuur_scanner/aanwezigheid.py` (pure: `detecteer_interactie` = huurder raakte
+  de thermostaat aan → 'thuis'; `beslis_setback` = na N dagen stil én nog op/boven drempel
+  één keer zacht terug naar setback_temp, bv. 20→15, zelf-corrigerend; `status()` →
+  thuis/onzeker/afwezig, met haakjes voor Bold + een onbetrouwbaar-vlag) + orchestratie
+  `kamerverhuur_scanner/verwarming_poll.py` (door beide poll-paden aangeroepen: interactie
+  → aanwezigheid bijwerken → setback beslissen/zetten; terugschakel-regel heeft voorrang).
+  DB: `aanwezigheid`-tabel + `setback_*`-kolommen op zone_config (migratie). UI: aanwezigheids-
+  badge in het overzicht + per zone een setback-regel (standaard UIT) + de **Verloop-grafiek
+  met tijd-as en 24u/5d/maand-knoppen** (venster geldt ook voor de conclusies). Setback
+  standaard uit → stuurt pas na aanzetten. **Fase 2 = Bold (slimme sloten)** als tweede
+  aanwezigheidsbron + toegangsoverzicht per huurder + historie-dashboard: Bold heeft een
+  Web Portal waar je zelf een **API-key** genereert (OAuth2, `api.boldsmartlock.com`; vereist
+  mogelijk een Bold Connect-bridge per pand). Plan: `docs/verwarming-tado-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,
