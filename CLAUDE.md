@@ -26,6 +26,11 @@ belegger in Rotterdam. Mede-gebruiker van de steenhub-app: Justin (beperkte
 pandtoegang). Waarde die de gebruiker expliciet vraagt: **eerlijk, gekalibreerd,
 niet-sycofantisch** advies — liever een onderbouwde tegenwerping dan meegaan.
 
+**Tech-context gebruiker:** heeft thuis een **Homey Pro** (home-automation hub) en tweakt
+graag — mogelijk bruikbaar als relay/koppeling voor ideeën (bv. een device → Homey-flow →
+webhook naar de VPS). Heeft Bold **Elite** op (vrijwel) alle kamerverhuur-sloten, mét
+**Bold Connect**-bridges (dus cloud-activaties stromen continu).
+
 ---
 
 ## 2. Apps / subdomeinen → map → branch
@@ -224,9 +229,18 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   standaard uit → stuurt pas na aanzetten. Op **"Wat vraagt aandacht"** (pandkiezer) een
   seintje bij een kamer die al dagen gemiddeld ≥22° stookt én nog geen terugschakel-regel
   heeft (`verwarming_db.lang_warme_zones`) - hint om er een in te stellen. **Fase 2 = Bold (slimme sloten)** als tweede
-  aanwezigheidsbron + toegangsoverzicht per huurder + historie-dashboard: Bold heeft een
-  Web Portal waar je zelf een **API-key** genereert (OAuth2, `api.boldsmartlock.com`; vereist
-  mogelijk een Bold Connect-bridge per pand). Plan: `docs/verwarming-tado-plan.md`.
+  aanwezigheidsbron + toegangsoverzicht per huurder + historie-dashboard. **Route (nov 2026,
+  onderzocht): de gratis consumenten-OAuth-API** — Bold geeft op aanvraag (per mail) een
+  **custom OAuth-client gratis** uit; daarmee lees je activaties uit (`api.boldsmartlock.com`,
+  OAuth2) en haal je ze **vanaf de VPS op via polling (~30s) of webhook**. Werkt met de
+  bestaande Bold Elite + Bold Connect-bridges. **Bold Pro (betaald abonnement, schaalt per slot)
+  is hiervoor NIET nodig**; telefoon-notificaties doorsturen ook niet (de VPS pollt zelf).
+  Alternatieve relay als het moet: Bold → **Homey Pro** (staat bij de gebruiker thuis) → webhook
+  → VPS. We willen in de kern maar één signaal: "huurder X activeerde slot Y op tijdstip T"
+  (slot + gebruiker-indien-bekend + tijd + methode). Status: gebruiker heeft Bold gemaild om de
+  OAuth-client; wacht op `client_id`/`secret` (+ ik lever een redirect-URI). De haakjes in de
+  aanwezigheidslaag staan al klaar (`status(... bold_recent=...)` en de `onbetrouwbaar`-vlag voor
+  de kamer met een losse tuinsleutel). Plan: `docs/verwarming-tado-plan.md`.
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,
