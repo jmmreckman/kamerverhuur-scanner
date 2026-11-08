@@ -454,6 +454,8 @@ def create_app(config: Config | None = None) -> Flask:
             "betaal_achter": betaal_achter,
             "verwarming_warm": _verwarming_aandacht(panden),
             "verwarming_drempel": 22,
+            "verwarming_vocht": _verwarming_vocht_aandacht(panden),
+            "vocht_drempel": 70,
         }
 
     def _verwarming_aandacht(panden: list, drempel: float = 22.0, dagen: float = 2) -> list:
@@ -476,6 +478,29 @@ def create_app(config: Config | None = None) -> Flask:
                     })
             except Exception:
                 app.logger.exception("Verwarming-aandachtsignaal mislukt voor %s.", p.slug)
+        return items
+
+    def _verwarming_vocht_aandacht(panden: list, drempel: float = 70.0, dagen: float = 3) -> list:
+        """Kamers die al `dagen` lang gemiddeld >= `drempel`% luchtvochtigheid gemeten zijn:
+        aanhoudend vochtig -> schimmelrisico. Korte douche-/kookpieken middelen weg; het gaat
+        om het aanhoudende beeld. Alleen Tado-knoppen meten vocht."""
+        db = _verwarming_db()
+        nu = datetime.now(timezone.utc)
+        sinds = (nu - timedelta(days=dagen)).isoformat(timespec="seconds")
+        span = (nu - timedelta(days=dagen * 0.75)).isoformat(timespec="seconds")
+        min_n = max(3, int(dagen * 24 * 0.5))   # genoeg metingen over het venster
+        items = []
+        for p in panden:
+            try:
+                for r in verwarming_db.vochtige_zones(db, p.slug, sinds, span, drempel, min_n):
+                    items.append({
+                        "pand_slug": p.slug, "pand_naam": p.naam, "provider": r["p"],
+                        "home_id": r["h"], "zone_id": r["z"],
+                        "kamer": r["kamer"] or r["zn"] or ("zone %s" % r["z"]),
+                        "gem": round(r["gem"]), "piek": round(r["piek"]),
+                    })
+            except Exception:
+                app.logger.exception("Vocht-aandachtsignaal mislukt voor %s.", p.slug)
         return items
 
     @app.route("/aandacht/sheet-signalen")

@@ -299,6 +299,26 @@ def lang_warme_zones(conn, pand_slug, sinds_iso, span_iso, drempel=22.0, min_n=1
     ).fetchall()
 
 
+def vochtige_zones(conn, pand_slug, sinds_iso, span_iso, drempel=70.0, min_n=1):
+    """Zones van een pand die over het venster (sinds_iso .. nu) gemiddeld >= drempel%
+    relatieve luchtvochtigheid zijn gemeten, en waarvan de data ook echt ver genoeg
+    terugreikt (MIN(ts) <= span_iso). Voor het schimmel-signaal op 'Wat vraagt aandacht':
+    'deze kamer is al dagen aanhoudend vochtig - schimmelrisico'. Alleen zones die vocht
+    meten tellen mee (humidity IS NOT NULL -> in de praktijk Tado); staat LOS van een
+    terugschakel-regel (schimmel heeft niets met de stooklimiet te maken)."""
+    return conn.execute(
+        "SELECT zc.provider p, zc.home_id h, zc.zone_id z, zc.kamer kamer, zc.zone_naam zn,"
+        " AVG(s.humidity) gem, MAX(s.humidity) piek, COUNT(*) n, MIN(s.ts) van"
+        " FROM zone_config zc JOIN sample s"
+        "  ON s.provider=zc.provider AND s.home_id=zc.home_id AND s.zone_id=zc.zone_id"
+        " WHERE zc.pand_slug=? AND s.ts>=?"
+        "  AND (s.online IS NULL OR s.online=1) AND s.humidity IS NOT NULL"
+        " GROUP BY zc.provider, zc.home_id, zc.zone_id"
+        " HAVING AVG(s.humidity) >= ? AND COUNT(*) >= ? AND MIN(s.ts) <= ?",
+        (pand_slug, sinds_iso, drempel, min_n, span_iso),
+    ).fetchall()
+
+
 def prune_samples(conn, ouder_dan_dagen=120) -> int:
     """Verwijdert ruwe metingen ouder dan N dagen (retentie). Geeft het aantal
     verwijderde rijen terug."""

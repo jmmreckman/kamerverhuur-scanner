@@ -133,6 +133,32 @@ def test_lang_warme_zones_signaal():
     assert zone_ids == {1}                 # alleen Kamer A (B heeft regel, C is koel)
 
 
+def test_vochtige_zones_schimmel_signaal():
+    conn = _verbind()
+    # kamer A: aanhoudend vochtig (72-75%) -> moet triggeren
+    vdb.registreer_zone(conn, "tado", 1, "H", 1, "Kamer A")
+    vdb.zet_koppeling(conn, "tado", 1, 1, "pandx", "Kamer A")
+    # kamer B: droog (45%) -> niet triggeren
+    vdb.registreer_zone(conn, "tado", 1, "H", 2, "Kamer B")
+    vdb.zet_koppeling(conn, "tado", 1, 2, "pandx", "Kamer B")
+    # kamer C (evohome): geen vochtmeting -> nooit triggeren
+    vdb.registreer_zone(conn, "evohome", 9, "H2", 3, "Studio")
+    vdb.zet_koppeling(conn, "evohome", 9, 3, "pandx", "Studio")
+    for u in range(0, 72, 12):
+        ts = "2026-11-%02dT%02d:00:00+00:00" % (1 + u // 24, u % 24)
+        vdb.bewaar_sample(conn, "tado", 1, 1, inside=20, setpoint=20, power="ON",
+                          heating_pct=0, overlay_type=None, online=True, humidity=73.0, ts=ts)
+        vdb.bewaar_sample(conn, "tado", 1, 2, inside=20, setpoint=20, power="ON",
+                          heating_pct=0, overlay_type=None, online=True, humidity=45.0, ts=ts)
+        vdb.bewaar_sample(conn, "evohome", 9, 3, inside=20, setpoint=20, power="ON",
+                          heating_pct=None, overlay_type=None, online=True, ts=ts)
+    sinds = "2026-10-30T00:00:00+00:00"
+    span = "2026-11-10T00:00:00+00:00"
+    vochtig = vdb.vochtige_zones(conn, "pandx", sinds, span, drempel=70.0, min_n=3)
+    assert {r["z"] for r in vochtig} == {1}      # alleen Kamer A
+    assert round(vochtig[0]["gem"]) == 73
+
+
 def test_prune_verwijdert_oude_samples():
     conn = _verbind()
     vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")

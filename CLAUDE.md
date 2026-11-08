@@ -234,7 +234,10 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   Setback
   standaard uit → stuurt pas na aanzetten. Op **"Wat vraagt aandacht"** (pandkiezer) een
   seintje bij een kamer die al dagen gemiddeld ≥22° stookt én nog geen terugschakel-regel
-  heeft (`verwarming_db.lang_warme_zones`) - hint om er een in te stellen. **Fase 2 = Bold (slimme sloten)** als tweede
+  heeft (`verwarming_db.lang_warme_zones`) - hint om er een in te stellen. **Idem een schimmel-seintje**
+  (nov 2026): een kamer die ≥3 dagen gemiddeld **≥70% luchtvochtigheid** meet (`verwarming_db.vochtige_zones`,
+  los van een terugschakel-regel, alleen Tado want evohome meet geen vocht) → "aanhoudend vochtig, schimmelrisico,
+  check ventilatie". **Fase 2 = Bold (slimme sloten)** als tweede
   aanwezigheidsbron + toegangsoverzicht per huurder + historie-dashboard. **Route (nov 2026,
   onderzocht): de gratis consumenten-OAuth-API** — Bold geeft op aanvraag (per mail) een
   **custom OAuth-client gratis** uit; daarmee lees je activaties uit (`api.boldsmartlock.com`,
