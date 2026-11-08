@@ -3093,6 +3093,44 @@ def create_app(config: Config | None = None) -> Flask:
                 "hoogte": hoogte, "marge": marge, "lo": round(lo, 1), "hi": round(hi, 1),
                 "ticks": ticks, "van": waarden[0]["ts"], "tot": waarden[-1]["ts"]}
 
+    def _verwarming_vocht_spark(hist, breedte=680, hoogte=160, marge=30, kort=True) -> dict:
+        """Eén polyline voor de luchtvochtigheid (%) over de tijd, zelfde tijd-as-opzet
+        als de temperatuurgrafiek. Alleen zinvol voor providers die vocht meten (Tado);
+        bij geen enkele meting -> {'heeft': False}."""
+        waarden = [h for h in hist if h["humidity"] is not None]
+        if len(waarden) < 2:
+            return {"heeft": False}
+        alle = [h["humidity"] for h in waarden]
+        lo, hi = min(alle), max(alle)
+        # iets lucht boven/onder zodat een vlakke lijn niet tegen de rand plakt
+        lo, hi = max(0.0, lo - 2), min(100.0, hi + 2)
+        span = (hi - lo) or 1
+        n = len(waarden)
+        stap = (breedte - 2 * marge) / (n - 1)
+
+        def x(i):
+            return round(marge + i * stap, 1)
+
+        def y(v):
+            return round(hoogte - marge - ((v - lo) / span) * (hoogte - 2 * marge), 1)
+
+        def _label(ts):
+            try:
+                d = datetime.fromisoformat(ts)
+            except Exception:
+                return (ts or "")[:16]
+            return d.strftime("%H:%M") if kort else d.strftime("%d-%m")
+
+        punten = " ".join("%s,%s" % (x(i), y(h["humidity"])) for i, h in enumerate(waarden))
+        aantal_ticks = min(6, n)
+        ticks = []
+        for k in range(aantal_ticks):
+            i = round(k * (n - 1) / (aantal_ticks - 1)) if aantal_ticks > 1 else 0
+            ticks.append({"x": x(i), "label": _label(waarden[i]["ts"])})
+        return {"heeft": True, "punten": punten, "breedte": breedte, "hoogte": hoogte,
+                "marge": marge, "lo": round(lo), "hi": round(hi),
+                "ticks": ticks, "van": waarden[0]["ts"], "tot": waarden[-1]["ts"]}
+
     _VERWARMING_BEREIKEN = {"24u": (1, "24 uur"), "5d": (5, "5 dagen"), "maand": (30, "maand")}
 
     def _bereik_sinds(bereik: str):
@@ -3163,6 +3201,7 @@ def create_app(config: Config | None = None) -> Flask:
         return render_template(
             "verwarming_zone.html", z=z, hist=list(reversed(hist)), concl=concl,
             spark=_verwarming_spark(hist, kort=(bereik == "24u")),
+            vocht_spark=_verwarming_vocht_spark(hist, kort=(bereik == "24u")),
             std=verwarming_regels.Regel(), setback_std=aanwezigheid.SetbackRegel(),
             aanwezig=_verwarming_aanwezigheid(db, z),
             bereik=bereik, bereiken=_VERWARMING_BEREIKEN)

@@ -225,7 +225,13 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   → aanwezigheid bijwerken → setback beslissen/zetten; terugschakel-regel heeft voorrang).
   DB: `aanwezigheid`-tabel + `setback_*`-kolommen op zone_config (migratie). UI: aanwezigheids-
   badge in het overzicht + per zone een setback-regel (standaard UIT) + de **Verloop-grafiek
-  met tijd-as en 24u/5d/maand-knoppen** (venster geldt ook voor de conclusies). Setback
+  met tijd-as en 24u/5d/maand-knoppen** (venster geldt ook voor de conclusies). **Luchtvochtigheid
+  (nov 2026):** Tado levert per zone ook de relatieve luchtvochtigheid mee (`sensorDataPoints.humidity.percentage`);
+  die bewaren we in de `sample.humidity`-kolom (migratie zoals bij `online`) en tonen we als
+  aparte vocht-grafiek + gem./max-vocht in de conclusies + kolom in de metingen-tabel, mét een
+  schimmel-vuistregel (langdurig >~70% RH = risico). **Evohome/Honeywell meet GEEN vocht** (API
+  geeft alleen temp + setpoint) → `humidity=None`, en de zone-pagina toont dan netjes "geen vochtdata".
+  Setback
   standaard uit → stuurt pas na aanzetten. Op **"Wat vraagt aandacht"** (pandkiezer) een
   seintje bij een kamer die al dagen gemiddeld ≥22° stookt én nog geen terugschakel-regel
   heeft (`verwarming_db.lang_warme_zones`) - hint om er een in te stellen. **Fase 2 = Bold (slimme sloten)** als tweede

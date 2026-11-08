@@ -88,6 +88,25 @@ def test_online_wordt_opgeslagen_als_0_1_null():
     assert vdb.laatste_sample(conn, "tado", 1, 5)["online"] is None
 
 
+def test_humidity_opslag_en_in_conclusies():
+    conn = _verbind()
+    vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
+                      heating_pct=0.0, overlay_type=None, online=True, humidity=58.0,
+                      ts="2026-11-07T10:00:00+00:00")
+    vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
+                      heating_pct=0.0, overlay_type=None, online=True, humidity=62.0,
+                      ts="2026-11-07T11:00:00+00:00")
+    assert vdb.laatste_sample(conn, "tado", 1, 5)["humidity"] == 62.0
+    c = vdb.conclusies(conn, "tado", 1, 5)
+    assert c["gem_vocht"] == 60 and c["max_vocht"] == 62
+    # evohome-achtige zone zonder vocht -> gem_vocht None (geen crash)
+    vdb.registreer_zone(conn, "evohome", 9, "H2", 1, "Studio")
+    vdb.bewaar_sample(conn, "evohome", 9, 1, inside=19.0, setpoint=19, power="ON",
+                      heating_pct=None, overlay_type=None, online=True)
+    assert vdb.conclusies(conn, "evohome", 9, 1)["gem_vocht"] is None
+
+
 def test_lang_warme_zones_signaal():
     conn = _verbind()
     # kamer A: al dagen warm (23-24), geen regel -> moet getriggerd worden
@@ -139,6 +158,7 @@ def test_migratie_voegt_online_kolom_toe_aan_oude_db():
     conn = vdb.verbind(pad)
     kolommen = [r[1] for r in conn.execute("PRAGMA table_info(sample)").fetchall()]
     assert "online" in kolommen
+    assert "humidity" in kolommen          # ook de later toegevoegde vocht-kolom
     vdb.registreer_zone(conn, "tado", 1, "H", 5, "Z")
     vdb.bewaar_sample(conn, "tado", 1, 5, inside=20.0, setpoint=20, power="ON",
                       heating_pct=0.0, overlay_type=None, online=True)

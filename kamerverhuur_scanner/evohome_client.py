@@ -61,6 +61,7 @@ def verwerk_zone(temperature, target, mode, active_faults) -> dict:
 
     return {
         "inside": temperature,
+        "humidity": None,             # evohome/Honeywell geeft geen luchtvochtigheid per zone
         "setpoint": target,
         "power": "ON" if target is not None else None,
         "heating_pct": None,          # evohome geeft geen stookvermogen per zone
@@ -142,7 +143,8 @@ async def _ronde_async(config, conn) -> int:
                         vdb.bewaar_sample(conn, PROVIDER, loc.id, z.id,
                                           inside=v["inside"], setpoint=v["setpoint"],
                                           power=v["power"], heating_pct=v["heating_pct"],
-                                          overlay_type=v["overlay_type"], online=v["online"])
+                                          overlay_type=v["overlay_type"], online=v["online"],
+                                          humidity=v.get("humidity"))
                         aantal += 1
                         zc = vdb.zone(conn, PROVIDER, loc.id, z.id)
                         nu = datetime.now(timezone.utc)

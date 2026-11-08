@@ -47,6 +47,7 @@ def verwerk_state(state: dict) -> dict:
     temp = setting.get("temperature") or {}
     sensor = state.get("sensorDataPoints") or {}
     binnen = sensor.get("insideTemperature") or {}
+    vocht = sensor.get("humidity") or {}
     activity = state.get("activityDataPoints") or {}
     verwarmt = activity.get("heatingPower") or {}
     overlay = state.get("overlay")
@@ -57,6 +58,7 @@ def verwerk_state(state: dict) -> dict:
     online = None if link_state is None else (link_state == "ONLINE")
     return {
         "inside": binnen.get("celsius"),
+        "humidity": vocht.get("percentage"),  # luchtvochtigheid %, None als de knop 'm niet meet
         "setpoint": temp.get("celsius"),
         "power": setting.get("power"),
         "heating_pct": verwarmt.get("percentage"),

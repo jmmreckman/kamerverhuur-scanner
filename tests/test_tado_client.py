@@ -10,14 +10,22 @@ from kamerverhuur_scanner import tado_client as tc
 def test_verwerk_state_handmatig():
     state = {
         "setting": {"type": "HEATING", "power": "ON", "temperature": {"celsius": 24.0}},
-        "sensorDataPoints": {"insideTemperature": {"celsius": 24.97}},
+        "sensorDataPoints": {"insideTemperature": {"celsius": 24.97},
+                             "humidity": {"type": "PERCENTAGE", "percentage": 55.0}},
         "activityDataPoints": {"heatingPower": {"percentage": 30.0}},
         "overlay": {"termination": {"type": "TIMER", "remainingTimeInSeconds": 120}},
         "link": {"state": "ONLINE"},
     }
     r = tc.verwerk_state(state)
-    assert r == {"inside": 24.97, "setpoint": 24.0, "power": "ON",
+    assert r == {"inside": 24.97, "humidity": 55.0, "setpoint": 24.0, "power": "ON",
                  "heating_pct": 30.0, "overlay_type": "TIMER", "online": True}
+
+
+def test_verwerk_state_zonder_vocht_is_none():
+    # Een knop zonder vochtsensor: humidity-veld ontbreekt -> None (niet crashen).
+    state = {"setting": {"type": "HEATING", "power": "ON", "temperature": {"celsius": 20.0}},
+             "sensorDataPoints": {"insideTemperature": {"celsius": 20.0}}}
+    assert tc.verwerk_state(state)["humidity"] is None
 
 
 def test_verwerk_state_offline_knop():

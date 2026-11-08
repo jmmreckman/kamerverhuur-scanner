@@ -51,6 +51,10 @@
     {{ tegel("Gem. ingesteld", temp(concl.gem_setpoint)) }}
     {{ tegel("Hoogst ingesteld", temp(concl.max_setpoint)) }}
     {{ tegel("Deel ≥ %.0f°"|format(concl.drempel), concl.aandeel_boven ~ '%') }}
+    {% if concl.gem_vocht is not none %}
+    {{ tegel("Gem. vocht", concl.gem_vocht ~ '%') }}
+    {{ tegel("Hoogste vocht", concl.max_vocht ~ '%') }}
+    {% endif %}
   </div>
   <p class="muted" style="margin:0.6rem 0 0; font-size:0.85rem">Periode: {{ concl.van[:16]|replace('T',' ') }} t/m {{ concl.tot[:16]|replace('T',' ') }}</p>
   {% else %}
@@ -81,6 +85,36 @@
   </div>
 </div>
 {% endif %}
+
+<div class="card">
+  <h2>Luchtvochtigheid</h2>
+  {% if vocht_spark.heeft %}
+  <svg viewBox="0 0 {{ vocht_spark.breedte }} {{ vocht_spark.hoogte }}" style="width:100%; height:auto; max-width:{{ vocht_spark.breedte }}px" role="img" aria-label="Luchtvochtigheidsverloop">
+    {# y-as labels (%) #}
+    <text x="2" y="{{ vocht_spark.marge }}" font-size="11" fill="currentColor" opacity="0.55">{{ vocht_spark.hi }}%</text>
+    <text x="2" y="{{ vocht_spark.hoogte - vocht_spark.marge + 10 }}" font-size="11" fill="currentColor" opacity="0.55">{{ vocht_spark.lo }}%</text>
+    {# tijd-as #}
+    <line x1="{{ vocht_spark.marge }}" y1="{{ vocht_spark.hoogte - vocht_spark.marge }}" x2="{{ vocht_spark.breedte - vocht_spark.marge }}" y2="{{ vocht_spark.hoogte - vocht_spark.marge }}" stroke="currentColor" opacity="0.15"/>
+    {% for t in vocht_spark.ticks %}
+    <line x1="{{ t.x }}" y1="{{ vocht_spark.hoogte - vocht_spark.marge }}" x2="{{ t.x }}" y2="{{ vocht_spark.hoogte - vocht_spark.marge + 4 }}" stroke="currentColor" opacity="0.3"/>
+    <text x="{{ t.x }}" y="{{ vocht_spark.hoogte - 8 }}" font-size="11" fill="currentColor" opacity="0.6" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
+    <polyline fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" points="{{ vocht_spark.punten }}"/>
+  </svg>
+  <div class="muted" style="display:flex; gap:1.2rem; font-size:0.85rem; flex-wrap:wrap">
+    <span><span style="color:#2563eb">&#9644;</span> relatieve luchtvochtigheid</span>
+    <span style="margin-left:auto">{{ vocht_spark.van[:16]|replace('T',' ') }} &rarr; {{ vocht_spark.tot[:16]|replace('T',' ') }}</span>
+  </div>
+  <p class="muted" style="margin:0.6rem 0 0; font-size:0.8rem">Vuistregel schimmel: langdurig <strong>&gt; ~70%</strong> relatieve
+     luchtvochtigheid (zeker bij koude muren/ramen) geeft condens- en schimmelrisico. Kort piekt het altijd bij douchen/koken;
+     het gaat om de aanhoudend hoge waarden. Handig om te checken bij een schimmelklacht.</p>
+  {% elif z.provider != 'tado' %}
+  <p class="muted">Deze knop ({{ z.provider }}, bv. Honeywell/evohome) levert geen luchtvochtigheid &mdash; alleen temperatuur.
+     Vochtgrafiek is alleen beschikbaar op Tado-knoppen.</p>
+  {% else %}
+  <p class="muted">Nog geen vochtmetingen in dit venster. Tado-knoppen meten vocht mee; zodra de uitlezing gedraaid heeft, vult de grafiek zich.</p>
+  {% endif %}
+</div>
 
 <div class="card">
   <h2>Terugschakel-regel</h2>
@@ -147,12 +181,13 @@
   <h2>Recente metingen</h2>
   <div class="tabel-scroll tabel-responsief">
   <table>
-    <thead><tr><th>Tijd</th><th>Binnen</th><th>Ingesteld</th><th>Stookt</th><th>Stand</th></tr></thead>
+    <thead><tr><th>Tijd</th><th>Binnen</th><th>Vocht</th><th>Ingesteld</th><th>Stookt</th><th>Stand</th></tr></thead>
     <tbody>
     {% for h in hist[:60] %}
     <tr>
       <td data-label="Tijd"><span class="muted">{{ h.ts[:16]|replace('T',' ') }}</span>{% if h.online == 0 %} <span class="muted" style="font-size:0.72rem">offline</span>{% endif %}</td>
       <td data-label="Binnen">{% if h.online == 0 %}<span class="muted">{{ temp(h.inside) }}</span>{% else %}{{ temp(h.inside) }}{% endif %}</td>
+      <td data-label="Vocht">{% if h.humidity is not none %}{{ h.humidity|round|int }}%{% else %}<span class="muted">-</span>{% endif %}</td>
       <td data-label="Ingesteld">{% if h.power == 'OFF' %}<span class="muted">uit</span>{% else %}{{ temp(h.setpoint) }}{% endif %}</td>
       <td data-label="Stookt">{% if h.heating_pct is not none %}{{ h.heating_pct|round|int }}%{% else %}-{% endif %}</td>
       <td data-label="Stand">{{ h.overlay_type or 'schema' }}</td>

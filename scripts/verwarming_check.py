@@ -118,7 +118,7 @@ def _draai_een_ronde(config: Config, client: TadoClient) -> None:
             vdb.bewaar_sample(conn, PROVIDER, home_id, zone_id,
                               inside=v["inside"], setpoint=v["setpoint"], power=v["power"],
                               heating_pct=v["heating_pct"], overlay_type=v["overlay_type"],
-                              online=v["online"])
+                              online=v["online"], humidity=v.get("humidity"))
             zc = vdb.zone(conn, PROVIDER, home_id, zone_id)
             nu = datetime.now(timezone.utc)
             try:

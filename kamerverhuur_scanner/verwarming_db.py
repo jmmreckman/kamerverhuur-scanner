@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS sample (
     zone_id INTEGER NOT NULL,
     ts TEXT NOT NULL,
     inside REAL,
+    humidity REAL,
     setpoint REAL,
     power TEXT,
     heating_pct REAL,
@@ -130,6 +131,9 @@ def init_db(conn: sqlite3.Connection) -> None:
     kolommen = [r[1] for r in conn.execute("PRAGMA table_info(sample)").fetchall()]
     if "online" not in kolommen:
         conn.execute("ALTER TABLE sample ADD COLUMN online INTEGER")
+    # Migratie: 'humidity' (luchtvochtigheid %) later toegevoegd.
+    if "humidity" not in kolommen:
+        conn.execute("ALTER TABLE sample ADD COLUMN humidity REAL")
     # Migratie: setback-kolommen later toegevoegd aan een bestaande zone_config.
     zc_kol = [r[1] for r in conn.execute("PRAGMA table_info(zone_config)").fetchall()]
     for kol, definitie in (("setback_actief", "INTEGER NOT NULL DEFAULT 0"),
@@ -210,13 +214,13 @@ def lijst_zones(conn, pand_slug=None, inclusief_ongekoppeld=False):
 # --- metingen ---------------------------------------------------------------
 
 def bewaar_sample(conn, provider, home_id, zone_id, *, inside, setpoint, power,
-                  heating_pct, overlay_type, online=None, ts=None) -> None:
-    # online: True->1, False->0, None->NULL (onbekend).
+                  heating_pct, overlay_type, online=None, humidity=None, ts=None) -> None:
+    # online: True->1, False->0, None->NULL (onbekend). humidity: % of None.
     online_val = None if online is None else (1 if online else 0)
     conn.execute(
-        "INSERT INTO sample (provider, home_id, zone_id, ts, inside, setpoint, power,"
-        " heating_pct, overlay_type, online) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (provider, str(home_id), int(zone_id), ts or _nu(), inside, setpoint, power,
+        "INSERT INTO sample (provider, home_id, zone_id, ts, inside, humidity, setpoint, power,"
+        " heating_pct, overlay_type, online) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (provider, str(home_id), int(zone_id), ts or _nu(), inside, humidity, setpoint, power,
          heating_pct, overlay_type, online_val),
     )
     conn.commit()
@@ -257,6 +261,7 @@ def conclusies(conn, provider, home_id, zone_id, sinds=None, drempel=22.0):
     row = conn.execute(
         f"SELECT COUNT(*) n, AVG(inside) gem_binnen, AVG(setpoint) gem_setpoint,"
         f" MAX(setpoint) max_setpoint, MIN(ts) van, MAX(ts) tot,"
+        f" AVG(humidity) gem_vocht, MAX(humidity) max_vocht,"
         f" SUM(CASE WHEN setpoint>=? THEN 1 ELSE 0 END) boven"
         f" FROM sample WHERE {waar}",
         [drempel] + args,
@@ -267,6 +272,8 @@ def conclusies(conn, provider, home_id, zone_id, sinds=None, drempel=22.0):
         "gem_binnen": round(row["gem_binnen"], 1) if row["gem_binnen"] is not None else None,
         "gem_setpoint": round(row["gem_setpoint"], 1) if row["gem_setpoint"] is not None else None,
         "max_setpoint": row["max_setpoint"],
+        "gem_vocht": round(row["gem_vocht"]) if row["gem_vocht"] is not None else None,
+        "max_vocht": round(row["max_vocht"]) if row["max_vocht"] is not None else None,
         "drempel": drempel,
         "aandeel_boven": round(100.0 * row["boven"] / n) if n else 0,
         "van": row["van"],
