@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Contractsjabloon aanpassen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Contractsjabloon aanpassen</h1>
+</div>
+
+<div class="warning-box">
+  <p>Dit zijn de artikelen die voor <strong>elk pand</strong> gebruikt worden om een concept-huurcontract te
+     genereren - typ en maak op zoals in een gewone tekstverwerker (geen HTML-code). De vaste opmaak
+     eromheen (kop met partijengegevens, handtekeningenblok) staat hier niet bij en kun je niet aanpassen.</p>
+  <p>Je ziet tussen de tekst nog wel stukjes zoals <code>{{ '{{ huurprijs }}' }}</code> en
+     <code>{{ '{% if ... %}' }}</code> staan - dat zijn de plekken waar automatisch gegevens worden ingevuld,
+     of waar een stuk tekst automatisch aan/uit gaat (bijvoorbeeld alleen getoond wordt als er een
+     borgsteller is). Laat die stukjes altijd staan zoals ze zijn - de rest van de tekst kun je vrij
+     aanpassen. Beschikbare variabelen: {% for v in variabelen %}<code>{{ '{{ ' + v + ' }}' }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+  <p>Sla altijd eerst een <strong>test-contract</strong> op (Contracten &gt; Nieuw huurcontract) om te
+     controleren of je wijziging er goed uitziet, vóórdat je 'm echt naar een huurder stuurt.</p>
+</div>
+
+{% if aangepast %}
+<div class="card">
+  <p class="muted">Er staat momenteel <strong>aangepaste</strong> tekst actief (niet de standaardtekst).</p>
+  <form method="post" action="{{ url_for('contractsjabloon_terugzetten') }}"
+        onsubmit="return confirm('Weet je zeker dat je terug wilt naar de standaardtekst? Je aanpassingen gaan dan verloren.');">
+    <button class="btn btn-secondary" type="submit">Terugzetten naar standaardtekst</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" id="sjabloon-form">
+    <div class="editor-toolbar">
+      <button type="button" class="btn btn-secondary" data-cmd="formatBlock" data-arg="h2" title="Kop (bv. 'Artikel 1 - ...')">Kop</button>
+      <button type="button" class="btn btn-secondary" data-cmd="formatBlock" data-arg="p" title="Gewone alinea">Alinea</button>
+      <button type="button" class="btn btn-secondary" data-cmd="bold" title="Vet"><strong>V</strong></button>
+      <button type="button" class="btn btn-secondary" data-cmd="italic" title="Cursief"><em>I</em></button>
+      <button type="button" class="btn btn-secondary" data-cmd="insertUnorderedList" title="Opsomming">Lijst</button>
+      <button type="button" class="btn btn-secondary" data-cmd="undo" title="Ongedaan maken">Ongedaan maken</button>
+      <button type="button" class="btn btn-secondary" id="bron-knop" style="margin-left:auto"
+              title="Toon/bewerk de onderliggende HTML - handig als een titel of stuk tekst hardnekkig te groot blijft">HTML-bron</button>
+    </div>
+    <div id="artikelen-editor" class="editor-oppervlak" contenteditable="true">{{ sjabloon|safe }}</div>
+    <textarea id="bron-textarea" style="display:none; width:100%; min-height:22rem; font-family:monospace; font-size:0.85rem"></textarea>
+    <p id="bron-uitleg" class="muted" style="display:none; margin-top:0.4rem">Dit is de onderliggende HTML. Titels horen
+       <code>&lt;h2&gt;...&lt;/h2&gt;</code> te zijn; is er ergens een <code>&lt;h1&gt;</code> of een stuk met
+       <code>style="font-size:..."</code>, dan kun je dat hier weghalen. Bij opslaan wordt zulke opmaak sowieso opgeschoond.</p>
+    <textarea name="sjabloon" id="artikelen-textarea" style="display:none"></textarea>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Opslaan</button>
+      <a class="btn btn-secondary" href="{{ url_for('start') }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    var editor = document.getElementById("artikelen-editor");
+    var bron = document.getElementById("bron-textarea");
+    var bronUitleg = document.getElementById("bron-uitleg");
+    var bronKnop = document.getElementById("bron-knop");
+    var textarea = document.getElementById("artikelen-textarea");
+    var form = document.getElementById("sjabloon-form");
+    var toolbar = document.querySelector(".editor-toolbar");
+    var bronActief = false;
+
+    toolbar.addEventListener("click", function (event) {
+      var knop = event.target.closest("button[data-cmd]");
+      if (!knop) return;
+      event.preventDefault();
+      editor.focus();
+      document.execCommand(knop.dataset.cmd, false, knop.dataset.arg || null);
+    });
+
+    // Houd de (verborgen) textarea doorlopend gelijk aan de actieve weergave,
+    // zodat het formulier altijd verstuurd wordt - een verborgen 'required'-veld
+    // dat pas bij submit gevuld wordt, blokkeerde de opslag stil (browser-
+    // validatie loopt vóór het submit-event).
+    function synchroniseer() {
+      textarea.value = bronActief ? bron.value : editor.innerHTML;
+    }
+    synchroniseer();
+    editor.addEventListener("input", synchroniseer);
+    bron.addEventListener("input", synchroniseer);
+
+    // Wisselen tussen de visuele editor en de onderliggende HTML - de escape-hatch
+    // als een titel/stuk tekst hardnekkig te groot blijft: in de HTML zie en fix je
+    // het rechtstreeks. De inhoud wordt bij elke wissel overgezet, zodat je niets
+    // kwijtraakt.
+    bronKnop.addEventListener("click", function () {
+      bronActief = !bronActief;
+      if (bronActief) {
+        bron.value = editor.innerHTML;
+        editor.style.display = "none";
+        bron.style.display = "";
+        bronUitleg.style.display = "";
+        bronKnop.textContent = "Visuele editor";
+      } else {
+        editor.innerHTML = bron.value;
+        editor.style.display = "";
+        bron.style.display = "none";
+        bronUitleg.style.display = "none";
+        bronKnop.textContent = "HTML-bron";
+      }
+      synchroniseer();
+    });
+
+    // Meegeplakte opmaak (lettertype/-grootte/kleur uit Word/Docs) er meteen
+    // uithalen, zodat alles in het contractlettertype blijft - koppen (die je
+    // met de 'Kop'-knop maakt) blijven wel groter. Dezelfde opschoning gebeurt
+    // sowieso nog eens bij het opslaan (server-side), dit is puur voor de weergave.
+    editor.addEventListener("paste", function (event) {
+      event.preventDefault();
+      var data = event.clipboardData || window.clipboardData;
+      var html = data.getData("text/html");
+      if (html) {
+        html = html
+          .replace(/<style\b[^>]*>[\s\S]*?<\/style>|<meta\b[^>]*>|<!--[\s\S]*?-->/gi, "")
+          .replace(/<\/?(?:span|font)\b[^>]*>/gi, "")
+          .replace(/<h[1-6]\b[^>]*>/gi, "<h2>")
+          .replace(/<\/h[1-6]\s*>/gi, "</h2>")
+          .replace(/\s(?:style|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+        document.execCommand("insertHTML", false, html);
+      } else {
+        document.execCommand("insertText", false, data.getData("text/plain"));
+      }
+      synchroniseer();
+    });
+
+    form.addEventListener("submit", function (event) {
+      synchroniseer();
+      var tekst = bronActief ? bron.value.replace(/<[^>]*>/g, "") : editor.textContent;
+      if (!tekst.trim()) {
+        event.preventDefault();
+        alert("De artikelen mogen niet leeg zijn.");
+      }
+    });
+  })();
+</script>
+{% endblock %}

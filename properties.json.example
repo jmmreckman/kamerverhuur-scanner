@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "mahoniestraat",
+    "naam": "Mahoniestraat 15",
+    "google_sheet_id": "1X3Zs1bFOU-21EEN1zCLoWqVJ-_2OpPVK4ylj7dDcYus",
+    "google_sheet_worksheet": "Mahoniestraat",
+    "history_worksheet": "Historie",
+    "aanmeldingen_worksheet": "Aanmeldingen",
+    "bunq_rekening_iban": "NL81BUNQ2163127125",
+    "hypotheek_rente_per_maand": "850,00",
+    "hypotheek_last_per_maand": "1200,00",
+    "aantal_eigenaren": 1
+  }
+]

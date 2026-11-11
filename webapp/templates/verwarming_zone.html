@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}{{ z.kamer or z.zone_naam }} - Verwarming{% endblock %}
+
+{% macro temp(v) %}{% if v is not none %}{{ "%.1f"|format(v) }}&deg;{% else %}<span class="muted">-</span>{% endif %}{% endmacro %}
+{% macro tegel(label, waarde) %}
+<div style="flex:1 1 120px; min-width:120px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:0.7rem 0.9rem">
+  <div class="muted" style="font-size:0.78rem">{{ label }}</div>
+  <div style="font-size:1.3rem; font-weight:600">{{ waarde|safe }}</div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ z.kamer or z.zone_naam or ('zone ' ~ z.zone_id) }}</h1>
+  <a class="btn btn-secondary" href="{{ url_for('verwarming_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar overzicht</a>
+</div>
+<p class="muted" style="margin-top:-0.5rem">Knop: {{ z.zone_naam or '-' }} &middot; huis: {{ z.home_naam or z.home_id }}</p>
+
+{% if hist and hist[0].online == 0 %}
+<div class="warning-box">
+  <p><strong>Deze knop is offline.</strong> Tado geeft dan nog wel de laatst bekende (bevroren) meting
+     en de ingestelde temperatuur terug, maar die is verouderd - loop de batterij/plaatsing even na.
+     Offline metingen tellen niet mee in de conclusies, en er wordt niet op gestuurd.</p>
+</div>
+{% endif %}
+
+<div class="card" style="padding:0.6rem 0.9rem">
+  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+    <span class="muted" style="font-size:0.85rem">Periode:</span>
+    {% for key, info in bereiken.items() %}
+    <a class="btn btn-xs {{ 'btn' if key == bereik else 'btn-secondary' }}"
+       href="{{ url_for('verwarming_zone', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id, bereik=key) }}">{{ info[1] }}</a>
+    {% endfor %}
+    <span style="margin-left:auto; font-size:0.85rem" class="muted">aanwezigheid:
+      {% set aw = aanwezig.status %}
+      {% if aw == 'thuis' %}<span class="pil status-betaald">thuis</span>
+      {% elif aw == 'afwezig' %}<span class="pil" style="background:var(--border);color:var(--muted)">afwezig</span>
+      {% else %}<span class="pil" style="background:var(--warn-soft);color:var(--warn)">onzeker?</span>{% endif %}
+    </span>
+  </div>
+  <p class="muted" style="margin:0.4rem 0 0; font-size:0.78rem">Aanwezigheid is geschat uit thermostaat-activiteit
+    {% if aanwezig.laatste_interactie %}(laatst actief: {{ aanwezig.laatste_interactie[:16]|replace('T',' ') }}){% else %}(nog geen activiteit gezien){% endif %}. Bold-deursignaal volgt.</p>
+</div>
+
+<div class="card">
+  <h2>Conclusies</h2>
+  {% if concl.aantal %}
+  <div style="display:flex; flex-wrap:wrap; gap:0.6rem">
+    {{ tegel("Metingen", concl.aantal) }}
+    {{ tegel("Gem. binnen", temp(concl.gem_binnen)) }}
+    {{ tegel("Gem. ingesteld", temp(concl.gem_setpoint)) }}
+    {{ tegel("Hoogst ingesteld", temp(concl.max_setpoint)) }}
+    {{ tegel("Deel ≥ %.0f°"|format(concl.drempel), concl.aandeel_boven ~ '%') }}
+    {% if concl.gem_vocht is not none %}
+    {{ tegel("Gem. vocht", concl.gem_vocht ~ '%') }}
+    {{ tegel("Hoogste vocht", concl.max_vocht ~ '%') }}
+    {% endif %}
+  </div>
+  <p class="muted" style="margin:0.6rem 0 0; font-size:0.85rem">Periode: {{ concl.van[:16]|replace('T',' ') }} t/m {{ concl.tot[:16]|replace('T',' ') }}</p>
+  {% else %}
+  <p class="muted">Nog geen metingen. Zodra de uitlezing draait, vullen de cijfers zich vanzelf.</p>
+  {% endif %}
+</div>
+
+{% if spark.heeft %}
+<div class="card">
+  <h2>Verloop</h2>
+  <svg viewBox="0 0 {{ spark.breedte }} {{ spark.hoogte }}" style="width:100%; height:auto; max-width:{{ spark.breedte }}px" role="img" aria-label="Temperatuurverloop">
+    {# y-as labels #}
+    <text x="2" y="{{ spark.marge }}" font-size="11" fill="currentColor" opacity="0.55">{{ spark.hi }}&deg;</text>
+    <text x="2" y="{{ spark.hoogte - spark.marge + 10 }}" font-size="11" fill="currentColor" opacity="0.55">{{ spark.lo }}&deg;</text>
+    {# tijd-as #}
+    <line x1="{{ spark.marge }}" y1="{{ spark.hoogte - spark.marge }}" x2="{{ spark.breedte - spark.marge }}" y2="{{ spark.hoogte - spark.marge }}" stroke="currentColor" opacity="0.15"/>
+    {% for t in spark.ticks %}
+    <line x1="{{ t.x }}" y1="{{ spark.hoogte - spark.marge }}" x2="{{ t.x }}" y2="{{ spark.hoogte - spark.marge + 4 }}" stroke="currentColor" opacity="0.3"/>
+    <text x="{{ t.x }}" y="{{ spark.hoogte - 8 }}" font-size="11" fill="currentColor" opacity="0.6" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
+    <polyline fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" points="{{ spark.setpoint }}"/>
+    <polyline fill="none" stroke="var(--ok, #16a34a)" stroke-width="2" stroke-linejoin="round" opacity="0.85" points="{{ spark.inside }}"/>
+  </svg>
+  <div class="muted" style="display:flex; gap:1.2rem; font-size:0.85rem; flex-wrap:wrap">
+    <span><span style="color:var(--primary)">&#9644;</span> ingesteld</span>
+    <span><span style="color:var(--ok,#16a34a)">&#9644;</span> gemeten binnen</span>
+    <span style="margin-left:auto">{{ spark.van[:16]|replace('T',' ') }} &rarr; {{ spark.tot[:16]|replace('T',' ') }}</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Luchtvochtigheid</h2>
+  {% if vocht_spark.heeft %}
+  <svg viewBox="0 0 {{ vocht_spark.breedte }} {{ vocht_spark.hoogte }}" style="width:100%; height:auto; max-width:{{ vocht_spark.breedte }}px" role="img" aria-label="Luchtvochtigheidsverloop">
+    {# y-as labels (%) #}
+    <text x="2" y="{{ vocht_spark.marge }}" font-size="11" fill="currentColor" opacity="0.55">{{ vocht_spark.hi }}%</text>
+    <text x="2" y="{{ vocht_spark.hoogte - vocht_spark.marge + 10 }}" font-size="11" fill="currentColor" opacity="0.55">{{ vocht_spark.lo }}%</text>
+    {# tijd-as #}
+    <line x1="{{ vocht_spark.marge }}" y1="{{ vocht_spark.hoogte - vocht_spark.marge }}" x2="{{ vocht_spark.breedte - vocht_spark.marge }}" y2="{{ vocht_spark.hoogte - vocht_spark.marge }}" stroke="currentColor" opacity="0.15"/>
+    {% for t in vocht_spark.ticks %}
+    <line x1="{{ t.x }}" y1="{{ vocht_spark.hoogte - vocht_spark.marge }}" x2="{{ t.x }}" y2="{{ vocht_spark.hoogte - vocht_spark.marge + 4 }}" stroke="currentColor" opacity="0.3"/>
+    <text x="{{ t.x }}" y="{{ vocht_spark.hoogte - 8 }}" font-size="11" fill="currentColor" opacity="0.6" text-anchor="middle">{{ t.label }}</text>
+    {% endfor %}
+    <polyline fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" points="{{ vocht_spark.punten }}"/>
+  </svg>
+  <div class="muted" style="display:flex; gap:1.2rem; font-size:0.85rem; flex-wrap:wrap">
+    <span><span style="color:#2563eb">&#9644;</span> relatieve luchtvochtigheid</span>
+    <span style="margin-left:auto">{{ vocht_spark.van[:16]|replace('T',' ') }} &rarr; {{ vocht_spark.tot[:16]|replace('T',' ') }}</span>
+  </div>
+  <p class="muted" style="margin:0.6rem 0 0; font-size:0.8rem">Vuistregel schimmel: langdurig <strong>&gt; ~70%</strong> relatieve
+     luchtvochtigheid (zeker bij koude muren/ramen) geeft condens- en schimmelrisico. Kort piekt het altijd bij douchen/koken;
+     het gaat om de aanhoudend hoge waarden. Handig om te checken bij een schimmelklacht.</p>
+  {% elif z.provider != 'tado' %}
+  <p class="muted">Deze knop ({{ z.provider }}, bv. Honeywell/evohome) levert geen luchtvochtigheid &mdash; alleen temperatuur.
+     Vochtgrafiek is alleen beschikbaar op Tado-knoppen.</p>
+  {% else %}
+  <p class="muted">Nog geen vochtmetingen in dit venster. Tado-knoppen meten vocht mee; zodra de uitlezing gedraaid heeft, vult de grafiek zich.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Terugschakel-regel</h2>
+  <p class="muted" style="margin-top:0">Vriendelijk afbouwen bij grootverbruik. <strong>Standaard uit</strong> - de knop van de
+     huurder blijft altijd werken; dit corrigeert alleen achteraf. Voorbeeld: vanaf {{ std.max_temp|round|int }}&deg; elke
+     {{ std.interval_min }} min een graad eraf tot {{ std.vloer_temp|round|int }}&deg;, en na {{ std.na_uren }} uur naar {{ std.nacht_temp|round|int }}&deg;.</p>
+  <form method="post" action="{{ url_for('verwarming_regel_opslaan', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id) }}">
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="regel_actief" {{ 'checked' if z.regel_actief }} style="width:auto">
+      Terugschakeling aan voor deze kamer
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-top:0.6rem">
+      <label style="flex:1 1 140px">Plafond (&deg;C)
+        <input type="number" step="0.5" name="max_temp" value="{{ z.max_temp if z.max_temp is not none else std.max_temp }}">
+      </label>
+      <label style="flex:1 1 140px">Graden per stap
+        <input type="number" step="0.5" name="stap" value="{{ z.stap if z.stap is not none else std.stap }}">
+      </label>
+      <label style="flex:1 1 140px">Interval (min)
+        <input type="number" step="1" name="interval_min" value="{{ z.interval_min if z.interval_min is not none else std.interval_min }}">
+      </label>
+      <label style="flex:1 1 140px">Vloer (&deg;C)
+        <input type="number" step="0.5" name="vloer_temp" value="{{ z.vloer_temp if z.vloer_temp is not none else std.vloer_temp }}">
+      </label>
+      <label style="flex:1 1 140px">Na ... uur hoog
+        <input type="number" step="1" name="na_uren" value="{{ z.na_uren if z.na_uren is not none else std.na_uren }}">
+      </label>
+      <label style="flex:1 1 140px">Nachttemp (&deg;C)
+        <input type="number" step="0.5" name="nacht_temp" value="{{ z.nacht_temp if z.nacht_temp is not none else std.nacht_temp }}">
+      </label>
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Regel opslaan</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Afwezigheid-setback</h2>
+  <p class="muted" style="margin-top:0">Zachte probe bij vermoedelijke afwezigheid. <strong>Standaard uit.</strong>
+     Als deze kamer <strong>{{ setback_std.na_dagen|round|int }} dagen</strong> geen thermostaat-activiteit had én nog op/boven
+     {{ setback_std.drempel|round|int }}&deg; staat, wordt 'ie één keer zacht teruggezet naar {{ setback_std.setback_temp|round|int }}&deg;.
+     Draait de huurder 'm terug &rarr; dat telt meteen als "thuis" en de setback wordt losgelaten. Mild en zelf-corrigerend.</p>
+  <form method="post" action="{{ url_for('verwarming_setback_opslaan', pand_slug=huidig_pand.slug, provider=z.provider, home_id=z.home_id, zone_id=z.zone_id) }}">
+    <label style="display:flex; align-items:center; gap:0.5rem">
+      <input type="checkbox" name="setback_actief" {{ 'checked' if z.setback_actief }} style="width:auto">
+      Afwezigheid-setback aan voor deze kamer
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-top:0.6rem">
+      <label style="flex:1 1 140px">Na ... dagen stil
+        <input type="number" step="0.5" name="setback_na_dagen" value="{{ z.setback_na_dagen if z.setback_na_dagen is not none else setback_std.na_dagen }}">
+      </label>
+      <label style="flex:1 1 140px">Alleen boven (&deg;C)
+        <input type="number" step="0.5" name="setback_drempel" value="{{ z.setback_drempel if z.setback_drempel is not none else setback_std.drempel }}">
+      </label>
+      <label style="flex:1 1 140px">Terugzetten naar (&deg;C)
+        <input type="number" step="0.5" name="setback_temp" value="{{ z.setback_temp if z.setback_temp is not none else setback_std.setback_temp }}">
+      </label>
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Setback opslaan</button>
+  </form>
+</div>
+
+{% if hist %}
+<div class="card">
+  <h2>Recente metingen</h2>
+  <div class="tabel-scroll tabel-responsief">
+  <table>
+    <thead><tr><th>Tijd</th><th>Binnen</th><th>Vocht</th><th>Ingesteld</th><th>Stookt</th><th>Stand</th></tr></thead>
+    <tbody>
+    {% for h in hist[:60] %}
+    <tr>
+      <td data-label="Tijd"><span class="muted">{{ h.ts[:16]|replace('T',' ') }}</span>{% if h.online == 0 %} <span class="muted" style="font-size:0.72rem">offline</span>{% endif %}</td>
+      <td data-label="Binnen">{% if h.online == 0 %}<span class="muted">{{ temp(h.inside) }}</span>{% else %}{{ temp(h.inside) }}{% endif %}</td>
+      <td data-label="Vocht">{% if h.humidity is not none %}{{ h.humidity|round|int }}%{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td data-label="Ingesteld">{% if h.power == 'OFF' %}<span class="muted">uit</span>{% else %}{{ temp(h.setpoint) }}{% endif %}</td>
+      <td data-label="Stookt">{% if h.heating_pct is not none %}{{ h.heating_pct|round|int }}%{% else %}-{% endif %}</td>
+      <td data-label="Stand">{{ h.overlay_type or 'schema' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

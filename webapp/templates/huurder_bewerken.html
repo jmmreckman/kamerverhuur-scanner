@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Kamer {{ kamer.kamer }} bewerken{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Kamer {{ kamer.kamer }} bewerken</h1>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('huurder_bewerken', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">
+    <label>Kamer
+      <input type="text" name="kamer" value="{{ kamer.kamer }}" required>
+    </label>
+    <label>Naam huurder (leeg = kamer staat leeg)
+      <input type="text" name="naam" value="{{ kamer.naam }}">
+    </label>
+    <label>Mail
+      <input type="email" name="email" value="{{ kamer.email or '' }}" multiple>
+    </label>
+    <label>Telefoonnummer
+      <input type="tel" name="telefoonnummer" value="{{ kamer.telefoonnummer or '' }}">
+    </label>
+    <label>Kale huurprijs per maand (EUR, optioneel)
+      <input type="text" name="kale_huurprijs" value="{{ kamer.kale_huurprijs|eur if kamer.kale_huurprijs is not none else '' }}">
+    </label>
+    <label>Servicekosten per maand (EUR, optioneel)
+      <input type="text" name="servicekosten" value="{{ kamer.servicekosten|eur if kamer.servicekosten is not none else '' }}">
+    </label>
+    <label>Totale huur per maand (EUR) - dit bedrag moet via bunq binnenkomen
+      <input type="text" name="verwacht_bedrag" value="{{ kamer.verwacht_bedrag|eur }}" required>
+    </label>
+    <label>Contract einddatum (of bijv. "onbepaalde tijd")
+      <input type="text" name="contract_einddatum" value="{{ kamer.contract_einddatum or '' }}">
+    </label>
+    <label>Opmerking
+      <input type="text" name="opmerking" value="{{ kamer.opmerking or '' }}">
+    </label>
+    <label>IBAN (optioneel, meest betrouwbare matching)
+      <input type="text" name="iban" value="{{ kamer.iban or '' }}">
+    </label>
+    <label>Zoekwoord (optioneel, gebruikt als er geen IBAN is)
+      <input type="text" name="zoekwoord" value="{{ kamer.zoekwoord or '' }}">
+    </label>
+
+    <h2 style="margin-top:2rem">Gegevens voor het huurcontract</h2>
+    <p class="muted">Optioneel - wordt gebruikt om automatisch een huurcontract voor te vullen (zie
+       Contracten). Wordt ook bijgewerkt zodra je voor deze kamer een contract genereert.</p>
+    <label>Geboortedatum
+      <input type="text" name="geboortedatum" value="{{ kamer.geboortedatum or '' }}" placeholder="dd-mm-jjjj">
+    </label>
+    <label>Geboorteplaats / land
+      <input type="text" name="geboorteplaats" value="{{ kamer.geboorteplaats or '' }}" placeholder="bv. Tatabánya, Hongarije">
+    </label>
+    <label>Studentnummer
+      <input type="text" name="studentnummer" value="{{ kamer.studentnummer or '' }}">
+    </label>
+    <label>Studierichting
+      <input type="text" name="studierichting" value="{{ kamer.studierichting or '' }}">
+    </label>
+    <label>Naam borgsteller
+      <input type="text" name="borgsteller_naam" value="{{ kamer.borgsteller_naam or '' }}">
+    </label>
+    <label>Relatie borgsteller tot huurder
+      <input type="text" name="borgsteller_relatie" value="{{ kamer.borgsteller_relatie or '' }}" placeholder="bv. Vader">
+    </label>
+    <label>Contract startdatum (bv. 01-07-2026 of 1 juli 2026) - wordt ook gebruikt om te
+      bepalen vanaf welke maand "Betaalgeschiedenis aanvullen" voor deze kamer terugzoekt
+      <input type="text" name="contract_startdatum" value="{{ kamer.contract_startdatum or '' }}" placeholder="dd-mm-jjjj">
+    </label>
+    <label>Waarborgsom (EUR, optioneel) - wordt in de instapmaand bovenop de huur verwacht,
+      zodat die maand niet als "te veel ontvangen" wordt gezien
+      <input type="text" name="borg_bedrag" value="{{ kamer.borg_bedrag|eur if kamer.borg_bedrag is not none else '' }}">
+    </label>
+
+    <button class="btn" type="submit">Opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+  </form>
+</div>
+{% endblock %}

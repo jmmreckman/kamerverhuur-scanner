@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ oud.naam }} - Oude huurders{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ oud.naam }} <span class="pil pil-neutral">voormalig</span></h1>
+</div>
+
+<p style="margin: -0.75rem 0 1.5rem">
+  <a class="btn btn-secondary" href="{{ url_for('oude_huurders', pand_slug=huidig_pand.slug) }}">Terug naar Oude huurders</a>
+</p>
+
+<div class="card">
+  <h2>Gegevens</h2>
+  <p><strong>Kamer:</strong> {{ oud.kamer }}</p>
+  <p><strong>Mail:</strong> {% if oud.email %}<a href="mailto:{{ oud.email }}">{{ oud.email }}</a>{% else %}-{% endif %}</p>
+  <p><strong>Telefoonnummer:</strong> {% if oud.telefoonnummer %}<a href="tel:{{ oud.telefoonnummer }}">{{ oud.telefoonnummer }}</a>{% else %}-{% endif %}</p>
+  <p><strong>Contract einddatum:</strong> {{ oud.contract_einddatum or "-" }}</p>
+  <p><strong>Vertrokken op:</strong> {{ oud.vertrokken_op.strftime("%d-%m-%Y") }}</p>
+</div>
+
+<div class="card">
+  <h2>Betaalgeschiedenis</h2>
+  {% if geschiedenis %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Maand</th><th>Verwacht</th><th>Ontvangen</th><th>Status</th><th>Betaald op</th></tr>
+    {% for regel in geschiedenis %}
+    <tr>
+      <td>{{ regel.maand|maandnaam }}</td>
+      <td>{{ regel.verwacht_bedrag|eur }}</td>
+      <td>{{ regel.ontvangen_bedrag|eur }}</td>
+      <td><span class="pil {{ regel.status.value|status_klasse }}">{{ regel.status.value }}</span></td>
+      <td>{{ regel.betaaldatum.strftime("%d-%m-%Y") if regel.betaaldatum else "-" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Geen betaalgeschiedenis gevonden voor deze huurder.</p>
+  {% endif %}
+</div>
+{% endblock %}

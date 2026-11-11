@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Openstaande acties{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Openstaande acties</h1>
+  <p class="muted">Concepten die op jouw akkoord wachten voordat ze de deur uit gaan. Niets wordt automatisch verstuurd.</p>
+</div>
+
+<div class="card">
+  {% if rijen %}
+    {% for r in rijen %}
+    <div class="item-box">
+      <p style="margin:0 0 .3rem 0">
+        <span class="pil pil-neutral">{% if r.actie.type == 'inkomend-ongekoppeld' %}Nog koppelen{% elif r.actie.type == 'concept-vakman' %}Naar klusjesman{% else %}Naar huurder{% endif %}</span>
+        <strong>{% if r.actie.type == 'inkomend-ongekoppeld' %}{{ r.actie.concept_onderwerp or 'Binnengekomen mail' }}{% elif r.actie.type == 'concept-vakman' %}{{ r.actie.ontvanger or 'klusjesman' }}{% else %}{{ r.contact_naam or r.actie.ontvanger or 'Onbekende huurder' }}{% endif %}</strong>
+        <span class="muted">&middot; {{ r.pand_naam }} &middot; {{ (r.actie.aangemaakt or '')[:10] }}</span>
+        {% if not r.actie.ontvanger and r.actie.type != 'inkomend-ongekoppeld' %}<span class="pil pil-neutral">geen e-mailadres</span>{% endif %}
+      </p>
+      {% if r.actie.concept_onderwerp and r.actie.type != 'inkomend-ongekoppeld' %}<p style="margin:.1rem 0"><strong>{{ r.actie.concept_onderwerp }}</strong></p>{% endif %}
+      <p class="muted" style="margin:.2rem 0">{{ r.actie.concept_body|truncate(160) }}</p>
+      <div class="item-box-acties">
+        <a class="btn btn-secondary btn-xs" href="{{ url_for('actie_detail', actie_id=r.actie.id) }}">{% if r.actie.type == 'inkomend-ongekoppeld' %}Bekijken{% else %}Bekijken &amp; versturen{% endif %}</a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <p class="muted">Geen openstaande acties. Concepten die je op een communicatie- of onderhoudspagina in de wachtrij zet, verschijnen hier.</p>
+  {% endif %}
+</div>
+{% endblock %}

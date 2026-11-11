@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Ingeplande bezichtigingen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Ingeplande bezichtigingen</h1>
+  <p class="muted">Zegt iemand af? Vink diegene aan en klik op "Verwijderen" - dat tijdslot komt dan weer vrij. Ga
+     daarna terug naar Aanmeldingen en nodig via "Bezichtigers toevoegen aan bestaande lijst" iemand anders uit voor
+     datzelfde tijdstip (pas de begintijd in het formulier aan naar het vrijgekomen tijdslot).</p>
+</div>
+
+<div class="card">
+  {% if rijen %}
+  <form method="post" action="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}">
+    <div class="tabel-scroll">
+    <table>
+      <tr>
+        <th>Kies</th><th>Datum</th><th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th>
+        <th>Bel nummer</th><th>Email</th>
+      </tr>
+      {% for rijnummer, r in rijen %}
+      <tr>
+        <td><input type="checkbox" name="rijnummers" value="{{ rijnummer }}" style="width:auto"></td>
+        <td>{{ r[0] }}</td>
+        <td>{{ r[1] }} - {{ r[2] }}</td>
+        <td>{{ r[4] }}</td>
+        <td>{{ r[3] }}</td>
+        <td>{{ r[7] }}</td>
+        <td>{{ r[8] }}</td>
+        <td>{{ r[5] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <p class="muted" style="margin-top:0.75rem">Kandidaat gekozen? Vink diegene aan en klik op "Documenten
+       verzoeken" om een mail te sturen met een link om ID/paspoort en bewijs van inkomen/garantsteller aan
+       te leveren.</p>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+      <button class="btn" type="submit" formaction="{{ url_for('documentverzoek_voorbeeld', pand_slug=huidig_pand.slug) }}">Documenten verzoeken</button>
+      <button class="btn btn-secondary" type="submit"
+              formaction="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}"
+              onclick="return confirm('Aangevinkte bezichtiging(en) verwijderen? Dat tijdslot komt dan weer vrij.')">Verwijderen</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar aanmeldingen</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted">Nog geen bezichtigingen ingepland.</p>
+  <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar aanmeldingen</a>
+  {% endif %}
+</div>
+{% endblock %}

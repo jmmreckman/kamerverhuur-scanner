@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Knoppen koppelen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Knoppen aan kamers koppelen</h1>
+  <a class="btn btn-secondary" href="{{ url_for('verwarming_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar overzicht</a>
+</div>
+
+<div class="card">
+  <p class="muted" style="margin-top:0">Vink aan welke Tado-knoppen bij <strong>{{ huidig_pand.naam }}</strong> horen en
+     kies per knop de kamer. Knoppen die je niet aanvinkt blijven (of worden) ongekoppeld.
+     De lijst wordt automatisch gevuld zodra de uitlezing draait.</p>
+
+  {% if zones %}
+  <form method="post">
+    <div class="tabel-scroll tabel-responsief">
+    <table>
+      <thead><tr><th>Bij dit pand</th><th>Knop (zone)</th><th>Huis (Tado)</th><th>Kamer</th></tr></thead>
+      <tbody>
+      {% for z in zones %}
+      {% set key = z.provider ~ '|' ~ z.home_id ~ '|' ~ z.zone_id %}
+      <tr>
+        <td data-label="Bij dit pand">
+          <input type="checkbox" name="pand__{{ key }}" {{ 'checked' if z.pand_slug == huidig_pand.slug }} style="width:auto">
+        </td>
+        <td data-label="Knop">{{ z.zone_naam or ('zone ' ~ z.zone_id) }}</td>
+        <td data-label="Huis"><span class="muted">{{ z.home_naam or z.home_id }}</span></td>
+        <td data-label="Kamer">
+          {% if kamers %}
+          <input list="kamerlijst" name="kamer__{{ key }}" value="{{ z.kamer or '' }}" placeholder="kies of typ een kamer">
+          {% else %}
+          <input type="text" name="kamer__{{ key }}" value="{{ z.kamer or '' }}" placeholder="kamernaam">
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if kamers %}
+    <datalist id="kamerlijst">{% for k in kamers %}<option value="{{ k }}">{% endfor %}</datalist>
+    {% endif %}
+    <button class="btn" type="submit">Koppeling opslaan</button>
+  </form>
+  {% else %}
+  <p>Er zijn nog geen uitgelezen knoppen. Zodra de verwarming-check-service minstens één
+     keer heeft gedraaid (en Tado gekoppeld is), verschijnen ze hier.</p>
+  {% endif %}
+</div>
+{% endblock %}

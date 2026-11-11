@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Onderhoud{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Onderhoud</h1>
+  <p class="muted">Alle onderhoudsklussen over je panden, nieuwste bovenaan.</p>
+</div>
+<p style="margin:-0.75rem 0 1.5rem">
+  <a class="btn btn-secondary" href="{{ url_for('vakmannen_beheer') }}">Klusjesmannen beheren</a>
+</p>
+
+{# --- Nieuw ticket -------------------------------------------------------- #}
+<div class="card">
+  <h2>Nieuw ticket</h2>
+  <form method="post" action="{{ url_for('onderhoud_nieuw') }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>Pand
+        <select name="pand" id="nieuw-pand" required>
+          <option value="">Kies een pand...</option>
+          {% for p in panden %}<option value="{{ p.slug }}">{{ p.naam }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Huurder (optioneel)
+        <select name="kamer" id="nieuw-huurder">
+          <option value="">(geen specifieke huurder, pandbreed)</option>
+        </select>
+      </label>
+      <label>Titel <input type="text" name="titel" placeholder="bv. Lekkage badkamer" required></label>
+    </span>
+    <label>Omschrijving (optioneel) <textarea name="omschrijving" rows="3" style="width:100%;box-sizing:border-box"></textarea></label>
+    <div style="margin-top:.6rem"><button class="btn" type="submit">Ticket aanmaken</button></div>
+  </form>
+  <p class="muted" style="margin-top:.5rem">Kies een pand, dan kun je er direct een huurder bij kiezen.
+     Laat je de huurder leeg, dan is het een pandbreed ticket.</p>
+  <script>
+  (function () {
+    var pandSel = document.getElementById('nieuw-pand');
+    var huurderSel = document.getElementById('nieuw-huurder');
+    if (!pandSel || !huurderSel) return;
+    pandSel.addEventListener('change', function () {
+      huurderSel.innerHTML = '<option value="">(geen specifieke huurder, pandbreed)</option>';
+      if (!pandSel.value) return;
+      fetch('{{ url_for("onderhoud_kamers") }}?pand=' + encodeURIComponent(pandSel.value))
+        .then(function (r) { return r.json(); })
+        .then(function (rows) {
+          rows.forEach(function (k) {
+            var o = document.createElement('option');
+            o.value = k.kamer;
+            o.textContent = k.kamer + ' - ' + k.naam;
+            huurderSel.appendChild(o);
+          });
+        })
+        .catch(function () {});
+    });
+  })();
+  </script>
+</div>
+
+{# --- Filters ------------------------------------------------------------- #}
+<div class="card">
+  <form method="get" action="{{ url_for('onderhoud_overzicht') }}">
+    <span style="display:inline-flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <label>Pand
+        <select name="pand" onchange="this.form.submit()">
+          <option value="">Alle panden</option>
+          {% for p in panden %}<option value="{{ p.slug }}" {{ 'selected' if pand_filter == p.slug }}>{{ p.naam }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Status
+        <select name="status" onchange="this.form.submit()">
+          <option value="">Alle openstaande</option>
+          {% for s in statussen %}<option value="{{ s }}" {{ 'selected' if status_filter == s }}>{{ status_labels[s] }}</option>{% endfor %}
+        </select>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:.3rem">
+        <input type="checkbox" name="afgerond" value="1" {{ 'checked' if toon_afgerond }} onchange="this.form.submit()"> ook afgeronde tonen
+      </label>
+    </span>
+  </form>
+</div>
+
+{# --- Lijst --------------------------------------------------------------- #}
+<div class="card">
+  {% if rijen %}
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Status</th><th>Titel</th><th>Pand</th><th>Huurder</th><th>Laatste update</th></tr>
+    {% for r in rijen %}
+    <tr>
+      <td>
+        {% if r.klus.status == 'afgerond' %}<span class="pil status-betaald">{{ status_labels[r.klus.status] }}</span>
+        {% else %}<span class="pil pil-neutral">{{ status_labels[r.klus.status] }}</span>{% endif %}
+      </td>
+      <td><a href="{{ url_for('onderhoud_detail', klus_id=r.klus.id) }}">{{ r.klus.titel }}</a></td>
+      <td>{{ r.pand_naam }}{% if r.klus.kamer %} &middot; {{ r.klus.kamer }}{% endif %}</td>
+      <td>{{ r.contact_naam or '-' }}</td>
+      <td class="muted">{{ (r.klus.laatste_update or '')[:10] }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Geen onderhoudsklussen gevonden{% if not toon_afgerond and not status_filter %} (er staat niets open){% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}

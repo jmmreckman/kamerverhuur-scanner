@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Link voor nieuwe huurder - kamer {{ kamer }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Link aangemaakt</h1>
+  <p class="muted">Kamer {{ kamer }} &middot; {{ huidig_pand.naam }}</p>
+</div>
+
+<div class="card">
+  <p>Deel deze link met de nieuwe huurder. Zij vult daarop <strong>zelf</strong> haar gegevens
+     (naam, e-mail, telefoon, &hellip;) in &eacute;n uploadt haar documenten; daarna wordt automatisch
+     het concept-huurcontract opgesteld.</p>
+  <label>Link voor de huurder
+    <input type="text" id="opvraag-link" readonly value="{{ upload_url }}"
+           onclick="this.select()" style="width:100%;box-sizing:border-box">
+  </label>
+  <div style="margin-top:.7rem; display:flex; gap:.6rem; flex-wrap:wrap">
+    <button class="btn" type="button" onclick="
+      var l = document.getElementById('opvraag-link'); l.select();
+      if (navigator.clipboard) { navigator.clipboard.writeText(l.value); } else { document.execCommand('copy'); }
+      this.textContent = 'Gekopieerd!';
+    ">Kopieer link</button>
+    <a class="btn btn-secondary" href="https://wa.me/?text={{ upload_url | urlencode }}"
+       target="_blank" rel="noopener">Delen via WhatsApp</a>
+  </div>
+</div>
+
+{% if email %}
+<div class="card">
+  <h2>Of mail de link naar de huurder</h2>
+  <p class="muted">Je gaf een e-mailadres op, dus je kunt de link ook rechtstreeks mailen naar
+     <strong>{{ email }}</strong>.</p>
+  <form method="post" action="{{ url_for('documentverzoek_versturen', pand_slug=huidig_pand.slug, sleutel=sleutel) }}">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}">
+    </label>
+    <label>Bericht
+      <textarea name="tekst" rows="8" style="width:100%;box-sizing:border-box">{{ tekst }}</textarea>
+    </label>
+    <div style="margin-top:.8rem">
+      <button class="btn btn-secondary" type="submit">Mail naar {{ email }}</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <a class="btn btn-secondary" href="{{ annuleren_url }}">Terug</a>
+</div>
+{% endblock %}
