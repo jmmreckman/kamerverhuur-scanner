@@ -3764,13 +3764,35 @@ def create_app(config: Config | None = None) -> Flask:
             contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
         except FileNotFoundError:
             abort(404)
-        if not contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir).get("email"):
-            flash("Geen e-mailadres bij dit contract bekend - kan geen nieuw ondertekenverzoek starten.")
+        # De metadata náást een (ouder) getekend contract kan leeg zijn; haal de
+        # gegevens daarom terug via _bevestiging_metadata (oorspronkelijke concept-
+        # metadata + ondertekenronde) en val als laatste terug op de Huurders-sheet.
+        kamers_cache: list | None = None
+
+        def _kamers():
+            nonlocal kamers_cache
+            if kamers_cache is None:
+                kamers_cache = SheetClient(config, g.pand).get_kamers()
+            return kamers_cache
+
+        meta = dict(_bevestiging_metadata(pand_slug, bestandsnaam, _kamers))
+        if not meta.get("email"):
+            tenant = next((k for k in _kamers() if k.naam and
+                           (k.naam == meta.get("huurder_naam") or k.kamer == meta.get("kamer"))), None)
+            if tenant and tenant.email:
+                meta["email"] = tenant.email
+                meta.setdefault("huurder_naam", tenant.naam)
+                meta.setdefault("kamer", tenant.kamer)
+        if not meta.get("email"):
+            flash("Geen e-mailadres van deze huurder bekend - kan geen nieuw ondertekenverzoek starten.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
         try:
-            nieuw = contracts.hergebruik_als_nieuw_concept(pand_slug, g.pand, bestandsnaam, config.state_dir)
+            nieuw = contracts.hergebruik_als_nieuw_concept(
+                pand_slug, g.pand, bestandsnaam, config.state_dir,
+                extra_metadata={k: v for k, v in meta.items() if v},
+            )
         except FileNotFoundError:
-            flash("Het oorspronkelijke concept is niet meer beschikbaar; maak een nieuw huurcontract aan.")
+            flash("Het oorspronkelijke contract is niet meer beschikbaar; maak een nieuw huurcontract aan.")
             return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
         flash("Vers concept met dezelfde inhoud aangemaakt - verstuur hieronder het ondertekenverzoek "
               "(ingangsdatum en afspraken blijven gelijk, alleen de tekendatum wordt nieuw).")

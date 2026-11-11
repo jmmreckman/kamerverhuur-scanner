@@ -518,7 +518,40 @@ def _unieke_concept_naam(output_dir: Path, basis_stem: str) -> str:
     return naam
 
 
-def hergebruik_als_nieuw_concept(pand_slug: str, pand: Pand, bron_bestandsnaam: str, state_dir: str = ".") -> str:
+def werk_metadata_bij(pand_slug: str, bestandsnaam: str, updates: dict, state_dir: str = ".") -> None:
+    """Vult de metadata van een contract aan/overschrijft velden (maakt het
+    bestand aan als het nog niet bestond). Alleen niet-lege waarden worden
+    weggeschreven, zodat bestaande gegevens niet per ongeluk gewist worden -
+    gebruikt bij "opnieuw tekenen" om een vers concept te verrijken met gegevens
+    die uit de sheet/ondertekenronde zijn teruggevonden (bv. het e-mailadres)."""
+    metadata = lees_metadata(pand_slug, bestandsnaam, state_dir)
+    metadata.update({k: v for k, v in updates.items() if v})
+    _schrijf_metadata(_output_dir(pand_slug, state_dir), Path(bestandsnaam).name, metadata)
+
+
+def _reset_handtekeningenblok_in_getekend(getekend_html: str, pand: Pand, metadata: dict, state_dir: str) -> tuple[str, bool]:
+    """Zet in een al-getekende contract-HTML het handtekeningenblok terug naar
+    een LEEG blok mét markeringen, zodat het als vers concept opnieuw ondertekend
+    kan worden. De rest van het document (alle afspraken) blijft exact gelijk.
+    In de getekende versie zijn de HANDTEKENINGEN-markeringen weg (zie
+    genereer_getekend_contract()) en staat er een gevulde `<table
+    class="handtekeningen">`; die ene tabel vervangen we door het lege blok uit
+    het sjabloon. Geeft (nieuwe_html, gevonden) terug."""
+    sjabloon = lees_sjabloon(state_dir)
+    _voor, _, s_rest = sjabloon.partition(_HANDTEKENINGEN_START)
+    blok_sjabloon, _, _ = s_rest.partition(_HANDTEKENINGEN_EINDE)
+    leeg_blok = _env.from_string(blok_sjabloon).render(
+        pand=pand, huurder_naam=metadata.get("huurder_naam", ""),
+        borgsteller_naam=metadata.get("borgsteller_naam", ""),
+    )
+    vervanging = _HANDTEKENINGEN_START + leeg_blok + _HANDTEKENINGEN_EINDE
+    nieuw, n = re.subn(r'<table class="handtekeningen">.*?</table>',
+                       lambda _m: vervanging, getekend_html, count=1, flags=re.DOTALL)
+    return nieuw, bool(n)
+
+
+def hergebruik_als_nieuw_concept(pand_slug: str, pand: Pand, bron_bestandsnaam: str,
+                                 state_dir: str = ".", extra_metadata: dict | None = None) -> str:
     """Maakt van een bestaand contract (een concept of een al getekende versie)
     een VERS concept met exact dezelfde inhoud maar een nieuwe bestandsnaam
     (datum van vandaag) en een leeg handtekeningenblok - klaar voor een nieuwe
@@ -527,14 +560,18 @@ def hergebruik_als_nieuw_concept(pand_slug: str, pand: Pand, bron_bestandsnaam: 
     Handig als een gemeente bijvoorbeeld een handtekening van < 3 maanden oud
     eist voor de inschrijving.
 
-    Bron bij voorkeur het oorspronkelijke concept (dat heeft het lege
-    handtekeningenblok mét markeringen nog; bij een getekende versie zijn die
-    markeringen juist weg). Is dat concept er niet meer, dan wordt het contract
-    opnieuw uit de opgeslagen metadata gegenereerd. Geeft de nieuwe bestandsnaam
-    terug. FileNotFoundError als er niets bruikbaars is (geen concept én geen
-    metadata)."""
+    Bronvolgorde (van meest naar minst getrouw):
+      1. het oorspronkelijke concept (markeringen + leeg blok nog intact);
+      2. anders de getekende HTML met het handtekeningenblok teruggezet naar leeg
+         (behoudt de exacte afsprakentekst);
+      3. als laatste redmiddel opnieuw genereren uit de metadata.
+    `extra_metadata` (bv. e-mail/naam uit de sheet/ondertekenronde teruggevonden)
+    wordt zowel voor de opbouw gebruikt als op het verse concept weggeschreven.
+    Geeft de nieuwe bestandsnaam terug. FileNotFoundError als er niets bruikbaars
+    is."""
     output = _output_dir(pand_slug, state_dir)
     output.mkdir(parents=True, exist_ok=True)
+    metadata = {**lees_metadata(pand_slug, bron_bestandsnaam, state_dir), **(extra_metadata or {})}
     concept_naam = (origineel_bestandsnaam(bron_bestandsnaam)
                     if is_getekend_contract(bron_bestandsnaam) else bron_bestandsnaam)
     _datum, _, rest = concept_naam.partition("_")
@@ -543,28 +580,30 @@ def hergebruik_als_nieuw_concept(pand_slug: str, pand: Pand, bron_bestandsnaam: 
 
     bron_concept = output / Path(concept_naam).name
     if bron_concept.is_file():
-        # Getrouw: neem de exacte concept-HTML over (markeringen + leeg
-        # handtekeningenblok intact), alleen de in-document PDF-link bijwerken.
+        # 1. Getrouw: de exacte concept-HTML (markeringen + leeg blok intact).
         html = bron_concept.read_text()
-        html = re.sub(
-            rf"/pand/{re.escape(pand_slug)}/contracten/[^/]+/pdf",
-            f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf",
-            html,
-        )
-        (output / nieuwe_naam).write_text(html)
-        kopieer_metadata(pand_slug, bron_bestandsnaam, nieuwe_naam, state_dir)
-        return nieuwe_naam
-
-    # Oorspronkelijk concept weg -> opnieuw genereren uit de metadata.
-    metadata = lees_metadata(pand_slug, bron_bestandsnaam, state_dir)
-    if not metadata:
+    elif is_getekend_contract(bron_bestandsnaam):
+        # 2. Concept weg: handtekeningenblok in de getekende HTML terug naar leeg.
+        getekend_html = lees_contract(pand_slug, bron_bestandsnaam, state_dir)
+        html, gevonden = _reset_handtekeningenblok_in_getekend(getekend_html, pand, metadata, state_dir)
+        if not gevonden:
+            # 3. Laatste redmiddel: opnieuw genereren uit de metadata.
+            if not metadata:
+                raise FileNotFoundError(bron_bestandsnaam)
+            context = _bouw_context(pand, _form_uit_metadata(metadata))
+            context["pdf_url"] = f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf"
+            html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
+    else:
         raise FileNotFoundError(bron_bestandsnaam)
-    form = _form_uit_metadata(metadata)
-    context = _bouw_context(pand, form)
-    context["pdf_url"] = f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf"
-    html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
+
+    # In-document PDF-link naar het nieuwe bestand laten wijzen.
+    html = re.sub(rf"/pand/{re.escape(pand_slug)}/contracten/[^/]+/pdf",
+                  f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf", html)
     (output / nieuwe_naam).write_text(html)
-    _schrijf_metadata(output, nieuwe_naam, _metadata_uit_form(form, context))
+    # Metadata: de bron-metadata kopiëren, daarna de verrijking eroverheen.
+    kopieer_metadata(pand_slug, bron_bestandsnaam, nieuwe_naam, state_dir)
+    if extra_metadata:
+        werk_metadata_bij(pand_slug, nieuwe_naam, extra_metadata, state_dir)
     return nieuwe_naam
 
 

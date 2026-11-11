@@ -67,12 +67,13 @@ def test_genereer_contract_zonder_borgsteller_laat_artikel_12_niet_van_toepassin
     assert "Not applicable" in html
 
 
+_SIGNED_BLOK = '<table class="handtekeningen"><tr><td>__TEST_SIG__</td></tr></table>'
+
+
 def test_opnieuw_tekenen_maakt_vers_concept_met_zelfde_inhoud(tmp_path):
     sd = str(tmp_path)
     concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
-    getekend = contracts.genereer_getekend_contract(
-        "mahoniestraat", concept, "<table>__TEST_SIG__</table>", state_dir=sd
-    )
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, _SIGNED_BLOK, state_dir=sd)
     # getekende versie heeft de handtekeningen en de markers zijn weg
     getekend_html = contracts.lees_contract("mahoniestraat", getekend, sd)
     assert "__TEST_SIG__" in getekend_html
@@ -94,21 +95,37 @@ def test_opnieuw_tekenen_maakt_vers_concept_met_zelfde_inhoud(tmp_path):
 def test_opnieuw_tekenen_zelfde_dag_overschrijft_niet(tmp_path):
     sd = str(tmp_path)
     concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
-    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, "<i>x</i>", state_dir=sd)
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, _SIGNED_BLOK, state_dir=sd)
     een = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
     twee = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
     assert een != twee
 
 
-def test_opnieuw_tekenen_valt_terug_op_metadata_als_concept_weg_is(tmp_path):
+def test_opnieuw_tekenen_reset_handtekeningen_als_concept_weg_is(tmp_path):
+    # Zelfs als het oorspronkelijke concept verwijderd is, blijft de inhoud exact
+    # gelijk: het handtekeningenblok wordt in de getekende HTML teruggezet naar leeg.
     sd = str(tmp_path)
     concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
-    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, "<i>x</i>", state_dir=sd)
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, _SIGNED_BLOK, state_dir=sd)
     contracts.verwijder_contract("mahoniestraat", concept, sd)  # origineel concept weg
     nieuw = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
     html = contracts.lees_contract("mahoniestraat", nieuw, sd)
-    assert contracts._HANDTEKENINGEN_START in html          # hergenereerd met leeg blok
-    assert "01-07-2026" in html and "Bence Neumayer" in html  # zelfde afspraken
+    assert contracts._HANDTEKENINGEN_START in html             # leeg blok mét markers terug
+    assert "__TEST_SIG__" not in html                          # oude handtekeningen weg
+    assert "01-07-2026" in html and "Bence Neumayer" in html   # zelfde afspraken
+
+
+def test_opnieuw_tekenen_verrijkt_metadata_met_extra(tmp_path):
+    # Ouder contract zonder e-mail in de metadata: via extra_metadata (bv. uit de
+    # sheet teruggevonden) krijgt het verse concept alsnog het e-mailadres.
+    sd = str(tmp_path)
+    concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email=""), state_dir=sd)
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, _SIGNED_BLOK, state_dir=sd)
+    nieuw = contracts.hergebruik_als_nieuw_concept(
+        "mahoniestraat", _pand(), getekend, state_dir=sd,
+        extra_metadata={"email": "teruggevonden@x.nl", "huurder_naam": "Bence Neumayer"},
+    )
+    assert contracts.lees_metadata("mahoniestraat", nieuw, sd).get("email") == "teruggevonden@x.nl"
 
 
 def test_genereer_contract_zonder_pandgegevens_toont_invulplekken(tmp_path):

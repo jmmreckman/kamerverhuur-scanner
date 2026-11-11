@@ -138,8 +138,13 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   inhoud (ingangsdatum/afspraken ongewijzigd) + een leeg handtekeningenblok, en doorstuurt
   naar de bestaande tekenverzoek-flow → nieuwe ondertekenronde met verse tekendatum. Bron bij
   voorkeur het oorspronkelijke concept (markers + leeg blok nog intact; in de getekende versie
-  zijn die juist weggepartitioneerd), anders hergenereren uit de metadata. Nieuwe bestandsnaam
-  met datum-van-vandaag (-2/-3 bij meerdere op één dag). Voor bv. een gemeente die een
+  zijn die juist weggepartitioneerd); is dat concept weg, dan wordt in de getekende HTML het
+  `<table class="handtekeningen">`-blok teruggezet naar leeg (afspraken exact behouden), met als
+  laatste redmiddel hergeneratie uit de metadata. Nieuwe bestandsnaam met datum-van-vandaag
+  (-2/-3 bij meerdere op één dag). **E-mail/gegevens**: de metadata náást een ouder getekend
+  contract kan leeg zijn, dus de route haalt ze terug via `_bevestiging_metadata` (oorspronkelijke
+  concept-metadata + ondertekenronde) en valt terug op de Huurders-sheet (`Tenant.email`), en
+  verrijkt daarmee het verse concept (`contracts.werk_metadata_bij`). Voor bv. een gemeente die een
   handtekening < 3 maanden oud eist voor de inschrijving.
 - `kamerverhuur_scanner/models.py` — dataclasses (`Pand`, `Tenant`, …).
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
