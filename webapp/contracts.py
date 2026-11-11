@@ -478,6 +478,96 @@ def genereer_getekend_contract(pand_slug: str, bestandsnaam: str, handtekeningen
     return getekend_bestandsnaam
 
 
+def _form_uit_metadata(metadata: dict) -> ImmutableMultiDict:
+    """Reconstrueert het contractformulier uit de opgeslagen metadata, zodat een
+    contract opnieuw te genereren is met exact dezelfde gegevens. De datumvelden
+    staan als ISO in de metadata (ingangsdatum_iso/einddatum_iso); het formulier
+    verwacht ze onder ingangsdatum/einddatum in datzelfde ISO-formaat."""
+    return ImmutableMultiDict({
+        "email": metadata.get("email", ""),
+        "huurder_naam": metadata.get("huurder_naam", ""),
+        "kamer": metadata.get("kamer", ""),
+        "kamer_omschrijving": metadata.get("kamer_omschrijving", ""),
+        "borg": metadata.get("borg", ""),
+        "huurprijs": metadata.get("huurprijs", ""),
+        "kale_huurprijs": metadata.get("kale_huurprijs", ""),
+        "servicekosten": metadata.get("servicekosten", ""),
+        "aantal_bewoners": metadata.get("aantal_bewoners", ""),
+        "ingangsdatum": metadata.get("ingangsdatum_iso", ""),
+        "einddatum": metadata.get("einddatum_iso", ""),
+        "geboortedatum": metadata.get("geboortedatum", ""),
+        "geboorteplaats": metadata.get("geboorteplaats", ""),
+        "studentnummer": metadata.get("studentnummer", ""),
+        "studierichting": metadata.get("studierichting", ""),
+        "borgsteller_naam": metadata.get("borgsteller_naam", ""),
+        "borgsteller_relatie": metadata.get("borgsteller_relatie", ""),
+        "borgsteller_email": metadata.get("borgsteller_email", ""),
+        "bijzonderheden": metadata.get("bijzonderheden", ""),
+    })
+
+
+def _unieke_concept_naam(output_dir: Path, basis_stem: str) -> str:
+    """'<vandaag>_<basis_stem>.html', met een -2/-3-achtervoegsel als er die dag
+    voor dezelfde kamer/huurder al één bestaat (zodat opnieuw tekenen op dezelfde
+    dag een bestaand concept niet overschrijft)."""
+    naam = f"{date.today():%Y-%m-%d}_{basis_stem}.html"
+    n = 2
+    while (output_dir / naam).exists():
+        naam = f"{date.today():%Y-%m-%d}_{basis_stem}-{n}.html"
+        n += 1
+    return naam
+
+
+def hergebruik_als_nieuw_concept(pand_slug: str, pand: Pand, bron_bestandsnaam: str, state_dir: str = ".") -> str:
+    """Maakt van een bestaand contract (een concept of een al getekende versie)
+    een VERS concept met exact dezelfde inhoud maar een nieuwe bestandsnaam
+    (datum van vandaag) en een leeg handtekeningenblok - klaar voor een nieuwe
+    ondertekenronde. De afspraken (ingangsdatum, huurprijs, artikelen) blijven
+    gelijk; alleen de ondertekening wordt straks opnieuw met verse data gezet.
+    Handig als een gemeente bijvoorbeeld een handtekening van < 3 maanden oud
+    eist voor de inschrijving.
+
+    Bron bij voorkeur het oorspronkelijke concept (dat heeft het lege
+    handtekeningenblok mét markeringen nog; bij een getekende versie zijn die
+    markeringen juist weg). Is dat concept er niet meer, dan wordt het contract
+    opnieuw uit de opgeslagen metadata gegenereerd. Geeft de nieuwe bestandsnaam
+    terug. FileNotFoundError als er niets bruikbaars is (geen concept én geen
+    metadata)."""
+    output = _output_dir(pand_slug, state_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    concept_naam = (origineel_bestandsnaam(bron_bestandsnaam)
+                    if is_getekend_contract(bron_bestandsnaam) else bron_bestandsnaam)
+    _datum, _, rest = concept_naam.partition("_")
+    basis_stem = Path(rest).stem or "contract"
+    nieuwe_naam = _unieke_concept_naam(output, basis_stem)
+
+    bron_concept = output / Path(concept_naam).name
+    if bron_concept.is_file():
+        # Getrouw: neem de exacte concept-HTML over (markeringen + leeg
+        # handtekeningenblok intact), alleen de in-document PDF-link bijwerken.
+        html = bron_concept.read_text()
+        html = re.sub(
+            rf"/pand/{re.escape(pand_slug)}/contracten/[^/]+/pdf",
+            f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf",
+            html,
+        )
+        (output / nieuwe_naam).write_text(html)
+        kopieer_metadata(pand_slug, bron_bestandsnaam, nieuwe_naam, state_dir)
+        return nieuwe_naam
+
+    # Oorspronkelijk concept weg -> opnieuw genereren uit de metadata.
+    metadata = lees_metadata(pand_slug, bron_bestandsnaam, state_dir)
+    if not metadata:
+        raise FileNotFoundError(bron_bestandsnaam)
+    form = _form_uit_metadata(metadata)
+    context = _bouw_context(pand, form)
+    context["pdf_url"] = f"/pand/{pand_slug}/contracten/{nieuwe_naam}/pdf"
+    html = _env.from_string(lees_sjabloon(state_dir)).render(**context)
+    (output / nieuwe_naam).write_text(html)
+    _schrijf_metadata(output, nieuwe_naam, _metadata_uit_form(form, context))
+    return nieuwe_naam
+
+
 def lees_contract(pand_slug: str, bestandsnaam: str, state_dir: str = ".") -> str:
     veilige_naam = Path(bestandsnaam).name  # voorkomt path traversal (../)
     pad = _output_dir(pand_slug, state_dir) / veilige_naam

@@ -3753,6 +3753,29 @@ def create_app(config: Config | None = None) -> Flask:
             onderwerp=mail["onderwerp"], tekst=mail["tekst"], overige_ontvangers=overige_ontvangers,
         )
 
+    @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/opnieuw-tekenen", methods=["POST"])
+    @login_required
+    def contract_opnieuw_tekenen(pand_slug: str, bestandsnaam: str):
+        """Maakt een vers concept met dezelfde inhoud (nieuwe tekendatum straks)
+        en stuurt door naar het tekenverzoek-scherm. Voor als een al getekend
+        contract opnieuw ondertekend moet worden - bv. een gemeente eist een
+        handtekening van < 3 maanden oud - zonder de afspraken te wijzigen."""
+        try:
+            contracts.lees_contract(pand_slug, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            abort(404)
+        if not contracts.lees_metadata(pand_slug, bestandsnaam, config.state_dir).get("email"):
+            flash("Geen e-mailadres bij dit contract bekend - kan geen nieuw ondertekenverzoek starten.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        try:
+            nieuw = contracts.hergebruik_als_nieuw_concept(pand_slug, g.pand, bestandsnaam, config.state_dir)
+        except FileNotFoundError:
+            flash("Het oorspronkelijke concept is niet meer beschikbaar; maak een nieuw huurcontract aan.")
+            return redirect(url_for("contracten_overzicht", pand_slug=pand_slug))
+        flash("Vers concept met dezelfde inhoud aangemaakt - verstuur hieronder het ondertekenverzoek "
+              "(ingangsdatum en afspraken blijven gelijk, alleen de tekendatum wordt nieuw).")
+        return redirect(url_for("contract_tekenverzoek", pand_slug=pand_slug, bestandsnaam=nieuw))
+
     @app.route("/pand/<pand_slug>/contracten/<bestandsnaam>/ondertekenstatus")
     @login_required
     def contract_ondertekenstatus(pand_slug: str, bestandsnaam: str):

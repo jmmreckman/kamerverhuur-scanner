@@ -67,6 +67,50 @@ def test_genereer_contract_zonder_borgsteller_laat_artikel_12_niet_van_toepassin
     assert "Not applicable" in html
 
 
+def test_opnieuw_tekenen_maakt_vers_concept_met_zelfde_inhoud(tmp_path):
+    sd = str(tmp_path)
+    concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
+    getekend = contracts.genereer_getekend_contract(
+        "mahoniestraat", concept, "<table>__TEST_SIG__</table>", state_dir=sd
+    )
+    # getekende versie heeft de handtekeningen en de markers zijn weg
+    getekend_html = contracts.lees_contract("mahoniestraat", getekend, sd)
+    assert "__TEST_SIG__" in getekend_html
+    assert contracts._HANDTEKENINGEN_START not in getekend_html
+
+    nieuw = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
+    assert not contracts.is_getekend_contract(nieuw)
+    assert nieuw not in (concept, getekend)
+    nieuw_html = contracts.lees_contract("mahoniestraat", nieuw, sd)
+    # vers concept: leeg handtekeningenblok (markers terug), geen oude handtekeningen
+    assert contracts._HANDTEKENINGEN_START in nieuw_html
+    assert "__TEST_SIG__" not in nieuw_html
+    # inhoud (ingangsdatum, huurprijs, huurder) ongewijzigd
+    assert "01-07-2026" in nieuw_html and "919,00" in nieuw_html and "Bence Neumayer" in nieuw_html
+    # metadata meegekopieerd (nodig voor het ondertekenverzoek)
+    assert contracts.lees_metadata("mahoniestraat", nieuw, sd).get("email") == "b@x.nl"
+
+
+def test_opnieuw_tekenen_zelfde_dag_overschrijft_niet(tmp_path):
+    sd = str(tmp_path)
+    concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, "<i>x</i>", state_dir=sd)
+    een = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
+    twee = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
+    assert een != twee
+
+
+def test_opnieuw_tekenen_valt_terug_op_metadata_als_concept_weg_is(tmp_path):
+    sd = str(tmp_path)
+    concept = contracts.genereer_contract("mahoniestraat", _pand(), _form(email="b@x.nl"), state_dir=sd)
+    getekend = contracts.genereer_getekend_contract("mahoniestraat", concept, "<i>x</i>", state_dir=sd)
+    contracts.verwijder_contract("mahoniestraat", concept, sd)  # origineel concept weg
+    nieuw = contracts.hergebruik_als_nieuw_concept("mahoniestraat", _pand(), getekend, state_dir=sd)
+    html = contracts.lees_contract("mahoniestraat", nieuw, sd)
+    assert contracts._HANDTEKENINGEN_START in html          # hergenereerd met leeg blok
+    assert "01-07-2026" in html and "Bence Neumayer" in html  # zelfde afspraken
+
+
 def test_genereer_contract_zonder_pandgegevens_toont_invulplekken(tmp_path):
     leeg_pand = Pand(
         slug="baumannlaan", naam="Baumannlaan 70b", google_sheet_id="y", google_sheet_worksheet="Huurders",

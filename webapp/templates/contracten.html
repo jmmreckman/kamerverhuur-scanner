@@ -51,6 +51,12 @@
         <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_tekenverzoek', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Verzoek tot tekenen</a>
         {% endif %}
         {% endif %}
+        {% if item.getekend %}
+        <form method="post" action="{{ url_for('contract_opnieuw_tekenen', pand_slug=huidig_pand.slug, bestandsnaam=c) }}" style="display:inline"
+              onsubmit="return confirm('Een vers concept met dezelfde inhoud aanmaken en opnieuw laten tekenen? Ingangsdatum en afspraken blijven gelijk - alleen de tekendatum wordt nieuw.');">
+          <button type="submit" class="btn btn-secondary btn-xs">Opnieuw tekenen</button>
+        </form>
+        {% endif %}
         {% if item.kan_bevestiging_mailen %}
         <a class="btn btn-secondary btn-xs" href="{{ url_for('contract_bevestiging', pand_slug=huidig_pand.slug, bestandsnaam=c) }}">Mail bevestiging</a>
         {% endif %}

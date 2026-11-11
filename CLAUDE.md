@@ -133,6 +133,14 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - `kamerverhuur_scanner/drive_sync.py` + `drive_browse.py` — Drive via **rclone**.
 - `webapp/tekenportaal.py` + `handtekening.py` + `ondertekenen.py` + `contracts.py`
   — document/contract tekenen (pymupdf stempelt, xhtml2pdf voor contracten).
+  **"Opnieuw tekenen"** (nov 2026): knop op een getekend contract (Contracten-pagina) die
+  via `contracts.hergebruik_als_nieuw_concept()` een VERS concept maakt met exact dezelfde
+  inhoud (ingangsdatum/afspraken ongewijzigd) + een leeg handtekeningenblok, en doorstuurt
+  naar de bestaande tekenverzoek-flow → nieuwe ondertekenronde met verse tekendatum. Bron bij
+  voorkeur het oorspronkelijke concept (markers + leeg blok nog intact; in de getekende versie
+  zijn die juist weggepartitioneerd), anders hergenereren uit de metadata. Nieuwe bestandsnaam
+  met datum-van-vandaag (-2/-3 bij meerdere op één dag). Voor bv. een gemeente die een
+  handtekening < 3 maanden oud eist voor de inschrijving.
 - `kamerverhuur_scanner/models.py` — dataclasses (`Pand`, `Tenant`, …).
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
 - `kamerverhuur_scanner/state.py` — kleine JSON-state in `state_dir` (laatste
