@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Eenmalige probe: ontdek hoe de voor ons relevante velden in de Move-GraphQL-API
-heten (eigendom/erfpacht, VvE + bijdrage, omschrijving, beschermd stadsgezicht, ...),
-zodat we move_scrape.py's query gericht kunnen uitbreiden.
+"""Ontdek de echte veldnamen op het Move `ExchangeObject` ZONDER introspectie
+(die is op de Move-API volledig dichtgezet: __schema.types én __type zijn geblokkeerd).
 
-Hergebruikt de bestaande Move-login (MOVE_* uit de env). Draai op de VPS:
+Truc: stuur één echte query met een grote lijst KANDIDAAT-veldnamen in de
+exchangeObject-selectie. GraphQL valideert het hele document vóór uitvoering en
+rapporteert per ongeldig veld een fout:
+  - classification FieldUndefined  -> veld BESTAAT NIET;
+  - classification SubSelectionRequired -> veld BESTAAT en is een object (subvelden nodig);
+  - geen fout voor een kandidaat   -> veld BESTAAT en is een scalar/enum.
+Zo leiden we de hele veld-inventaris af uit de foutenlijst.
 
+Draai op de VPS:
     docker exec $(docker ps -qf name=fundazoeker) python -m scripts.move_introspect
-
-Schema-brede introspectie (__schema.types) is op de Move-API geblokkeerd, maar
-type-gerichte introspectie (__type(name:)) meestal niet. Daarom:
-  1. haal via een echte query de concrete typenaam van `exchangeObject` op (__typename);
-  2. introspecteer dat type (en één niveau sub-objecten) met __type(name:).
-Lukt ook __type niet, dan print het script dat; haal de detail-query dan uit DevTools
-(Network > graphql: woning aanklikken, request-query + stuk response kopiëren).
+Plak de output (de drie groepen) terug in de chat.
 """
 from __future__ import annotations
 
-import json
+import re
 import sys
 
 import requests
@@ -24,25 +24,45 @@ import requests
 from rotterdam_scanner import move_scrape
 from rotterdam_scanner.config import load_config
 
-_TYPENAAM_QUERY = """
-query Typenaam($dossierId: ID!, $first: Int!) {
-  searchDossier(id: $dossierId) {
-    searcher { foundObjects(first: $first) { edges { node { exchangeObject { __typename } } } } }
-  }
-}
-"""
+# Kandidaat-veldnamen (Engels + wat NL-gokjes) voor wat we zoeken. De bekend-geldige
+# onderaan dienen als sanity-check (die mogen nooit als 'bestaat niet' terugkomen).
+_KANDIDATEN = [
+    # eigendom / erfpacht
+    "ownership", "ownershipType", "ownershipSituation", "ownershipStatus", "propertyOwnership",
+    "erfpacht", "leasehold", "groundLease", "groundLeaseType", "canon", "groundLeaseAmount",
+    # VvE
+    "vve", "vveContribution", "vveContributionPerMonth", "monthlyContribution",
+    "serviceCosts", "serviceCharge", "ownersAssociation", "hoa", "hoaContribution",
+    # omschrijving / tekst
+    "description", "descriptionLong", "longDescription", "fullDescription", "body",
+    "text", "salesText", "advertisementText", "marketingText",
+    # energie
+    "energyLabel", "energyClass", "energyLabelValidUntil",
+    # kadaster
+    "cadastral", "cadastralDesignation", "parcel", "parcelNumber", "section", "municipality",
+    # bijzonderheden / stadsgezicht / monument
+    "particularities", "features", "characteristics", "specialFeatures",
+    "protectedCityscape", "protectedTownscape", "monument", "monumentalStatus", "listedStatus",
+    # bouw / gebruik / aanvaarding
+    "constructionYear", "buildYear", "yearOfConstruction",
+    "acceptance", "availability", "currentUse", "currentUsage", "usageType", "destination",
+    "numberOfRooms", "numberOfBedrooms", "livingArea", "plotArea", "volume",
+    # bekend-geldig (sanity-check)
+    "objectDetailedType", "woonOppervlakte", "perceelOppervlakte", "aantalKamers",
+    "status", "address", "koopPrice",
+]
 
-_TYPE_QUERY = """
-query TypeVelden($name: String!) {
-  __type(name: $name) {
-    name
-    fields(includeDeprecated: true) {
-      name
-      type { kind name ofType { kind name ofType { kind name } } }
-    }
-  }
-}
-"""
+
+def _query(velden: list[str]) -> str:
+    seln = "\n            ".join(dict.fromkeys(velden))
+    return f"""
+query Velden($dossierId: ID!, $first: Int!) {{
+  searchDossier(id: $dossierId) {{
+    searcher {{ foundObjects(first: $first) {{ edges {{ node {{ exchangeObject {{
+            {seln}
+    }} }} }} }} }}
+  }}
+}}"""
 
 
 def _post(session, token, query, variables):
@@ -58,39 +78,14 @@ def _post(session, token, query, variables):
         timeout=30,
     )
     try:
-        return resp.json()
+        return resp.json(), resp.status_code
     except ValueError:
-        return {"errors": [{"message": f"HTTP {resp.status_code}: {resp.text[:200]}"}]}
+        return {"_raw": resp.text[:300]}, resp.status_code
 
 
-def _resolve(veldtype: dict) -> tuple[str, str]:
-    """(kind, naam) van een (mogelijk geneste NON_NULL/LIST) veldtype."""
-    t = veldtype or {}
-    for _ in range(4):
-        if t.get("name"):
-            return t.get("kind") or "?", t["name"]
-        t = t.get("ofType") or {}
-    return t.get("kind") or "?", "?"
-
-
-def _introspecteer_type(session, token, naam, gezien):
-    if naam in gezien:
-        return []
-    gezien.add(naam)
-    data = _post(session, token, _TYPE_QUERY, {"name": naam})
-    typ = (data.get("data") or {}).get("__type")
-    if not typ:
-        if data.get("errors"):
-            print(f"  (introspectie van {naam} geweigerd: {data['errors'][0].get('message')})")
-        return []
-    print(f"\n### type {typ['name']}")
-    sub_objecten = []
-    for f in typ.get("fields") or []:
-        kind, tnaam = _resolve(f.get("type"))
-        print(f"  {f['name']}: {tnaam} ({kind})")
-        if kind in ("OBJECT", "INTERFACE") and tnaam not in ("?",):
-            sub_objecten.append(tnaam)
-    return sub_objecten
+def _veld_uit_pad(msg: str) -> str | None:
+    m = re.search(r"@\[([^\]]+)\]", msg or "")
+    return m.group(1).split("/")[-1] if m else None
 
 
 def main() -> int:
@@ -98,7 +93,6 @@ def main() -> int:
     if not (config.move_email and config.move_password and config.move_dossier_id):
         print("MOVE_EMAIL/MOVE_PASSWORD/MOVE_DOSSIER_ID ontbreken in de env.")
         return 1
-
     session = requests.Session()
     session.headers.update({"User-Agent": move_scrape._UA})
     try:
@@ -107,27 +101,39 @@ def main() -> int:
         print(f"Move-login mislukt: {exc}")
         return 1
 
-    # 1. concrete typenaam van exchangeObject ophalen via een echte query.
-    data = _post(session, token, _TYPENAAM_QUERY, {"dossierId": config.move_dossier_id, "first": 1})
-    try:
-        edges = data["data"]["searchDossier"]["searcher"]["foundObjects"]["edges"]
-        typenaam = edges[0]["node"]["exchangeObject"]["__typename"]
-    except (KeyError, IndexError, TypeError):
-        print("Kon de objecttypenaam niet ophalen. Antwoord:", json.dumps(data)[:500])
-        print("\n=> Haal de detail-query uit DevTools (Network > graphql) en plak die hier.")
+    data, status = _post(session, token, _query(_KANDIDATEN),
+                         {"dossierId": config.move_dossier_id, "first": 1})
+    errors = data.get("errors") or []
+    niet_bestaand: set[str] = set()
+    object_velden: set[str] = set()
+    for err in errors:
+        klasse = (err.get("extensions") or {}).get("classification")
+        veld = _veld_uit_pad(err.get("message", ""))
+        if not veld:
+            continue
+        if klasse == "FieldUndefined":
+            niet_bestaand.add(veld)
+        elif klasse == "SubSelectionRequired":
+            object_velden.add(veld)
+
+    getest = list(dict.fromkeys(_KANDIDATEN))
+    scalar_velden = [v for v in getest if v not in niet_bestaand and v not in object_velden]
+
+    if not errors and not data.get("data"):
+        print("Onverwacht antwoord (geen errors, geen data). Ruwe respons:")
+        print(str(data)[:800])
+        print("\n=> Val terug op de DevTools-route.")
         return 2
-    print(f"exchangeObject is van type: {typenaam}")
 
-    # 2. dat type + één niveau sub-objecten introspecteren.
-    gezien: set[str] = set()
-    sub = _introspecteer_type(session, token, typenaam, gezien)
-    if typenaam in gezien and not sub and not gezien - {typenaam}:
-        # introspectie van het hoofdtype gaf niets terug -> waarschijnlijk geblokkeerd.
-        pass
-    for subnaam in sub:
-        _introspecteer_type(session, token, subnaam, gezien)
-
-    print("\nKlaar. Plak de bovenstaande typelijst(en) terug in de chat, dan koppel ik de velden.")
+    print("=== BESTAAT (scalar/enum) ===")
+    for v in scalar_velden:
+        print(f"  {v}")
+    print("\n=== BESTAAT (object - subvelden nodig) ===")
+    for v in sorted(object_velden):
+        print(f"  {v}")
+    print("\n=== bestaat NIET ===")
+    print("  " + ", ".join(sorted(niet_bestaand)))
+    print("\nPlak de eerste twee groepen terug in de chat.")
     return 0
 
 
