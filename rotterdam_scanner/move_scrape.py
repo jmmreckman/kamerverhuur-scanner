@@ -22,7 +22,11 @@ import secrets
 import requests
 
 from .config import Config
+from .eigendom import classificeer_eigendom
 from .funda_mail import FundaListing, _maak_object_id
+from .vve import classificeer_vve, parse_vve_bijdrage
+from .woningkenmerken import classificeer_woningtype
+from .zelfbewoning import classificeer_zelfbewoning
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,8 @@ _QUERY = """query SearchDossierViewObjectsWithCursorQuery($dossierId: ID!, $filt
               aantalKamers
               status
               objectDetailedType
+              aanbiedingsTekst
+              kenmerkSections { name kenmerken { label value } }
             }
           }
         }
@@ -185,6 +191,65 @@ def _prijs_uit(koop: dict | None) -> int | None:
     return int(match.group(1).replace(".", ""))
 
 
+def _kenmerk_lookup(obj: dict) -> dict[str, str]:
+    """Plat label->waarde-woordenboek uit exchangeObject.kenmerkSections.
+
+    Move levert de kenmerken gegroepeerd per sectie (Overdracht, Bouwvorm, VvE
+    checklist, Kadastrale gegevens, ...); voor onze filters is een platte lookup op
+    (kleine letters) label genoeg - de relevante labels zijn uniek genoeg
+    ('Eigendomssituatie', 'Bijdrage VVE p/m', 'Periodieke bijdrage', 'Soort object')."""
+    lookup: dict[str, str] = {}
+    for sectie in obj.get("kenmerkSections") or []:
+        for kenmerk in (sectie or {}).get("kenmerken") or []:
+            label = (kenmerk or {}).get("label")
+            waarde = (kenmerk or {}).get("value")
+            if label and waarde is not None:
+                lookup[label.strip().lower()] = str(waarde).strip()
+    return lookup
+
+
+def _vve_signaal(periodiek: str | None) -> bool | None:
+    """Expliciet ja/nee uit de VvE-checklist-regel 'Periodieke bijdrage: Ja (...)'."""
+    if not periodiek:
+        return None
+    low = periodiek.strip().lower()
+    if low.startswith("ja"):
+        return True
+    if low.startswith("nee") or low.startswith("geen"):
+        return False
+    return None
+
+
+def _kenmerken_uit_object(obj: dict) -> dict:
+    """Leidt de filter-velden (eigendom, VvE, zelfbewoning) af uit de Move-kenmerken +
+    advertentietekst via de pure classificatielagen. Levert een dict met precies de
+    extra FundaListing-velden, zodat parse_move_woningen 'm direct kan uitpakken."""
+    lookup = _kenmerk_lookup(obj)
+    tekst = obj.get("aanbiedingsTekst") or ""
+    woningtype = classificeer_woningtype(obj.get("objectDetailedType"))
+
+    eigendom = classificeer_eigendom(lookup.get("eigendomssituatie"), tekst)
+
+    bijdrage_raw = lookup.get("bijdrage vve p/m") or lookup.get("periodieke bijdrage")
+    vve = classificeer_vve(
+        woningtype,
+        parse_vve_bijdrage(bijdrage_raw),
+        _vve_signaal(lookup.get("periodieke bijdrage")),
+    )
+    bijdrage = vve["bijdrage_pm"]
+
+    zb = classificeer_zelfbewoning(tekst)
+
+    return {
+        "eigendom_soort": eigendom["soort"],
+        "heeft_vve": vve["heeft_vve"],
+        "vve_bijdrage_pm": float(bijdrage) if bijdrage is not None else None,
+        "zelfbewoningsplicht": zb["zelfbewoningsplicht"],
+        "niet_zelfbewoningsclausule": zb["niet_zelfbewoningsclausule"],
+        "anti_speculatie": zb["anti_speculatie"],
+    }
+
+
 def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
     """Zet de GraphQL-edges om naar FundaListing-objecten (bron='nvm'). Verkochte/
     ingetrokken woningen worden overgeslagen op basis van de status."""
@@ -206,6 +271,7 @@ def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
             continue
         opp = obj.get("woonOppervlakte")
         perceel = obj.get("perceelOppervlakte")
+        kenmerken = _kenmerken_uit_object(obj)
         woningen.setdefault(
             object_id,
             FundaListing(
@@ -221,6 +287,7 @@ def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
                 woningtype_detail=(obj.get("objectDetailedType") or None),
                 perceel_oppervlakte=int(perceel) if isinstance(perceel, (int, float)) else None,
                 bron="nvm",
+                **kenmerken,
             ),
         )
     return list(woningen.values())

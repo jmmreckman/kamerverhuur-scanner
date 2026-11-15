@@ -38,6 +38,10 @@ const filterM2MinEl = document.getElementById("filter-m2-min");
 const filterM2MaxEl = document.getElementById("filter-m2-max");
 const filterPrijsM2MaxEl = document.getElementById("filter-prijs-m2-max");
 const filterWoningtypeEl = document.getElementById("filter-woningtype");
+const filterEigendomEl = document.getElementById("filter-eigendom");
+const filterVveEl = document.getElementById("filter-vve");
+const filterVveMaxEl = document.getElementById("filter-vve-max");
+const filterZelfbewoningEl = document.getElementById("filter-zelfbewoning");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
@@ -188,6 +192,10 @@ function gefilterd() {
   const maxDagen = parseFloat(filterDagenEl.value);
   const stad = filterStadEl ? filterStadEl.value : "";
   const woningtype = filterWoningtypeEl ? filterWoningtypeEl.value : "";
+  const eigendom = filterEigendomEl ? filterEigendomEl.value : "";
+  const vve = filterVveEl ? filterVveEl.value : "";
+  const maxVve = filterVveMaxEl ? parseFloat(filterVveMaxEl.value) : NaN;
+  const zelfbewoning = filterZelfbewoningEl ? filterZelfbewoningEl.value : "";
 
   return alleKansen.filter((k) => {
     const c = kansCijfers(k);
@@ -211,6 +219,29 @@ function gefilterd() {
       if (k.prijs / m2 > maxPrijsM2) return false;
     }
     if (woningtype && k.woningtype !== woningtype) return false;
+    // Eigendom: "geen_erfpacht" = eigen grond óf afgekochte erfpacht (beide feitelijk
+    // zonder doorlopende canon); de overige waarden matchen exact op eigendom_soort.
+    if (eigendom) {
+      if (eigendom === "geen_erfpacht") {
+        if (k.eigendom_soort !== "eigen_grond" && k.eigendom_soort !== "erfpacht_afgekocht") return false;
+      } else if (k.eigendom_soort !== eigendom) {
+        return false;
+      }
+    }
+    // VvE: woningen met onbekende VvE-status (heeft_vve === null, bv. Funda-only) vallen
+    // weg zodra je expliciet op wel/geen VvE filtert.
+    if (vve === "ja" && k.heeft_vve !== true) return false;
+    if (vve === "nee" && k.heeft_vve !== false) return false;
+    if (!isNaN(maxVve)) {
+      // Zonder bekende bijdrage niet te bevestigen dat 'ie onder de grens valt → weg.
+      if (k.vve_bijdrage_pm === null || k.vve_bijdrage_pm === undefined) return false;
+      if (k.vve_bijdrage_pm > maxVve) return false;
+    }
+    // Zelfbewoningsplicht uit de advertentietekst. "zonder" = geen plicht gevonden
+    // (let op: de gemeentelijke opkoop-zelfbewoningsplicht staat vrijwel nooit in de
+    // tekst en zit niet in dit signaal); "met" = expliciete plicht in de tekst.
+    if (zelfbewoning === "zonder" && k.zelfbewoningsplicht === true) return false;
+    if (zelfbewoning === "met" && k.zelfbewoningsplicht !== true) return false;
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
       const dagen = dagenOpFunda(k.eerst_gezien);
@@ -218,6 +249,37 @@ function gefilterd() {
     }
     return true;
   });
+}
+
+// Leesbare weergave van de Move-kenmerken (eigendom/VvE/zelfbewoning) in het popup.
+// Alleen tonen wat bekend is; onbekende waarden (bv. Funda-only woningen) blijven weg.
+function kenmerkenHtml(kans) {
+  const regels = [];
+  const eigendomLabels = {
+    eigen_grond: "Eigen grond",
+    erfpacht: "Erfpacht (lopend)",
+    erfpacht_afgekocht: "Erfpacht (afgekocht)",
+  };
+  if (kans.eigendom_soort && eigendomLabels[kans.eigendom_soort]) {
+    const rood = kans.eigendom_soort === "erfpacht";
+    regels.push(`<span${rood ? ' style="color:#b3261e"' : ""}>${eigendomLabels[kans.eigendom_soort]}</span>`);
+  }
+  if (kans.heeft_vve === true) {
+    const bedrag = (kans.vve_bijdrage_pm !== null && kans.vve_bijdrage_pm !== undefined)
+      ? ` (${formatEuro(kans.vve_bijdrage_pm)} p/m)` : "";
+    regels.push(`VvE${bedrag}`);
+  } else if (kans.heeft_vve === false) {
+    regels.push("Geen VvE");
+  }
+  if (kans.zelfbewoningsplicht) {
+    regels.push('<span style="color:#b3261e">Zelfbewoningsplicht (in advertentietekst)</span>');
+  } else if (kans.niet_zelfbewoningsclausule) {
+    regels.push('<span style="color:#1b7a43">Niet-zelfbewoningsclausule (geen plicht)</span>');
+  }
+  if (kans.anti_speculatie) {
+    regels.push('<span style="color:#9a6700">Anti-speculatie-/kettingbeding</span>');
+  }
+  return regels.length ? regels.join("<br>") + "<br>" : "";
 }
 
 function bouwPopup(kans) {
@@ -244,6 +306,7 @@ function bouwPopup(kans) {
     ${kans.bag_oppervlakte && kans.bag_oppervlakte !== kans.primaire_oppervlakte ? kans.bag_oppervlakte + " m² (BAG, ter info)<br>" : ""}
     ${kans.woningtype_label ? `${kans.woningtype_label}${kans.woningtype ? ` &middot; ${kans.woningtype}` : ""}<br>` : ""}
     ${kans.perceel_oppervlakte ? `Perceel: ${kans.perceel_oppervlakte} m²<br>` : ""}
+    ${kenmerkenHtml(kans)}
     <span class="kamers-editor">
       ${kamersLabel}: <input type="number" class="kamers-input" min="0" step="1" inputmode="numeric" value="${kamersWaarde}">
       ${kans.aantal_kamers_handmatig ? `<button type="button" class="kamers-reset-knop" title="${resetTitel}">automatisch</button>` : ""}
@@ -960,11 +1023,12 @@ if (toon3kamerEl) {
 }
 
 for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
-                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterZoekEl,
+                  filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterVveMaxEl, filterZoekEl,
                   filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
-for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl, filterWoningtypeEl]) {
+for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl, filterWoningtypeEl,
+                  filterEigendomEl, filterVveEl, filterZelfbewoningEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
 
@@ -985,6 +1049,10 @@ function verzamelFilters() {
     "filter-m2-max": filterM2MaxEl ? filterM2MaxEl.value : undefined,
     "filter-prijs-m2-max": filterPrijsM2MaxEl ? filterPrijsM2MaxEl.value : undefined,
     "filter-woningtype": filterWoningtypeEl ? filterWoningtypeEl.value : undefined,
+    "filter-eigendom": filterEigendomEl ? filterEigendomEl.value : undefined,
+    "filter-vve": filterVveEl ? filterVveEl.value : undefined,
+    "filter-vve-max": filterVveMaxEl ? filterVveMaxEl.value : undefined,
+    "filter-zelfbewoning": filterZelfbewoningEl ? filterZelfbewoningEl.value : undefined,
     "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
     "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
     "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
@@ -1007,6 +1075,10 @@ function pasFiltersToe(f) {
   zetWaarde(filterM2MaxEl, f["filter-m2-max"]);
   zetWaarde(filterPrijsM2MaxEl, f["filter-prijs-m2-max"]);
   zetWaarde(filterWoningtypeEl, f["filter-woningtype"]);
+  zetWaarde(filterEigendomEl, f["filter-eigendom"]);
+  zetWaarde(filterVveEl, f["filter-vve"]);
+  zetWaarde(filterVveMaxEl, f["filter-vve-max"]);
+  zetWaarde(filterZelfbewoningEl, f["filter-zelfbewoning"]);
   zetWaarde(filterZoekEl, f["filter-zoek"]);
   zetWaarde(filterDagenEl, f["filter-dagen"]);
   zetWaarde(filterSorteerEl, f["filter-sorteer"]);

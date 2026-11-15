@@ -477,6 +477,20 @@ def _voeg_bron_toe(item: ListingState, bron: str) -> None:
         item.bronnen.append(bron)
 
 
+def _kopieer_move_kenmerken(doel: ListingState, listing: FundaListing) -> None:
+    """Neemt de afgeleide Move-kenmerken (eigendom/VvE/zelfbewoning) over op de
+    ListingState. Alleen voor de Move/NVM-bron: de Funda-mail levert ze niet, dus een
+    Funda-(her)waarneming mag eerder via Move gevonden kenmerken niet overschrijven."""
+    if listing.bron != "nvm":
+        return
+    doel.eigendom_soort = listing.eigendom_soort
+    doel.heeft_vve = listing.heeft_vve
+    doel.vve_bijdrage_pm = listing.vve_bijdrage_pm
+    doel.zelfbewoningsplicht = listing.zelfbewoningsplicht
+    doel.niet_zelfbewoningsclausule = listing.niet_zelfbewoningsclausule
+    doel.anti_speculatie = listing.anti_speculatie
+
+
 def _verwerk_listings(
     listings: list[FundaListing],
     te_verwijderen_ids: set[str],
@@ -519,6 +533,7 @@ def _verwerk_listings(
                 existing.woningtype_detail = listing.woningtype_detail
             if listing.perceel_oppervlakte is not None:
                 existing.perceel_oppervlakte = listing.perceel_oppervlakte
+            _kopieer_move_kenmerken(existing, listing)
             _voeg_bron_toe(existing, listing.bron)
             state.upsert(existing)
             result.al_bekend.append(existing)
@@ -536,6 +551,7 @@ def _verwerk_listings(
             processed.woningtype_detail = listing.woningtype_detail
         if listing.perceel_oppervlakte is not None:
             processed.perceel_oppervlakte = listing.perceel_oppervlakte
+        _kopieer_move_kenmerken(processed, listing)
         if processed.object_id in te_verwijderen_ids and processed.status == "actief":
             processed.status = "afgevallen"
             processed.afvalreden = _HANDMATIG_VERWIJDERD_REDEN

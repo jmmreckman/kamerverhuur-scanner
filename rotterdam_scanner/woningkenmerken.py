@@ -4,8 +4,9 @@ woningtype-filter op kansen.steenhub.nl.
 
 Move levert per woning een gedetailleerd type (bv. BENEDENWONING, HERENHUIS).
 Onbekende/nieuwe typen vallen bewust op None (= "onbekend") zodat ze niet in de
-verkeerde bak belanden; breid dan de sets hieronder uit. De erfpacht/woonlagen/
-VvE-kenmerken zitten niet op dit dossier-type en komen later via de detail-query.
+verkeerde bak belanden; breid dan de sets hieronder uit. De erfpacht/VvE-kenmerken
+komen mee in de lijst-query via ExchangeObject.kenmerkSections (label/value-paren) en
+worden door move_scrape._kenmerken_uit_object afgeleid, niet uit dit objectDetailedType.
 """
 from __future__ import annotations
 

@@ -62,6 +62,86 @@ def test_parse_move_woningen_zonder_prijs_geeft_none():
     assert move_scrape.parse_move_woningen(edges)[0].prijs is None
 
 
+def _edge_met_kenmerken(object_type, secties, tekst=""):
+    return {
+        "node": {
+            "exchangeObject": {
+                "address": {"street": "Testlaan", "nr": 1, "nrExtension": "", "city": "Rotterdam", "zipCode": "3011 AA"},
+                "koopPrice": {"formatMoneyLong": "€ 300.000,- k.k."},
+                "woonOppervlakte": 80,
+                "aantalKamers": 4,
+                "status": "BESCHIKBAAR",
+                "objectDetailedType": object_type,
+                "aanbiedingsTekst": tekst,
+                "kenmerkSections": secties,
+            }
+        }
+    }
+
+
+def _sectie(naam, **paren):
+    return {"name": naam, "kenmerken": [{"label": k, "value": v} for k, v in paren.items()]}
+
+
+def test_parse_move_kenmerken_appartement_erfpacht_vve():
+    edge = _edge_met_kenmerken(
+        "PORTIEKFLAT",
+        [
+            {"name": "Overdracht", "kenmerken": [{"label": "Bijdrage VVE p/m", "value": "€ 301,26"}]},
+            {"name": "VvE checklist", "kenmerken": [{"label": "Periodieke bijdrage", "value": "Ja (€ 301,26 p.m.)"}]},
+            {"name": "Kadastrale gegevens", "kenmerken": [{"label": "Eigendomssituatie", "value": "Erfpacht"}]},
+        ],
+    )
+    w = move_scrape.parse_move_woningen([edge])[0]
+    assert w.eigendom_soort == "erfpacht"
+    assert w.heeft_vve is True
+    assert w.vve_bijdrage_pm == 301.26
+    assert w.zelfbewoningsplicht is False
+
+
+def test_parse_move_kenmerken_woonhuis_eigen_grond_geen_vve():
+    edge = _edge_met_kenmerken(
+        "TUSSENWONING",
+        [{"name": "Kadastrale gegevens", "kenmerken": [{"label": "Eigendomssituatie", "value": "Volle eigendom"}]}],
+    )
+    w = move_scrape.parse_move_woningen([edge])[0]
+    assert w.eigendom_soort == "eigen_grond"
+    assert w.heeft_vve is False
+    assert w.vve_bijdrage_pm is None
+
+
+def test_parse_move_kenmerken_zelfbewoningsplicht_uit_tekst():
+    edge = _edge_met_kenmerken(
+        "TUSSENWONING",
+        [],
+        tekst="Voor deze woning geldt een zelfbewoningsplicht van vier jaar.",
+    )
+    w = move_scrape.parse_move_woningen([edge])[0]
+    assert w.zelfbewoningsplicht is True
+
+
+def test_parse_move_kenmerken_niet_clausule_en_afgekocht():
+    edge = _edge_met_kenmerken(
+        "HERENHUIS",
+        [{"name": "Kadastrale gegevens", "kenmerken": [{"label": "Eigendomssituatie", "value": "Erfpacht"}]}],
+        tekst="De erfpacht is eeuwigdurend afgekocht. Een niet-zelfbewoningsclausule is van toepassing.",
+    )
+    w = move_scrape.parse_move_woningen([edge])[0]
+    assert w.eigendom_soort == "erfpacht_afgekocht"
+    assert w.niet_zelfbewoningsclausule is True
+    assert w.zelfbewoningsplicht is False
+
+
+def test_parse_move_zonder_kenmerken_crasht_niet():
+    # Een Move-edge zonder kenmerkSections mag niet crashen; zonder Eigendomssituatie-
+    # kenmerk en zonder tekst is het eigendom "onbekend" (Move-gezien maar onbekend,
+    # niet None - None is voorbehouden aan Funda-only/legacy), en geen zelfbewoningsplicht.
+    edges = [_edge("Leegstraat", 9, "", "Rotterdam", "3011 ZZ", "€ 250.000,- k.k.", 55, "BESCHIKBAAR")]
+    w = move_scrape.parse_move_woningen(edges)[0]
+    assert w.eigendom_soort == "onbekend"
+    assert w.zelfbewoningsplicht is False
+
+
 def test_code_uit_locatie():
     loc = "https://move.nl/?state=abc&code=XYZ123&session_state=foo"
     assert move_scrape._code_uit_locatie(loc) == "XYZ123"

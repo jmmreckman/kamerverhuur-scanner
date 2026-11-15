@@ -94,6 +94,32 @@
             <option value="woonhuis">Woonhuis</option>
           </select>
         </label>
+        <label>Eigendom
+          <select id="filter-eigendom">
+            <option value="">Alle</option>
+            <option value="eigen_grond">Eigen grond</option>
+            <option value="erfpacht_afgekocht">Erfpacht (afgekocht)</option>
+            <option value="erfpacht">Erfpacht (lopend)</option>
+            <option value="geen_erfpacht">Eigen grond óf afgekocht</option>
+          </select>
+        </label>
+        <label>VvE
+          <select id="filter-vve">
+            <option value="">Alle</option>
+            <option value="ja">Wel VvE</option>
+            <option value="nee">Geen VvE</option>
+          </select>
+        </label>
+        <label>Max. VvE-bijdrage p/m
+          <input type="number" id="filter-vve-max" min="0" step="1" inputmode="numeric" placeholder="bv. 150">
+        </label>
+        <label>Zelfbewoningsplicht
+          <select id="filter-zelfbewoning">
+            <option value="">Alle</option>
+            <option value="zonder">Zonder plicht</option>
+            <option value="met">Met plicht</option>
+          </select>
+        </label>
         <label>Zoek adres
           <input type="text" id="filter-zoek" placeholder="straatnaam...">
         </label>

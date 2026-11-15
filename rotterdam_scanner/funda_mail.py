@@ -69,6 +69,21 @@ class FundaListing:
     # is Move's ruwe objectDetailedType (bv. "BENEDENWONING"); perceel_oppervlakte in m².
     woningtype_detail: str | None = None
     perceel_oppervlakte: int | None = None
+    # Afgeleide kenmerken uit de Move-detailkenmerken (kenmerkSections) +
+    # advertentietekst, voor de filters op kansen.steenhub.nl. Alleen de Move/NVM-bron
+    # vult deze; de Funda-mail laat ze op hun default staan (= onbekend). Zie
+    # move_scrape._kenmerken_uit_object en de pure lagen eigendom.py/vve.py/zelfbewoning.py.
+    #   eigendom_soort: "eigen_grond"|"erfpacht"|"erfpacht_afgekocht"|"onbekend"|None
+    #   heeft_vve: True|False|None (onbekend); vve_bijdrage_pm: maandbedrag in euro
+    #   zelfbewoningsplicht: restrictieve plicht uit de tekst (slecht voor verhuur)
+    #   niet_zelfbewoningsclausule: expliciet GEEN plicht (gunstig)
+    #   anti_speculatie: anti-speculatie-/kettingbeding (apart risico)
+    eigendom_soort: str | None = None
+    heeft_vve: bool | None = None
+    vve_bijdrage_pm: float | None = None
+    zelfbewoningsplicht: bool = False
+    niet_zelfbewoningsclausule: bool = False
+    anti_speculatie: bool = False
 
     @property
     def adres_bekend(self) -> bool:

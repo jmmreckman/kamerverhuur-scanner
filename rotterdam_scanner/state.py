@@ -33,6 +33,21 @@ class ListingState:
     # afgeleid bij het serialiseren (zie woningkenmerken.py), niet apart opgeslagen.
     woningtype_detail: str | None = None
     perceel_oppervlakte: int | None = None
+    # Afgeleide kenmerken uit de Move-detailkenmerken, voor de filters op
+    # kansen.steenhub.nl (zie move_scrape._kenmerken_uit_object + de pure lagen).
+    # Alleen door de Move/NVM-bron gevuld; woningen die alleen via Funda binnenkwamen
+    # of van vóór dit veld dateren houden de defaults (= onbekend).
+    #   eigendom_soort: "eigen_grond"|"erfpacht"|"erfpacht_afgekocht"|"onbekend"|None
+    #   heeft_vve: True|False|None; vve_bijdrage_pm: maandbedrag in euro
+    #   zelfbewoningsplicht: restrictieve plicht uit de advertentietekst
+    #   niet_zelfbewoningsclausule: expliciet GEEN plicht (gunstig)
+    #   anti_speculatie: anti-speculatie-/kettingbeding (apart risico)
+    eigendom_soort: str | None = None
+    heeft_vve: bool | None = None
+    vve_bijdrage_pm: float | None = None
+    zelfbewoningsplicht: bool = False
+    niet_zelfbewoningsclausule: bool = False
+    anti_speculatie: bool = False
     huurprijsopslag_signalen: list[str] = field(default_factory=list)
     opslag_percentage: float = 0.0
     aantal_kamers_mogelijk: int | None = None

@@ -65,6 +65,7 @@ _FILTER_SLEUTELS = {
     "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
     "filter-m2-min", "filter-m2-max", "filter-prijs-m2-max",
     "filter-woningtype", "toon-oude-vergunningen",
+    "filter-eigendom", "filter-vve", "filter-vve-max", "filter-zelfbewoning",
     "filter-zoek", "filter-dagen", "filter-sorteer",
 }
 
@@ -783,6 +784,14 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebru
         "woningtype": classificeer_woningtype(item.woningtype_detail),
         "woningtype_label": mooi_woningtype(item.woningtype_detail),
         "perceel_oppervlakte": item.perceel_oppervlakte,
+        # Afgeleide Move-kenmerken voor de filters (erfpacht/VvE/zelfbewoning). Alleen
+        # door de Move/NVM-bron gevuld; Funda-only/legacy-woningen houden de defaults.
+        "eigendom_soort": item.eigendom_soort,
+        "heeft_vve": item.heeft_vve,
+        "vve_bijdrage_pm": item.vve_bijdrage_pm,
+        "zelfbewoningsplicht": item.zelfbewoningsplicht,
+        "niet_zelfbewoningsclausule": item.niet_zelfbewoningsclausule,
+        "anti_speculatie": item.anti_speculatie,
         "aantal_kamers_mogelijk": item.aantal_kamers_mogelijk,
         "aantal_kamers_handmatig": item.aantal_kamers_handmatig,
         # p.p.-velden (legacy) afgeleid van de totalen bij het standaardaantal
