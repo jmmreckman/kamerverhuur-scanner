@@ -33,6 +33,7 @@ from rotterdam_scanner.config import Config, load_config
 from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.jsonbestand import schrijf_json_atomisch
 from rotterdam_scanner.woningkenmerken import classificeer_woningtype, mooi_woningtype
+from rotterdam_scanner.vve import classificeer_vve
 
 # Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
 # volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
@@ -767,6 +768,16 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebru
     # per-woning) uitgangspunten, zodat de kaart en lijst overeenkomen met de rekentool.
     winst_totaal, inleg_na_totaal, schakelgeld_totaal = _live_totalen(
         item, config, globale_defaults, account_overrides)
+    # VvE live afleiden: een scan vult heeft_vve alleen voor woningen die nú in het
+    # Move-dossier zitten. Woningen met een al bekend woningtype (woningtype_detail van
+    # een eerdere scan) maar zonder opgeslagen heeft_vve zouden anders voor altijd
+    # "onbekend" blijven en bij elk VvE-filter wegvallen. Daarom: is heeft_vve leeg, dan
+    # leiden we 'm af uit het woningtype (woonhuis -> geen VvE, appartement -> wel) via
+    # dezelfde pure regel. Een expliciet gescande waarde (checklist) blijft leidend.
+    woningtype = classificeer_woningtype(item.woningtype_detail)
+    heeft_vve = item.heeft_vve
+    if heeft_vve is None:
+        heeft_vve = classificeer_vve(woningtype, item.vve_bijdrage_pm, None)["heeft_vve"]
     return {
         "object_id": item.object_id,
         "url": item.url,
@@ -781,13 +792,14 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebru
         "oppervlakte_advertentie": item.oppervlakte_advertentie,
         # Woningkenmerken uit de NVM/Move-bron. woningtype = grove klasse voor het
         # filter (appartement/woonhuis/None), woningtype_label = leesbare ruwe type.
-        "woningtype": classificeer_woningtype(item.woningtype_detail),
+        "woningtype": woningtype,
         "woningtype_label": mooi_woningtype(item.woningtype_detail),
         "perceel_oppervlakte": item.perceel_oppervlakte,
         # Afgeleide Move-kenmerken voor de filters (erfpacht/VvE/zelfbewoning). Alleen
         # door de Move/NVM-bron gevuld; Funda-only/legacy-woningen houden de defaults.
+        # heeft_vve valt terug op de woningtype-afleiding als er nog geen scan-waarde is.
         "eigendom_soort": item.eigendom_soort,
-        "heeft_vve": item.heeft_vve,
+        "heeft_vve": heeft_vve,
         "vve_bijdrage_pm": item.vve_bijdrage_pm,
         "zelfbewoningsplicht": item.zelfbewoningsplicht,
         "niet_zelfbewoningsclausule": item.niet_zelfbewoningsclausule,
