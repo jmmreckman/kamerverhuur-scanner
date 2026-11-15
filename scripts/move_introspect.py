@@ -83,9 +83,16 @@ def _post(session, token, query, variables):
         return {"_raw": resp.text[:300]}, resp.status_code
 
 
-def _veld_uit_pad(msg: str) -> str | None:
-    m = re.search(r"@\[([^\]]+)\]", msg or "")
-    return m.group(1).split("/")[-1] if m else None
+# graphql-java zet de validatiesoort in de message: "Validation error (FieldUndefined@[pad]) : ..."
+# extensions.classification is altijd generiek "ValidationError", dus parsen we de message.
+_SOORT_PAD_RE = re.compile(r"\((\w+)@\[([^\]]+)\]\)")
+
+
+def _soort_en_veld(msg: str) -> tuple[str | None, str | None]:
+    m = _SOORT_PAD_RE.search(msg or "")
+    if not m:
+        return None, None
+    return m.group(1), m.group(2).split("/")[-1]
 
 
 def main() -> int:
@@ -104,16 +111,16 @@ def main() -> int:
     data, status = _post(session, token, _query(_KANDIDATEN),
                          {"dossierId": config.move_dossier_id, "first": 1})
     errors = data.get("errors") or []
+    print(f"(aantal validatiefouten terug: {len(errors)})")
     niet_bestaand: set[str] = set()
     object_velden: set[str] = set()
     for err in errors:
-        klasse = (err.get("extensions") or {}).get("classification")
-        veld = _veld_uit_pad(err.get("message", ""))
+        soort, veld = _soort_en_veld(err.get("message", ""))
         if not veld:
             continue
-        if klasse == "FieldUndefined":
+        if soort == "FieldUndefined":
             niet_bestaand.add(veld)
-        elif klasse == "SubSelectionRequired":
+        elif soort in ("SubSelectionRequired", "SubselectionRequired", "SubselectionNotAllowed"):
             object_velden.add(veld)
 
     getest = list(dict.fromkeys(_KANDIDATEN))
