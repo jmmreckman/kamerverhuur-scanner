@@ -134,6 +134,20 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   in `rente_historie.json`.
 - `kansen_site/app.py`, `kansen_site/templates/berekening.html`,
   `kansen_site/static/berekening.js/.css`, `kansen_site/rapport_pdf.py` (PDF-export).
+- **Move-kenmerkfilters (erfpacht/VvE/zelfbewoning).** De Move-**lijst**query levert de
+  kenmerken al mee: `ExchangeObject.kenmerkSections` (secties met `label`/`value`-paren,
+  bv. "Eigendomssituatie: Volle eigendom", "Bijdrage VVE p/m: € …", "Periodieke
+  bijdrage: Ja (…)") + `aanbiedingsTekst` (advertentietekst). **Dus géén extra call per
+  woning** (bevestigd via `scripts/move_introspect.py`). `move_scrape._kenmerken_uit_object`
+  leidt hieruit via de **pure lagen** af: `eigendom.py` (eigen_grond/erfpacht/erfpacht_
+  afgekocht/onbekend; veld leidend, tekst vangnet voor afgekocht/canon), `vve.py`
+  (wel/geen VvE + maandbijdrage; woonhuis→geen, appartement→wel, checklist leidend) en
+  `zelfbewoning.py` (zelfbewoningsplicht / niet-clausule / anti-speculatie uit de tekst —
+  let op: de *gemeentelijke* opkoop-zelfbewoningsplicht staat vrijwel nooit in de tekst en
+  wordt apart berekend, zie §9/opkoop.py). Velden lopen mee FundaListing→ListingState
+  (alleen door de Move/NVM-bron gevuld; een Funda-herwaarneming overschrijft ze niet) en
+  komen in de kaart-payload. Drie kaart-filters + popup-weergave; onthouden per account
+  (`_FILTER_SLEUTELS` in app.py). Pure lagen los getest (sandbox-proof).
 - `rotterdam_scanner/mailer.py` — uitgaande mail; **stille BCC** naar
   `jmmreckman@gmail.com` (in SMTP-envelope, niet in headers). `send_mail(...,
   stille_bcc=False)` laat die BCC weg — gebruikt door de concurrentie-scan, waar de
