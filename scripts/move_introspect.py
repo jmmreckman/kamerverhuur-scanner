@@ -25,7 +25,7 @@ from rotterdam_scanner import move_scrape
 from rotterdam_scanner.config import load_config
 
 _TYPENAAM_QUERY = """
-query Typenaam($dossierId: ID!, $first: Int) {
+query Typenaam($dossierId: ID!, $first: Int!) {
   searchDossier(id: $dossierId) {
     searcher { foundObjects(first: $first) { edges { node { exchangeObject { __typename } } } } }
   }
