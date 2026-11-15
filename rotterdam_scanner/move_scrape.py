@@ -24,6 +24,7 @@ import requests
 from .config import Config
 from .eigendom import classificeer_eigendom
 from .funda_mail import FundaListing, _maak_object_id
+from .verkoopstatus import categoriseer_verkoopstatus
 from .vve import classificeer_vve, parse_vve_bijdrage
 from .woningkenmerken import classificeer_woningtype
 from .zelfbewoning import classificeer_zelfbewoning
@@ -50,9 +51,6 @@ _UA = (
 _PAGE_SIZE = 50
 _MAX_PAGINAS = 60  # veiligheidsgrens: 60 x 50 = 3000 woningen
 
-# Alleen daadwerkelijk te koop staande woningen meenemen; verkocht/ingetrokken slaan
-# we bij de bron al over (dit is precies de meerwaarde van de verkoopstatus).
-_TE_KOOP_STATUS = re.compile(r"BESCHIKBAAR|BOD", re.IGNORECASE)
 _FORM_ACTION_RE = re.compile(r'<form[^>]+action="([^"]+)"', re.IGNORECASE)
 _PRIJS_RE = re.compile(r"([\d][\d.]*)")
 
@@ -251,15 +249,19 @@ def _kenmerken_uit_object(obj: dict) -> dict:
 
 
 def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
-    """Zet de GraphQL-edges om naar FundaListing-objecten (bron='nvm'). Verkochte/
-    ingetrokken woningen worden overgeslagen op basis van de status."""
+    """Zet de GraphQL-edges om naar FundaListing-objecten (bron='nvm').
+
+    We gooien verkochte/ingetrokken woningen hier NIET meer weg: de verkoopstatus wordt
+    per woning meegegeven en opgeslagen, zodat een al bekende woning dagelijks een
+    statusupdate krijgt (beschikbaar -> onder bod -> verkocht) en de kaart erop kan
+    filteren. Een gloednieuwe woning die al afgerond is (verkocht/ingetrokken) wordt pas
+    in de pipeline overgeslagen (die hoeven we niet alsnog te geocoden), zie
+    _verwerk_listings."""
     woningen: dict[str, FundaListing] = {}
     for edge in edges:
         obj = ((edge or {}).get("node") or {}).get("exchangeObject") or {}
         adres = obj.get("address") or {}
-        status = (obj.get("status") or "").strip()
-        if status and not _TE_KOOP_STATUS.search(status):
-            continue  # verkocht/onder voorbehoud/ingetrokken - geen kans meer
+        verkoopstatus = categoriseer_verkoopstatus(obj.get("status"))
         postcode = (adres.get("zipCode") or "").replace(" ", "")
         huisnummer = adres.get("nr")
         toevoeging = (adres.get("nrExtension") or "").strip().upper()
@@ -287,6 +289,7 @@ def parse_move_woningen(edges: list[dict]) -> list[FundaListing]:
                 woningtype_detail=(obj.get("objectDetailedType") or None),
                 perceel_oppervlakte=int(perceel) if isinstance(perceel, (int, float)) else None,
                 bron="nvm",
+                verkoopstatus=verkoopstatus,
                 **kenmerken,
             ),
         )

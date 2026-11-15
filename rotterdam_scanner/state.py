@@ -48,6 +48,12 @@ class ListingState:
     zelfbewoningsplicht: bool = False
     niet_zelfbewoningsclausule: bool = False
     anti_speculatie: bool = False
+    # Verkoopstatus-categorie (verkoopstatus.py): beschikbaar | in_optie | onder_bod |
+    # verkocht_onder_voorbehoud | verkocht | ingetrokken | onbekend. Dagelijks bijgewerkt
+    # uit de Move-status (en bij een Funda-verkocht-signaal, zie run_beschikbaarheidscheck).
+    # Staat LOS van `status` (die gaat over de regelgeving: actief/afgevallen). None =
+    # nog niet vastgesteld (legacy/Funda-only). Het kaart-statusfilter leest dit veld.
+    verkoopstatus: str | None = None
     huurprijsopslag_signalen: list[str] = field(default_factory=list)
     opslag_percentage: float = 0.0
     aantal_kamers_mogelijk: int | None = None

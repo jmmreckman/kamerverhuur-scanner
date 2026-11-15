@@ -34,6 +34,7 @@ from rotterdam_scanner.handmatig import parse_bestand
 from rotterdam_scanner.jsonbestand import schrijf_json_atomisch
 from rotterdam_scanner.woningkenmerken import classificeer_woningtype, mooi_woningtype
 from rotterdam_scanner.vve import classificeer_vve
+from rotterdam_scanner.verkoopstatus import label_voor as verkoopstatus_label
 
 # Eenvoudige e-mailvalidatie voor het ontvanger-veld van de concurrentie-scan: geen
 # volledige RFC-check, maar genoeg om vertypte adressen ("jan@", "jan.nl") te weren.
@@ -67,6 +68,7 @@ _FILTER_SLEUTELS = {
     "filter-m2-min", "filter-m2-max", "filter-prijs-m2-max",
     "filter-woningtype", "toon-oude-vergunningen",
     "filter-eigendom", "filter-vve", "filter-vve-max", "filter-zelfbewoning",
+    "filter-verkoopstatus",
     "filter-zoek", "filter-dagen", "filter-sorteer",
 }
 
@@ -801,6 +803,10 @@ def _listing_naar_json(item, config, globale_defaults: dict | None = None, gebru
         "eigendom_soort": item.eigendom_soort,
         "heeft_vve": heeft_vve,
         "vve_bijdrage_pm": item.vve_bijdrage_pm,
+        # Verkoopstatus (beschikbaar/onder bod/verkocht/...). None = onbekend (legacy/
+        # nog niet gescand); het statusfilter op de kaart behandelt onbekend als zichtbaar.
+        "verkoopstatus": item.verkoopstatus,
+        "verkoopstatus_label": verkoopstatus_label(item.verkoopstatus) if item.verkoopstatus else None,
         "zelfbewoningsplicht": item.zelfbewoningsplicht,
         "niet_zelfbewoningsclausule": item.niet_zelfbewoningsclausule,
         "anti_speculatie": item.anti_speculatie,

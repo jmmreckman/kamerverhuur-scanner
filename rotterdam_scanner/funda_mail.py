@@ -84,6 +84,10 @@ class FundaListing:
     zelfbewoningsplicht: bool = False
     niet_zelfbewoningsclausule: bool = False
     anti_speculatie: bool = False
+    # Verkoopstatus-categorie uit Move (zie verkoopstatus.categoriseer_verkoopstatus):
+    # beschikbaar | in_optie | onder_bod | verkocht_onder_voorbehoud | verkocht |
+    # ingetrokken | onbekend. Alleen door de Move/NVM-bron gezet; None = onbekend.
+    verkoopstatus: str | None = None
 
     @property
     def adres_bekend(self) -> bool:

@@ -45,16 +45,21 @@ def test_parse_move_woningen_zonder_toevoeging():
     assert w.prijs == 775000
 
 
-def test_parse_move_woningen_slaat_verkocht_over():
+def test_parse_move_woningen_houdt_alle_met_verkoopstatus():
+    # Sinds de verkoopstatus-tracking worden verkochte woningen NIET meer weggegooid bij
+    # het inlezen (zodat bestaande woningen een statusupdate krijgen); ze krijgen een
+    # verkoopstatus-categorie. De pipeline beslist of een gloednieuwe verkochte woning
+    # alsnog verwerkt wordt.
     edges = [
         _edge("Verkochtstraat", 1, "", "Rotterdam", "3011 AA", "€ 200.000,- k.k.", 50, "VERKOCHT"),
         _edge("Kansstraat", 2, "", "Rotterdam", "3011 AB", "€ 250.000,- k.k.", 60, "BESCHIKBAAR"),
         _edge("Bodstraat", 3, "", "Rotterdam", "3011 AC", "€ 260.000,- k.k.", 61, "ONDER_BOD"),
     ]
-    ids = {w.object_id for w in move_scrape.parse_move_woningen(edges)}
-    assert "3011AA-1" not in ids  # verkocht -> overgeslagen
-    assert "3011AB-2" in ids  # beschikbaar
-    assert "3011AC-3" in ids  # onder bod telt nog als kans
+    per_id = {w.object_id: w for w in move_scrape.parse_move_woningen(edges)}
+    assert set(per_id) == {"3011AA-1", "3011AB-2", "3011AC-3"}
+    assert per_id["3011AA-1"].verkoopstatus == "verkocht"
+    assert per_id["3011AB-2"].verkoopstatus == "beschikbaar"
+    assert per_id["3011AC-3"].verkoopstatus == "onder_bod"
 
 
 def test_parse_move_woningen_zonder_prijs_geeft_none():

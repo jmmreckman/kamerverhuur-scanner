@@ -148,6 +148,27 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (alleen door de Move/NVM-bron gevuld; een Funda-herwaarneming overschrijft ze niet) en
   komen in de kaart-payload. Drie kaart-filters + popup-weergave; onthouden per account
   (`_FILTER_SLEUTELS` in app.py). Pure lagen los getest (sandbox-proof).
+  **Kenmerk-filters zijn SOEPEL** (nov 2026): ze verbergen alleen woningen die bevestigd
+  NIET matchen; onbekend/nog-niet-gescand blijft altijd zichtbaar (anders loopt de kaart
+  leeg terwijl de kenmerken nog vullen). `heeft_vve` wordt bovendien live afgeleid uit het
+  woningtype als er nog geen scan-waarde is (`_listing_naar_json`), zodat het VvE-filter
+  meteen klopt (woonhuis→geen VvE) zonder op een scan te wachten.
+- **Verkoopstatus + statusfilter** (`rotterdam_scanner/verkoopstatus.py`, nov 2026).
+  `categoriseer_verkoopstatus()` normaliseert de Move-`status` (enum én NL-label, tolerant)
+  naar: beschikbaar | in_optie | onder_bod | verkocht_onder_voorbehoud | verkocht |
+  ingetrokken | onbekend. **Dagelijks bijgewerkt** uit het Move-dossier (`ListingState.
+  verkoopstatus`, los van `status`=regelgeving actief/afgevallen). move_scrape gooit
+  verkochte woningen NIET meer weg bij het inlezen (zodat bestaande woningen een
+  statusupdate krijgen); een gloednieuwe afgeronde woning (verkocht/ingetrokken) wordt pas
+  in `_verwerk_listings` overgeslagen (`verkoopstatus_mod.AFGEROND`). `run_beschikbaarheids-
+  check` zet een Funda-"verkocht" nu op `verkoopstatus=verkocht` (blijft onder "alles"
+  zichtbaar) i.p.v. hard `afgevallen`, en slaat al-verkochte woningen over. Kaart-filter
+  **Status** (standaard "Alleen beschikbaar"; "Incl. onder bod/optie"; "Alles") — soepel op
+  onbekend. **Langstaanders blijven vanzelf staan:** de dagelijkse 09:00-scan
+  (`scripts/dagelijkse_scan.py` → `pipeline.run`) leest het hele dossier opnieuw en zet
+  `laatst_gezien=vandaag`, dus `prune_expired` (30 dgn, `LISTING_EXPIRY_DAYS`) raakt een
+  nog-te-koop-woning nooit; die prune ruimt alleen woningen op die 30 dgn niet meer gezien
+  zijn (echt van de markt).
 - `rotterdam_scanner/mailer.py` — uitgaande mail; **stille BCC** naar
   `jmmreckman@gmail.com` (in SMTP-envelope, niet in headers). `send_mail(...,
   stille_bcc=False)` laat die BCC weg — gebruikt door de concurrentie-scan, waar de

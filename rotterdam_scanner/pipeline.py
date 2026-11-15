@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from . import bekendmakingen, den_haag, mail_voorkeuren
+from . import verkoopstatus as verkoopstatus_mod
 from .archief import ListingArchief, archief_pad_voor
 from .bag import fetch_bag_gegevens
 from .beschikbaarheid import controleer_beschikbaar
@@ -489,6 +490,9 @@ def _kopieer_move_kenmerken(doel: ListingState, listing: FundaListing) -> None:
     doel.zelfbewoningsplicht = listing.zelfbewoningsplicht
     doel.niet_zelfbewoningsclausule = listing.niet_zelfbewoningsclausule
     doel.anti_speculatie = listing.anti_speculatie
+    # Verkoopstatus dagelijks bijwerken (beschikbaar -> onder bod -> verkocht).
+    if listing.verkoopstatus:
+        doel.verkoopstatus = listing.verkoopstatus
 
 
 def _verwerk_listings(
@@ -537,6 +541,13 @@ def _verwerk_listings(
             _voeg_bron_toe(existing, listing.bron)
             state.upsert(existing)
             result.al_bekend.append(existing)
+            continue
+
+        # Een gloednieuwe woning die al afgerond is (verkocht/ingetrokken) nooit alsnog
+        # geocoden/verwerken: die hebben we nooit als kans gevolgd en zijn al van de markt.
+        # (Sinds de verkoopstatus-tracking levert de Move-bron óók niet-te-koop woningen
+        # aan, puur zodat BESTAANDE woningen een statusupdate krijgen - zie move_scrape.)
+        if existing is None and listing.verkoopstatus in verkoopstatus_mod.AFGEROND:
             continue
 
         try:
@@ -761,6 +772,10 @@ def run_beschikbaarheidscheck(config: Config, today: date | None = None) -> RunR
     for item in state.all():
         if item.status != "actief":
             continue
+        # Al bekend verkocht/ingetrokken: niet elke dag opnieuw de Funda-pagina ophalen
+        # (scheelt onnodige requests); de woning blijft onder "alles" zichtbaar.
+        if item.verkoopstatus in verkoopstatus_mod.AFGEROND:
+            continue
         beschikbaar = controleer_beschikbaar(item.url)
         item.laatst_gecheckt = today_iso  # we hébben 'm vandaag opgevraagd
         if beschikbaar is None:
@@ -772,10 +787,16 @@ def run_beschikbaarheidscheck(config: Config, today: date | None = None) -> RunR
         item.laatst_gezien = today_iso
         if beschikbaar:
             item.laatst_beschikbaar = today_iso  # bevestigd nog te koop
+            if item.verkoopstatus is None:
+                item.verkoopstatus = verkoopstatus_mod.BESCHIKBAAR
         else:
-            item.status = "afgevallen"
-            item.afvalreden = "Niet meer 'te koop' op de eigen Funda-pagina - vermoedelijk verkocht."
-            result.nieuw_afgevallen.append(item)
+            # Verkocht volgens de eigen Funda-pagina: markeer de VERKOOPstatus, maar laat
+            # 'm niet hard 'afvallen' - zo blijft hij onder het "alles"-filter zichtbaar
+            # (standaard verborgen). De regelgeving-status (actief) blijft ongemoeid; een
+            # echte afvaller is iets anders (nulquotum/50m/opkoop).
+            if item.verkoopstatus != verkoopstatus_mod.VERKOCHT:
+                item.verkoopstatus = verkoopstatus_mod.VERKOCHT
+                result.nieuw_afgevallen.append(item)
         state.upsert(item)
 
     _vul_archief_aan(config, state, today)

@@ -52,6 +52,13 @@
         <label class="checkbox-filter checkbox-sub"><input type="checkbox" id="toon-3kamer"> ook 3-kamer vergunningen</label>
         <label class="checkbox-filter"><input type="checkbox" id="toon-oude-vergunningen"> Toon oude vergunningen <span class="muted">(historisch, personen onbekend)</span></label>
         <span id="vergunningen-status" class="muted"></span>
+        <label>Status
+          <select id="filter-verkoopstatus">
+            <option value="beschikbaar" selected>Alleen beschikbaar</option>
+            <option value="te_koop_breed">Incl. onder bod / optie</option>
+            <option value="alles">Alles (incl. verkocht)</option>
+          </select>
+        </label>
         <label>Stad
           <select id="filter-stad">
             <option value="">Alle steden</option>

@@ -42,6 +42,7 @@ const filterEigendomEl = document.getElementById("filter-eigendom");
 const filterVveEl = document.getElementById("filter-vve");
 const filterVveMaxEl = document.getElementById("filter-vve-max");
 const filterZelfbewoningEl = document.getElementById("filter-zelfbewoning");
+const filterVerkoopstatusEl = document.getElementById("filter-verkoopstatus");
 const filterZoekEl = document.getElementById("filter-zoek");
 const filterDagenEl = document.getElementById("filter-dagen");
 const filterStadEl = document.getElementById("filter-stad");
@@ -196,6 +197,7 @@ function gefilterd() {
   const vve = filterVveEl ? filterVveEl.value : "";
   const maxVve = filterVveMaxEl ? parseFloat(filterVveMaxEl.value) : NaN;
   const zelfbewoning = filterZelfbewoningEl ? filterZelfbewoningEl.value : "";
+  const verkoopstatus = filterVerkoopstatusEl ? filterVerkoopstatusEl.value : "beschikbaar";
 
   return alleKansen.filter((k) => {
     const c = kansCijfers(k);
@@ -219,29 +221,43 @@ function gefilterd() {
       if (k.prijs / m2 > maxPrijsM2) return false;
     }
     if (woningtype && k.woningtype !== woningtype) return false;
-    // Eigendom: "geen_erfpacht" = eigen grond óf afgekochte erfpacht (beide feitelijk
-    // zonder doorlopende canon); de overige waarden matchen exact op eigendom_soort.
+    // Kenmerk-filters zijn SOEPEL: ze verbergen alleen woningen die bevestigd NIET
+    // matchen. Onbekend (nog niet gescand) blijft altijd staan, zodat de kaart nooit
+    // misleidend leeg wordt terwijl de kenmerken nog aan het vullen zijn.
+    // Eigendom: null én "onbekend" = onbekend → tonen. "geen_erfpacht" = eigen grond óf
+    // afgekochte erfpacht (beide zonder doorlopende canon); verberg dan alleen lopende erfpacht.
     if (eigendom) {
-      if (eigendom === "geen_erfpacht") {
-        if (k.eigendom_soort !== "eigen_grond" && k.eigendom_soort !== "erfpacht_afgekocht") return false;
-      } else if (k.eigendom_soort !== eigendom) {
-        return false;
+      const e = k.eigendom_soort;
+      const bekend = e && e !== "onbekend";
+      if (bekend) {
+        if (eigendom === "geen_erfpacht") {
+          if (e !== "eigen_grond" && e !== "erfpacht_afgekocht") return false;
+        } else if (e !== eigendom) {
+          return false;
+        }
       }
     }
-    // VvE: woningen met onbekende VvE-status (heeft_vve === null, bv. Funda-only) vallen
-    // weg zodra je expliciet op wel/geen VvE filtert.
-    if (vve === "ja" && k.heeft_vve !== true) return false;
-    if (vve === "nee" && k.heeft_vve !== false) return false;
+    // VvE: verberg alleen bevestigd mis (heeft_vve bekend én tegengesteld); null blijft staan.
+    if (vve === "ja" && k.heeft_vve === false) return false;
+    if (vve === "nee" && k.heeft_vve === true) return false;
     if (!isNaN(maxVve)) {
-      // Zonder bekende bijdrage niet te bevestigen dat 'ie onder de grens valt → weg.
-      if (k.vve_bijdrage_pm === null || k.vve_bijdrage_pm === undefined) return false;
-      if (k.vve_bijdrage_pm > maxVve) return false;
+      // Alleen een bekende bijdrage bóven de grens verbergen; onbekende bijdrage blijft staan.
+      if (k.vve_bijdrage_pm !== null && k.vve_bijdrage_pm !== undefined && k.vve_bijdrage_pm > maxVve) return false;
     }
-    // Zelfbewoningsplicht uit de advertentietekst. "zonder" = geen plicht gevonden
-    // (let op: de gemeentelijke opkoop-zelfbewoningsplicht staat vrijwel nooit in de
-    // tekst en zit niet in dit signaal); "met" = expliciete plicht in de tekst.
+    // Zelfbewoningsplicht uit de advertentietekst (false = geen plicht gevonden; let op: de
+    // gemeentelijke opkoop-zelfbewoningsplicht staat vrijwel nooit in de tekst, zie opkoop.py).
+    // "zonder" verbergt alleen bevestigde plicht; "met" toont alleen bevestigde plicht.
     if (zelfbewoning === "zonder" && k.zelfbewoningsplicht === true) return false;
     if (zelfbewoning === "met" && k.zelfbewoningsplicht !== true) return false;
+    // Verkoopstatus. Standaard "beschikbaar": verberg bekende niet-beschikbare (onder
+    // bod/optie/verkocht/...); onbekend (null, nog niet gescand) blijft staan zodat de
+    // kaart niet leegloopt. "te_koop_breed" toont ook onder bod/optie; "alles" alles.
+    const vs = k.verkoopstatus;
+    if (verkoopstatus === "beschikbaar") {
+      if (vs && vs !== "beschikbaar") return false;
+    } else if (verkoopstatus === "te_koop_breed") {
+      if (vs && vs !== "beschikbaar" && vs !== "in_optie" && vs !== "onder_bod") return false;
+    }
     if (zoek && !k.weergavenaam.toLowerCase().includes(zoek)) return false;
     if (!isNaN(maxDagen)) {
       const dagen = dagenOpFunda(k.eerst_gezien);
@@ -299,7 +315,7 @@ function bouwPopup(kans) {
     <button type="button" class="verwijder-knop popup-verwijder-knop" title="Verwijderen uit kansenlijst">&times;</button>
     <button type="button" class="ster-knop ${kans.favoriet ? "ster-actief" : ""}" title="${kans.favoriet ? "Favoriet - wordt gemonitord op nieuwe vergunningen binnen 50 m" : "Als favoriet instellen (monitoren op nieuwe kamerverhuurvergunningen binnen 50 m)"}">${kans.favoriet ? "★" : "☆"}</button>
     ${waarschuwingHtml(kans)}
-    <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}${kans.status && kans.status !== "actief" ? ' <span class="stad-tag" title="Niet meer actief op Funda, blijft staan omdat het een favoriet is">niet meer op Funda</span>' : ""}
+    <span class="adres">${kans.weergavenaam}</span>${isDenHaag ? ' <span class="stad-tag">Den Haag</span>' : ""}${kans.verkoopstatus && kans.verkoopstatus !== "beschikbaar" && kans.verkoopstatus_label ? ` <span class="stad-tag" title="Verkoopstatus volgens Move">${kans.verkoopstatus_label}</span>` : ""}${kans.status && kans.status !== "actief" ? ' <span class="stad-tag" title="Niet meer actief op Funda, blijft staan omdat het een favoriet is">niet meer op Funda</span>' : ""}
     ${kans.wijknaam ? kans.wijknaam + "<br>" : ""}
     Vraagprijs: ${formatEuro(kans.prijs)}<br>
     ${kans.primaire_oppervlakte ? kans.primaire_oppervlakte + " m²<br>" : ""}
@@ -1028,7 +1044,7 @@ for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterW
   if (el) el.addEventListener("input", renderAlles);
 }
 for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl, filterWoningtypeEl,
-                  filterEigendomEl, filterVveEl, filterZelfbewoningEl]) {
+                  filterEigendomEl, filterVveEl, filterZelfbewoningEl, filterVerkoopstatusEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
 
@@ -1053,6 +1069,7 @@ function verzamelFilters() {
     "filter-vve": filterVveEl ? filterVveEl.value : undefined,
     "filter-vve-max": filterVveMaxEl ? filterVveMaxEl.value : undefined,
     "filter-zelfbewoning": filterZelfbewoningEl ? filterZelfbewoningEl.value : undefined,
+    "filter-verkoopstatus": filterVerkoopstatusEl ? filterVerkoopstatusEl.value : undefined,
     "filter-zoek": filterZoekEl ? filterZoekEl.value : undefined,
     "filter-dagen": filterDagenEl ? filterDagenEl.value : undefined,
     "filter-sorteer": filterSorteerEl ? filterSorteerEl.value : undefined,
@@ -1079,6 +1096,7 @@ function pasFiltersToe(f) {
   zetWaarde(filterVveEl, f["filter-vve"]);
   zetWaarde(filterVveMaxEl, f["filter-vve-max"]);
   zetWaarde(filterZelfbewoningEl, f["filter-zelfbewoning"]);
+  zetWaarde(filterVerkoopstatusEl, f["filter-verkoopstatus"]);
   zetWaarde(filterZoekEl, f["filter-zoek"]);
   zetWaarde(filterDagenEl, f["filter-dagen"]);
   zetWaarde(filterSorteerEl, f["filter-sorteer"]);
