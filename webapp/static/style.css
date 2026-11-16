@@ -75,7 +75,7 @@ a { color: inherit; }
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr minmax(0, auto);
   grid-template-areas: "brand . right" "links links links";
   column-gap: 0.5rem;
   row-gap: 0.6rem;
@@ -145,6 +145,12 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* Bij veel menu-items niet buiten het scherm lopen (waardoor de laatste items -
+     Mailvoorkeuren/uitloggen - afgesneden werden en niet te scrollen waren), maar
+     netjes naar een volgende regel afbreken, rechts uitgelijnd. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 .nav-right select { width: auto; margin: 0; }
 
