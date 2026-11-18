@@ -327,27 +327,19 @@ def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
     return max((p.datum for p in betalingen), default=None)
 
 
-# Per-proces cache van de geauthenticeerde gspread-client + geopende spreadsheets.
-# Vroeger auth'te + open'de ELKE request opnieuw (meerdere Google-round-trips per
-# paginaweergave, ~4-5s op /aanbod), en een transiente hik bij die auth gaf een 500.
-# Nu: éénmalig authenticeren + openen per sheet, met een korte retry op transiente
-# netwerk-/429/5xx-fouten. De token wordt door google-auth zelf ververst, dus de cache
-# blijft geldig. google-auth lost de slow-start op.
+# Verse gspread-client + open PER request (net als vanouds), maar met een korte retry op
+# transiente netwerk-/429/5xx-fouten. Dit overbrugt de sporadische 500 die een koude
+# auth/verbinding (vlak na een herstart, of een losse hik) opleverde.
 #
-# BEWUST GEEN lock en GEEN warm-up-thread: gunicorn draait `sync`-workers (één request
-# tegelijk per worker-proces, elk met zijn eigen cache), dus er is geen gelijktijdige
-# toegang binnen een worker. Een eerdere poging met een lock róndom de netwerk-open +
-# een warm-up-thread zette de hele app vast (de worker-thread blokkeerde op de lock die
-# de trage warm-up vasthield → gunicorn-timeout → crash-loop). Zonder lock kan dat niet:
-# in het ergste geval opent een tweede toegang dezelfde sheet nog een keer (dict-set is
-# atomair onder de GIL), nooit een blokkade.
-_gc_cache = None
-_spreadsheet_cache: dict[str, object] = {}
-
-
+# BEWUST GEEN cache van de client/spreadsheet, GEEN lock, GEEN warm-up-thread. Geleerd
+# (nov 2026): (1) een lock rondom de netwerk-open + warm-up-thread zette de hele webapp
+# vast (worker blokkeerde op de lock → gunicorn-timeout → crash-loop; login óók plat).
+# (2) Het CACHEN van de client zelf brak de boel juist: een koud-gefaald credential-object
+# bleef falen (persistente 500 op alle Sheets-pagina's), terwijl een VERSE client per
+# request vanzelf herstelt zodra de verbinding warm is. Dus: vers per request + retry.
 def _is_transiente_fout(exc: Exception) -> bool:
-    """Een koude/tijdelijke hik (netwerk of 429/5xx) die één keer opnieuw proberen
-    verdient - i.t.t. een echte fout (verkeerd ID, geen toegang) die meteen doorvalt."""
+    """Een koude/tijdelijke hik (netwerk of 429/5xx) die opnieuw proberen verdient -
+    i.t.t. een echte fout (verkeerd ID, geen toegang) die meteen doorvalt."""
     try:
         from requests.exceptions import RequestException
     except Exception:  # noqa: BLE001
@@ -360,7 +352,7 @@ def _is_transiente_fout(exc: Exception) -> bool:
 
 def _met_retry(fn, pogingen: int = 4, pauze: float = 1.0):
     """Roept fn aan met retry op transiente fouten (oplopende pauze). Een niet-transiente
-    fout valt meteen door. Bedoeld om een koude verbinding na een herstart te overbruggen."""
+    fout valt meteen door."""
     for i in range(pogingen):
         try:
             return fn()
@@ -370,29 +362,17 @@ def _met_retry(fn, pogingen: int = 4, pauze: float = 1.0):
             time.sleep(pauze * (i + 1))
 
 
-def _gspread_client(config: Config):
-    global _gc_cache
-    if _gc_cache is None:
-        # Bouwt alleen de credentials uit het JSON-bestand (lokaal, geen netwerk) - de
-        # netwerk-call zit pas in open_by_key hieronder. Een race hier is onschadelijk.
-        _gc_cache = gspread.service_account(filename=config.google_service_account_file)
-    return _gc_cache
-
-
-def open_spreadsheet(config: Config, sheet_id: str):
-    """Opent (en cachet per proces) de spreadsheet van een pand, met retry op koude/
-    transiente netwerkfouten. Hergebruikt door SheetClient + bouw_structuur."""
-    sp = _spreadsheet_cache.get(sheet_id)
-    if sp is None:
-        sp = _met_retry(lambda: _gspread_client(config).open_by_key(sheet_id))
-        _spreadsheet_cache[sheet_id] = sp
-    return sp
+def _open_spreadsheet_vers(config: Config, sheet_id: str):
+    """Verse (niet-gecachete) gspread-client + open_by_key. Een verse client per keer is
+    cruciaal: een gecachete, koud-gefaalde client blijft falen."""
+    gc = gspread.service_account(filename=config.google_service_account_file)
+    return gc.open_by_key(sheet_id)
 
 
 class SheetClient:
     def __init__(self, config: Config, pand: Pand):
         self._pand = pand
-        self._spreadsheet = open_spreadsheet(config, pand.google_sheet_id)
+        self._spreadsheet = _met_retry(lambda: _open_spreadsheet_vers(config, pand.google_sheet_id))
         self._worksheet = _met_retry(lambda: self._spreadsheet.worksheet(pand.google_sheet_worksheet))
 
     @classmethod
@@ -402,7 +382,7 @@ class SheetClient:
         bouw_sheet_structuur). Opzettelijk een classmethod: hoeft geen bestaand
         hoofdtabblad te hebben (dat maakt deze functie juist aan), dus __init__ -
         dat meteen het hoofdtabblad opent - zou hier nog niet werken."""
-        spreadsheet = open_spreadsheet(config, pand.google_sheet_id)
+        spreadsheet = _met_retry(lambda: _open_spreadsheet_vers(config, pand.google_sheet_id))
         return bouw_sheet_structuur(spreadsheet, pand)
 
     def get_kamers(self) -> list[Tenant]:
