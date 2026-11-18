@@ -301,23 +301,24 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - **Google Sheets** = via **service account** (`gspread`), per sheet-ID. Elke sheet
   moet gedeeld zijn met het service-account-adres (`client_email` uit
   `google-service-account.json`). `service_account_email()` toont dat adres.
-  **Echte oorzaak van de sporadische 500 (bevestigd via de logs, nov 2026): een Sheets
-  `APIError [429]: Quota exceeded - 'Read requests per minute per user'`** op `get_all_values()`
-  (NIET de auth!). Google Sheets staat ~**60 leesverzoeken/min per service-account** toe; elke
-  paginaweergave leest de sheet(s), dus onder belasting (veel pagina's/refreshes + achtergrond-
-  taken, alles via hetzelfde service-account = één "user") tik je daar overheen → 429 → 500.
-  **Fix (code):** alle lees-aanroepen lopen via `_lees_rijen()` = `get_all_values()` met retry
-  (`_met_retry`, 5 pogingen, oplopende backoff); een 429 is meestal een korte piek die na een
-  paar seconden weer budget heeft. **Permanente fix (buiten de code): de leeslimiet verhogen**
-  in Google Cloud Console (project 993450403604 → APIs & Services → Google Sheets API → Quotas
-  → "Read requests per minute per user"). Overweeg bij groei ook de sheetdata kort te cachen
-  (TTL) om het leesvolume te verlagen - maar dan MET invalidatie-op-write (anders stale data).
-  **TWEE eerdere lessen (allebei de hele webapp platgelegd, niet herhalen):**
-  (1) **GEEN lock róndom de netwerk-open + GEEN warm-up-thread:** worker blokkeerde op de lock
-  die de trage koude warm-up vasthield → gunicorn `--timeout 120` → crash-loop → login óók plat.
+  **Sporadische 500 = Sheets `APIError [429]: Quota exceeded - 'Read requests per minute per
+  user'`** op `get_all_values()` (bevestigd via de prod-logs, nov 2026; NIET de auth). Google
+  staat ~**60 leesverzoeken/min per service-account** toe; elke paginaweergave leest de sheet(s),
+  dus onder belasting (veel pagina's/refreshes + achtergrondtaken, alles via hetzelfde service-
+  account = één "user") → 429 → 500. **DE echte fix = de leeslimiet verhogen in Google Cloud
+  Console** (het project van het Sheets-service-account, nr. **993450403604** → APIs & Services /
+  IAM & Admin → Quotas → filter `sheets.googleapis.com` → "Read requests per minute per user" →
+  increase aanvragen). Code houdt het bewust **simpel: verse client + open + lezen per request,
+  GEEN retry/cache** (zie de lessen hieronder). **DRIE lessen (nov 2026, elk los een storing — niet
+  herhalen):**
+  (1) **GEEN lock róndom de netwerk-open + GEEN warm-up-thread:** worker blokkeerde op de lock die
+  de trage koude warm-up vasthield → gunicorn `--timeout 120` → crash-loop → login óók plat.
   (2) **De gspread-client NIET cachen:** een gecachet, gefaald credential-object bleef falen →
-  persistente 500 op álle Sheets-pagina's. Verse client per request herstelt vanzelf. (Prijs:
-  per-request her-auth kost reads/tijd - vandaar dat de quota-verhoging de echte oplossing is.)
+  persistente 500 op álle Sheets-pagina's. Verse client per request herstelt vanzelf.
+  (3) **NIET retryen op een 429:** een retry is zelf ook een leesverzoek, dus retryen vreet het
+  minuut-budget verder op → zelfversterkende quota-uitputting (alles blijft 429). Bij een rate-
+  limit: minder lézen (quota omhoog, of de sheetdata kort cachen MET invalidatie-op-write), niet
+  retryen. **Dus voor dit probleem: geen codewijziging, maar de quota omhoog.**
 - **Drive (documenten/contracten)** = via **rclone** op de eigen Google-login van de
   gebruiker (2 TB). Mappen: `Steenhub <pandnaam>/` (Huidige/Oude huurders), plus
   `Steenhub getekende documenten`. rclone-config (token) in `/app/data/rclone.conf`

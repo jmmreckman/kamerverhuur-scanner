@@ -66,7 +66,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -230,11 +229,11 @@ def service_account_email(config: Config) -> str | None:
 
 
 def _kopregel_is_leeg(ws) -> bool:
-    return not any(any(str(cel).strip() for cel in rij) for rij in _lees_rijen(ws))
+    return not any(any(str(cel).strip() for cel in rij) for rij in ws.get_all_values())
 
 
 def _kopregel_klopt(ws, header: list[str]) -> bool:
-    rijen = _lees_rijen(ws)
+    rijen = ws.get_all_values()
     eerste = rijen[0] if rijen else []
     return [str(cel).strip() for cel in eerste[:len(header)]] == header
 
@@ -327,65 +326,12 @@ def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
     return max((p.datum for p in betalingen), default=None)
 
 
-# Verse gspread-client + open PER request (net als vanouds), maar met een korte retry op
-# transiente netwerk-/429/5xx-fouten. Dit overbrugt de sporadische 500 die een koude
-# auth/verbinding (vlak na een herstart, of een losse hik) opleverde.
-#
-# BEWUST GEEN cache van de client/spreadsheet, GEEN lock, GEEN warm-up-thread. Geleerd
-# (nov 2026): (1) een lock rondom de netwerk-open + warm-up-thread zette de hele webapp
-# vast (worker blokkeerde op de lock → gunicorn-timeout → crash-loop; login óók plat).
-# (2) Het CACHEN van de client zelf brak de boel juist: een koud-gefaald credential-object
-# bleef falen (persistente 500 op alle Sheets-pagina's), terwijl een VERSE client per
-# request vanzelf herstelt zodra de verbinding warm is. Dus: vers per request + retry.
-def _is_transiente_fout(exc: Exception) -> bool:
-    """Opnieuw proberen bij een tijdelijke/koude hik, niet bij een echt permanente fout.
-
-    Regel: heeft de fout een HTTP-status (gspread APIError / requests Response), dan alleen
-    retryen op 429 + 5xx; een 4xx (403 geen toegang, 404 verkeerd ID) is permanent. Heeft de
-    fout GÉÉN HTTP-status, dan is het een netwerk-/DNS-/TLS- of google-auth token-refresh-
-    fout (TransportError/RefreshError) - precies de koude/sporadische hik die we willen
-    overbruggen - dus als transient behandelen."""
-    resp = getattr(exc, "response", None)
-    code = getattr(resp, "status_code", None)
-    if code is not None:
-        return code == 429 or 500 <= int(code) <= 599
-    return True  # geen HTTP-status = netwerk/token-refresh-hik -> opnieuw proberen
-
-
-def _met_retry(fn, pogingen: int = 5, pauze: float = 1.0):
-    """Roept fn aan met retry op transiente fouten (oplopende pauze). Een niet-transiente
-    fout valt meteen door."""
-    for i in range(pogingen):
-        try:
-            return fn()
-        except Exception as exc:  # noqa: BLE001
-            if i == pogingen - 1 or not _is_transiente_fout(exc):
-                raise
-            time.sleep(pauze * (i + 1))
-
-
-def _open_spreadsheet_vers(config: Config, sheet_id: str):
-    """Verse (niet-gecachete) gspread-client + open_by_key. Een verse client per keer is
-    cruciaal: een gecachete, koud-gefaalde client blijft falen."""
-    gc = gspread.service_account(filename=config.google_service_account_file)
-    return gc.open_by_key(sheet_id)
-
-
-def _lees_rijen(ws) -> list:
-    """worksheet.get_all_values() met retry. De échte 500-oorzaak (nov 2026) was NIET de
-    auth maar een **429 'Quota exceeded - Read requests per minute per user'** op deze
-    lees-aanroep (Sheets staat ~60 leesverzoeken/min per service-account toe). Een 429 is
-    meestal een korte piek; na een paar seconden backoff is het minuut-budget weer
-    bijgevuld, dus retry vangt 'm op i.p.v. een 500. (Structureel plafond omhoog = de
-    leeslimiet verhogen in Google Cloud Console; dat kan deze code niet.)"""
-    return _met_retry(ws.get_all_values)
-
-
 class SheetClient:
     def __init__(self, config: Config, pand: Pand):
         self._pand = pand
-        self._spreadsheet = _met_retry(lambda: _open_spreadsheet_vers(config, pand.google_sheet_id))
-        self._worksheet = _met_retry(lambda: self._spreadsheet.worksheet(pand.google_sheet_worksheet))
+        gc = gspread.service_account(filename=config.google_service_account_file)
+        self._spreadsheet = gc.open_by_key(pand.google_sheet_id)
+        self._worksheet = self._spreadsheet.worksheet(pand.google_sheet_worksheet)
 
     @classmethod
     def bouw_structuur(cls, config: Config, pand: Pand) -> dict:
@@ -394,12 +340,13 @@ class SheetClient:
         bouw_sheet_structuur). Opzettelijk een classmethod: hoeft geen bestaand
         hoofdtabblad te hebben (dat maakt deze functie juist aan), dus __init__ -
         dat meteen het hoofdtabblad opent - zou hier nog niet werken."""
-        spreadsheet = _met_retry(lambda: _open_spreadsheet_vers(config, pand.google_sheet_id))
+        gc = gspread.service_account(filename=config.google_service_account_file)
+        spreadsheet = gc.open_by_key(pand.google_sheet_id)
         return bouw_sheet_structuur(spreadsheet, pand)
 
     def get_kamers(self) -> list[Tenant]:
         """Geeft alle kamers terug, inclusief leegstaande (lege huurder, wel een kamernaam)."""
-        rows = _lees_rijen(self._worksheet)
+        rows = self._worksheet.get_all_values()
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
@@ -587,7 +534,7 @@ class SheetClient:
         zo'n datum-vermomming hebben (van vóór deze fix) worden bij het
         opzoeken alsnog herkend via _normaliseer_maand()."""
         ws = self._history_worksheet()
-        bestaande = _lees_rijen(ws)
+        bestaande = ws.get_all_values()
         # Sleutel op (kamer, maand) samen - alleen op kamer sleutelen liet bij
         # meerdere bestaande maanden voor dezelfde kamer alleen de laatst
         # geziene rij over, waardoor eerdere maanden niet meer gevonden
@@ -634,7 +581,7 @@ class SheetClient:
         op dezelfde kamer (ander 'Huurder'-veld) blijven onaangeroerd. Geeft
         het aantal verwijderde regels terug."""
         ws = self._history_worksheet()
-        rows = _lees_rijen(ws)
+        rows = ws.get_all_values()
         if len(rows) <= 1:
             return 0
         header, data_rows = rows[0], rows[1:]
@@ -659,7 +606,7 @@ class SheetClient:
         'Maand'-kolom van rijen die Google Sheets ooit als datum heeft
         opgeslagen (bv. "01-06-2026" i.p.v. "2026-06"), zie _normaliseer_maand()."""
         ws = self._history_worksheet()
-        rows = _lees_rijen(ws)
+        rows = ws.get_all_values()
         if len(rows) <= 1:
             return 0
         header, data_rows = rows[0], rows[1:]
@@ -682,7 +629,7 @@ class SheetClient:
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
         ws = self._history_worksheet()
-        rows = _lees_rijen(ws)[1:]  # koprij overslaan
+        rows = ws.get_all_values()[1:]  # koprij overslaan
         regels: list[HistorieRegel] = []
         for row in rows:
             row = row + [""] * (7 - len(row))
@@ -746,7 +693,7 @@ class SheetClient:
 
     def get_aanmeldingen(self) -> list[list[str]]:
         ws = self._aanmeldingen_worksheet()
-        rows = _lees_rijen(ws)[1:]  # koprij overslaan
+        rows = ws.get_all_values()[1:]  # koprij overslaan
         aantal_kolommen = len(_AANMELDINGEN_HEADER)
         return [
             row + [""] * (aantal_kolommen - len(row))
@@ -783,7 +730,7 @@ class SheetClient:
 
     def get_bezichtigingen(self) -> list[list[str]]:
         ws = self._bezichtigingen_worksheet()
-        rows = _lees_rijen(ws)[1:]  # koprij overslaan
+        rows = ws.get_all_values()[1:]  # koprij overslaan
         aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
         return [
             row + [""] * (aantal_kolommen - len(row))
@@ -795,7 +742,7 @@ class SheetClient:
         nodig om een specifieke bezichtiging te kunnen verwijderen (zie
         verwijder_bezichtiging())."""
         ws = self._bezichtigingen_worksheet()
-        rows = _lees_rijen(ws)
+        rows = ws.get_all_values()
         aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
         resultaat = []
         for offset, row in enumerate(rows[1:]):  # koprij overslaan
@@ -842,7 +789,7 @@ class SheetClient:
         ook get_recent_vertrokken_huurders() als basis gebruikt voor zijn
         tijdelijke filter."""
         ws = self._vertrokken_worksheet()
-        rows = _lees_rijen(ws)[1:]  # koprij overslaan
+        rows = ws.get_all_values()[1:]  # koprij overslaan
         resultaat = []
         for i, row in enumerate(rows):
             row_index = i + 2  # +1 voor de koprij, +1 voor 1-gebaseerde rijnummers
