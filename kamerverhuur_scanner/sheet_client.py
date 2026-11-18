@@ -338,19 +338,21 @@ def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
 # bleef falen (persistente 500 op alle Sheets-pagina's), terwijl een VERSE client per
 # request vanzelf herstelt zodra de verbinding warm is. Dus: vers per request + retry.
 def _is_transiente_fout(exc: Exception) -> bool:
-    """Een koude/tijdelijke hik (netwerk of 429/5xx) die opnieuw proberen verdient -
-    i.t.t. een echte fout (verkeerd ID, geen toegang) die meteen doorvalt."""
-    try:
-        from requests.exceptions import RequestException
-    except Exception:  # noqa: BLE001
-        RequestException = ()  # type: ignore[assignment]
-    if RequestException and isinstance(exc, RequestException):
-        return True
+    """Opnieuw proberen bij een tijdelijke/koude hik, niet bij een echt permanente fout.
+
+    Regel: heeft de fout een HTTP-status (gspread APIError / requests Response), dan alleen
+    retryen op 429 + 5xx; een 4xx (403 geen toegang, 404 verkeerd ID) is permanent. Heeft de
+    fout GÉÉN HTTP-status, dan is het een netwerk-/DNS-/TLS- of google-auth token-refresh-
+    fout (TransportError/RefreshError) - precies de koude/sporadische hik die we willen
+    overbruggen - dus als transient behandelen."""
     resp = getattr(exc, "response", None)
-    return getattr(resp, "status_code", None) in (429, 500, 502, 503, 504)
+    code = getattr(resp, "status_code", None)
+    if code is not None:
+        return code == 429 or 500 <= int(code) <= 599
+    return True  # geen HTTP-status = netwerk/token-refresh-hik -> opnieuw proberen
 
 
-def _met_retry(fn, pogingen: int = 4, pauze: float = 1.0):
+def _met_retry(fn, pogingen: int = 5, pauze: float = 1.0):
     """Roept fn aan met retry op transiente fouten (oplopende pauze). Een niet-transiente
     fout valt meteen door."""
     for i in range(pogingen):
