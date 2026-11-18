@@ -25,11 +25,12 @@ from dotenv import load_dotenv
 from kamerverhuur_scanner import db
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.db_client import DbClient
-from kamerverhuur_scanner.lokale_media import LokaleMediaClient
+from kamerverhuur_scanner.lokale_media import STANDAARD_VARIANT_BREEDTES, LokaleMediaClient
 
-# Zelfde breedtes als webapp/app.py:_MEDIA_BREEDTES - anders warm je varianten op
-# die de route nooit opvraagt (cache-miss).
-_BREEDTES = (500, 1600)
+# Dezelfde breedtes die de app serveert én bij upload aanmaakt (één bron van
+# waarheid in lokale_media) - anders warm je varianten op die de route nooit
+# opvraagt (cache-miss).
+_BREEDTES = STANDAARD_VARIANT_BREEDTES
 
 
 def main() -> int:

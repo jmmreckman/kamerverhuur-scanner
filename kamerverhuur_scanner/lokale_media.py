@@ -43,11 +43,19 @@ def _veilig(tekst: str) -> str:
     return re.sub(r"[^a-z0-9_-]+", "-", tekst.lower()).strip("-") or "onbekend"
 
 
+# De breedtes waarvoor de publieke aanbodpagina een snelle, verkleinde WebP-
+# variant serveert (thumb=500 voor de grids, web=1600 voor de detail/lightbox).
+# De namen in webapp/app.py:_MEDIA_BREEDTES moeten hiermee overeenkomen, en
+# scripts/warm_media_cache.py gebruikt deze lijst om bestaande foto's op te warmen.
+STANDAARD_VARIANT_BREEDTES = (500, 1600)
+
+
 class LokaleMediaClient:
     def __init__(self, config: Config, pand: Pand, categorie: str):
         """`categorie` is bv. "aanbod" of "aanmeldingen" - houdt de
         mappenstructuur overzichtelijk en voorkomt naamsconflicten tussen
         beide soorten uploads."""
+        self._categorie = categorie
         self._basis = Path(config.state_dir) / "media" / _veilig(pand.slug) / _veilig(categorie)
 
     def _kamer_map(self, kamer: str, maak_aan: bool = False) -> Path:
@@ -83,7 +91,19 @@ class LokaleMediaClient:
         extensie = Path(bestandsnaam).suffix
         bestand_id = f"{uuid.uuid4().hex}{extensie}"
         (pad / bestand_id).write_bytes(inhoud)
-        self._schrijf_meta(pad / bestand_id, bestandsnaam, mimetype or "application/octet-stream")
+        mimetype = mimetype or "application/octet-stream"
+        self._schrijf_meta(pad / bestand_id, bestandsnaam, mimetype)
+        # Voor aanbod-foto's meteen de verkleinde WebP-varianten aanmaken, zodat
+        # de allereerste bezoeker niet op de conversie hoeft te wachten (anders
+        # gebeurt dat lui bij de eerste weergave). Alleen voor afbeeldingen in de
+        # "aanbod"-categorie; een mislukte conversie mag de upload nooit breken
+        # (lees_variant vangt fouten zelf af en valt terug op het origineel).
+        if self._categorie == "aanbod" and mimetype.startswith("image/"):
+            for breedte in STANDAARD_VARIANT_BREEDTES:
+                try:
+                    self.lees_variant(kamer, bestand_id, breedte)
+                except Exception:  # noqa: BLE001 - upload nooit laten mislukken op het opwarmen
+                    pass
         return bestand_id
 
     def verwijder_bestand(self, kamer: str, bestand_id: str) -> None:
