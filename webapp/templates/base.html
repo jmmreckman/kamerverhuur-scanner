@@ -22,6 +22,20 @@
 </head>
 <body class="{{ 'pand-thema' if pandkleur }}">
   {% from "_icons.html" import icon_dashboard, icon_kamers, icon_huurders, icon_betalingen, icon_contracten, icon_documenten, icon_logout, icon_instellingen, icon_inbox, icon_megafoon, icon_panden, icon_baksteen %}
+  {# Publieke bezoeker op een aanbodpagina (niet ingelogd): een eigen Steenhub-balk +
+     footer, zodat de pagina als die van een echte verhuurder/makelaar oogt. #}
+  {% set publiek = (not current_user.is_authenticated) and request.endpoint and request.endpoint.startswith('aanbod') %}
+  {% if publiek %}
+  <header class="publiek-balk">
+    <a class="publiek-merk" href="{{ url_for('aanbod_overzicht') }}">
+      <span class="logo-mark">{{ icon_baksteen() }}</span>
+      <span class="publiek-merk-tekst"><strong>Steenhub</strong><span>Student housing · Rotterdam</span></span>
+    </a>
+    <nav class="publiek-nav">
+      <a href="{{ url_for('aanbod_overzicht') }}">Available rooms</a>
+    </nav>
+  </header>
+  {% endif %}
   {% if current_user.is_authenticated %}
   {% set ep = request.endpoint or "" %}
   <nav class="navbar">
@@ -90,6 +104,37 @@
 
     {% block content %}{% endblock %}
   </main>
+  {% if publiek %}
+  <footer class="publiek-footer">
+    <div class="publiek-footer-binnen">
+      <div class="publiek-footer-merk">
+        <span class="logo-mark">{{ icon_baksteen() }}</span>
+        <div>
+          <strong>Steenhub</strong>
+          <p>Quality student rooms in Rotterdam, directly from the landlord. Transparent listings, a simple application, and a quick response.</p>
+        </div>
+      </div>
+      <div class="publiek-footer-kolommen">
+        <div>
+          <h4>Rooms</h4>
+          <a href="{{ url_for('aanbod_overzicht') }}">Available rooms</a>
+        </div>
+        <div>
+          <h4>Why Steenhub</h4>
+          <span>Verified listings</span>
+          <span>Direct from the landlord</span>
+          <span>Student-friendly</span>
+        </div>
+        <div>
+          <h4>Good to know</h4>
+          <span>Non-smoking houses</span>
+          <span>Viewings in person or by video call</span>
+        </div>
+      </div>
+    </div>
+    <div class="publiek-footer-onder">© {{ huidig_jaar }} Steenhub · Rotterdam</div>
+  </footer>
+  {% endif %}
   <script>
   // Knoppen in laadtoestand: zodra een formulier met class "js-busy" verzonden wordt
   // (ná de ingebouwde veldvalidatie), wordt de verzendknop grijs met een spinner +

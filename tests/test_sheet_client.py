@@ -211,8 +211,8 @@ def test_update_aanbod_breidt_sheet_uit_als_grid_te_klein_is():
     client, ws = _sheet_client(rows)
     assert ws.col_count == 26  # het standaard-grid, zoals op de live sheet
     client.update_aanbod(row_index=2, beschikbaar=True, omschrijving="Great room", map_id="map456")
-    assert ws.resize_aanroepen == [{"rows": None, "cols": 30}]
-    assert ws.col_count == 30
+    assert ws.resize_aanroepen == [{"rows": None, "cols": 31}]
+    assert ws.col_count == 31
 
 
 def test_update_aanbod_breidt_niet_onnodig_uit_als_grid_al_groot_genoeg_is():

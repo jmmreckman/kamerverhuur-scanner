@@ -58,6 +58,11 @@ class Tenant:
     advertentie_beschikbaar_per: str | None = None  # vrije tekst/datum
     advertentie_beschikbaar_tot: str | None = None  # vrije tekst/datum, leeg = onbepaalde tijd
     advertentie_borg: Decimal | None = None
+    # Tonen op de publieke aanbodpagina, maar duidelijk als VERHUURD gemarkeerd (rood).
+    # Zo oogt het aanbod voller/professioneler terwijl bezoekers zien dat de kamer weg is;
+    # je kunt 'm wel openen/bekijken, maar niet erop reageren. Los van `beschikbaar`;
+    # als dit aan staat wint "verhuurd" (ook als beschikbaar ook aan zou staan).
+    aanbod_verhuurd: bool = False
 
 
 @dataclass(frozen=True)

@@ -263,6 +263,22 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   OAuth-client; wacht op `client_id`/`secret` (+ ik lever een redirect-URI). De haakjes in de
   aanwezigheidslaag staan al klaar (`status(... bold_recent=...)` en de `onbetrouwbaar`-vlag voor
   de kamer met een losse tuinsleutel). Plan: `docs/verwarming-tado-plan.md`.
+- **Publieke aanbodpagina** (`/aanbod`, Engelstalig voor expats; geen login). Foto's/video's
+  staan **lokaal op de VPS** (`lokale_media.py`, `<state_dir>/media/...`), niet in Drive (service
+  account = 0 GB). **Snelheid (nov 2026):** `lokale_media.lees_variant()` maakt per foto een
+  verkleinde **WebP**-variant met schijf-cache (verborgen `.cache`-map naast het origineel; eerste
+  aanvraag maakt 'm, daarna uit cache — dekt bestaande foto's, geen migratie). Media-route neemt
+  `?size=thumb` (500px, grids) / `web` (1600px, detail) en cachet lang+immutable; zonder size =
+  origineel. Pillow in requirements. Detailpagina heeft een **lightbox** (klik→fullscreen, prev/
+  next/ESC/swipe, geen library). Verzendknoppen gaan in **laadtoestand** (spinner + "even geduld",
+  class `js-busy` + globale handler in base.html; de upload-dropzone heeft 'n eigen bezig-state).
+  **Branding:** niet-ingelogde bezoekers op een `aanbod`-pagina krijgen een Steenhub-balk + footer
+  (base.html `{% set publiek %}`), zodat het als een echte verhuurder/makelaar oogt. **VERHUURD-
+  status:** `Tenant.aanbod_verhuurd` (sheetkolom AE, `COL_AANBOD_VERHUURD=31`) = kamer tonen op de
+  aanbodpagina maar rood als VERHUURD; wél te bekijken, niet op te reageren (apply→404). Aan te
+  zetten op "Aanbod beheren" naast "deze kamer is te huur"; `_publiek_zichtbaar()` = beschikbaar óf
+  aanbod_verhuurd. Zo oogt het aanbod voller. `ads.py` = advertentietekst-generator (geen
+  Kamernet-API voor particulieren).
 
 ### kansen.steenhub.nl (`kansen_site/`, package `rotterdam_scanner/`)
 - `rotterdam_scanner/investering.py` — **rekentool-model** (`bereken_rekentool`,

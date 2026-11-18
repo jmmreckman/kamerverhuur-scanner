@@ -12,6 +12,13 @@
       <input type="checkbox" name="beschikbaar" style="width:auto; display:inline-block" {{ 'checked' if kamer.beschikbaar }}>
       Deze kamer is te huur (zichtbaar op de publieke aanbodpagina)
     </label>
+    <label>
+      <input type="checkbox" name="aanbod_verhuurd" style="width:auto; display:inline-block" {{ 'checked' if kamer.aanbod_verhuurd }}>
+      Tonen op de aanbodpagina, maar als <strong>VERHUURD</strong> markeren
+    </label>
+    <p class="muted">Met "VERHUURD markeren" staat de kamer wél op de aanbodpagina (en is 'ie te
+       openen/bekijken), maar duidelijk rood als verhuurd — en er kan niet op gereageerd worden.
+       Zo oogt het aanbod voller. Staat dit aan, dan wint "verhuurd" (ook als "te huur" ook aan staat).</p>
     <label>Omschrijving (in het Engels - dit ziet de bezoeker)
       <textarea name="omschrijving" rows="10">{{ kamer.advertentie_omschrijving or standaard_omschrijving }}</textarea>
     </label>

@@ -792,3 +792,99 @@ video.galerij-item { aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
   color: var(--muted);
   cursor: progress;
 }
+
+/* ---------- Publieke aanbodpagina: eigen Steenhub-balk + footer ---------- */
+.publiek-balk {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem clamp(1rem, 4vw, 2.5rem);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.publiek-merk { display: flex; align-items: center; gap: 0.7rem; text-decoration: none; color: var(--text); }
+.publiek-merk-tekst { display: flex; flex-direction: column; line-height: 1.15; }
+.publiek-merk-tekst strong { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.01em; }
+.publiek-merk-tekst span { font-size: 0.78rem; color: var(--muted); }
+.publiek-nav a {
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+}
+.publiek-nav a:hover { background: var(--surface-alt); color: var(--text); }
+
+.publiek-footer {
+  margin-top: 3rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.publiek-footer-binnen {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem clamp(1rem, 4vw, 2.5rem) 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) 2fr;
+  gap: 2rem;
+}
+.publiek-footer-merk { display: flex; gap: 0.9rem; align-items: flex-start; }
+.publiek-footer-merk strong { font-size: 1.1rem; font-weight: 800; }
+.publiek-footer-merk p { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.9rem; max-width: 42ch; }
+.publiek-footer-kolommen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+}
+.publiek-footer-kolommen h4 { margin: 0 0 0.6rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text); }
+.publiek-footer-kolommen a, .publiek-footer-kolommen span { display: block; color: var(--muted); font-size: 0.9rem; text-decoration: none; margin-bottom: 0.35rem; }
+.publiek-footer-kolommen a:hover { color: var(--primary); }
+.publiek-footer-onder {
+  border-top: 1px solid var(--border);
+  padding: 1rem clamp(1rem, 4vw, 2.5rem);
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+@media (max-width: 720px) {
+  .publiek-footer-binnen { grid-template-columns: 1fr; }
+}
+
+/* ---------- Aanbod: VERHUURD-markering ---------- */
+.tile-foto { position: relative; }
+.verhuurd-badge {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  background: var(--bad);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.card.is-verhuurd .tile-foto img { filter: grayscale(0.3) brightness(0.92); }
+.verhuurd-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-weight: 700;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  margin-top: 0.5rem;
+}
+.btn.btn-verhuurd {
+  background: var(--bad-soft);
+  color: var(--bad);
+  cursor: not-allowed;
+}

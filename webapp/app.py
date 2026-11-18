@@ -322,6 +322,7 @@ def create_app(config: Config | None = None) -> Flask:
         return {
             "eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None),
             "pand_wissel_url": _pand_wissel_url, "open_acties_aantal": open_acties_aantal,
+            "huidig_jaar": date.today().year,
         }
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
@@ -2312,6 +2313,7 @@ def create_app(config: Config | None = None) -> Flask:
         kamer = _kamer_of_404(sheet, kamer_naam)
         if request.method == "POST":
             beschikbaar = request.form.get("beschikbaar") == "on"
+            aanbod_verhuurd = request.form.get("aanbod_verhuurd") == "on"
             omschrijving = request.form.get("omschrijving", "").strip() or None
             prijs = request.form.get("advertentie_prijs", "").strip()
             oppervlakte = request.form.get("advertentie_oppervlakte", "").strip() or None
@@ -2333,7 +2335,7 @@ def create_app(config: Config | None = None) -> Flask:
                     kamer.row_index, beschikbaar, omschrijving, kamer.advertentie_map_id,
                     prijs=prijs_bedrag, oppervlakte=oppervlakte,
                     beschikbaar_per=beschikbaar_per, beschikbaar_tot=beschikbaar_tot,
-                    borg=borg_bedrag,
+                    borg=borg_bedrag, aanbod_verhuurd=aanbod_verhuurd,
                 )
             except Exception:
                 app.logger.exception(
@@ -4272,9 +4274,15 @@ def create_app(config: Config | None = None) -> Flask:
 
     # --- Publieke aanbodpagina (geen login, Engelstalig - vooral voor expats) ---
 
+    def _publiek_zichtbaar(kamer: Tenant) -> bool:
+        """Op de publieke aanbodpagina te zien: ofwel te huur (beschikbaar), ofwel
+        bewust als VERHUURD getoond (aanbod_verhuurd). Een VERHUURD-kamer is wel te
+        bekijken maar niet te reageren - zie aanbod_apply."""
+        return bool(kamer.beschikbaar or kamer.aanbod_verhuurd)
+
     def _beschikbare_kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
         kamer = _kamer_of_404(sheet, kamer_naam)
-        if not kamer.beschikbaar:
+        if not _publiek_zichtbaar(kamer):
             abort(404)
         return kamer
 
@@ -4288,10 +4296,13 @@ def create_app(config: Config | None = None) -> Flask:
             sheet = SheetClient(config, pand)
             media_client = _aanbod_media(pand)
             for kamer in sheet.get_kamers():
-                if not kamer.beschikbaar:
+                if not _publiek_zichtbaar(kamer):
                     continue
                 foto = _eerste_foto(media_client, kamer.kamer)
-                kaarten.append({"pand": pand, "kamer": kamer, "foto": foto})
+                kaarten.append({"pand": pand, "kamer": kamer, "foto": foto, "verhuurd": kamer.aanbod_verhuurd})
+        # Beschikbare kamers eerst, verhuurde onderaan (het aanbod oogt voller, maar de
+        # echt-te-huur kamers staan bovenaan).
+        kaarten.sort(key=lambda k: k["verhuurd"])
         return render_template("aanbod_overzicht.html", kaarten=kaarten)
 
     @app.route("/aanbod/<pand_slug>/<kamer_naam>")
@@ -4312,6 +4323,8 @@ def create_app(config: Config | None = None) -> Flask:
     def aanbod_apply(pand_slug: str, kamer_naam: str):
         sheet = SheetClient(config, g.pand)
         kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
+        if kamer.aanbod_verhuurd:
+            abort(404)  # alleen tonen (VERHUURD), niet op te reageren
         if request.method == "POST":
             bestand = request.files.get("study_proof")
             try:

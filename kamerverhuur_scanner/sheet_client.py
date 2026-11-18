@@ -111,6 +111,7 @@ COL_ADVERTENTIE_OPPERVLAKTE = 27
 COL_ADVERTENTIE_BESCHIKBAAR_PER = 28
 COL_ADVERTENTIE_BESCHIKBAAR_TOT = 29
 COL_ADVERTENTIE_BORG = 30
+COL_AANBOD_VERHUURD = 31  # kamer op de aanbodpagina tonen maar als VERHUURD markeren
 
 HEADER_ROW = 1
 _SOMRIJ_LABELS = {"totalen", "totaal"}
@@ -193,10 +194,10 @@ HUURDERS_HEADER = [
     "Geboortedatum", "Geboorteplaats", "Studentnummer", "Studierichting",
     "Borgsteller naam", "Borgsteller relatie", "Contract startdatum", "Borg",
     "Advertentie prijs", "Advertentie oppervlakte", "Advertentie beschikbaar per",
-    "Advertentie beschikbaar tot", "Advertentie borg",
+    "Advertentie beschikbaar tot", "Advertentie borg", "Aanbod verhuurd tonen",
 ]
-# Veiligheidsnet: de koprij moet precies even lang zijn als de kolomindeling (A t/m AD).
-assert len(HUURDERS_HEADER) == COL_ADVERTENTIE_BORG, "HUURDERS_HEADER loopt niet in de pas met de COL_*-indeling"
+# Veiligheidsnet: de koprij moet precies even lang zijn als de kolomindeling (A t/m AE).
+assert len(HUURDERS_HEADER) == COL_AANBOD_VERHUURD, "HUURDERS_HEADER loopt niet in de pas met de COL_*-indeling"
 
 # Standaardnamen die Google aan het eerste (lege) tabblad van een nieuwe sheet geeft -
 # die hernoemen we naar het hoofdtabblad i.p.v. er een los leeg "Blad1" naast te laten.
@@ -349,7 +350,7 @@ class SheetClient:
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
-            row = row + [""] * (COL_ADVERTENTIE_BORG - len(row))
+            row = row + [""] * (COL_AANBOD_VERHUURD - len(row))
             kamer = row[COL_KAMER - 1].strip()
             if not kamer or kamer.lower() in _SOMRIJ_LABELS:
                 continue  # lege rij of somrij ("Totalen") overslaan
@@ -387,6 +388,7 @@ class SheetClient:
                     advertentie_borg=(
                         parse_bedrag(row[COL_ADVERTENTIE_BORG - 1]) if row[COL_ADVERTENTIE_BORG - 1].strip() else None
                     ),
+                    aanbod_verhuurd=_naar_bool(row[COL_AANBOD_VERHUURD - 1]),
                 )
             )
         return kamers
@@ -463,14 +465,16 @@ class SheetClient:
         beschikbaar_per: str | None = None,
         beschikbaar_tot: str | None = None,
         borg: Decimal | None = None,
+        aanbod_verhuurd: bool = False,
     ) -> None:
         # Anders dan bij nieuwe RIJEN (die de Sheets API vanzelf aanmaakt),
         # breidt de API het aantal KOLOMMEN niet automatisch uit - schrijven
-        # voorbij het huidige grid (bv. een sheet die nog nooit tot kolom AD
+        # voorbij het huidige grid (bv. een sheet die nog nooit tot kolom AE
         # is uitgebreid) faalt anders met "exceeds grid limits".
-        self._zorg_voor_voldoende_kolommen(COL_ADVERTENTIE_BORG)
+        self._zorg_voor_voldoende_kolommen(COL_AANBOD_VERHUURD)
         updates = [
             {"range": self._a1(row_index, COL_BESCHIKBAAR), "values": [[_naar_ja_nee(beschikbaar)]]},
+            {"range": self._a1(row_index, COL_AANBOD_VERHUURD), "values": [[_naar_ja_nee(aanbod_verhuurd)]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_OMSCHRIJVING), "values": [[omschrijving or ""]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_MAP_ID), "values": [[map_id or ""]]},
             {"range": self._a1(row_index, COL_ADVERTENTIE_PRIJS), "values": [[self._bedrag_of_leeg(prijs)]]},

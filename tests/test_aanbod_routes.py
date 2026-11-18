@@ -29,6 +29,11 @@ KAMER_MET_ADVERTENTIEVELDEN = Tenant(
     advertentie_beschikbaar_per="01-09-2026", advertentie_beschikbaar_tot="01-07-2027",
     advertentie_borg=Decimal("1000.00"),
 )
+# Op de aanbodpagina getoond maar als VERHUURD gemarkeerd: wel te bekijken, niet op te reageren.
+KAMER_AANBOD_VERHUURD = Tenant(
+    row_index=5, naam="Piet Pietersen", kamer="4", verwacht_bedrag=Decimal("700.00"),
+    beschikbaar=False, aanbod_verhuurd=True, advertentie_omschrijving="This room is rented out",
+)
 
 
 class FakeSheetClient:
@@ -39,7 +44,7 @@ class FakeSheetClient:
         self.laatste_update_aanbod = None
 
     def get_kamers(self):
-        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN]
+        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN, KAMER_AANBOD_VERHUURD]
 
     def get_tenants(self):
         return [k for k in self.get_kamers() if k.naam]
@@ -55,13 +60,14 @@ class FakeSheetClient:
     def update_aanbod(
         self, row_index, beschikbaar, omschrijving, map_id,
         prijs=None, oppervlakte=None, beschikbaar_per=None, beschikbaar_tot=None, borg=None,
+        aanbod_verhuurd=False,
     ):
         if self.laat_update_aanbod_falen:
             raise RuntimeError("simuleert een mislukte Google Sheets-schrijfactie")
         self.laatste_update_aanbod = {
             "row_index": row_index, "beschikbaar": beschikbaar, "omschrijving": omschrijving, "map_id": map_id,
             "prijs": prijs, "oppervlakte": oppervlakte, "beschikbaar_per": beschikbaar_per,
-            "beschikbaar_tot": beschikbaar_tot, "borg": borg,
+            "beschikbaar_tot": beschikbaar_tot, "borg": borg, "aanbod_verhuurd": aanbod_verhuurd,
         }
 
     def add_aanmelding(self, kamer, aanmelding):
@@ -241,6 +247,25 @@ def test_apply_form_volledig_ingevuld_slaagt(app_client):
 
 def test_apply_form_op_verhuurde_kamer_geeft_404(app_client):
     resp = app_client.get("/aanbod/mahoniestraat/2/apply")
+    assert resp.status_code == 404
+
+
+def test_als_verhuurd_getoonde_kamer_staat_op_overzicht_met_badge(app_client):
+    resp = app_client.get("/aanbod")
+    assert resp.status_code == 200
+    assert b"room 4" in resp.data  # wordt getoond, ook al is 'ie niet beschikbaar
+    assert b"VERHUURD" in resp.data
+
+
+def test_als_verhuurd_getoonde_kamer_detail_toont_rented_zonder_apply(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/4")
+    assert resp.status_code == 200
+    assert b"Rented" in resp.data
+    assert b"Apply for this room" not in resp.data
+
+
+def test_reageren_op_als_verhuurd_getoonde_kamer_geeft_404(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/4/apply")
     assert resp.status_code == 404
 
 

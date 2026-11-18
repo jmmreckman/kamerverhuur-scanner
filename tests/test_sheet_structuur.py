@@ -9,7 +9,7 @@ from kamerverhuur_scanner.sheet_client import (
     _BEZICHTIGINGEN_HEADER,
     _HISTORIE_HEADER,
     _VERTROKKEN_HEADER,
-    COL_ADVERTENTIE_BORG,
+    COL_AANBOD_VERHUURD,
     HUURDERS_HEADER,
     bouw_sheet_structuur,
     sheet_id_uit_invoer,
@@ -90,16 +90,16 @@ def test_lege_nieuwe_sheet_krijgt_alle_tabbladen_en_kopregels():
 
 
 def test_huurders_kopregel_is_30_kolommen_breed():
-    assert len(HUURDERS_HEADER) == COL_ADVERTENTIE_BORG == 30
+    assert len(HUURDERS_HEADER) == COL_AANBOD_VERHUURD == 31
     ss = FakeSpreadsheet([FakeWorksheet("Blad1", rows=[])])
     bouw_sheet_structuur(ss, _pand())
     huurders = next(w for w in ss.worksheets() if w.title == "Huurders")
-    assert huurders.col_count >= 30  # grid is breed genoeg gemaakt voor kolom AD
+    assert huurders.col_count >= 31  # grid is breed genoeg gemaakt voor kolom AE
 
 
 def test_idempotent_bestaande_kloppende_tabbladen_blijven_ongemoeid():
     ss = FakeSpreadsheet([
-        FakeWorksheet("Huurders", rows=[list(HUURDERS_HEADER)], col_count=30),
+        FakeWorksheet("Huurders", rows=[list(HUURDERS_HEADER)], col_count=31),
         FakeWorksheet("Historie", rows=[list(_HISTORIE_HEADER)]),
         FakeWorksheet("Aanmeldingen", rows=[list(_AANMELDINGEN_HEADER)]),
         FakeWorksheet("Bezichtigingen", rows=[list(_BEZICHTIGINGEN_HEADER)]),
@@ -113,7 +113,7 @@ def test_idempotent_bestaande_kloppende_tabbladen_blijven_ongemoeid():
 
 def test_ontbrekend_tabblad_wordt_toegevoegd_naast_bestaande():
     # Huurders bestaat al correct; de rest ontbreekt (bv. een half opgezette sheet).
-    ss = FakeSpreadsheet([FakeWorksheet("Huurders", rows=[list(HUURDERS_HEADER)], col_count=30)])
+    ss = FakeSpreadsheet([FakeWorksheet("Huurders", rows=[list(HUURDERS_HEADER)], col_count=31)])
     r = bouw_sheet_structuur(ss, _pand())
     assert r["ongewijzigd"] == ["Huurders"]
     assert set(r["aangemaakt"]) == {"Historie", "Aanmeldingen", "Bezichtigingen", "Vertrokken"}
@@ -121,7 +121,7 @@ def test_ontbrekend_tabblad_wordt_toegevoegd_naast_bestaande():
 
 def test_verkeerde_kopregel_wordt_hersteld():
     ss = FakeSpreadsheet([
-        FakeWorksheet("Huurders", rows=[["Kamer", "Naam", "Huur"]], col_count=30),  # oude/foute koppen
+        FakeWorksheet("Huurders", rows=[["Kamer", "Naam", "Huur"]], col_count=31),  # oude/foute koppen
     ])
     r = bouw_sheet_structuur(ss, _pand())
     assert "Huurders" in r["kopregel_gezet"]

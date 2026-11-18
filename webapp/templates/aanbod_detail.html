@@ -12,6 +12,9 @@
   {% if borg is not none %}
   <p class="muted">Security deposit: {{ borg|eur }}</p>
   {% endif %}
+  {% if kamer.aanbod_verhuurd %}
+  <p class="verhuurd-banner">● RENTED — this room is no longer available</p>
+  {% endif %}
 </div>
 
 {% if media %}
@@ -48,7 +51,11 @@
   <p style="white-space: pre-line">{{ omschrijving }}</p>
 </div>
 
+{% if kamer.aanbod_verhuurd %}
+<span class="btn btn-verhuurd" aria-disabled="true">Rented</span>
+{% else %}
 <a class="btn" href="{{ url_for('aanbod_apply', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Apply for this room</a>
+{% endif %}
 <a class="btn btn-secondary" href="{{ url_for('aanbod_overzicht') }}">Back to all rooms</a>
 
 <script>
