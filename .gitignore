@@ -21,3 +21,9 @@ deploy/data/
 
 # lokale runtime-data (logs, state_dir met o.a. tekenportaal-uploads) - nooit committen
 data/
+
+# SQLite-hoofddatabase (panden + huurders + historie + ...) - leeft op het
+# state_dir-volume van de VPS, nooit in git. Ook de WAL-/shm-bijbestanden.
+steenhub.db
+steenhub.db-wal
+steenhub.db-shm

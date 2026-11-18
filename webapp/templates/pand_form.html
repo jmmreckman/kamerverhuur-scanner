@@ -6,19 +6,12 @@
 </div>
 
 <div class="warning-box">
-  <p><strong>Nieuwe sheet toevoegen in 3 stappen:</strong></p>
-  <ol style="margin:0.4rem 0 0.2rem 1.1rem; padding:0">
-    <li>Maak een lege Google Sheet aan (File &rarr; New).</li>
-    <li>Deel 'm met bewerkrechten met
-      {% if service_account_adres %}<code>{{ service_account_adres }}</code>{% else %}het e-mailadres uit je
-      <code>google-service-account.json</code>{% endif %}.</li>
-    <li>Plak hieronder de link (of het ID) en laat <em>"Tabbladen + kopjes automatisch opbouwen"</em>
-      aan staan — de juiste tabbladen (Huurders, Historie, Aanmeldingen, Bezichtigingen, Vertrokken)
-      en alle kolomkoppen worden dan voor je aangemaakt.</li>
-  </ol>
-  <p class="muted" style="margin:0.4rem 0 0">De bunq-koppeling (<code>bunq_production.conf</code>) is gedeeld met
-     alle panden; hier vul je alleen het IBAN in van de specifieke rekening van dit pand. Een Drive-map hoef je niet
-     aan te maken — die ontstaat vanzelf zodra er een contract getekend of document aangeleverd wordt.</p>
+  <p>De gegevens staan in de eigen database op de server (geen Google Sheets meer). Vul hieronder
+     de naam en de bunq-IBAN in; de <strong>kamers/huurders</strong> voeg je daarna toe via
+     <em>Huurders &rarr; Bewerken (grid)</em>. De bunq-koppeling (<code>bunq_production.conf</code>)
+     is gedeeld met alle panden; hier vul je alleen het IBAN in van de rekening van dit pand. Een
+     Drive-map hoef je niet aan te maken — die ontstaat vanzelf zodra er een contract getekend of
+     document aangeleverd wordt.</p>
 </div>
 
 <div class="card">
@@ -34,26 +27,6 @@
     {% endif %}
     <label>Naam (weergavenaam, bv. "Burgemeester Baumannlaan 70b")
       <input type="text" name="naam" value="{{ pand.naam if pand else '' }}" required>
-    </label>
-    <label>Google Sheet ID of de volledige link (je mag de hele <code>docs.google.com/spreadsheets/d/…</code>-link plakken)
-      <input type="text" name="google_sheet_id" value="{{ pand.google_sheet_id if pand else '' }}" required>
-    </label>
-    <label>Tabbladnaam met de kamers
-      <input type="text" name="google_sheet_worksheet" value="{{ pand.google_sheet_worksheet if pand else 'Huurders' }}">
-    </label>
-    <label>Tabbladnaam voor betaalgeschiedenis
-      <input type="text" name="history_worksheet" value="{{ pand.history_worksheet if pand else 'Historie' }}">
-    </label>
-    <label>Tabbladnaam voor aanmeldingen
-      <input type="text" name="aanmeldingen_worksheet" value="{{ pand.aanmeldingen_worksheet if pand else 'Aanmeldingen' }}">
-    </label>
-    <label>Tabbladnaam voor vertrokken huurders
-      <input type="text" name="vertrokken_worksheet" value="{{ pand.vertrokken_worksheet if pand else 'Vertrokken' }}">
-    </label>
-    <label style="display:flex; align-items:center; gap:0.5rem">
-      <input type="checkbox" name="sheet_structuur" {{ 'checked' if not pand }} style="width:auto">
-      Tabbladen + kopjes automatisch opbouwen in deze sheet bij opslaan
-      {% if pand %}(opnieuw uitvoeren is veilig — bestaande, kloppende tabbladen blijven ongemoeid){% endif %}
     </label>
     <label>IBAN van de rekening waar de huur van dit pand op binnenkomt
       <input type="text" name="bunq_rekening_iban" value="{{ pand.bunq_rekening_iban if pand else '' }}" required>

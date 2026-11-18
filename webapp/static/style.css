@@ -888,3 +888,36 @@ video.galerij-item { aspect-ratio: 4 / 3; object-fit: cover; background: #000; }
   color: var(--bad);
   cursor: not-allowed;
 }
+
+/* Bewerkbaar huurders-grid (spreadsheet-achtig), zie huurders_grid.html */
+.grid-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+}
+.grid-tabel {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+}
+.grid-tabel th,
+.grid-tabel td {
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--border, #eee);
+  white-space: nowrap;
+}
+.grid-tabel thead th {
+  position: sticky;
+  top: 0;
+  background: var(--card, #fff);
+  text-align: left;
+  font-size: 0.85rem;
+}
+.grid-tabel input[type="text"] {
+  padding: 3px 5px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+.grid-tabel .grid-weg {
+  text-align: center;
+}

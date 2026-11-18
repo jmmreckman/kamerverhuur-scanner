@@ -23,8 +23,8 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
+from kamerverhuur_scanner import db
 from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.properties import PropertiesError, load_properties
 from kamerverhuur_scanner.runner import run_check
 
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
@@ -41,8 +41,8 @@ def _seconden_tot_volgende_run(nu: datetime | None = None) -> float:
 
 def _draai_alle_panden(config: Config) -> None:
     try:
-        panden = load_properties(config.properties_file)
-    except PropertiesError as exc:
+        panden = db.laad_panden(config)
+    except Exception as exc:  # noqa: BLE001 - database-/IO-fout niet de hele loop laten stoppen
         logger.error("Kon panden niet laden: %s", exc)
         return
     for pand in panden:

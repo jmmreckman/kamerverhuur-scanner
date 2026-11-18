@@ -96,6 +96,43 @@ def _parse_verhuurders(waarde) -> list[Verhuurder]:
     return verhuurders
 
 
+def pand_uit_dict(item: dict) -> Pand:
+    """Bouwt één `Pand` uit een losse dict (zoals een regel in properties.json,
+    of een rij uit de SQLite-hoofddatabase - zie kamerverhuur_scanner/db.py).
+    De parse-helpers accepteren bewust zowel de genormaliseerde vorm (lijst/
+    dict, zoals opgeslagen) als de handmatig-bewerkte vorm (komma-/regel-
+    gescheiden tekst), zodat beide bronnen exact hetzelfde `Pand` opleveren.
+    Gooit KeyError bij een ontbrekend verplicht veld (slug/naam/
+    google_sheet_id/bunq_rekening_iban)."""
+    return Pand(
+        slug=item["slug"],
+        naam=item["naam"],
+        google_sheet_id=item["google_sheet_id"],
+        google_sheet_worksheet=item.get("google_sheet_worksheet") or "Huurders",
+        history_worksheet=item.get("history_worksheet") or "Historie",
+        bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
+        aanmeldingen_worksheet=item.get("aanmeldingen_worksheet") or "Aanmeldingen",
+        vertrokken_worksheet=item.get("vertrokken_worksheet") or "Vertrokken",
+        extra_bcc=_normaliseer_extra_bcc(item.get("extra_bcc")),
+        postcode=item.get("postcode", "") or "",
+        plaats=item.get("plaats", "") or "",
+        verhuurders=_parse_verhuurders(item.get("verhuurders")),
+        rekeninghouder_naam=item.get("rekeninghouder_naam", "") or "",
+        gedeelde_ruimtes=item.get("gedeelde_ruimtes", "") or "",
+        bijzondere_bepalingen=item.get("bijzondere_bepalingen", "") or "",
+        gemeente_meldpunt=item.get("gemeente_meldpunt", "") or "",
+        heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
+        onderhoud_reserve_per_maand=_parse_optioneel_bedrag(item.get("onderhoud_reserve_per_maand")),
+        energiekosten_per_maand=_parse_optioneel_bedrag(item.get("energiekosten_per_maand")),
+        belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
+        hypotheek_rente_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_rente_per_maand")),
+        hypotheek_last_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_last_per_maand")),
+        aantal_eigenaren=_parse_optioneel_int(item.get("aantal_eigenaren")),
+        sleutels=_parse_sleutels(item.get("sleutels")),
+        kleur=_normaliseer_kleur(item.get("kleur")),
+    )
+
+
 def load_properties(path: str) -> list[Pand]:
     file_path = Path(path)
     if not file_path.exists():
@@ -114,35 +151,7 @@ def load_properties(path: str) -> list[Pand]:
     panden = []
     for i, item in enumerate(raw):
         try:
-            panden.append(
-                Pand(
-                    slug=item["slug"],
-                    naam=item["naam"],
-                    google_sheet_id=item["google_sheet_id"],
-                    google_sheet_worksheet=item.get("google_sheet_worksheet", "Huurders"),
-                    history_worksheet=item.get("history_worksheet", "Historie"),
-                    bunq_rekening_iban=item["bunq_rekening_iban"].replace(" ", "").upper(),
-                    aanmeldingen_worksheet=item.get("aanmeldingen_worksheet", "Aanmeldingen"),
-                    vertrokken_worksheet=item.get("vertrokken_worksheet", "Vertrokken"),
-                    extra_bcc=_normaliseer_extra_bcc(item.get("extra_bcc")),
-                    postcode=item.get("postcode", ""),
-                    plaats=item.get("plaats", ""),
-                    verhuurders=_parse_verhuurders(item.get("verhuurders")),
-                    rekeninghouder_naam=item.get("rekeninghouder_naam", ""),
-                    gedeelde_ruimtes=item.get("gedeelde_ruimtes", ""),
-                    bijzondere_bepalingen=item.get("bijzondere_bepalingen", ""),
-                    gemeente_meldpunt=item.get("gemeente_meldpunt", ""),
-                    heeft_bold_slot=bool(item.get("heeft_bold_slot", True)),
-                    onderhoud_reserve_per_maand=_parse_optioneel_bedrag(item.get("onderhoud_reserve_per_maand")),
-                    energiekosten_per_maand=_parse_optioneel_bedrag(item.get("energiekosten_per_maand")),
-                    belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
-                    hypotheek_rente_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_rente_per_maand")),
-                    hypotheek_last_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_last_per_maand")),
-                    aantal_eigenaren=_parse_optioneel_int(item.get("aantal_eigenaren")),
-                    sleutels=_parse_sleutels(item.get("sleutels")),
-                    kleur=_normaliseer_kleur(item.get("kleur")),
-                )
-            )
+            panden.append(pand_uit_dict(item))
         except KeyError as exc:
             raise PropertiesError(f"Pand #{i + 1} in '{path}' mist verplicht veld {exc}.") from exc
 

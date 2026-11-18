@@ -17,11 +17,10 @@ from datetime import timedelta
 
 from dotenv import load_dotenv
 
-from kamerverhuur_scanner import state
+from kamerverhuur_scanner import db, state
 from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.properties import PropertiesError, load_properties
+from kamerverhuur_scanner.db_client import DbClient as SheetClient
 from kamerverhuur_scanner.runner import bereken_winstoverzicht, verwachte_huurinkomsten_specificatie
-from kamerverhuur_scanner.sheet_client import SheetClient
 
 _INTERVAL_SECONDEN = timedelta(days=7).total_seconds()
 
@@ -30,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 def _leg_snapshot_vast_voor_alle_panden(config: Config) -> None:
     try:
-        panden = load_properties(config.properties_file)
-    except PropertiesError as exc:
+        panden = db.laad_panden(config)
+    except Exception as exc:  # noqa: BLE001
         logger.error("Kon panden niet laden: %s", exc)
         return
     for pand in panden:

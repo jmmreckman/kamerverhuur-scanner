@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
   <h1>Panden</h1>
-  <p class="muted">Welke panden zitten er in het systeem, en waar halen ze hun data vandaan?</p>
+  <p class="muted">Welke panden zitten er in het systeem? Alle gegevens staan in de eigen database op de server.</p>
 </div>
 
 <div class="card">
@@ -14,7 +14,7 @@
 <div class="card">
   <div class="tabel-scroll">
   <table>
-    <tr><th>Naam</th><th>Slug</th><th>Google Sheet</th><th>bunq IBAN</th><th></th></tr>
+    <tr><th>Naam</th><th>Slug</th><th>bunq IBAN</th><th></th></tr>
     {% for pand in panden %}
     <tr>
       <td>
@@ -23,22 +23,18 @@
         {{ pand.naam }}
       </td>
       <td><code>{{ pand.slug }}</code></td>
-      <td><a href="https://docs.google.com/spreadsheets/d/{{ pand.google_sheet_id }}/edit" target="_blank" rel="noopener">Bekijken</a></td>
       <td>{{ pand.bunq_rekening_iban }}</td>
       <td>
-        <a href="{{ url_for('pand_bewerken', slug=pand.slug) }}">Bewerken</a>
-        <form method="post" action="{{ url_for('pand_sheet_structuur', slug=pand.slug) }}" style="display:inline"
-              onsubmit="return confirm('Tabbladen + kopjes opbouwen/herstellen in de sheet van \'{{ pand.naam }}\'? Bestaande, kloppende tabbladen blijven ongemoeid.')">
-          <button class="btn-link" type="submit">Tabbladen opbouwen</button>
-        </form>
+        <a href="{{ url_for('huurders_grid', pand_slug=pand.slug) }}">Huurders (grid)</a>
+        &middot; <a href="{{ url_for('pand_bewerken', slug=pand.slug) }}">Bewerken</a>
         <form method="post" action="{{ url_for('pand_verwijderen', slug=pand.slug) }}" style="display:inline"
-              onsubmit="return confirm('Pand \'{{ pand.naam }}\' verwijderen? Dit verwijdert alleen de koppeling in deze site, niet de sheet/Drive-data zelf.')">
+              onsubmit="return confirm('Pand \'{{ pand.naam }}\' verwijderen? Dit verwijdert het pand en al zijn kamers/huurders uit de database. De Drive-documenten blijven staan.')">
           <button class="btn-link-danger" type="submit">Verwijderen</button>
         </form>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Nog geen panden.</td></tr>
+    <tr><td colspan="4" class="muted">Nog geen panden.</td></tr>
     {% endfor %}
   </table>
   </div>

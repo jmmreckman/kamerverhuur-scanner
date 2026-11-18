@@ -298,6 +298,40 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 
 ## 5. Google / bunq / Drive-architectuur (belangrijk)
 
+> **GROTE WIJZIGING (nov 2026): steenhub.nl draait NIET meer op Google Sheets.**
+> Alle gegevens (panden + per pand de kamers/huurders, betaalhistorie, aanmeldingen,
+> bezichtigingen, vertrokken huurders) staan nu in een **eigen SQLite-hoofddatabase**
+> `steenhub.db` in `state_dir` (het blijvende `/app/data`-volume). Dit maakte een einde
+> aan de Sheets-quota-500's (zie de historische les hieronder), de traagheid en de
+> instabiliteit. Google wordt alléén nog gebruikt voor **Drive** (documenten/back-up).
+> - **`kamerverhuur_scanner/db.py`** = verbinding + schema (idempotente migraties) +
+>   panden-opslag (`laad_panden`/`zet_pand`/`verwijder_pand`). `laad_panden` valt terug
+>   op het oude `properties.json` zolang de panden-tabel nog leeg is (transitie-vangnet;
+>   zodra er panden in de DB staan is de DB leidend en mag properties.json weg).
+> - **`kamerverhuur_scanner/db_client.py`** = `DbClient(config, pand)`, een **drop-in
+>   vervanger van de oude SheetClient** (exact dezelfde methodes/retourtypes). De app,
+>   runner en scripts importeren 'm als `DbClient as SheetClient`, dus alle
+>   `SheetClient(config, pand)`-aanroepen bleven ongewijzigd. `Tenant.row_index` = de
+>   DB-primary-key (`huurders.id`), zodat de bestaande update-flows blijven werken.
+>   Nieuw: `voeg_kamer_toe()` / `verwijder_kamer()` voor het grid.
+> - **Bewerkbaar grid**: `/pand/<slug>/huurders/grid` (knop "Bewerken (grid)" op de
+>   Huurders-pagina en "Huurders (grid)" bij Panden beheren) - spreadsheet-achtig,
+>   inline bewerken + rijen toevoegen/verwijderen, vervangt het met de hand bewerken
+>   van de oude Google Sheet. Diepe contractvelden blijven ongemoeid (die bewerk je op
+>   de huurder-detailpagina); een huurderwissel (met archivering) doe je via
+>   Huurders → bewerken of een nieuw contract, niet in het grid.
+> - **Eenmalige migratie**: `scripts/migreer_naar_db.py` leest properties.json + alle
+>   pand-sheets (via de oude gspread-`SheetClient`) en vult de DB. Draai op de VPS:
+>   `docker compose exec app python3 -m scripts.migreer_naar_db` (met `--droog` om eerst
+>   te tonen, `--opnieuw` om de DB eerst leeg te maken). De Sheets blijven onaangeroerd
+>   als back-up (er wordt alleen gelezen). Draai dit **direct na de uitrol** - tussen
+>   uitrol en migratie toont de app wél de panden (file-fallback) maar nog geen huurders.
+> - De DB is **volledig in de sandbox testbaar** (SQLite, geen externe deps): zie
+>   `tests/test_db_client.py`. `gspread` blijft in requirements, puur voor de migratie.
+>
+> Onderstaande Sheets-architectuur is historisch (back-up + migratie), niet meer de
+> live gegevensbron van steenhub:
+
 - **Google Sheets** = via **service account** (`gspread`), per sheet-ID. Elke sheet
   moet gedeeld zijn met het service-account-adres (`client_email` uit
   `google-service-account.json`). `service_account_email()` toont dat adres.

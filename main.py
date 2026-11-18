@@ -18,8 +18,9 @@ import sys
 
 from dotenv import load_dotenv
 
-from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties
+from kamerverhuur_scanner import db
+from kamerverhuur_scanner.config import Config
+from kamerverhuur_scanner.properties import find_pand
 from kamerverhuur_scanner.runner import run_check
 
 
@@ -44,8 +45,8 @@ def main() -> int:
 
     try:
         config = Config.load()
-        properties = load_properties(config.properties_file)
-    except (ConfigError, PropertiesError) as exc:
+        properties = db.laad_panden(config)
+    except Exception as exc:  # noqa: BLE001 - config- of database-/IO-fout
         print(f"Configuratiefout: {exc}", file=sys.stderr)
         return 1
 

@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from werkzeug.security import generate_password_hash
 
+from kamerverhuur_scanner import db
 from kamerverhuur_scanner.config import Config
 from webapp.app import create_app
 
@@ -17,30 +18,39 @@ class _FakeSheetClient:
         return []
 
 
+def _panden(config):
+    """De panden zoals ze in de hoofddatabase staan (ruwe opgeslagen dicts),
+    vervangt het oude teruglezen van properties.json."""
+    return db.laad_panden_ruw(config)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "SheetClient", _FakeSheetClient)
 
     properties_file = tmp_path / "properties.json"
-    properties_file.write_text(json.dumps([
-        {"slug": "mahoniestraat", "naam": "Mahoniestraat 15", "google_sheet_id": "fake",
-         "bunq_rekening_iban": "NL81BUNQ2163127125"},
-    ]))
+    properties_file.write_text("[]")
     users_file = tmp_path / "users.json"
     users_file.write_text(json.dumps({
         "beheerder": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": True, "panden": []},
         "justin": {"wachtwoord_hash": generate_password_hash("geheim123"), "alle_panden": False, "panden": ["mahoniestraat"]},
     }))
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
     config = Config(
         google_service_account_file="fake.json", properties_file=str(properties_file),
         bunq_conf_file="fake.conf", bunq_environment="PRODUCTION", bunq_api_key=None,
         users_file=str(users_file), flask_secret_key="test-secret",
-        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14,
+        bedrag_tolerantie=Decimal("0.01"), vooruitbetaling_dagen=14, state_dir=str(state_dir),
     )
+    # Het startpand staat in de hoofddatabase (niet meer in properties.json).
+    db.zet_pand(config, "mahoniestraat", {
+        "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
+    })
     app = create_app(config)
     app.testing = True
-    return app.test_client(), properties_file
+    return app.test_client(), config
 
 
 def _login(client, username, password="geheim123"):
@@ -63,7 +73,7 @@ def test_beheerder_ziet_panden_overzicht(client):
 
 
 def test_beheerder_kan_nieuw_pand_toevoegen(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/nieuw", data={
         "slug": "baumannlaan",
@@ -75,20 +85,20 @@ def test_beheerder_kan_nieuw_pand_toevoegen(client):
         "bunq_rekening_iban": "nl00 test 0000000000",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert any(p["slug"] == "baumannlaan" for p in panden)
     nieuw = next(p for p in panden if p["slug"] == "baumannlaan")
     assert nieuw["bunq_rekening_iban"] == "NL00TEST0000000000"
 
 
 def test_ongeldige_slug_wordt_geweigerd(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/nieuw", data={
         "slug": "Baumannlaan Fout!", "naam": "X", "google_sheet_id": "y", "bunq_rekening_iban": "NL00TEST0000000000",
     })
     assert b"Slug mag alleen" in resp.data
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert len(panden) == 1
 
 
@@ -102,7 +112,7 @@ def test_dubbele_slug_wordt_geweigerd(client):
 
 
 def test_beheerder_kan_pand_bewerken(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15 - bijgewerkt",
@@ -113,12 +123,12 @@ def test_beheerder_kan_pand_bewerken(client):
         "bunq_rekening_iban": "NL81BUNQ2163127125",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert panden[0]["naam"] == "Mahoniestraat 15 - bijgewerkt"
 
 
 def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15",
@@ -133,7 +143,7 @@ def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
         "gemeente_meldpunt": "www.rotterdam.nl/ongewenst-verhuurgedrag-melden",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     pand = panden[0]
     assert pand["postcode"] == "3077WD"
     assert pand["plaats"] == "Rotterdam"
@@ -148,21 +158,21 @@ def test_beheerder_kan_contractgegevens_van_pand_opslaan(client):
 
 
 def test_beheerder_kan_sleutels_opslaan(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
         "sleutels": "Lips 961 zolder straatkant\nLips 961 zolder tuinkant\n\nNemef 1240 BG straatkant",
     }, follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert panden[0]["sleutels"] == [
         "Lips 961 zolder straatkant", "Lips 961 zolder tuinkant", "Nemef 1240 BG straatkant",
     ]
 
 
 def test_sleuteloverzicht_toont_sleutels_van_pand(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
@@ -176,7 +186,7 @@ def test_sleuteloverzicht_toont_sleutels_van_pand(client):
 
 
 def test_sleuteloverzicht_zonder_sleutels_toont_lege_melding(client):
-    c, _properties_file = client
+    c, _config = client
     _login(c, "beheerder")
     resp = c.get("/pand/mahoniestraat/sleutels")
     assert resp.status_code == 200
@@ -184,7 +194,7 @@ def test_sleuteloverzicht_zonder_sleutels_toont_lege_melding(client):
 
 
 def test_nieuw_pand_toont_bold_slot_vinkje_standaard_aangevinkt(client):
-    c, _properties_file = client
+    c, _config = client
     _login(c, "beheerder")
     resp = c.get("/beheer/panden/nieuw")
     assert resp.status_code == 200
@@ -192,14 +202,14 @@ def test_nieuw_pand_toont_bold_slot_vinkje_standaard_aangevinkt(client):
 
 
 def test_beheerder_kan_bold_slot_vinkje_uitzetten(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
         # heeft_bold_slot NIET meegestuurd - simuleert een uitgevinkte checkbox
     }, follow_redirects=True)
     assert resp.status_code == 200
-    pand = json.loads(properties_file.read_text())[0]
+    pand = _panden(config)[0]
     assert pand["heeft_bold_slot"] is False
 
     bewerk_resp = c.get("/beheer/panden/mahoniestraat/bewerken")
@@ -207,20 +217,20 @@ def test_beheerder_kan_bold_slot_vinkje_uitzetten(client):
 
 
 def test_beheerder_kan_bold_slot_vinkje_weer_aanzetten(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15", "google_sheet_id": "fake", "bunq_rekening_iban": "NL81BUNQ2163127125",
         "heeft_bold_slot": "on",
     })
-    pand = json.loads(properties_file.read_text())[0]
+    pand = _panden(config)[0]
     assert pand["heeft_bold_slot"] is True
 
 
 def test_verhuurders_met_komma_i_p_v_pipe_wordt_ook_correct_gesplitst(client):
     # Regressietest voor een echt gemelde situatie: een huurder typt de naam
     # en het adres met een komma i.p.v. het "Naam | Adres"-formaat.
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/bewerken", data={
         "naam": "Mahoniestraat 15",
@@ -232,7 +242,7 @@ def test_verhuurders_met_komma_i_p_v_pipe_wordt_ook_correct_gesplitst(client):
         ),
     }, follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert panden[0]["verhuurders"] == [
         {"naam": "Jurian Reckman", "adres": "Batavierenplantsoen 33 2025CJ Haarlem"},
         {"naam": "Justin Winkelman", "adres": "Rijksstraatweg 98, 2022 DD Haarlem"},
@@ -240,7 +250,7 @@ def test_verhuurders_met_komma_i_p_v_pipe_wordt_ook_correct_gesplitst(client):
 
 
 def test_beheerder_kan_pand_verwijderen(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     c.post("/beheer/panden/nieuw", data={
         "slug": "baumannlaan", "naam": "Baumannlaan 70b", "google_sheet_id": "y",
@@ -248,21 +258,21 @@ def test_beheerder_kan_pand_verwijderen(client):
     })
     resp = c.post("/beheer/panden/mahoniestraat/verwijderen", follow_redirects=True)
     assert resp.status_code == 200
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert [p["slug"] for p in panden] == ["baumannlaan"]
 
 
 def test_laatste_pand_kan_niet_verwijderd_worden(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     resp = c.post("/beheer/panden/mahoniestraat/verwijderen", follow_redirects=True)
     assert b"laatste overgebleven pand niet verwijderen" in resp.data
-    panden = json.loads(properties_file.read_text())
+    panden = _panden(config)
     assert len(panden) == 1
 
 
 def test_beheerder_kan_pandkleur_opslaan_en_wissen(client):
-    c, properties_file = client
+    c, config = client
     _login(c, "beheerder")
     # Kleur aanzetten + hex meegeven -> opgeslagen.
     c.post("/beheer/panden/mahoniestraat/bewerken", data={
@@ -271,7 +281,7 @@ def test_beheerder_kan_pandkleur_opslaan_en_wissen(client):
         "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL81BUNQ2163127125",
         "kleur_aan": "on", "kleur": "#7b1fa2",
     }, follow_redirects=True)
-    assert json.loads(properties_file.read_text())[0]["kleur"] == "#7b1fa2"
+    assert _panden(config)[0]["kleur"] == "#7b1fa2"
 
     # Vinkje uit -> kleur gewist (ook al staat er nog een hex in het veld).
     c.post("/beheer/panden/mahoniestraat/bewerken", data={
@@ -280,4 +290,4 @@ def test_beheerder_kan_pandkleur_opslaan_en_wissen(client):
         "aanmeldingen_worksheet": "Aanmeldingen", "bunq_rekening_iban": "NL81BUNQ2163127125",
         "kleur": "#7b1fa2",
     }, follow_redirects=True)
-    assert json.loads(properties_file.read_text())[0]["kleur"] == ""
+    assert _panden(config)[0]["kleur"] == ""

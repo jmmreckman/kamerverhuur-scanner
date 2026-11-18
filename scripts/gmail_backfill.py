@@ -28,9 +28,9 @@ import sys
 
 from dotenv import load_dotenv
 
+from kamerverhuur_scanner import db as hoofddb
 from kamerverhuur_scanner.config import Config, ConfigError
-from kamerverhuur_scanner.properties import PropertiesError, load_properties
-from kamerverhuur_scanner.sheet_client import SheetClient
+from kamerverhuur_scanner.db_client import DbClient as SheetClient
 from webapp import communicatie_ai, communicatie_db, mail_import
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -59,8 +59,8 @@ def main(argv: list[str]) -> int:
 
     db = communicatie_db.verbind(communicatie_db.pad(config.state_dir))
     try:
-        panden = load_properties(config.properties_file)
-    except PropertiesError as exc:
+        panden = hoofddb.laad_panden(config)
+    except Exception as exc:  # noqa: BLE001
         logger.error("Pandenfout: %s", exc)
         return 1
 

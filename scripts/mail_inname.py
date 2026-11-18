@@ -52,8 +52,8 @@ def _pand_naam(config: Config, pand_slug: str | None) -> str:
     if not pand_slug:
         return ""
     try:
-        from kamerverhuur_scanner.properties import load_properties
-        for pand in load_properties(config.properties_file):
+        from kamerverhuur_scanner import db
+        for pand in db.laad_panden(config):
             if pand.slug == pand_slug:
                 return pand.naam
     except Exception:  # noqa: BLE001

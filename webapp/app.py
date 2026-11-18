@@ -28,19 +28,28 @@ from kamerverhuur_scanner import (
     aanwezigheid, document_ai, drive_browse, drive_sync, huuroverzicht, mail_voorkeuren,
     state, verwarming_db, verwarming_regels, winst,
 )
+from kamerverhuur_scanner import db
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.lokale_media import LokaleMediaClient
 from kamerverhuur_scanner.mailer import MailError, verstuur_email
 from kamerverhuur_scanner.matcher import betaling_matcht_naam
 from kamerverhuur_scanner.models import Status, Tenant
-from kamerverhuur_scanner.properties import PropertiesError, find_pand, load_properties, verwijder_pand, zet_pand
+from kamerverhuur_scanner.properties import find_pand
 from kamerverhuur_scanner.runner import (
     backfill_geschiedenis,
     bereken_winstoverzicht,
     run_check,
     verwachte_huurinkomsten_specificatie,
 )
-from kamerverhuur_scanner.sheet_client import SheetClient, service_account_email, sheet_id_uit_invoer
+# De gegevens staan sinds nov 2026 in de eigen SQLite-hoofddatabase (zie
+# kamerverhuur_scanner/db.py), niet meer in Google Sheets. DbClient is een
+# drop-in vervanger van de oude SheetClient (zelfde methodes/retourtypes), dus
+# we importeren 'm onder die naam en laten alle `SheetClient(config, pand)`-
+# aanroepen hieronder ongemoeid. sheet_id_uit_invoer blijft uit sheet_client
+# komen (puur, pelt een geplakte Google-Sheet-link terug tot het ID - alleen
+# nog relevant voor het legacy-veld in het pand-formulier/de back-up).
+from kamerverhuur_scanner.db_client import DbClient as SheetClient
+from kamerverhuur_scanner.sheet_client import sheet_id_uit_invoer
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import (
@@ -93,18 +102,13 @@ def create_app(config: Config | None = None) -> Flask:
         except ConfigError as exc:
             raise SystemExit(f"Configuratiefout: {exc}") from exc
 
-    try:
-        load_properties(config.properties_file)  # fail fast bij een ongeldig properties.json
-    except PropertiesError as exc:
-        raise SystemExit(f"Pandenfout: {exc}") from exc
+    db.verbind(config).close()  # initialiseert de hoofddatabase (schema) bij het starten
 
     def _properties() -> list:
-        # Steeds opnieuw inlezen (net als users.json) zodat wijzigingen via
-        # "Panden beheren" meteen gelden, zonder de app te herstarten.
-        try:
-            return load_properties(config.properties_file)
-        except PropertiesError:
-            return []
+        # Steeds opnieuw uit de hoofddatabase lezen (net als users.json) zodat
+        # wijzigingen via "Panden beheren" meteen gelden, zonder de app te
+        # herstarten. Een lege database (nog geen panden) is geldig.
+        return db.laad_panden(config)
 
     def _comm_db():
         """Verbinding met de communicatie-/onderhoudsdatabase (SQLite in state_dir),
@@ -691,36 +695,6 @@ def create_app(config: Config | None = None) -> Flask:
     def panden_overzicht():
         return render_template("panden.html", panden=_properties())
 
-    def _bouw_sheet_structuur_veilig(slug: str) -> None:
-        """Bouwt de tabbladen + koprijen op in de (al met het service account gedeelde)
-        sheet van dit pand, en flasht het resultaat of een begrijpelijke fout. Best-
-        effort: een mislukte opbouw (bv. sheet nog niet gedeeld) laat het aanmaken/
-        bewerken van het pand zelf niet mislukken - de gebruiker krijgt dan alleen de
-        uitleg hoe 'ie het alsnog goed zet."""
-        pand = find_pand(_properties(), slug)
-        if pand is None:
-            return
-        try:
-            r = SheetClient.bouw_structuur(config, pand)
-        except Exception:  # noqa: BLE001 - externe Google-fouten zijn divers; altijd nette uitleg tonen
-            logging.exception("Sheet-structuur opbouwen mislukt voor pand %s", slug)
-            adres = service_account_email(config)
-            deel_met = f" met {adres}" if adres else " met het service-account-adres"
-            flash(
-                "Kon de sheet niet openen om de tabbladen aan te maken. Controleer het "
-                f"Google Sheet-ID/de link, en deel de sheet{deel_met} met bewerkrechten. "
-                "Daarna kun je bij het pand op 'Tabbladen opbouwen' klikken.",
-            )
-            return
-        deel = []
-        if r["aangemaakt"]:
-            deel.append("aangemaakt: " + ", ".join(r["aangemaakt"]))
-        if r["kopregel_gezet"]:
-            deel.append("kopregel hersteld: " + ", ".join(r["kopregel_gezet"]))
-        if r["ongewijzigd"]:
-            deel.append("al in orde: " + ", ".join(r["ongewijzigd"]))
-        flash("Tabbladen/kopjes bijgewerkt — " + "; ".join(deel) + ".")
-
     @app.route("/beheer/panden/nieuw", methods=["GET", "POST"])
     @login_required
     @admin_required
@@ -733,15 +707,13 @@ def create_app(config: Config | None = None) -> Flask:
                 flash("Slug mag alleen kleine letters, cijfers en streepjes bevatten.")
             elif slug in bestaande_slugs:
                 flash(f"Pand met slug '{slug}' bestaat al.")
-            elif not gegevens["naam"] or not gegevens["google_sheet_id"] or not gegevens["bunq_rekening_iban"]:
-                flash("Naam, Google Sheet ID en bunq-IBAN zijn verplicht.")
+            elif not gegevens["naam"] or not gegevens["bunq_rekening_iban"]:
+                flash("Naam en bunq-IBAN zijn verplicht.")
             else:
-                zet_pand(config.properties_file, slug, gegevens)
-                flash(f"Pand '{gegevens['naam']}' aangemaakt.")
-                if request.form.get("sheet_structuur") == "on":
-                    _bouw_sheet_structuur_veilig(slug)
+                db.zet_pand(config, slug, gegevens)
+                flash(f"Pand '{gegevens['naam']}' aangemaakt. Voeg nu de kamers toe via 'Huurders bewerken'.")
                 return redirect(url_for("panden_overzicht"))
-        return render_template("pand_form.html", pand=None, slug=None, service_account_adres=service_account_email(config))
+        return render_template("pand_form.html", pand=None, slug=None)
 
     @app.route("/beheer/panden/<slug>/bewerken", methods=["GET", "POST"])
     @login_required
@@ -752,11 +724,11 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404, f"Pand '{slug}' bestaat niet.")
         if request.method == "POST":
             gegevens = _pand_gegevens_uit_form(request.form)
-            if not gegevens["naam"] or not gegevens["google_sheet_id"] or not gegevens["bunq_rekening_iban"]:
-                flash("Naam, Google Sheet ID en bunq-IBAN zijn verplicht.")
+            if not gegevens["naam"] or not gegevens["bunq_rekening_iban"]:
+                flash("Naam en bunq-IBAN zijn verplicht.")
             else:
                 oude_naam = pand.naam
-                zet_pand(config.properties_file, slug, gegevens)
+                db.zet_pand(config, slug, gegevens)
                 # De Drive-map hangt aan de pandnaam (Steenhub <naam>), niet aan de
                 # vaste slug. Wijzigt de naam, dan de bestaande map meehernoemen,
                 # anders raakt alles (WWSO-rapporten, huurdersmappen) "verweesd"
@@ -764,21 +736,8 @@ def create_app(config: Config | None = None) -> Flask:
                 if gegevens["naam"] != oude_naam:
                     drive_sync.hernoem_pand_map(config, oude_naam, gegevens["naam"])
                 flash(f"Pand '{gegevens['naam']}' bijgewerkt.")
-                if request.form.get("sheet_structuur") == "on":
-                    _bouw_sheet_structuur_veilig(slug)
                 return redirect(url_for("panden_overzicht"))
-        return render_template("pand_form.html", pand=pand, slug=slug, service_account_adres=service_account_email(config))
-
-    @app.route("/beheer/panden/<slug>/sheet-structuur", methods=["POST"])
-    @login_required
-    @admin_required
-    def pand_sheet_structuur(slug: str):
-        """Bouwt (of herstelt) de tabbladen + koprijen in de sheet van een bestaand
-        pand - idempotent, dus ook handig als er later een tabblad/kopje mist."""
-        if find_pand(_properties(), slug) is None:
-            abort(404, f"Pand '{slug}' bestaat niet.")
-        _bouw_sheet_structuur_veilig(slug)
-        return redirect(url_for("panden_overzicht"))
+        return render_template("pand_form.html", pand=pand, slug=slug)
 
     @app.route("/beheer/panden/<slug>/verwijderen", methods=["POST"])
     @login_required
@@ -787,7 +746,7 @@ def create_app(config: Config | None = None) -> Flask:
         if len(_properties()) <= 1:
             flash("Je kunt het laatste overgebleven pand niet verwijderen (de site heeft minstens één pand nodig om te starten).")
             return redirect(url_for("panden_overzicht"))
-        verwijder_pand(config.properties_file, slug)
+        db.verwijder_pand(config, slug)
         flash(f"Pand '{slug}' verwijderd (gebruikerstoegang tot dit pand blijft ongebruikt in users.json staan, maar heeft geen effect meer).")
         return redirect(url_for("panden_overzicht"))
 
@@ -1327,6 +1286,68 @@ def create_app(config: Config | None = None) -> Flask:
             "huurders.html", kamers=kamers,
             vertrokken_huurders=sheet.get_recent_vertrokken_huurders(),
         )
+
+    def _grid_bedrag(waarde: str):
+        waarde = (waarde or "").strip()
+        return parse_bedrag(waarde) if waarde else None
+
+    @app.route("/pand/<pand_slug>/huurders/grid", methods=["GET", "POST"])
+    @login_required
+    def huurders_grid(pand_slug: str):
+        """Spreadsheet-achtig bewerkbaar overzicht van alle kamers van dit pand -
+        vervangt het met de hand bewerken van de (nu verdwenen) Google Sheet.
+        Inline bewerken + in één keer opslaan, plus rijen toevoegen/verwijderen.
+
+        Bewust voor snelle correcties: een huurderwissel (met archivering van de
+        vertrekkende huurder en de Drive-mappen) doe je via 'Huurders → bewerken'
+        of een nieuw huurcontract - niet hier. De diepe contractvelden
+        (geboortedatum, studentnummer, borgsteller, ...) blijven bij een
+        gridwijziging ongemoeid; die bewerk je op de huurder-detailpagina."""
+        sheet = SheetClient(config, g.pand)
+        if request.method == "POST":
+            huidig = {k.row_index: k for k in sheet.get_kamers()}
+            indices = [i for i in request.form.get("rij_indices", "").split(",") if i]
+            toegevoegd = verwijderd = bijgewerkt = 0
+            for idx in indices:
+                rid = request.form.get(f"r_{idx}_id", "").strip()
+                verwijder = request.form.get(f"r_{idx}_verwijder") == "on"
+                kamer = request.form.get(f"r_{idx}_kamer", "").strip()
+                grid = {
+                    "naam": request.form.get(f"r_{idx}_naam", "").strip(),
+                    "kamer": kamer,
+                    "verwacht_bedrag": parse_bedrag(request.form.get(f"r_{idx}_verwacht_bedrag", "0") or "0"),
+                    "iban": request.form.get(f"r_{idx}_iban", "").strip().replace(" ", "").upper() or None,
+                    "zoekwoord": request.form.get(f"r_{idx}_zoekwoord", "").strip() or None,
+                    "kale_huurprijs": _grid_bedrag(request.form.get(f"r_{idx}_kale_huurprijs")),
+                    "servicekosten": _grid_bedrag(request.form.get(f"r_{idx}_servicekosten")),
+                    "contract_startdatum": request.form.get(f"r_{idx}_contract_startdatum", "").strip() or None,
+                    "contract_einddatum": request.form.get(f"r_{idx}_contract_einddatum", "").strip() or None,
+                    "email": request.form.get(f"r_{idx}_email", "").strip() or None,
+                    "telefoonnummer": request.form.get(f"r_{idx}_telefoonnummer", "").strip() or None,
+                    "borg_bedrag": _grid_bedrag(request.form.get(f"r_{idx}_borg_bedrag")),
+                    "opmerking": request.form.get(f"r_{idx}_opmerking", "").strip() or None,
+                }
+                if rid:
+                    bestaande = huidig.get(int(rid))
+                    if bestaande is None:
+                        continue
+                    if verwijder:
+                        sheet.verwijder_kamer(bestaande.row_index)
+                        verwijderd += 1
+                        continue
+                    # Begin bij alle huidige velden (zodat de diepe contractvelden
+                    # behouden blijven) en leg de grid-kolommen eroverheen.
+                    velden = _kamer_snapshot_velden(bestaande)
+                    velden.update(grid)
+                    sheet.update_kamer(row_index=bestaande.row_index, **velden)
+                    bijgewerkt += 1
+                elif not verwijder and kamer:
+                    nieuw_id = sheet.voeg_kamer_toe(kamer)
+                    sheet.update_kamer(row_index=nieuw_id, **grid)
+                    toegevoegd += 1
+            flash(f"Huurders-grid opgeslagen: {bijgewerkt} bijgewerkt, {toegevoegd} toegevoegd, {verwijderd} verwijderd.")
+            return redirect(url_for("huurders_grid", pand_slug=pand_slug))
+        return render_template("huurders_grid.html", kamers=sheet.get_kamers())
 
     @app.route("/pand/<pand_slug>/huurders/oud")
     @login_required

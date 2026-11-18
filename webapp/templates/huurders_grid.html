@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Huurders bewerken (grid) - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Huurders bewerken</h1>
+  <p class="muted">
+    Spreadsheet-achtig overzicht van alle kamers van {{ huidig_pand.naam }}. Pas cellen aan,
+    voeg rijen toe of vink een rij aan om te verwijderen, en klik op <strong>Alles opslaan</strong>.
+    Voor een huurderwissel (met archivering van de vorige huurder) gebruik je liever
+    <a href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Huurders → bewerken</a> of een nieuw huurcontract.
+    De diepe contractvelden (geboortedatum, studentnummer, borgsteller) blijven hier ongemoeid.
+  </p>
+</div>
+
+<form method="post" action="{{ url_for('huurders_grid', pand_slug=huidig_pand.slug) }}" id="grid-form" class="js-busy">
+  <input type="hidden" name="rij_indices" id="rij_indices"
+         value="{{ kamers|map(attribute='row_index')|join(',') }}">
+
+  <div class="grid-scroll">
+    <table class="grid-tabel">
+      <thead>
+        <tr>
+          <th>Kamer</th><th>Huurder</th><th>Kale huur</th><th>Service</th>
+          <th>Totale huur</th><th>IBAN</th><th>Zoekwoord</th><th>Start</th>
+          <th>Eind</th><th>E-mail</th><th>Telefoon</th><th>Borg</th>
+          <th>Opmerking</th><th title="Aanvinken = verwijderen">Weg?</th>
+        </tr>
+      </thead>
+      <tbody id="grid-body">
+        {% for k in kamers %}
+        {% set idx = k.row_index %}
+        <tr data-idx="{{ idx }}">
+          <td><input type="hidden" name="r_{{ idx }}_id" value="{{ k.row_index }}">
+              <input type="text" name="r_{{ idx }}_kamer" value="{{ k.kamer }}" size="8"></td>
+          <td><input type="text" name="r_{{ idx }}_naam" value="{{ k.naam }}" size="16"></td>
+          <td><input type="text" name="r_{{ idx }}_kale_huurprijs" value="{{ (k.kale_huurprijs|eur)|replace('€','') if k.kale_huurprijs is not none else '' }}" size="7"></td>
+          <td><input type="text" name="r_{{ idx }}_servicekosten" value="{{ (k.servicekosten|eur)|replace('€','') if k.servicekosten is not none else '' }}" size="7"></td>
+          <td><input type="text" name="r_{{ idx }}_verwacht_bedrag" value="{{ (k.verwacht_bedrag|eur)|replace('€','') }}" size="7"></td>
+          <td><input type="text" name="r_{{ idx }}_iban" value="{{ k.iban or '' }}" size="16"></td>
+          <td><input type="text" name="r_{{ idx }}_zoekwoord" value="{{ k.zoekwoord or '' }}" size="10"></td>
+          <td><input type="text" name="r_{{ idx }}_contract_startdatum" value="{{ k.contract_startdatum or '' }}" size="9"></td>
+          <td><input type="text" name="r_{{ idx }}_contract_einddatum" value="{{ k.contract_einddatum or '' }}" size="9"></td>
+          <td><input type="text" name="r_{{ idx }}_email" value="{{ k.email or '' }}" size="16"></td>
+          <td><input type="text" name="r_{{ idx }}_telefoonnummer" value="{{ k.telefoonnummer or '' }}" size="11"></td>
+          <td><input type="text" name="r_{{ idx }}_borg_bedrag" value="{{ (k.borg_bedrag|eur)|replace('€','') if k.borg_bedrag is not none else '' }}" size="7"></td>
+          <td><input type="text" name="r_{{ idx }}_opmerking" value="{{ k.opmerking or '' }}" size="14"></td>
+          <td class="grid-weg"><input type="checkbox" name="r_{{ idx }}_verwijder" aria-label="Rij verwijderen"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:1rem">
+    <button type="button" class="btn btn-secondary" id="rij-toevoegen">+ Rij toevoegen</button>
+    <button type="submit" class="btn">Alles opslaan</button>
+    <a class="btn btn-secondary" href="{{ url_for('huurders', pand_slug=huidig_pand.slug) }}">Terug</a>
+  </p>
+  {% if not kamers %}
+  <p class="muted">Dit pand heeft nog geen kamers. Klik op "+ Rij toevoegen" om de eerste kamer in te voeren.</p>
+  {% endif %}
+</form>
+
+<template id="rij-sjabloon">
+  <tr data-idx="__IDX__">
+    <td><input type="hidden" name="r___IDX___id" value="">
+        <input type="text" name="r___IDX___kamer" size="8"></td>
+    <td><input type="text" name="r___IDX___naam" size="16"></td>
+    <td><input type="text" name="r___IDX___kale_huurprijs" size="7"></td>
+    <td><input type="text" name="r___IDX___servicekosten" size="7"></td>
+    <td><input type="text" name="r___IDX___verwacht_bedrag" size="7"></td>
+    <td><input type="text" name="r___IDX___iban" size="16"></td>
+    <td><input type="text" name="r___IDX___zoekwoord" size="10"></td>
+    <td><input type="text" name="r___IDX___contract_startdatum" size="9"></td>
+    <td><input type="text" name="r___IDX___contract_einddatum" size="9"></td>
+    <td><input type="text" name="r___IDX___email" size="16"></td>
+    <td><input type="text" name="r___IDX___telefoonnummer" size="11"></td>
+    <td><input type="text" name="r___IDX___borg_bedrag" size="7"></td>
+    <td><input type="text" name="r___IDX___opmerking" size="14"></td>
+    <td class="grid-weg"><input type="checkbox" name="r___IDX___verwijder" aria-label="Rij verwijderen"></td>
+  </tr>
+</template>
+
+<script>
+(function () {
+  const body = document.getElementById("grid-body");
+  const sjabloon = document.getElementById("rij-sjabloon").innerHTML;
+  const form = document.getElementById("grid-form");
+  const indicesInput = document.getElementById("rij_indices");
+  let teller = 0;
+
+  document.getElementById("rij-toevoegen").addEventListener("click", function () {
+    const idx = "new" + (teller++);
+    const html = sjabloon.replaceAll("__IDX__", idx);
+    const tr = document.createElement("tbody");
+    tr.innerHTML = html;
+    body.appendChild(tr.firstElementChild);
+  });
+
+  // Bij opslaan rij_indices opnieuw opbouwen uit alle aanwezige rijen, zodat
+  // nieuwe rijen meegaan en de server precies die indices uitleest.
+  form.addEventListener("submit", function () {
+    const idxs = Array.from(body.querySelectorAll("tr[data-idx]")).map(function (tr) {
+      return tr.getAttribute("data-idx");
+    });
+    indicesInput.value = idxs.join(",");
+  });
+})();
+</script>
+{% endblock %}

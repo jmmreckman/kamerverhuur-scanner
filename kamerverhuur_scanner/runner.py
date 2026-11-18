@@ -23,7 +23,10 @@ from .matcher import (
     openstaand_tekort_uit_geschiedenis,
 )
 from .models import Pand, Payment, Status, Tenant, TenantResult
-from .sheet_client import SheetClient
+# De gegevens staan sinds nov 2026 in de eigen SQLite-hoofddatabase (db.py), niet
+# meer in Google Sheets. DbClient is een drop-in vervanger van de oude SheetClient
+# (zelfde methodes/retourtypes), dus importeren we 'm onder die naam.
+from .db_client import DbClient as SheetClient
 
 logger = logging.getLogger(__name__)
 
