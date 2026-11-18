@@ -183,8 +183,11 @@ def main(argv: list[str]) -> int:
         print(f"Pandenfout (properties.json): {exc}", file=sys.stderr)
         return 1
 
-    # Veiligheidscheck: niet per ongeluk twee keer migreren.
-    bestaande = db.laad_panden(config)
+    # Veiligheidscheck: niet per ongeluk twee keer migreren. Kijk naar de
+    # panden-TABEL zelf (laad_panden_ruw), niet naar laad_panden - die valt
+    # terug op properties.json zolang de tabel leeg is, waardoor de check
+    # anders onterecht aanslaat vóór de allereerste migratie.
+    bestaande = db.laad_panden_ruw(config)
     if bestaande and not opnieuw and not droog:
         print(
             f"De database bevat al {len(bestaande)} pand(en). Migratie afgebroken om "
