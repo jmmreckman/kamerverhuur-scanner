@@ -4,6 +4,7 @@ paginabezoek opnieuw bunq/Sheets te hoeven bevragen."""
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime
 from decimal import Decimal
@@ -11,6 +12,23 @@ from pathlib import Path
 
 from .models import Payment, TenantResult
 from .utils import nu_amsterdam
+
+
+def _schrijf_json(pad: Path, data, ensure_ascii: bool = True) -> None:
+    """Schrijft JSON **atomair**: eerst naar een tijdelijk bestand in dezelfde
+    map, dan `os.replace()` (een atomaire rename binnen dezelfde filesystem). Zo
+    kan een crash midden in het schrijven, of twee gelijktijdige schrijvers (de
+    2 app-workers/threads + de achtergrond-scanners), nooit een half-geschreven
+    bestand achterlaten dat de pagina bij het volgende inlezen laat crashen. De
+    lezer ziet altijd óf de oude, óf de nieuwe, volledige inhoud - nooit iets
+    halfs. (De read-modify-write-race op dezelfde sleutel blijft; die lossen we
+    pas op als deze state naar de database verhuist.)"""
+    pad = Path(pad)
+    pad.parent.mkdir(parents=True, exist_ok=True)
+    # Pid in de tijdelijke naam: twee processen botsen zo niet op hetzelfde temp-bestand.
+    tmp = pad.with_name(f".{pad.name}.tmp-{os.getpid()}")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=ensure_ascii))
+    os.replace(tmp, pad)
 
 
 def _bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
@@ -56,7 +74,7 @@ def save(
             for p in (unmatched_payments or [])
         ],
     }
-    _bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+    _schrijf_json(_bestandsnaam(pand_slug, state_dir), data)
 
 
 def load(pand_slug: str, state_dir: str = ".") -> dict | None:
@@ -106,7 +124,7 @@ def goedgekeurde_kamers(pand_slug: str, maand: str, state_dir: str = ".") -> set
 def zet_handmatig_betaald(pand_slug: str, kamer: str, maand: str, origineel_status: str, state_dir: str = ".") -> None:
     data = _laad_handmatig_betaald_alles(pand_slug, state_dir)
     data.setdefault(maand, {})[kamer] = origineel_status
-    _handmatig_betaald_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+    _schrijf_json(_handmatig_betaald_bestandsnaam(pand_slug, state_dir), data)
 
 
 def verwijder_handmatig_betaald(pand_slug: str, kamer: str, maand: str, state_dir: str = ".") -> str | None:
@@ -115,7 +133,7 @@ def verwijder_handmatig_betaald(pand_slug: str, kamer: str, maand: str, state_di
     origineel = data.get(maand, {}).pop(kamer, None)
     if maand in data and not data[maand]:
         del data[maand]
-    _handmatig_betaald_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+    _schrijf_json(_handmatig_betaald_bestandsnaam(pand_slug, state_dir), data)
     return origineel
 
 
@@ -133,7 +151,7 @@ def overschrijf_status_in_cache(pand_slug: str, kamer: str, nieuwe_status: str, 
     for regel in data.get("resultaten", []):
         if regel.get("kamer") == kamer:
             regel["status"] = nieuwe_status
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def _verzonden_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
@@ -149,7 +167,7 @@ def markeer_email_verzonden(pand_slug: str, kamer: str, soort: str, maand: str, 
     p = _verzonden_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else {}
     data[f"{kamer}|{soort}|{maand}"] = nu_amsterdam().strftime("%d-%m-%Y %H:%M")
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def email_verzonden_op(pand_slug: str, kamer: str, soort: str, maand: str, state_dir: str = ".") -> str | None:
@@ -173,7 +191,7 @@ def markeer_aanzegging_afgehandeld(pand_slug: str, kamer: str, einddatum: str, s
     p = _aanzeggingen_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else {}
     data[f"{kamer}|{einddatum}"] = nu_amsterdam().strftime("%d-%m-%Y %H:%M")
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def aanzegging_is_afgehandeld(pand_slug: str, kamer: str, einddatum: str, state_dir: str = ".") -> bool:
@@ -203,7 +221,7 @@ def voeg_winst_snapshot_toe(pand_slug: str, winst: Decimal, state_dir: str = "."
     data = [punt for punt in data if punt["datum"] != vandaag]
     data.append({"datum": vandaag, "winst": str(winst)})
     data.sort(key=lambda punt: punt["datum"])
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def laad_winst_geschiedenis(pand_slug: str, state_dir: str = ".") -> list[dict]:
@@ -235,7 +253,7 @@ def log_testaccount_activiteit(gebruiker: str, ip: str | None, pad: str, state_d
         "ip": ip or "",
         "pad": pad,
     })
-    p.write_text(json.dumps(data[-_TESTACCOUNT_LOGBOEK_MAX:], indent=2))
+    _schrijf_json(p, data[-_TESTACCOUNT_LOGBOEK_MAX:])
 
 
 def laad_testaccount_logboek(state_dir: str = ".") -> list[dict]:
@@ -274,12 +292,12 @@ def voeg_huur_handmatig_toe(
         "id": nieuw_id, "kamer": kamer, "naam": naam,
         "kale": kale, "servicekosten": servicekosten,
     })
-    _huur_handmatig_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(rijen, indent=2))
+    _schrijf_json(_huur_handmatig_bestandsnaam(pand_slug, state_dir), rijen)
 
 
 def verwijder_huur_handmatig(pand_slug: str, regel_id: int, state_dir: str = ".") -> None:
     rijen = [r for r in laad_huur_handmatig(pand_slug, state_dir) if int(r.get("id", 0)) != regel_id]
-    _huur_handmatig_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(rijen, indent=2))
+    _schrijf_json(_huur_handmatig_bestandsnaam(pand_slug, state_dir), rijen)
 
 
 def _persoonlijke_leningen_bestandsnaam(username: str, state_dir: str = ".") -> Path:
@@ -308,12 +326,12 @@ def voeg_persoonlijke_lening_toe(
     rijen = laad_persoonlijke_leningen(username, state_dir)
     nieuw_id = max((int(r.get("id", 0)) for r in rijen), default=0) + 1
     rijen.append({"id": nieuw_id, "omschrijving": omschrijving, "bedrag": bedrag, "jaarrente": jaarrente})
-    _persoonlijke_leningen_bestandsnaam(username, state_dir).write_text(json.dumps(rijen, indent=2))
+    _schrijf_json(_persoonlijke_leningen_bestandsnaam(username, state_dir), rijen)
 
 
 def verwijder_persoonlijke_lening(username: str, lening_id: int, state_dir: str = ".") -> None:
     rijen = [r for r in laad_persoonlijke_leningen(username, state_dir) if int(r.get("id", 0)) != lening_id]
-    _persoonlijke_leningen_bestandsnaam(username, state_dir).write_text(json.dumps(rijen, indent=2))
+    _schrijf_json(_persoonlijke_leningen_bestandsnaam(username, state_dir), rijen)
 
 
 def _komende_maand_bestandsnaam(pand_slug: str, state_dir: str = ".") -> Path:
@@ -333,7 +351,7 @@ def bewaar_komende_maand(pand_slug: str, maand: str, resultaten: list[dict], sta
         "maand": maand,
         "resultaten": resultaten,
     }
-    _komende_maand_bestandsnaam(pand_slug, state_dir).write_text(json.dumps(data, indent=2))
+    _schrijf_json(_komende_maand_bestandsnaam(pand_slug, state_dir), data)
 
 
 def laad_komende_maand(pand_slug: str, state_dir: str = ".") -> dict | None:
@@ -356,7 +374,7 @@ def negeer_last(pand_slug: str, sleutel: str, omschrijving: str, state_dir: str 
     p = _genegeerde_lasten_bestandsnaam(pand_slug, state_dir)
     data = json.loads(p.read_text()) if p.exists() else {}
     data[sleutel] = omschrijving
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def verwijder_genegeerde_last(pand_slug: str, sleutel: str, state_dir: str = ".") -> None:
@@ -368,7 +386,7 @@ def verwijder_genegeerde_last(pand_slug: str, sleutel: str, state_dir: str = "."
         return
     data = json.loads(p.read_text())
     data.pop(sleutel, None)
-    p.write_text(json.dumps(data, indent=2))
+    _schrijf_json(p, data)
 
 
 def laad_genegeerde_lasten(pand_slug: str, state_dir: str = ".") -> dict[str, str]:
@@ -411,7 +429,7 @@ def bewaar_pand_volgorde(username: str, slugs: list[str], state_dir: str = ".") 
     data = _laad_pand_volgorde_alles(state_dir)
     data[username] = [str(s) for s in slugs]
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    _schrijf_json(p, data, ensure_ascii=False)
 
 
 def sorteer_op_volgorde(panden: list, volgorde: list[str], sleutel=lambda p: p.slug) -> list:
