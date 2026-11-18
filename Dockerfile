@@ -26,4 +26,11 @@ ENV RCLONE_CONFIG=/app/data/rclone.conf
 
 EXPOSE 8000
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "--timeout", "120", "webapp.app:create_app()"]
+# Threaded workers (gthread): zelfde 2 PROCESSEN (dus zelfde RAM-voetafdruk op de
+# 2GB-VPS), maar elk proces handelt meerdere requests tegelijk af via threads. Zo
+# blokkeert een trage I/O-call (rclone naar Drive tot 120s, een AI-call tot 45s,
+# media serveren) niet langer de hele site - de snelle database-pagina's en login
+# blijven responsief. Het trage werk is wachten op I/O/subprocessen (geeft de GIL
+# vrij), geen rekenwerk, dus de 2 vCPU's raken hier niet door overbelast. Threads
+# delen het procesgeheugen, dus een paar erbij kost vrijwel geen RAM.
+CMD ["gunicorn", "-w", "2", "-k", "gthread", "--threads", "4", "-b", "0.0.0.0:8000", "--timeout", "120", "webapp.app:create_app()"]
