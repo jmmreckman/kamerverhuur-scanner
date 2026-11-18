@@ -40,7 +40,7 @@ from kamerverhuur_scanner.runner import (
     run_check,
     verwachte_huurinkomsten_specificatie,
 )
-from kamerverhuur_scanner.sheet_client import SheetClient, service_account_email, sheet_id_uit_invoer
+from kamerverhuur_scanner.sheet_client import SheetClient, open_spreadsheet, service_account_email, sheet_id_uit_invoer
 from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import (
@@ -4384,6 +4384,19 @@ def create_app(config: Config | None = None) -> Flask:
         sheet = SheetClient(config, g.pand)
         kamer = _beschikbare_kamer_of_404(sheet, kamer_naam)
         return render_template("aanbod_bedankt.html", kamer=kamer)
+
+    # Warm de Google Sheets-verbinding op bij het opstarten (op de achtergrond, best-effort):
+    # dan is de token-exchange + verbinding al warm vóór de eerste bezoeker, i.p.v. dat de
+    # eerste request na een deploy/herstart de koude verbinding opvangt (en soms met een 500
+    # afging). Faalt dit, dan pakt de retry in sheet_client het alsnog bij de eerste request.
+    def _warm_sheets_op():
+        for pand in _properties():
+            try:
+                open_spreadsheet(config, pand.google_sheet_id)
+            except Exception:  # noqa: BLE001
+                app.logger.warning("Sheets-warm-up voor pand %s mislukt (retry volgt bij gebruik).", pand.slug)
+
+    threading.Thread(target=_warm_sheets_op, name="sheets-warmup", daemon=True).start()
 
     return app
 
