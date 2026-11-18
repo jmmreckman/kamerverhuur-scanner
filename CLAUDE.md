@@ -301,6 +301,17 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - **Google Sheets** = via **service account** (`gspread`), per sheet-ID. Elke sheet
   moet gedeeld zijn met het service-account-adres (`client_email` uit
   `google-service-account.json`). `service_account_email()` toont dat adres.
+  **Verbinding wordt per proces gecached** (`sheet_client.open_spreadsheet` +
+  `_gspread_client` + `_met_retry`, nov 2026): vroeger auth'te+open'de elke request opnieuw
+  (meerdere round-trips, ~4-5s op /aanbod) en een transiente hik gaf een **500**. Nu
+  éénmalig per sheet, met **retry** op transiente netwerk-/429/5xx-fouten; token-refresh
+  door google-auth. **LES (fout okt→nov 2026): GEEN lock róndom de netwerk-open en GEEN
+  warm-up-thread.** Gunicorn draait `sync`-workers (één request per worker-proces, eigen
+  cache), dus geen concurrency binnen een worker. Een eerdere poging met een `threading.Lock`
+  om `open_by_key` + een warm-up-thread zette de hele webapp vast (de worker-thread
+  blokkeerde op de lock die de trage koude warm-up vasthield → gunicorn `--timeout 120`
+  killde de worker → crash-loop → login óók plat; kansen bleef wél up = niet de VPS). Lock-vrij
+  kan dat niet: een dubbele open is hooguit een extra call (dict-set atomair onder de GIL).
 - **Drive (documenten/contracten)** = via **rclone** op de eigen Google-login van de
   gebruiker (2 TB). Mappen: `Steenhub <pandnaam>/` (Huidige/Oude huurders), plus
   `Steenhub getekende documenten`. rclone-config (token) in `/app/data/rclone.conf`
