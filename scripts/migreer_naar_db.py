@@ -19,17 +19,26 @@ helemaal opnieuw te beginnen.
 from __future__ import annotations
 
 import sys
+import time
+from datetime import datetime
 
 from dotenv import load_dotenv
 
 from kamerverhuur_scanner import db
 from kamerverhuur_scanner.config import Config, ConfigError
 from kamerverhuur_scanner.db_client import DbClient
+from kamerverhuur_scanner.models import Status
 from kamerverhuur_scanner.properties import PropertiesError, load_properties
 # De ECHTE sheet-lezer (gspread) - alleen hier nog nodig, voor de eenmalige
 # overzet. De rest van de app gebruikt 'm niet meer.
 from kamerverhuur_scanner.sheet_client import SheetClient as SheetReader
 from kamerverhuur_scanner.sheet_client import _normaliseer_maand
+from kamerverhuur_scanner.utils import parse_bedrag
+
+# Korte pauze tussen panden: de Sheets-leeslimiet is ~60 reads/min per service-
+# account, en de migratie leest per pand een handvol tabbladen. Even ademruimte
+# zodat het rollende minuut-venster niet volloopt (alleen bij de echte overzet).
+_PAUZE_TUSSEN_PANDEN_SEC = 8
 
 
 def _migreer_pand(config: Config, pand, droog: bool) -> dict:
@@ -66,28 +75,45 @@ def _migreer_pand(config: Config, pand, droog: bool) -> dict:
 
     conn = db.verbind(config)
     try:
-        # 2. Historie - alle kamernamen die in het Historie-tabblad voorkomen (ook
-        #    kamers die niet meer in de Huurders-sheet staan), via de geteste
-        #    get_geschiedenis()-parser.
-        hist_ws = reader._history_worksheet()
-        hist_rows = hist_ws.get_all_values()[1:]
-        kamer_namen = {
-            row[1].strip() for row in hist_rows
-            if len(row) > 1 and row[1].strip() and _normaliseer_maand(row[0] if row else "")
-        }
-        for kamer in sorted(kamer_namen):
-            for r in reader.get_geschiedenis(kamer):
-                telling["historie"] += 1
-                if droog:
-                    continue
-                conn.execute(
-                    """INSERT OR IGNORE INTO historie
-                       (pand_slug, maand, kamer, huurder, verwacht_bedrag, ontvangen_bedrag, status, betaaldatum)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (pand.slug, r.maand, r.kamer, r.huurder, f"{r.verwacht_bedrag:.2f}",
-                     f"{r.ontvangen_bedrag:.2f}", r.status.value,
-                     r.betaaldatum.isoformat() if r.betaaldatum else None),
-                )
+        # 2. Historie - het hele Historie-tabblad in EEN read uitlezen en in
+        #    Python verwerken (niet per kamer apart; dat vrat de Sheets-leeslimiet
+        #    op). Zelfde parsing/normalisatie als SheetClient.get_geschiedenis.
+        #    Bij een dubbele (kamer, maand) wint de ONDERSTE rij (ON CONFLICT DO
+        #    UPDATE), net als dedupliceer_geschiedenis.
+        hist_rows = reader._history_worksheet().get_all_values()[1:]
+        for row in hist_rows:
+            row = row + [""] * (7 - len(row))
+            maand = _normaliseer_maand(row[0])
+            kamer = row[1].strip()
+            if not maand or not kamer:
+                continue
+            try:
+                status = Status(row[5].strip())
+            except ValueError:
+                continue
+            betaaldatum = None
+            if row[6].strip():
+                try:
+                    betaaldatum = datetime.strptime(row[6].strip(), "%d-%m-%Y").date().isoformat()
+                except ValueError:
+                    betaaldatum = None
+            telling["historie"] += 1
+            if droog:
+                continue
+            conn.execute(
+                """INSERT INTO historie
+                   (pand_slug, maand, kamer, huurder, verwacht_bedrag, ontvangen_bedrag, status, betaaldatum)
+                   VALUES (:slug, :maand, :kamer, :huurder, :verwacht, :ontvangen, :status, :betaaldatum)
+                   ON CONFLICT(pand_slug, kamer, maand) DO UPDATE SET
+                       huurder = excluded.huurder, verwacht_bedrag = excluded.verwacht_bedrag,
+                       ontvangen_bedrag = excluded.ontvangen_bedrag, status = excluded.status,
+                       betaaldatum = excluded.betaaldatum""",
+                {
+                    "slug": pand.slug, "maand": maand, "kamer": kamer, "huurder": row[2].strip(),
+                    "verwacht": f"{parse_bedrag(row[3]):.2f}", "ontvangen": f"{parse_bedrag(row[4]):.2f}",
+                    "status": status.value, "betaaldatum": betaaldatum,
+                },
+            )
 
         # 3. Aanmeldingen (19 kolommen, zelfde volgorde als _AANMELDINGEN_HEADER).
         for rij in reader.get_aanmeldingen():
@@ -181,7 +207,12 @@ def main(argv: list[str]) -> int:
     print(f"{'DROOG - ' if droog else ''}Migreren van {len(panden)} pand(en) naar {db.db_pad(config)}\n")
 
     totaal = {"kamers": 0, "historie": 0, "aanmeldingen": 0, "bezichtigingen": 0, "vertrokken": 0}
-    for pand in panden:
+    for i, pand in enumerate(panden):
+        # Korte pauze tussen panden tegen de Sheets-leeslimiet (niet voor de 1e,
+        # en niet bij een droge run waar niets weggeschreven wordt maar wél wordt
+        # gelezen - dus ook dan even ademen).
+        if i > 0:
+            time.sleep(_PAUZE_TUSSEN_PANDEN_SEC)
         # Pand-metadata (incl. financiële velden) overzetten.
         if not droog:
             db.zet_pand(config, pand.slug, _pand_naar_gegevens(pand))
