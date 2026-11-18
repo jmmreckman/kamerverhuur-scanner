@@ -301,13 +301,6 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
 - **Google Sheets** = via **service account** (`gspread`), per sheet-ID. Elke sheet
   moet gedeeld zijn met het service-account-adres (`client_email` uit
   `google-service-account.json`). `service_account_email()` toont dat adres.
-  **Verbinding wordt per proces gecached** (`sheet_client.open_spreadsheet` +
-  `_gspread_client`, nov 2026): vroeger auth'te+open'de elke request opnieuw, wat traag was
-  en vlak na een deploy/herstart de eerste request met een **500** liet afgaan (koude DNS/
-  TLS/token-exchange). Nu éénmalig, met **retry** op transiente netwerk-/5xx-hikken, token-
-  refresh door google-auth. `webapp.app` draait bij het opstarten een **warm-up-thread**
-  (`_warm_sheets_op`) die de sheets alvast opent, zodat de eerste bezoeker een warme
-  verbinding heeft.
 - **Drive (documenten/contracten)** = via **rclone** op de eigen Google-login van de
   gebruiker (2 TB). Mappen: `Steenhub <pandnaam>/` (Huidige/Oude huurders), plus
   `Steenhub getekende documenten`. rclone-config (token) in `/app/data/rclone.conf`

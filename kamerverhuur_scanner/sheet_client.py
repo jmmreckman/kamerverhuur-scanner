@@ -66,8 +66,6 @@ from __future__ import annotations
 
 import json
 import re
-import threading
-import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -328,71 +326,12 @@ def _laatste_betaaldatum(betalingen: list[Payment]) -> date | None:
     return max((p.datum for p in betalingen), default=None)
 
 
-# Eén gedeelde, geauthenticeerde gspread-client + geopende spreadsheets per proces.
-# Vroeger auth'te + open'de ELKE request opnieuw (gspread.service_account + open_by_key in
-# __init__). Dat was traag (meerdere Google-round-trips per paginaweergave) en liet - vooral
-# vlak na een container-herstart, als DNS/TLS/token-exchange nog koud zijn - de eerste
-# requests met een 500 afgaan. Nu: éénmalig authenticeren + openen, met een korte retry op
-# transiente netwerk-/5xx-hikken, en daarna uit cache. De token wordt door google-auth zelf
-# ververst, dus de cache blijft dagenlang geldig. Draai een warm-up bij het opstarten
-# (zie webapp.app) zodat zelfs de állereerste bezoeker meteen een warme verbinding heeft.
-_client_lock = threading.Lock()
-_gc_cache = None
-_spreadsheet_cache: dict[str, object] = {}
-
-
-def _is_transiente_fout(exc: Exception) -> bool:
-    """Koude/tijdelijke hik (netwerk of 429/5xx) die één keer opnieuw proberen verdient -
-    i.t.t. een echte fout (verkeerd ID, geen toegang) die we meteen laten doorvallen."""
-    try:
-        from requests.exceptions import RequestException
-    except Exception:  # noqa: BLE001
-        RequestException = ()  # type: ignore[assignment]
-    if RequestException and isinstance(exc, RequestException):
-        return True
-    resp = getattr(exc, "response", None)
-    return getattr(resp, "status_code", None) in (429, 500, 502, 503, 504)
-
-
-def _met_retry(fn, pogingen: int = 3, pauze: float = 0.8):
-    for i in range(pogingen):
-        try:
-            return fn()
-        except Exception as exc:  # noqa: BLE001
-            if i == pogingen - 1 or not _is_transiente_fout(exc):
-                raise
-            time.sleep(pauze * (i + 1))
-
-
-def _gspread_client(config: Config):
-    global _gc_cache
-    if _gc_cache is None:
-        with _client_lock:
-            if _gc_cache is None:
-                _gc_cache = gspread.service_account(filename=config.google_service_account_file)
-    return _gc_cache
-
-
-def open_spreadsheet(config: Config, sheet_id: str):
-    """Opent (en cachet per proces) de spreadsheet van een pand, met retry op koude/
-    transiente netwerkfouten. Hergebruikt door SheetClient én de opstart-warm-up."""
-    sp = _spreadsheet_cache.get(sheet_id)
-    if sp is not None:
-        return sp
-    with _client_lock:
-        sp = _spreadsheet_cache.get(sheet_id)
-        if sp is None:
-            client = _gspread_client(config)
-            sp = _met_retry(lambda: client.open_by_key(sheet_id))
-            _spreadsheet_cache[sheet_id] = sp
-    return sp
-
-
 class SheetClient:
     def __init__(self, config: Config, pand: Pand):
         self._pand = pand
-        self._spreadsheet = open_spreadsheet(config, pand.google_sheet_id)
-        self._worksheet = _met_retry(lambda: self._spreadsheet.worksheet(pand.google_sheet_worksheet))
+        gc = gspread.service_account(filename=config.google_service_account_file)
+        self._spreadsheet = gc.open_by_key(pand.google_sheet_id)
+        self._worksheet = self._spreadsheet.worksheet(pand.google_sheet_worksheet)
 
     @classmethod
     def bouw_structuur(cls, config: Config, pand: Pand) -> dict:
@@ -401,7 +340,8 @@ class SheetClient:
         bouw_sheet_structuur). Opzettelijk een classmethod: hoeft geen bestaand
         hoofdtabblad te hebben (dat maakt deze functie juist aan), dus __init__ -
         dat meteen het hoofdtabblad opent - zou hier nog niet werken."""
-        spreadsheet = open_spreadsheet(config, pand.google_sheet_id)
+        gc = gspread.service_account(filename=config.google_service_account_file)
+        spreadsheet = gc.open_by_key(pand.google_sheet_id)
         return bouw_sheet_structuur(spreadsheet, pand)
 
     def get_kamers(self) -> list[Tenant]:
