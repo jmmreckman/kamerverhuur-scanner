@@ -333,6 +333,28 @@ def create_app(config: Config | None = None) -> Flask:
     def _aanbod_media(pand=None) -> LokaleMediaClient:
         return LokaleMediaClient(config, pand or g.pand, "aanbod")
 
+    # Breedtes voor de ?size=-varianten: thumb voor de kaartjes/grids, web voor de
+    # detail-/lightbox-weergave. Zonder ?size= wordt het origineel geserveerd.
+    _MEDIA_BREEDTES = {"thumb": 500, "web": 1600}
+
+    def _serveer_media(media_client: LokaleMediaClient, kamer_naam: str, file_id: str) -> Response:
+        """Serveert een aanbod-foto/video, desgevraagd als verkleinde WebP-variant
+        (?size=thumb|web). Lang + immutable cachen: id+size is uniek per upload, dus de
+        browser hoeft 'm nooit opnieuw op te halen."""
+        size = request.args.get("size")
+        breedte = _MEDIA_BREEDTES.get(size)
+        if breedte:
+            gevonden = media_client.lees_variant(kamer_naam, file_id, breedte)
+            if not gevonden:
+                abort(404)
+            mimetype, inhoud = gevonden
+        else:
+            rauw = media_client.lees_bestand(kamer_naam, file_id)
+            if not rauw:
+                abort(404)
+            _naam, mimetype, inhoud = rauw
+        return Response(inhoud, mimetype=mimetype, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
     def _aanmeldingen_media(pand=None) -> LokaleMediaClient:
         return LokaleMediaClient(config, pand or g.pand, "aanmeldingen")
 
@@ -2363,11 +2385,7 @@ def create_app(config: Config | None = None) -> Flask:
         """Toont een aanbod-foto/video inline (geen Content-Disposition: attachment,
         anders tonen <img>/<video>-tags op de 'Aanbod beheren'-pagina niets)."""
         _kamer_of_404(SheetClient(config, g.pand), kamer_naam)
-        gevonden = _aanbod_media().lees_bestand(kamer_naam, file_id)
-        if not gevonden:
-            abort(404)
-        _naam, mimetype, inhoud = gevonden
-        return Response(inhoud, mimetype=mimetype, headers={"Cache-Control": "private, max-age=3600"})
+        return _serveer_media(_aanbod_media(), kamer_naam, file_id)
 
     # --- Aanmeldingen (reacties op de publieke aanbodpagina) ---
 
@@ -4288,11 +4306,7 @@ def create_app(config: Config | None = None) -> Flask:
     def aanbod_media(pand_slug: str, kamer_naam: str, file_id: str):
         sheet = SheetClient(config, g.pand)
         _beschikbare_kamer_of_404(sheet, kamer_naam)
-        gevonden = _aanbod_media().lees_bestand(kamer_naam, file_id)
-        if not gevonden:
-            abort(404)
-        _naam, mimetype, inhoud = gevonden
-        return Response(inhoud, mimetype=mimetype, headers={"Cache-Control": "public, max-age=3600"})
+        return _serveer_media(_aanbod_media(), kamer_naam, file_id)
 
     @app.route("/aanbod/<pand_slug>/<kamer_naam>/apply", methods=["GET", "POST"])
     def aanbod_apply(pand_slug: str, kamer_naam: str):

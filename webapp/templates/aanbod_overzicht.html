@@ -11,7 +11,8 @@
   {% for k in kaarten %}
   <a class="card kamer-tile" href="{{ url_for('aanbod_detail', pand_slug=k.pand.slug, kamer_naam=k.kamer.kamer) }}">
     {% if k.foto %}
-      <img src="{{ url_for('aanbod_media', pand_slug=k.pand.slug, kamer_naam=k.kamer.kamer, file_id=k.foto.id) }}" alt=""
+      <img src="{{ url_for('aanbod_media', pand_slug=k.pand.slug, kamer_naam=k.kamer.kamer, file_id=k.foto.id, size='thumb') }}" alt=""
+           loading="lazy" decoding="async" width="600" height="450"
            style="width:100%; aspect-ratio:4/3; object-fit:cover; border-radius: var(--radius-sm); margin-bottom:0.75rem">
     {% endif %}
     <h2>{{ k.pand.naam }} - room {{ k.kamer.kamer }}</h2>

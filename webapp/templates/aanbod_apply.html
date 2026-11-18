@@ -18,7 +18,7 @@
 {% endif %}
 
 <div class="card">
-  <form method="post" enctype="multipart/form-data">
+  <form method="post" enctype="multipart/form-data" class="js-busy" data-bezig-tekst="Submitting…">
     <label>Full name
       <input type="text" name="full_name" required value="{{ request.form.get('full_name', '') }}">
     </label>

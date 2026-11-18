@@ -90,6 +90,66 @@ class LokaleMediaClient:
         bestand_pad = self._kamer_map(kamer) / Path(bestand_id).name  # .name voorkomt path traversal
         bestand_pad.unlink(missing_ok=True)
         self._meta_pad(bestand_pad).unlink(missing_ok=True)
+        self._wis_varianten(bestand_pad)
+
+    # --- Verkleinde, snel-ladende varianten (voor de publieke aanbodpagina) ---
+    #
+    # Telefoonfoto's zijn al snel enkele MB's; die op volle grootte serveren terwijl
+    # ze op het scherm klein getoond worden maakt de pagina traag. We maken daarom per
+    # afbeelding een naar maxbreedte verkleinde WebP-variant en cachen die op schijf
+    # (in een verborgen .cache-map naast het origineel, zodat list_bestanden ze niet
+    # meetelt). De eerste aanvraag maakt de variant aan, daarna komt 'ie uit cache -
+    # dus bestaande foto's worden ook automatisch meegenomen, zonder migratie.
+
+    def _cache_map(self, kamer: str) -> Path:
+        return self._kamer_map(kamer) / ".cache"
+
+    def _wis_varianten(self, bestand_pad: Path) -> None:
+        cache = bestand_pad.parent / ".cache"
+        if cache.is_dir():
+            for variant in cache.glob(bestand_pad.name + ".*"):
+                variant.unlink(missing_ok=True)
+
+    def lees_variant(self, kamer: str, bestand_id: str, maxbreedte: int) -> tuple[str, bytes] | None:
+        """Geeft (mimetype, inhoud) van een naar `maxbreedte` px verkleinde WebP-variant
+        van een afbeelding, met schijf-cache. Een niet-afbeelding (of een conversie die
+        mislukt) valt netjes terug op het origineel. None als het bestand niet bestaat."""
+        bron = self._kamer_map(kamer) / Path(bestand_id).name
+        if not bron.is_file():
+            return None
+        meta = self._lees_meta(bron)
+        mimetype = meta.get("mimetype") or "application/octet-stream"
+        if not mimetype.startswith("image/"):
+            return mimetype, bron.read_bytes()  # video e.d.: ongewijzigd serveren
+
+        cache = self._cache_map(kamer)
+        variant = cache / f"{bron.name}.w{maxbreedte}.webp"
+        try:
+            if variant.is_file() and variant.stat().st_mtime >= bron.stat().st_mtime:
+                return "image/webp", variant.read_bytes()
+        except OSError:
+            pass
+
+        try:
+            from io import BytesIO
+
+            from PIL import Image, ImageOps
+
+            with Image.open(bron) as img:
+                img = ImageOps.exif_transpose(img)  # telefoon-rotatie uit EXIF toepassen
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
+                img.thumbnail((maxbreedte, maxbreedte * 4), Image.LANCZOS)  # alleen verkleinen
+                buffer = BytesIO()
+                img.save(buffer, format="WEBP", quality=80, method=4)
+                data = buffer.getvalue()
+            cache.mkdir(parents=True, exist_ok=True)
+            tmp = variant.with_suffix(variant.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(variant)  # atomisch, voorkomt een half geschreven cachebestand
+            return "image/webp", data
+        except Exception:  # noqa: BLE001 - nooit de weergave breken op een rare afbeelding
+            return mimetype, bron.read_bytes()
 
     def lees_bestand(self, kamer: str, bestand_id: str) -> tuple[str, str, bytes] | None:
         """Geeft (bestandsnaam, mimetype, inhoud) terug, of None als het

@@ -90,5 +90,24 @@
 
     {% block content %}{% endblock %}
   </main>
+  <script>
+  // Knoppen in laadtoestand: zodra een formulier met class "js-busy" verzonden wordt
+  // (ná de ingebouwde veldvalidatie), wordt de verzendknop grijs met een spinner +
+  // "even geduld"-tekst, zodat bezoekers niet nog eens klikken bij een trage upload.
+  document.addEventListener("submit", function (e) {
+    const form = e.target;
+    if (!(form instanceof HTMLFormElement) || !form.classList.contains("js-busy")) return;
+    const knop = e.submitter || form.querySelector("button[type=submit], input[type=submit]");
+    if (!knop || knop.classList.contains("is-bezig")) return;
+    const tekst = form.dataset.bezigTekst || "Even geduld…";
+    knop.classList.add("is-bezig");
+    knop.setAttribute("aria-busy", "true");
+    if (knop.tagName === "BUTTON") {
+      knop.dataset.origineel = knop.innerHTML;
+      knop.innerHTML = '<span class="knop-spinner"></span>' + tekst;
+    }
+    setTimeout(function () { knop.disabled = true; }, 0);
+  }, true);
+  </script>
 </body>
 </html>
