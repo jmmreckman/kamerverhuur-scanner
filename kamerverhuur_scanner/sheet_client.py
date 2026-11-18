@@ -230,11 +230,11 @@ def service_account_email(config: Config) -> str | None:
 
 
 def _kopregel_is_leeg(ws) -> bool:
-    return not any(any(str(cel).strip() for cel in rij) for rij in ws.get_all_values())
+    return not any(any(str(cel).strip() for cel in rij) for rij in _lees_rijen(ws))
 
 
 def _kopregel_klopt(ws, header: list[str]) -> bool:
-    rijen = ws.get_all_values()
+    rijen = _lees_rijen(ws)
     eerste = rijen[0] if rijen else []
     return [str(cel).strip() for cel in eerste[:len(header)]] == header
 
@@ -371,6 +371,16 @@ def _open_spreadsheet_vers(config: Config, sheet_id: str):
     return gc.open_by_key(sheet_id)
 
 
+def _lees_rijen(ws) -> list:
+    """worksheet.get_all_values() met retry. De échte 500-oorzaak (nov 2026) was NIET de
+    auth maar een **429 'Quota exceeded - Read requests per minute per user'** op deze
+    lees-aanroep (Sheets staat ~60 leesverzoeken/min per service-account toe). Een 429 is
+    meestal een korte piek; na een paar seconden backoff is het minuut-budget weer
+    bijgevuld, dus retry vangt 'm op i.p.v. een 500. (Structureel plafond omhoog = de
+    leeslimiet verhogen in Google Cloud Console; dat kan deze code niet.)"""
+    return _met_retry(ws.get_all_values)
+
+
 class SheetClient:
     def __init__(self, config: Config, pand: Pand):
         self._pand = pand
@@ -389,7 +399,7 @@ class SheetClient:
 
     def get_kamers(self) -> list[Tenant]:
         """Geeft alle kamers terug, inclusief leegstaande (lege huurder, wel een kamernaam)."""
-        rows = self._worksheet.get_all_values()
+        rows = _lees_rijen(self._worksheet)
         kamers: list[Tenant] = []
         for offset, row in enumerate(rows[HEADER_ROW:]):
             row_index = HEADER_ROW + 1 + offset
@@ -577,7 +587,7 @@ class SheetClient:
         zo'n datum-vermomming hebben (van vóór deze fix) worden bij het
         opzoeken alsnog herkend via _normaliseer_maand()."""
         ws = self._history_worksheet()
-        bestaande = ws.get_all_values()
+        bestaande = _lees_rijen(ws)
         # Sleutel op (kamer, maand) samen - alleen op kamer sleutelen liet bij
         # meerdere bestaande maanden voor dezelfde kamer alleen de laatst
         # geziene rij over, waardoor eerdere maanden niet meer gevonden
@@ -624,7 +634,7 @@ class SheetClient:
         op dezelfde kamer (ander 'Huurder'-veld) blijven onaangeroerd. Geeft
         het aantal verwijderde regels terug."""
         ws = self._history_worksheet()
-        rows = ws.get_all_values()
+        rows = _lees_rijen(ws)
         if len(rows) <= 1:
             return 0
         header, data_rows = rows[0], rows[1:]
@@ -649,7 +659,7 @@ class SheetClient:
         'Maand'-kolom van rijen die Google Sheets ooit als datum heeft
         opgeslagen (bv. "01-06-2026" i.p.v. "2026-06"), zie _normaliseer_maand()."""
         ws = self._history_worksheet()
-        rows = ws.get_all_values()
+        rows = _lees_rijen(ws)
         if len(rows) <= 1:
             return 0
         header, data_rows = rows[0], rows[1:]
@@ -672,7 +682,7 @@ class SheetClient:
 
     def get_geschiedenis(self, kamer: str) -> list[HistorieRegel]:
         ws = self._history_worksheet()
-        rows = ws.get_all_values()[1:]  # koprij overslaan
+        rows = _lees_rijen(ws)[1:]  # koprij overslaan
         regels: list[HistorieRegel] = []
         for row in rows:
             row = row + [""] * (7 - len(row))
@@ -736,7 +746,7 @@ class SheetClient:
 
     def get_aanmeldingen(self) -> list[list[str]]:
         ws = self._aanmeldingen_worksheet()
-        rows = ws.get_all_values()[1:]  # koprij overslaan
+        rows = _lees_rijen(ws)[1:]  # koprij overslaan
         aantal_kolommen = len(_AANMELDINGEN_HEADER)
         return [
             row + [""] * (aantal_kolommen - len(row))
@@ -773,7 +783,7 @@ class SheetClient:
 
     def get_bezichtigingen(self) -> list[list[str]]:
         ws = self._bezichtigingen_worksheet()
-        rows = ws.get_all_values()[1:]  # koprij overslaan
+        rows = _lees_rijen(ws)[1:]  # koprij overslaan
         aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
         return [
             row + [""] * (aantal_kolommen - len(row))
@@ -785,7 +795,7 @@ class SheetClient:
         nodig om een specifieke bezichtiging te kunnen verwijderen (zie
         verwijder_bezichtiging())."""
         ws = self._bezichtigingen_worksheet()
-        rows = ws.get_all_values()
+        rows = _lees_rijen(ws)
         aantal_kolommen = len(_BEZICHTIGINGEN_HEADER)
         resultaat = []
         for offset, row in enumerate(rows[1:]):  # koprij overslaan
@@ -832,7 +842,7 @@ class SheetClient:
         ook get_recent_vertrokken_huurders() als basis gebruikt voor zijn
         tijdelijke filter."""
         ws = self._vertrokken_worksheet()
-        rows = ws.get_all_values()[1:]  # koprij overslaan
+        rows = _lees_rijen(ws)[1:]  # koprij overslaan
         resultaat = []
         for i, row in enumerate(rows):
             row_index = i + 2  # +1 voor de koprij, +1 voor 1-gebaseerde rijnummers
