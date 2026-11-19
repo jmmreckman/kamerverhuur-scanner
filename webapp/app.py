@@ -1967,7 +1967,10 @@ def create_app(config: Config | None = None) -> Flask:
                 "pand_naam": pand_namen.get(a["pand_slug"], a["pand_slug"] or "Nog koppelen"),
                 "contact_naam": contact["naam"] if contact else None,
             })
-        return render_template("acties_overzicht.html", rijen=rijen)
+        # De "Todo"-pagina = de aandachtssignalen (zelfde als op de pandkiezer,
+        # minus de concepten-regel want die staan hieronder al als wachtrij) +
+        # de concept-goedkeur-wachtrij.
+        return render_template("acties_overzicht.html", rijen=rijen, aandacht=_aandacht_goedkope_signalen(panden))
 
     @app.route("/acties/<int:actie_id>")
     @login_required

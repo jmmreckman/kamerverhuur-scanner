@@ -1,12 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Openstaande acties{% endblock %}
+{% block title %}Todo{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Openstaande acties</h1>
-  <p class="muted">Concepten die op jouw akkoord wachten voordat ze de deur uit gaan. Niets wordt automatisch verstuurd.</p>
+  <h1>Todo</h1>
+  <p class="muted">Alles wat aandacht vraagt op één plek: signalen over je panden, plus concepten die op jouw akkoord wachten. Niets wordt automatisch verstuurd.</p>
 </div>
 
+{% set heeft_signalen = aandacht and (aandacht.onderhoud_open or aandacht.betaal_achter or aandacht.verwarming_warm or aandacht.verwarming_vocht) %}
+{% if heeft_signalen %}
+<div class="card" style="margin-bottom:1.25rem">
+  <h2 style="margin-top:0">Aandachtspunten</h2>
+  <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem">
+    {% if aandacht.onderhoud_open %}<li><span class="pil pil-neutral">Onderhoud</span> <a href="{{ url_for('onderhoud_overzicht') }}">{{ aandacht.onderhoud_open }} openstaande klus(sen)</a></li>{% endif %}
+    {% if aandacht.betaal_achter %}<li><span class="pil pil-neutral">Betaling</span> {{ aandacht.betaal_achter }} kamer(s) met betaalachterstand</li>{% endif %}
+    {% for w in aandacht.verwarming_warm %}
+    <li><span class="pil pil-neutral">Verwarming</span>
+      <a href="{{ url_for('verwarming_zone', pand_slug=w.pand_slug, provider=w.provider, home_id=w.home_id, zone_id=w.zone_id) }}">{{ w.pand_naam }} &middot; {{ w.kamer }}</a>
+      stookt al dagen hoog (gem. {{ w.gem }}&deg;) &mdash; overweeg een terugschakel-regel</li>
+    {% endfor %}
+    {% for v in aandacht.verwarming_vocht %}
+    <li><span class="pil pil-neutral">Vocht</span>
+      <a href="{{ url_for('verwarming_zone', pand_slug=v.pand_slug, provider=v.provider, home_id=v.home_id, zone_id=v.zone_id) }}">{{ v.pand_naam }} &middot; {{ v.kamer }}</a>
+      is al dagen vochtig (gem. {{ v.gem }}%, piek {{ v.piek }}%) &mdash; schimmelrisico, check de ventilatie</li>
+    {% endfor %}
+  </ul>
+  <p class="muted" style="margin:.75rem 0 0;font-size:.85rem">Lege kamers en aflopende contracten zie je op de <a href="{{ url_for('start') }}">startpagina</a>.</p>
+</div>
+{% endif %}
+
 <div class="card">
+  <h2 style="margin-top:0">Concepten te keuren</h2>
   {% if rijen %}
     {% for r in rijen %}
     <div class="item-box">
@@ -24,7 +47,7 @@
     </div>
     {% endfor %}
   {% else %}
-  <p class="muted">Geen openstaande acties. Concepten die je op een communicatie- of onderhoudspagina in de wachtrij zet, verschijnen hier.</p>
+  <p class="muted">Geen concepten in de wachtrij. Concepten die je op een communicatie- of onderhoudspagina klaarzet, verschijnen hier.</p>
   {% endif %}
 </div>
 {% endblock %}

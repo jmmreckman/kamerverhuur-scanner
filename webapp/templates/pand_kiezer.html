@@ -8,7 +8,10 @@
 
 {% if panden %}
 <div class="card" id="aandacht-card" style="margin-bottom:1.5rem">
-  <h2 style="margin-top:0">Wat vraagt aandacht</h2>
+  <h2 style="margin-top:0;display:flex;justify-content:space-between;align-items:baseline;gap:1rem">
+    <span>Todo</span>
+    <a href="{{ url_for('acties_overzicht') }}" style="font-size:.8rem;font-weight:600">Alles bekijken &rarr;</a>
+  </h2>
   <ul id="aandacht-lijst" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem">
     {% if aandacht.concepten %}<li><span class="pil pil-neutral">Communicatie</span> <a href="{{ url_for('acties_overzicht') }}">{{ aandacht.concepten }} concept(en) te keuren</a></li>{% endif %}
     {% if aandacht.onderhoud_open %}<li><span class="pil pil-neutral">Onderhoud</span> <a href="{{ url_for('onderhoud_overzicht') }}">{{ aandacht.onderhoud_open }} openstaande klus(sen)</a></li>{% endif %}
