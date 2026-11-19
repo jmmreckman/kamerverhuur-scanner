@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_icons.html" import icon_kamers, icon_euro %}
+{% from "_icons.html" import icon_kamers %}
 {% block title %}Kies een woning{% endblock %}
 {% block content %}
 {% if panden %}
@@ -121,13 +121,6 @@
   })();
 </script>
 
-<a class="stat-card" href="{{ url_for('winst_overzicht') }}" style="margin-top:1.5rem; max-width:320px">
-  <div class="stat-icon">{{ icon_euro() }}</div>
-  <div>
-    <div class="stat-value">Totaal overzicht</div>
-    <div class="stat-label">winst &amp; betalingen alle panden</div>
-  </div>
-</a>
 {% else %}
 <div class="card">
   <p>Je hebt nog geen toegang tot een pand. Vraag de beheerder om je toegang te geven.</p>
