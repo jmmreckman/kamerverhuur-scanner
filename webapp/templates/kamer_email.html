@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}{{ titel }} - {{ kamer.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ titel }} versturen</h1>
+</div>
+
+<div class="card">
+  <p>Aan: <strong><a href="{{ url_for('kamer_detail', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">{{ kamer.naam }}</a></strong> ({{ kamer.email }}) - kamer {{ kamer.kamer }}</p>
+  <p class="muted">BCC gaat automatisch mee naar de ingestelde beheerders (zie .env). Je kunt onderwerp en
+     tekst hieronder nog aanpassen voordat je 'm verstuurt.</p>
+
+  <form method="post" onsubmit="return confirm('Weet je zeker dat je deze {{ titel|lower }} nu wilt versturen naar {{ kamer.naam }} ({{ kamer.email }})?');">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="16" required>{{ tekst }}</textarea>
+    </label>
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ url_for('betalingen', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

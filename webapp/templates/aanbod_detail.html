@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Room {{ kamer.kamer }} - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ huidig_pand.naam }} - room {{ kamer.kamer }}</h1>
+  <p class="muted">
+    {{ (kamer.advertentie_prijs if kamer.advertentie_prijs is not none else kamer.verwacht_bedrag)|eur }} / month
+    {%- if kamer.advertentie_oppervlakte %} · {{ kamer.advertentie_oppervlakte }}{% endif %}
+    {%- if kamer.advertentie_beschikbaar_per %} · available from {{ kamer.advertentie_beschikbaar_per }}{% if kamer.advertentie_beschikbaar_tot %} to {{ kamer.advertentie_beschikbaar_tot }}{% endif %}{% endif %}
+  </p>
+  {% set borg = kamer.advertentie_borg if kamer.advertentie_borg is not none else kamer.borg_bedrag %}
+  {% if borg is not none %}
+  <p class="muted">Security deposit: {{ borg|eur }}</p>
+  {% endif %}
+  {% if kamer.aanbod_verhuurd %}
+  <p class="verhuurd-banner">● RENTED — this room is no longer available</p>
+  {% endif %}
+</div>
+
+{% if media %}
+<div class="galerij" id="galerij">
+  {% for b in media %}
+    {% if b.mimetype.startswith('image/') %}
+      <button type="button" class="galerij-item galerij-foto"
+              data-vol="{{ url_for('aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id, size='web') }}"
+              aria-label="Foto vergroten">
+        <img src="{{ url_for('aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id, size='thumb') }}" alt=""
+             loading="lazy" decoding="async" width="600" height="450">
+        <span class="galerij-zoom" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg>
+        </span>
+      </button>
+    {% elif b.mimetype.startswith('video/') %}
+      <video class="galerij-item" controls preload="metadata">
+        <source src="{{ url_for('aanbod_media', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer, file_id=b.id) }}" type="{{ b.mimetype }}">
+      </video>
+    {% endif %}
+  {% endfor %}
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button type="button" class="lightbox-sluit" aria-label="Sluiten">&times;</button>
+  <button type="button" class="lightbox-nav lightbox-vorige" aria-label="Vorige">&#8249;</button>
+  <img class="lightbox-foto" id="lightbox-foto" alt="">
+  <button type="button" class="lightbox-nav lightbox-volgende" aria-label="Volgende">&#8250;</button>
+  <div class="lightbox-teller" id="lightbox-teller"></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <p style="white-space: pre-line">{{ omschrijving }}</p>
+</div>
+
+{% if kamer.aanbod_verhuurd %}
+<span class="btn btn-verhuurd" aria-disabled="true">Rented</span>
+{% else %}
+<a class="btn" href="{{ url_for('aanbod_apply', pand_slug=huidig_pand.slug, kamer_naam=kamer.kamer) }}">Apply for this room</a>
+{% endif %}
+<a class="btn btn-secondary" href="{{ url_for('aanbod_overzicht') }}">Back to all rooms</a>
+
+<script>
+(function () {
+  const galerij = document.getElementById("galerij");
+  const lightbox = document.getElementById("lightbox");
+  if (!galerij || !lightbox) return;
+  const foto = document.getElementById("lightbox-foto");
+  const teller = document.getElementById("lightbox-teller");
+  const knoppen = Array.from(galerij.querySelectorAll(".galerij-foto"));
+  const bronnen = knoppen.map((k) => k.dataset.vol);
+  let huidig = 0;
+
+  function toon(i) {
+    huidig = (i + bronnen.length) % bronnen.length;
+    foto.src = bronnen[huidig];
+    teller.textContent = (huidig + 1) + " / " + bronnen.length;
+  }
+  function open(i) { toon(i); lightbox.hidden = false; document.body.style.overflow = "hidden"; }
+  function sluit() { lightbox.hidden = true; foto.src = ""; document.body.style.overflow = ""; }
+
+  knoppen.forEach((k, i) => k.addEventListener("click", () => open(i)));
+  lightbox.querySelector(".lightbox-sluit").addEventListener("click", sluit);
+  lightbox.querySelector(".lightbox-vorige").addEventListener("click", (e) => { e.stopPropagation(); toon(huidig - 1); });
+  lightbox.querySelector(".lightbox-volgende").addEventListener("click", (e) => { e.stopPropagation(); toon(huidig + 1); });
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) sluit(); });
+  document.addEventListener("keydown", (e) => {
+    if (lightbox.hidden) return;
+    if (e.key === "Escape") sluit();
+    else if (e.key === "ArrowLeft") toon(huidig - 1);
+    else if (e.key === "ArrowRight") toon(huidig + 1);
+  });
+  // Swipe op mobiel.
+  let startX = null;
+  lightbox.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; }, { passive: true });
+  lightbox.addEventListener("touchend", (e) => {
+    if (startX === null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 40) toon(huidig + (dx < 0 ? 1 : -1));
+    startX = null;
+  }, { passive: true });
+})();
+</script>
+{% endblock %}

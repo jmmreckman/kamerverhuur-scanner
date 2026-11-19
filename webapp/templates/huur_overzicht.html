@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Huuroverzicht{% endblock %}
+{% block content %}
+<style>
+  .huur-tabel td.num, .huur-tabel th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .huur-tabel tr.totaal-rij td { font-weight:700; border-top:2px solid var(--border); }
+  .huur-kerncijfers { display:flex; gap:0.7rem; flex-wrap:wrap; margin-bottom:0.4rem; }
+  .huur-kencijfer { border:1px solid var(--border); border-radius:8px; padding:0.5rem 0.8rem; background:var(--surface); min-width:7.5rem; }
+  .huur-kencijfer .waarde { font-size:1.25em; font-weight:700; }
+  .huur-kencijfer .label { font-size:0.78em; color:var(--muted); }
+  .pand-finance { display:flex; gap:0.7rem; flex-wrap:wrap; margin-top:0.7rem; }
+  .pand-finance .blok { border:1px solid var(--border); border-radius:8px; padding:0.45rem 0.7rem; min-width:7rem; }
+  .pand-finance .blok .waarde { font-weight:700; }
+  .pand-finance .blok .label { font-size:0.76em; color:var(--muted); }
+  .badge-gedeeld { font-size:0.72em; background:#eef3f7; color:#365; border:1px solid var(--border); border-radius:10px; padding:0.05rem 0.5rem; vertical-align:middle; }
+  .handmatig-regel td { background:#fbfcf6; }
+  .mini-form { display:flex; gap:0.4rem; flex-wrap:wrap; align-items:flex-end; margin-top:0.6rem; }
+  .mini-form label { display:flex; flex-direction:column; font-size:0.74em; color:var(--muted); gap:0.15rem; }
+  .mini-form input { padding:0.3rem 0.4rem; border:1px solid var(--border); border-radius:4px; }
+  .mini-form input.kort { width:6.5rem; }
+  .icr-goed { color:var(--ok); font-weight:700; }
+  .icr-laag { color:var(--bad); font-weight:700; }
+  .verwijder-knop { background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; }
+  @media print {
+    .mini-form, .verwijder-knop, .print-knop, nav, .flashes { display:none !important; }
+    .card { box-shadow:none; border:1px solid #ccc; }
+  }
+</style>
+
+<div class="page-header">
+  <h1>Huuroverzicht</h1>
+  <button type="button" class="btn btn-secondary print-knop" onclick="window.print()">Print / PDF</button>
+</div>
+<p class="muted">
+  Per huurder de kale huur, servicekosten en totale huur — automatisch uit de huurcontracten/Huurders-sheet,
+  dus bijgewerkt zodra er een nieuw contract is. Plus de maandelijkse hypotheekrente per pand, de netto
+  (<strong>kale huur − hypotheekrente</strong>, bewust geen andere lasten), jouw aandeel daarvan, en de
+  <strong>ICR</strong> (kale huur / rente) — handig voor hypotheekverstrekkers. Hypotheekbedragen en het aantal
+  eigenaren stel je per pand in bij <a href="{{ url_for('panden_overzicht') }}">Panden beheren</a>.
+</p>
+
+{# ---- Portefeuilletotalen ---- #}
+<div class="card">
+  <h2>Totaal alle panden</h2>
+  <div class="huur-kerncijfers">
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.kale|eur }}</div><div class="label">kale huur / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.service|eur }}</div><div class="label">servicekosten / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.totaal|eur }}</div><div class="label">totale huur / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.rente|eur }}</div><div class="label">hypotheekrente / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.last|eur }}</div><div class="label">hypotheeklast / maand</div></div>
+    <div class="huur-kencijfer">
+      <div class="waarde">{{ totalen.netto_vol|eur if totalen.netto_vol is not none else "-" }}</div>
+      <div class="label">netto (kale − rente)</div>
+    </div>
+    <div class="huur-kencijfer">
+      <div class="waarde">{{ totalen.netto_eigen|eur if totalen.netto_eigen is not none else "-" }}</div>
+      <div class="label">jouw aandeel netto</div>
+    </div>
+    <div class="huur-kencijfer">
+      <div class="waarde">
+        {% if totalen.icr is not none %}<span class="{{ 'icr-goed' if totalen.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(totalen.icr) }}</span>{% else %}-{% endif %}
+      </div>
+      <div class="label">ICR portefeuille (Domivest)</div>
+    </div>
+    {% if lening_rente and lening_rente > 0 %}
+    <div class="huur-kencijfer"><div class="waarde">{{ lening_rente|eur }}</div><div class="label">persoonlijke lening / maand</div></div>
+    {% endif %}
+    <div class="huur-kencijfer">
+      <div class="waarde">
+        {% if dekking_incl is not none %}<span class="{{ 'icr-goed' if dekking_incl >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(dekking_incl) }}</span>{% else %}-{% endif %}
+      </div>
+      <div class="label">
+        totale rentedekking{% if lening_rente and lening_rente > 0 %} incl. lening{% endif %}
+        {% if lening_rente and lening_rente > 0 and dekking_hyp is not none %}<br><span style="color:var(--muted)">{{ '%.2f'|format(dekking_hyp) }} zonder lening</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  <p class="muted" style="margin-top:0.5rem">
+    <strong>ICR portefeuille (Domivest)</strong> = kale huur ÷ hypotheekrente (zo toetst Domivest, norm ≥1,25;
+    voor kamerverhuur ≥1,5). Een familielening telt hier <em>niet</em> in mee — die is voor Domivest eigen middelen.
+    <strong>Totale rentedekking</strong> = al je kale huur ÷ ál je rentelasten (hypotheken + persoonlijke lening) —
+    jouw eigen check of je alles samen kunt dragen.
+    {% if totalen.icr is none %}<br>Vul bij minstens één pand de hypotheekrente in (Panden beheren) om netto en ICR te zien.{% endif %}
+  </p>
+</div>
+
+{# ---- Persoonlijke lening(en): familielening-check ---- #}
+<div class="card">
+  <h2>Persoonlijke lening(en)</h2>
+  <p class="muted">
+    Bv. een familielening bij je vader. De maandrente (bedrag × rente ÷ 12) telt mee in de
+    <strong>totale rentedekking</strong> hierboven — speel met bedrag/rente om te zien waar je nog veilig zit.
+    Dit staat los van Domivest's ICR (daar is zo'n lening je eigen middelen, mits getekende overeenkomst + per bank;
+    ≥6% rente is fiscaal veilig tegen een schenking).
+  </p>
+  {% if leningen %}
+  <div class="tabel-scroll">
+  <table class="huur-tabel">
+    <tr><th>Omschrijving</th><th class="num">Bedrag</th><th class="num">Rente</th><th class="num">Rente / maand</th><th></th></tr>
+    {% for l in leningen %}
+    <tr>
+      <td>{{ l.omschrijving or "Persoonlijke lening" }}</td>
+      <td class="num">{{ l.bedrag|eur }}</td>
+      <td class="num">{{ '%.2f'|format(l.jaarrente) }}%</td>
+      <td class="num">{{ l.maandrente|eur }}</td>
+      <td class="num">
+        <form method="post" action="{{ url_for('huur_overzicht_lening_verwijderen', lening_id=l.lening_id) }}" style="display:inline" onsubmit="return confirm('Deze lening verwijderen?')">
+          <button type="submit" class="verwijder-knop" title="Verwijderen">&times;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    <tr class="totaal-rij"><td colspan="3">Totaal rente / maand</td><td class="num">{{ lening_rente|eur }}</td><td></td></tr>
+  </table>
+  </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('huur_overzicht_lening_toevoegen') }}" class="mini-form">
+    <label>Omschrijving<input type="text" name="omschrijving" placeholder="bv. Lening vader"></label>
+    <label>Bedrag<input type="text" name="bedrag" class="kort" placeholder="bv. 200.000"></label>
+    <label>Rente % per jaar<input type="text" name="jaarrente" class="kort" placeholder="bv. 6"></label>
+    <button type="submit" class="btn btn-secondary btn-xs">+ Lening</button>
+  </form>
+</div>
+
+{# ---- Per pand ---- #}
+{% for p in overzichten %}
+<div class="card">
+  <h2>{{ p.naam }}{% if p.gedeeld %} <span class="badge-gedeeld">{{ p.aantal_eigenaren }} eigenaren — jouw aandeel 1/{{ p.aantal_eigenaren }}</span>{% endif %}</h2>
+  {% if p.fout %}<p class="muted">{{ p.fout }}</p>{% endif %}
+
+  <div class="tabel-scroll">
+  <table class="huur-tabel">
+    <tr><th>Kamer</th><th>Huurder</th><th class="num">Kale huur</th><th class="num">Servicekosten</th><th class="num">Totale huur</th><th></th></tr>
+    {% for r in p.regels %}
+    <tr{% if r.handmatig %} class="handmatig-regel"{% endif %}>
+      <td>{{ r.kamer or "—" }}</td>
+      <td>{{ r.naam or "—" }}{% if r.handmatig %} <span class="muted" style="font-size:0.75em">(handmatig)</span>{% endif %}</td>
+      <td class="num">{{ r.kale|eur }}</td>
+      <td class="num">{{ r.servicekosten|eur }}</td>
+      <td class="num">{{ r.totaal|eur }}</td>
+      <td class="num">
+        {% if r.handmatig %}
+        <form method="post" action="{{ url_for('huur_overzicht_regel_verwijderen', pand_slug=p.slug, regel_id=r.regel_id) }}" style="display:inline" onsubmit="return confirm('Deze handmatige regel verwijderen?')">
+          <button type="submit" class="verwijder-knop" title="Verwijderen">&times;</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Nog geen huurders — voeg eventueel handmatig een regel toe.</td></tr>
+    {% endfor %}
+    <tr class="totaal-rij">
+      <td colspan="2">Totaal</td>
+      <td class="num">{{ p.kale_totaal|eur }}</td>
+      <td class="num">{{ p.service_totaal|eur }}</td>
+      <td class="num">{{ p.totaal|eur }}</td>
+      <td></td>
+    </tr>
+  </table>
+  </div>
+
+  <div class="pand-finance">
+    <div class="blok"><div class="waarde">{{ p.rente|eur if p.rente is not none else "—" }}</div><div class="label">hypotheekrente / maand</div></div>
+    <div class="blok"><div class="waarde">{{ p.last|eur if p.last is not none else "—" }}</div><div class="label">hypotheeklast / maand</div></div>
+    <div class="blok"><div class="waarde">{{ p.netto|eur if p.netto is not none else "—" }}</div><div class="label">netto (kale − rente)</div></div>
+    {% if p.gedeeld %}
+    <div class="blok"><div class="waarde">{{ p.netto_eigen|eur if p.netto_eigen is not none else "—" }}</div><div class="label">jouw aandeel</div></div>
+    {% endif %}
+    <div class="blok">
+      <div class="waarde">{% if p.icr is not none %}<span class="{{ 'icr-goed' if p.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(p.icr) }}</span>{% else %}—{% endif %}</div>
+      <div class="label">ICR (kale / rente)</div>
+    </div>
+  </div>
+
+  {# ---- Handmatige regel toevoegen (oude huurder / nog niet in de sheet) ---- #}
+  <form method="post" action="{{ url_for('huur_overzicht_regel_toevoegen', pand_slug=p.slug) }}" class="mini-form">
+    <label>Kamer<input type="text" name="kamer" class="kort" placeholder="bv. Zolder"></label>
+    <label>Huurder<input type="text" name="naam" placeholder="naam (optioneel)"></label>
+    <label>Kale huur<input type="text" name="kale" class="kort" placeholder="€ p/m"></label>
+    <label>Servicekosten<input type="text" name="servicekosten" class="kort" placeholder="€ p/m"></label>
+    <button type="submit" class="btn btn-secondary btn-xs">+ Handmatige regel</button>
+  </form>
+</div>
+{% else %}
+<div class="card"><p class="muted">Je hebt (nog) geen panden met toegang.</p></div>
+{% endfor %}
+{% endblock %}

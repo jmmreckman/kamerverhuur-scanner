@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Kies bezichtiging - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Over welke bezichtiging wil je de huurders inlichten?</h1>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('licht_huurders_in_kies', pand_slug=huidig_pand.slug) }}">
+    {% for datum, afspraken in lijsten.items() %}
+    <label style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem">
+      <input type="radio" name="datum" value="{{ datum }}" {% if loop.first %}checked{% endif %} style="width:auto">
+      {{ datum }} - {{ afspraken|length }} bezichtiging(en) ({{ afspraken[0].tijd_start }} - {{ afspraken[-1].tijd_eind }})
+    </label>
+    {% endfor %}
+
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">Verder</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

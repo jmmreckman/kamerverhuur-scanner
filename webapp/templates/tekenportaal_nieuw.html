@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Nieuw document tekenen{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Nieuw document</h1>
+  <p class="muted">Upload de PDF die ondertekend moet worden. Daarna wijs je zelf de handtekeningplekken aan en koppel je per plek een mailadres.</p>
+</div>
+
+<div class="card" style="max-width:40rem;">
+  <form method="post" enctype="multipart/form-data">
+    <label>Titel van het document
+      <input type="text" name="titel" placeholder="Bijv. Samenwerkingscontract Pompstraat" required>
+    </label>
+    <label style="display:block; margin-top:1rem;">PDF-bestand
+      <input type="file" name="pdf" accept="application/pdf,.pdf" required>
+    </label>
+    <p class="muted" style="font-size:0.85em; margin-top:0.4rem;">Alleen PDF, maximaal 25&nbsp;MB.</p>
+    <div style="margin-top:1.2rem; display:flex; gap:0.6rem;">
+      <button class="btn" type="submit">Uploaden &amp; velden plaatsen</button>
+      <a class="btn btn-secondary" href="{{ url_for('tekenportaal_overzicht') }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
