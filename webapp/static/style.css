@@ -169,6 +169,57 @@ a { color: inherit; }
 .nav-logout:hover { background: var(--surface-alt); color: var(--text); }
 .nav-logout svg { width: 16px; height: 16px; }
 
+/* Gebruiker-dropdown (account): Mailvoorkeuren / Gebruikers / Uitloggen, achter
+   een gebruiker-icoon rechtsboven - houdt de menubalk korter. Native <details>,
+   geen JavaScript nodig. */
+.nav-user { position: relative; }
+.nav-user > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nav-user > summary::-webkit-details-marker { display: none; }
+.nav-user > summary:hover,
+.nav-user[open] > summary { background: var(--surface-alt); color: var(--text); }
+.nav-user > summary svg { width: 18px; height: 18px; flex-shrink: 0; }
+/* Op desktop toont de knop alleen het icoon (de naam staat in de title-tooltip
+   en bovenin het uitklapmenu); op mobiel tonen we de naam er wel bij. */
+.nav-user-naam { display: none; }
+.nav-user-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  z-index: 60;
+}
+.nav-user-menu .nav-link { justify-content: flex-start; }
+.nav-user-kop {
+  padding: 0.3rem 0.85rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.2rem;
+}
+
 /* ---------- Mobiel navigatiemenu (hamburger) ---------- */
 
 .nav-toggle-checkbox { display: none; }
@@ -221,6 +272,20 @@ a { color: inherit; }
     padding: 0.9rem 1rem;
     font-size: 1rem;
     border-radius: 10px;
+  }
+  /* Op mobiel klapt het account-blok gewoon in de verticale lijst open (geen
+     zwevende dropdown): volledige breedte, inhoud licht ingesprongen. */
+  .nav-user { width: 100%; }
+  .nav-user > summary { justify-content: flex-start; padding: 0.9rem 1rem; font-size: 1rem; border-radius: 10px; }
+  .nav-user-naam { display: inline; }
+  .nav-user-menu {
+    position: static;
+    min-width: 0;
+    margin-top: 0.2rem;
+    padding: 0 0 0 0.75rem;
+    background: transparent;
+    border: none;
+    box-shadow: none;
   }
 }
 
