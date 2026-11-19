@@ -134,6 +134,7 @@ class DbClient:
             advertentie_beschikbaar_tot=_tekst(row["advertentie_beschikbaar_tot"]),
             advertentie_borg=_bedrag_uit(row["advertentie_borg"]),
             aanbod_verhuurd=bool(row["aanbod_verhuurd"]),
+            studenten_verplicht=bool(row["studenten_verplicht"]),
         )
 
     def get_kamers(self) -> list[Tenant]:
@@ -252,6 +253,7 @@ class DbClient:
         beschikbaar_tot: str | None = None,
         borg: Decimal | None = None,
         aanbod_verhuurd: bool = False,
+        studenten_verplicht: bool = True,
     ) -> None:
         conn = self._verbind()
         try:
@@ -261,14 +263,15 @@ class DbClient:
                     advertentie_omschrijving = :omschrijving, advertentie_map_id = :map_id,
                     advertentie_prijs = :prijs, advertentie_oppervlakte = :oppervlakte,
                     advertentie_beschikbaar_per = :per, advertentie_beschikbaar_tot = :tot,
-                    advertentie_borg = :borg
+                    advertentie_borg = :borg, studenten_verplicht = :studenten
                    WHERE id = :id AND pand_slug = :slug""",
                 {
                     "beschikbaar": 1 if beschikbaar else 0, "verhuurd": 1 if aanbod_verhuurd else 0,
                     "omschrijving": omschrijving or None, "map_id": map_id or None,
                     "prijs": _bedrag_db(prijs), "oppervlakte": oppervlakte or None,
                     "per": beschikbaar_per or None, "tot": beschikbaar_tot or None,
-                    "borg": _bedrag_db(borg), "id": row_index, "slug": self._slug,
+                    "borg": _bedrag_db(borg), "studenten": 1 if studenten_verplicht else 0,
+                    "id": row_index, "slug": self._slug,
                 },
             )
             conn.commit()

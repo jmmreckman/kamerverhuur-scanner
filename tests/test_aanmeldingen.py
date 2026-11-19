@@ -75,3 +75,39 @@ def test_ontbrekend_verplicht_veld_geeft_fout():
     del form["email"]
     with pytest.raises(AanmeldingFout, match="Email address"):
         valideer_en_bouw(form, heeft_bestand=True)
+
+
+# --- Kamer zonder studenteneis: "are you a student?" ----------------------
+
+def test_niet_student_hoeft_geen_studievelden_of_bewijs():
+    # Kamer zonder studenteneis + aanmelder antwoordt "No": studie,
+    # studentnummer en inschrijvingsbewijs vervallen.
+    form = {k: v for k, v in VOLLEDIG_FORMULIER.items() if k not in ("study_program", "student_number")}
+    form["is_student"] = "No"
+    aanmelding = valideer_en_bouw(form, heeft_bestand=False, studenten_verplicht=False)
+    assert aanmelding.studie == ""
+    assert aanmelding.studentnummer == ""
+
+
+def test_niet_verplicht_maar_wel_student_vereist_studievelden_en_bewijs():
+    # Kamer zonder studenteneis, maar aanmelder zegt "Yes" -> studievelden +
+    # bewijs weer verplicht.
+    form = {**VOLLEDIG_FORMULIER, "is_student": "Yes"}
+    aanmelding = valideer_en_bouw(form, heeft_bestand=True, studenten_verplicht=False)
+    assert aanmelding.studie == "Computer Science"
+
+    zonder = {k: v for k, v in form.items() if k != "student_number"}
+    with pytest.raises(AanmeldingFout, match="Student number"):
+        valideer_en_bouw(zonder, heeft_bestand=True, studenten_verplicht=False)
+    with pytest.raises(AanmeldingFout, match="Proof of study enrollment"):
+        valideer_en_bouw(form, heeft_bestand=False, studenten_verplicht=False)
+
+
+def test_student_verplicht_negeert_is_student_antwoord():
+    # Verplicht huis: ook als iemand "No" zou meesturen, blijven de studievelden
+    # + bewijs verplicht (de vraag wordt niet eens getoond).
+    form = {**VOLLEDIG_FORMULIER, "is_student": "No"}
+    aanmelding = valideer_en_bouw(form, heeft_bestand=True, studenten_verplicht=True)
+    assert aanmelding.studie == "Computer Science"
+    with pytest.raises(AanmeldingFout, match="Proof of study enrollment"):
+        valideer_en_bouw(form, heeft_bestand=False, studenten_verplicht=True)

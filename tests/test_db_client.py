@@ -3,6 +3,7 @@
 de sandbox - SQLite heeft geen externe dependencies, geen Google-verbinding."""
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -117,6 +118,36 @@ def test_aanbod_verhuurd_vlag(client):
     rij = c.voeg_kamer_toe("Kamer 1")
     c.update_aanbod(rij, beschikbaar=False, omschrijving=None, map_id=None, aanbod_verhuurd=True)
     assert c.get_kamers()[0].aanbod_verhuurd is True
+
+
+def test_studenten_verplicht_standaard_aan_en_omzetbaar(client):
+    c, _ = client
+    rij = c.voeg_kamer_toe("Kamer 1")
+    # Nieuwe kamer: standaard student verplicht (behoudt bestaand gedrag).
+    assert c.get_kamers()[0].studenten_verplicht is True
+    c.update_aanbod(rij, beschikbaar=True, omschrijving=None, map_id=None, studenten_verplicht=False)
+    assert c.get_kamers()[0].studenten_verplicht is False
+    c.update_aanbod(rij, beschikbaar=True, omschrijving=None, map_id=None, studenten_verplicht=True)
+    assert c.get_kamers()[0].studenten_verplicht is True
+
+
+def test_migratie_voegt_studenten_verplicht_kolom_toe():
+    # Een oude huurders-tabel zonder de kolom -> _migreer_kolommen() voegt 'm
+    # idempotent toe (default 1 = True). Direct op de helper getest, los van het
+    # volledige schema.
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE huurders (id INTEGER PRIMARY KEY, pand_slug TEXT, kamer TEXT)")
+    conn.execute("INSERT INTO huurders (pand_slug, kamer) VALUES ('p', 'Kamer 1')")
+
+    db._migreer_kolommen(conn)
+    kolommen = {r["name"] for r in conn.execute("PRAGMA table_info(huurders)")}
+    assert "studenten_verplicht" in kolommen
+    assert conn.execute("SELECT studenten_verplicht FROM huurders").fetchone()[0] == 1  # default True
+
+    db._migreer_kolommen(conn)  # nog een keer: geen fout (idempotent)
+    conn.close()
 
 
 def test_update_kamer_raakt_aanbod_niet(client):

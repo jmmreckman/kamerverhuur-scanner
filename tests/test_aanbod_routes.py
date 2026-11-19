@@ -34,6 +34,11 @@ KAMER_AANBOD_VERHUURD = Tenant(
     row_index=5, naam="Piet Pietersen", kamer="4", verwacht_bedrag=Decimal("700.00"),
     beschikbaar=False, aanbod_verhuurd=True, advertentie_omschrijving="This room is rented out",
 )
+# Kamer zonder studenteneis: het aanmeldformulier vraagt eerst "are you a student?".
+KAMER_NIET_STUDENT = Tenant(
+    row_index=6, naam="", kamer="5", verwacht_bedrag=Decimal("680.00"),
+    beschikbaar=True, advertentie_omschrijving="Open to non-students too", studenten_verplicht=False,
+)
 
 
 class FakeSheetClient:
@@ -44,7 +49,7 @@ class FakeSheetClient:
         self.laatste_update_aanbod = None
 
     def get_kamers(self):
-        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN, KAMER_AANBOD_VERHUURD]
+        return [KAMER_BESCHIKBAAR, KAMER_VERHUURD, KAMER_MET_ADVERTENTIEVELDEN, KAMER_AANBOD_VERHUURD, KAMER_NIET_STUDENT]
 
     def get_tenants(self):
         return [k for k in self.get_kamers() if k.naam]
@@ -60,14 +65,15 @@ class FakeSheetClient:
     def update_aanbod(
         self, row_index, beschikbaar, omschrijving, map_id,
         prijs=None, oppervlakte=None, beschikbaar_per=None, beschikbaar_tot=None, borg=None,
-        aanbod_verhuurd=False,
+        aanbod_verhuurd=False, studenten_verplicht=True,
     ):
         if self.laat_update_aanbod_falen:
-            raise RuntimeError("simuleert een mislukte Google Sheets-schrijfactie")
+            raise RuntimeError("simuleert een mislukte schrijfactie")
         self.laatste_update_aanbod = {
             "row_index": row_index, "beschikbaar": beschikbaar, "omschrijving": omschrijving, "map_id": map_id,
             "prijs": prijs, "oppervlakte": oppervlakte, "beschikbaar_per": beschikbaar_per,
             "beschikbaar_tot": beschikbaar_tot, "borg": borg, "aanbod_verhuurd": aanbod_verhuurd,
+            "studenten_verplicht": studenten_verplicht,
         }
 
     def add_aanmelding(self, kamer, aanmelding):
@@ -243,6 +249,41 @@ def test_apply_form_volledig_ingevuld_slaagt(app_client):
     assert kamer == "1"
     assert aanmelding.naam == "Jane Doe"
     assert aanmelding.bewijs_inschrijving_link.startswith("/pand/mahoniestraat/aanmeldingen/bewijs/1/")
+
+
+def test_apply_niet_student_kamer_toont_is_student_vraag(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/5/apply")
+    assert resp.status_code == 200
+    assert b"Are you a student?" in resp.data
+
+
+def test_apply_student_verplichte_kamer_toont_geen_is_student_vraag(app_client):
+    resp = app_client.get("/aanbod/mahoniestraat/1/apply")
+    assert resp.status_code == 200
+    assert b"Are you a student?" not in resp.data
+
+
+def test_apply_niet_student_zonder_studievelden_en_bewijs_slaagt(app_client):
+    # Kamer zonder studenteneis + "No": studie, studentnummer en bewijs mogen weg.
+    data = {k: v for k, v in VOLLEDIG_FORMULIER.items() if k not in ("study_program", "student_number")}
+    data["is_student"] = "No"  # géén study_proof-bestand
+    resp = app_client.post(
+        "/aanbod/mahoniestraat/5/apply", data=data,
+        content_type="multipart/form-data", follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Thank" in resp.data or b"thank" in resp.data
+
+
+def test_apply_niet_student_maar_zegt_ja_eist_alsnog_studievelden(app_client):
+    data = {k: v for k, v in VOLLEDIG_FORMULIER.items() if k != "student_number"}
+    data["is_student"] = "Yes"
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    resp = app_client.post(
+        "/aanbod/mahoniestraat/5/apply", data=data, content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400
+    assert b"Student number" in resp.data
 
 
 def test_apply_form_op_verhuurde_kamer_geeft_404(app_client):

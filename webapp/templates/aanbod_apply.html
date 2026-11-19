@@ -10,7 +10,11 @@
   <p>Please fill in the form below to apply for this room. If your details match what
      we're looking for, we'll invite you for a viewing (in person, or by video call -
      your choice).</p>
+  {% if kamer.studenten_verplicht %}
   <p><strong>House rules:</strong> no smoking, no pets, and you must be enrolled as a student.</p>
+  {% else %}
+  <p><strong>House rules:</strong> no smoking, no pets.</p>
+  {% endif %}
 </div>
 
 {% if fout %}
@@ -31,12 +35,24 @@
     <label>Current address
       <input type="text" name="current_address" required value="{{ request.form.get('current_address', '') }}">
     </label>
-    <label>Study programme
-      <input type="text" name="study_program" required value="{{ request.form.get('study_program', '') }}">
+    {% if not kamer.studenten_verplicht %}
+    <label>Are you a student?
+      <select name="is_student" id="is_student" required>
+        <option value="Yes" {{ 'selected' if request.form.get('is_student', 'Yes') == 'Yes' }}>Yes</option>
+        <option value="No" {{ 'selected' if request.form.get('is_student') == 'No' }}>No</option>
+      </select>
     </label>
-    <label>Student number
-      <input type="text" name="student_number" required value="{{ request.form.get('student_number', '') }}">
-    </label>
+    {% endif %}
+    <div id="student_fields">
+      <label>Study programme
+        <input type="text" name="study_program" id="study_program"
+               {{ 'required' if kamer.studenten_verplicht }} value="{{ request.form.get('study_program', '') }}">
+      </label>
+      <label>Student number
+        <input type="text" name="student_number" id="student_number"
+               {{ 'required' if kamer.studenten_verplicht }} value="{{ request.form.get('student_number', '') }}">
+      </label>
+    </div>
     <label>Desired start date
       <input type="date" name="desired_start_date" required value="{{ request.form.get('desired_start_date', '') }}">
     </label>
@@ -76,12 +92,12 @@
     <label id="video_call_number_label">Phone number for the video call
       <input type="tel" name="video_call_number" id="video_call_number" value="{{ request.form.get('video_call_number', '') }}">
     </label>
-    <label>Proof of study enrollment (PDF or photo)
-      <input type="file" name="study_proof" accept="image/*,.pdf" required>
+    <label id="study_proof_label">Proof of study enrollment (PDF or photo)
+      <input type="file" name="study_proof" id="study_proof" accept="image/*,.pdf" {{ 'required' if kamer.studenten_verplicht }}>
     </label>
     <label>
       <input type="checkbox" name="agree_rules" style="width:auto; display:inline-block" required>
-      I confirm I am a student, do not smoke, and have no pets.
+      I confirm I {% if kamer.studenten_verplicht %}am a student, {% endif %}do not smoke, and have no pets.
     </label>
     <button class="btn" type="submit">Submit application</button>
   </form>
@@ -105,5 +121,28 @@
   }
   guarantor.addEventListener('change', toggleGuarantorFields);
   toggleGuarantorFields();
+
+  // "Are you a student?" - alleen aanwezig als dit huis geen student verplicht
+  // stelt. Bij "No" verdwijnen de studievragen + het inschrijvingsbewijs, en
+  // halen we hun 'required' weg (anders blokkeert een verborgen verplicht veld
+  // het verzenden).
+  const isStudent = document.getElementById('is_student');
+  if (isStudent) {
+    const studentBlok = document.getElementById('student_fields');
+    const proofLabel = document.getElementById('study_proof_label');
+    const verplicht = [
+      document.getElementById('study_program'),
+      document.getElementById('student_number'),
+      document.getElementById('study_proof'),
+    ];
+    function toggleStudentFields() {
+      const ja = isStudent.value === 'Yes';
+      studentBlok.style.display = ja ? 'block' : 'none';
+      proofLabel.style.display = ja ? 'block' : 'none';
+      verplicht.forEach(function (el) { if (el) el.required = ja; });
+    }
+    isStudent.addEventListener('change', toggleStudentFields);
+    toggleStudentFields();
+  }
 </script>
 {% endblock %}

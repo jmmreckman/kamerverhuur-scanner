@@ -63,6 +63,12 @@ class Tenant:
     # je kunt 'm wel openen/bekijken, maar niet erop reageren. Los van `beschikbaar`;
     # als dit aan staat wint "verhuurd" (ook als beschikbaar ook aan zou staan).
     aanbod_verhuurd: bool = False
+    # Of de huurder van deze kamer verplicht student moet zijn. True (standaard,
+    # zodat bestaande kamers hun huidige gedrag houden) = het aanmeldformulier
+    # vraagt direct de studiegegevens + bewijs van inschrijving. False = het
+    # formulier vraagt eerst "are you a student?"; kiest de aanmelder "No", dan
+    # vervallen de studievragen (studie, studentnummer) én het inschrijvingsbewijs.
+    studenten_verplicht: bool = True
 
 
 @dataclass(frozen=True)

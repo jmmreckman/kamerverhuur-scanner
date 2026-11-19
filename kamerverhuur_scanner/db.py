@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS huurders (
     advertentie_beschikbaar_tot TEXT,
     advertentie_borg TEXT,
     aanbod_verhuurd INTEGER NOT NULL DEFAULT 0,
+    studenten_verplicht INTEGER NOT NULL DEFAULT 1,
     status TEXT,
     ontvangen_bedrag TEXT,
     laatst_gecontroleerd TEXT
@@ -197,8 +198,26 @@ def verbind(config: Config) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
+    _migreer_kolommen(conn)
     conn.commit()
     return conn
+
+
+# Kolommen die na de eerste release zijn toegevoegd. CREATE TABLE IF NOT EXISTS
+# raakt een al bestaande tabel niet aan, dus nieuwe kolommen voegen we los toe
+# (idempotent: alleen als ze nog niet bestaan). Zo migreert de bestaande
+# productie-database zichzelf bij de eerstvolgende start.
+_EXTRA_KOLOMMEN = {
+    "huurders": [("studenten_verplicht", "INTEGER NOT NULL DEFAULT 1")],
+}
+
+
+def _migreer_kolommen(conn: sqlite3.Connection) -> None:
+    for tabel, kolommen in _EXTRA_KOLOMMEN.items():
+        bestaand = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabel})")}
+        for naam, definitie in kolommen:
+            if naam not in bestaand:
+                conn.execute(f"ALTER TABLE {tabel} ADD COLUMN {naam} {definitie}")
 
 
 # --- Panden ---------------------------------------------------------------

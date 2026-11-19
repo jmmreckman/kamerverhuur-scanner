@@ -10,14 +10,21 @@ VEREISTE_VELDEN = {
     "email": "Email address",
     "phone": "Phone number",
     "current_address": "Current address",
-    "study_program": "Study programme",
-    "student_number": "Student number",
     "desired_start_date": "Desired start date",
     "desired_contract_duration": "Desired contract duration",
     "income_source": "Source of income",
     "income_amount": "Monthly income",
     "guarantor": "Guarantor",
     "viewing_preference": "Viewing preference",
+}
+
+# Alleen verplicht als de aanmelder student is (zie valideer_en_bouw): ofwel
+# omdat het huis studenten verplicht stelt, ofwel omdat de aanmelder zelf "Yes"
+# antwoordt op "are you a student?". Bij "No" vervallen deze velden + het
+# inschrijvingsbewijs.
+VEREISTE_STUDENT_VELDEN = {
+    "study_program": "Study programme",
+    "student_number": "Student number",
 }
 
 # Alleen verplicht als "guarantor" == "Yes" - zie valideer_en_bouw().
@@ -32,10 +39,22 @@ class AanmeldingFout(ValueError):
     pass
 
 
-def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
+def valideer_en_bouw(form, heeft_bestand: bool, studenten_verplicht: bool = True) -> Aanmelding:
     """Valideert het formulier en bouwt een Aanmelding op (zonder de link naar
-    het geuploade bewijs - die wordt er na de Drive-upload aan toegevoegd)."""
+    het geuploade bewijs - die wordt er na de upload aan toegevoegd).
+
+    `studenten_verplicht` komt van de kamer/advertentie. Is die True, dan is de
+    aanmelder per definitie student (het formulier toont dan geen "are you a
+    student?"-vraag) en zijn de studievelden + het inschrijvingsbewijs verplicht.
+    Is die False, dan bepaalt het antwoord op "are you a student?" (veld
+    `is_student`) of die velden verplicht zijn; bij "No" vervallen ze."""
+    is_student = True if studenten_verplicht else form.get("is_student") == "Yes"
+
     ontbrekend = [label for veld, label in VEREISTE_VELDEN.items() if not form.get(veld, "").strip()]
+    if is_student:
+        for veld, label in VEREISTE_STUDENT_VELDEN.items():
+            if not form.get(veld, "").strip():
+                ontbrekend.append(label)
     if form.get("viewing_preference") == "video_call" and not form.get("video_call_number", "").strip():
         ontbrekend.append("Video call phone number")
     heeft_borgsteller = form.get("guarantor") == "Yes"
@@ -45,7 +64,7 @@ def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
                 ontbrekend.append(label)
     if form.get("agree_rules") != "on":
         ontbrekend.append("Agreement to the house rules")
-    if not heeft_bestand:
+    if is_student and not heeft_bestand:
         ontbrekend.append("Proof of study enrollment")
     if ontbrekend:
         raise AanmeldingFout("Please fill in: " + ", ".join(ontbrekend) + ".")
@@ -55,8 +74,8 @@ def valideer_en_bouw(form, heeft_bestand: bool) -> Aanmelding:
         email=form["email"].strip(),
         telefoon=form["phone"].strip(),
         huidig_adres=form["current_address"].strip(),
-        studie=form["study_program"].strip(),
-        studentnummer=form["student_number"].strip(),
+        studie=form.get("study_program", "").strip() if is_student else "",
+        studentnummer=form.get("student_number", "").strip() if is_student else "",
         gewenste_ingangsdatum=form["desired_start_date"].strip(),
         gewenste_huurduur=form["desired_contract_duration"].strip(),
         inkomstenbron=form["income_source"].strip(),

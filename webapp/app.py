@@ -2335,6 +2335,7 @@ def create_app(config: Config | None = None) -> Flask:
         if request.method == "POST":
             beschikbaar = request.form.get("beschikbaar") == "on"
             aanbod_verhuurd = request.form.get("aanbod_verhuurd") == "on"
+            studenten_verplicht = request.form.get("studenten_verplicht") == "on"
             omschrijving = request.form.get("omschrijving", "").strip() or None
             prijs = request.form.get("advertentie_prijs", "").strip()
             oppervlakte = request.form.get("advertentie_oppervlakte", "").strip() or None
@@ -2357,6 +2358,7 @@ def create_app(config: Config | None = None) -> Flask:
                     prijs=prijs_bedrag, oppervlakte=oppervlakte,
                     beschikbaar_per=beschikbaar_per, beschikbaar_tot=beschikbaar_tot,
                     borg=borg_bedrag, aanbod_verhuurd=aanbod_verhuurd,
+                    studenten_verplicht=studenten_verplicht,
                 )
             except Exception:
                 app.logger.exception(
@@ -4348,26 +4350,34 @@ def create_app(config: Config | None = None) -> Flask:
             abort(404)  # alleen tonen (VERHUURD), niet op te reageren
         if request.method == "POST":
             bestand = request.files.get("study_proof")
+            heeft_bestand = bool(bestand and bestand.filename)
             try:
-                aanmelding = valideer_en_bouw(request.form, heeft_bestand=bool(bestand and bestand.filename))
+                aanmelding = valideer_en_bouw(
+                    request.form, heeft_bestand=heeft_bestand,
+                    studenten_verplicht=kamer.studenten_verplicht,
+                )
             except AanmeldingFout as exc:
                 return render_template("aanbod_apply.html", kamer=kamer, fout=str(exc)), 400
-            media_client = _aanmeldingen_media()
-            try:
-                bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
-                file_id = media_client.upload_bestand(kamer_naam, bestandsnaam, bestand.mimetype, bestand.read())
-            except Exception:
-                app.logger.exception("Uploaden van bewijs inschrijving is mislukt (pand %s, kamer %s).", pand_slug, kamer_naam)
-                return render_template(
-                    "aanbod_apply.html", kamer=kamer,
-                    fout="Sorry, uploading your file failed. Please try again with a smaller file, or contact us directly.",
-                ), 500
-            aanmelding = dataclasses.replace(
-                aanmelding,
-                bewijs_inschrijving_link=url_for(
-                    "aanmelding_bewijs_bekijken", pand_slug=pand_slug, kamer_naam=kamer_naam, file_id=file_id
-                ),
-            )
+            # Alleen een inschrijvingsbewijs verwerken als er echt een bestand is
+            # meegestuurd: een niet-student (op een kamer zonder studenteneis)
+            # hoeft er geen te uploaden.
+            if heeft_bestand:
+                media_client = _aanmeldingen_media()
+                try:
+                    bestandsnaam = f"{date.today():%Y-%m-%d} - {aanmelding.naam} - bewijs inschrijving - {bestand.filename}"
+                    file_id = media_client.upload_bestand(kamer_naam, bestandsnaam, bestand.mimetype, bestand.read())
+                except Exception:
+                    app.logger.exception("Uploaden van bewijs inschrijving is mislukt (pand %s, kamer %s).", pand_slug, kamer_naam)
+                    return render_template(
+                        "aanbod_apply.html", kamer=kamer,
+                        fout="Sorry, uploading your file failed. Please try again with a smaller file, or contact us directly.",
+                    ), 500
+                aanmelding = dataclasses.replace(
+                    aanmelding,
+                    bewijs_inschrijving_link=url_for(
+                        "aanmelding_bewijs_bekijken", pand_slug=pand_slug, kamer_naam=kamer_naam, file_id=file_id
+                    ),
+                )
             sheet.add_aanmelding(kamer_naam, aanmelding)
             # Meldingsmail (best-effort, mag een geslaagde aanmelding nooit
             # laten mislukken) - bewust alleen naar de beheerder(s) uit

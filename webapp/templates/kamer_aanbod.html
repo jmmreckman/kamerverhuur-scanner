@@ -19,6 +19,14 @@
     <p class="muted">Met "VERHUURD markeren" staat de kamer wél op de aanbodpagina (en is 'ie te
        openen/bekijken), maar duidelijk rood als verhuurd — en er kan niet op gereageerd worden.
        Zo oogt het aanbod voller. Staat dit aan, dan wint "verhuurd" (ook als "te huur" ook aan staat).</p>
+    <label>
+      <input type="checkbox" name="studenten_verplicht" style="width:auto; display:inline-block" {{ 'checked' if kamer.studenten_verplicht }}>
+      Voor deze kamer is een <strong>student</strong> verplicht
+    </label>
+    <p class="muted">Staat dit <strong>aan</strong>, dan vraagt het aanmeldformulier meteen de
+       studiegegevens + bewijs van inschrijving. Staat het <strong>uit</strong>, dan vraagt het
+       formulier eerst "are you a student?"; kiest de aanmelder "No", dan vervallen de studievragen
+       en het inschrijvingsbewijs (handig voor een kamer die ook aan een niet-student verhuurd mag).</p>
     <label>Omschrijving (in het Engels - dit ziet de bezoeker)
       <textarea name="omschrijving" rows="10">{{ kamer.advertentie_omschrijving or standaard_omschrijving }}</textarea>
     </label>
