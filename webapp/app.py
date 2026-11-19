@@ -317,20 +317,12 @@ def create_app(config: Config | None = None) -> Flask:
     def _template_context():
         eigen_panden = []
         alle_panden = []
-        open_acties_aantal = 0
         if current_user.is_authenticated:
             alle_panden = _properties()
             eigen_panden = [p for p in alle_panden if current_user.heeft_toegang(p.slug)]
-            try:
-                open_acties_aantal = communicatie_db.tel_open_acties(
-                    _comm_db(), pand_slugs=[p.slug for p in eigen_panden],
-                    inclusief_ongekoppeld=current_user.alle_panden,
-                )
-            except Exception:
-                open_acties_aantal = 0
         return {
             "eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None),
-            "pand_wissel_url": _pand_wissel_url, "open_acties_aantal": open_acties_aantal,
+            "pand_wissel_url": _pand_wissel_url,
             "huidig_jaar": date.today().year,
         }
 
