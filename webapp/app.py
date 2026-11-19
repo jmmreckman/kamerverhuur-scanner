@@ -56,7 +56,12 @@ from . import (
     ads, afwijzing, bezichtiging, communicatie_ai, communicatie_db, contracts,
     documentverzoek, ondertekenen, tekenportaal, whatsapp_import, wwso,
 )
-from .aanmeldingen import AanmeldingFout, bouw_nieuwe_aanmelding_mail, valideer_en_bouw
+from .aanmeldingen import (
+    AanmeldingFout,
+    bouw_aanmelding_bevestigingsmail,
+    bouw_nieuwe_aanmelding_mail,
+    valideer_en_bouw,
+)
 from .aanzegging import bereken_aanzeg_status
 from .auth import User, load_users, save_users, user_uit_gegevens, verify_login, zet_gebruiker, zet_mail_voorkeuren
 from .reliability import bereken_betrouwbaarheid, voeg_actuele_maand_toe
@@ -4394,6 +4399,23 @@ def create_app(config: Config | None = None) -> Flask:
                 except MailError:
                     app.logger.exception(
                         "Melding van nieuwe aanmelding (kamer %s, pand %s) is mislukt.", kamer_naam, pand_slug
+                    )
+            # Bevestigingsmail naar de aanmelder zelf, met de beheerder(s) in CC -
+            # alleen als minstens één beheerder deze mailvoorkeur aan heeft staan
+            # (uitvinken = geen bevestiging + niet in CC). Ook best-effort.
+            bevestiging_cc = _ontvangers(
+                pand_slug, "aanmelding_bevestiging", config.email_bcc_beheerder or config.email_bcc
+            )
+            if bevestiging_cc and aanmelding.email:
+                bevestiging = bouw_aanmelding_bevestigingsmail(g.pand, kamer_naam, aanmelding)
+                try:
+                    verstuur_email(
+                        config, aanmelding.email, bevestiging["onderwerp"], bevestiging["tekst"],
+                        cc=bevestiging_cc, bcc=[],
+                    )
+                except MailError:
+                    app.logger.exception(
+                        "Bevestigingsmail naar aanmelder (kamer %s, pand %s) is mislukt.", kamer_naam, pand_slug
                     )
             return redirect(url_for("aanbod_apply_bedankt", pand_slug=pand_slug, kamer_naam=kamer_naam))
         return render_template("aanbod_apply.html", kamer=kamer, fout=None)

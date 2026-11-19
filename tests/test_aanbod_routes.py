@@ -176,8 +176,8 @@ def app_client(tmp_path, monkeypatch):
 def verstuurde_mails(monkeypatch):
     verstuurd = []
 
-    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, **kwargs):
-        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
+    def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, cc=None, **kwargs):
+        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc, "cc": cc})
 
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
@@ -318,14 +318,43 @@ def test_nieuwe_aanmelding_mailt_alleen_de_beheerder(app_client, verstuurde_mail
     data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
     app_client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
 
-    assert len(verstuurde_mails) == 1
-    mail = verstuurde_mails[0]
-    assert mail["aan"] == "jmmreckman@gmail.com"
-    assert mail["bcc"] == []  # expliciet leeg - geen mede-eigenaren erbij via de standaard-BCC
-    assert "justin@example.com" not in mail["aan"]
-    assert "Jane Doe" in mail["tekst"]
-    assert "kamer 1" in mail["onderwerp"].lower()
-    assert "Mahoniestraat 15" in mail["onderwerp"]
+    # De interne meldingsmail gaat alleen naar de beheerder (niet naar alle mede-eigenaren).
+    melding = next(m for m in verstuurde_mails if m["onderwerp"].startswith("Nieuwe aanmelding"))
+    assert melding["aan"] == "jmmreckman@gmail.com"
+    assert melding["bcc"] == []  # expliciet leeg - geen mede-eigenaren erbij via de standaard-BCC
+    assert "justin@example.com" not in melding["aan"]
+    assert "Jane Doe" in melding["tekst"]
+    assert "kamer 1" in melding["onderwerp"].lower()
+    assert "Mahoniestraat 15" in melding["onderwerp"]
+
+
+def test_aanmelder_krijgt_bevestigingsmail_met_beheerder_in_cc(app_client, verstuurde_mails):
+    data = dict(VOLLEDIG_FORMULIER)
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    app_client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
+
+    bevestiging = next(m for m in verstuurde_mails if m["onderwerp"].startswith("Application received"))
+    assert bevestiging["aan"] == "jane@example.com"  # naar de aanmelder zelf
+    assert "jmmreckman@gmail.com" in (bevestiging["cc"] or [])  # beheerder in CC
+    assert bevestiging["bcc"] == []  # geen mede-eigenaren via standaard-BCC
+
+
+def test_bevestigingsmail_uit_als_beheerder_m_afmeldt(tmp_path, monkeypatch, verstuurde_mails):
+    # Beheerder vinkt de bevestigingsmail-voorkeur uit -> geen bevestiging naar
+    # de aanmelder (en de beheerder niet in CC), maar de interne melding blijft.
+    import json
+    client = _bouw_app_client(tmp_path, monkeypatch)
+    users_pad = tmp_path / "users.json"
+    users = json.loads(users_pad.read_text())
+    users["beheerder"]["email"] = "jmmreckman@gmail.com"
+    users["beheerder"].setdefault("mail_voorkeuren", {})["aanmelding_bevestiging"] = False
+    users_pad.write_text(json.dumps(users))
+
+    data = dict(VOLLEDIG_FORMULIER)
+    data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
+    client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
+
+    assert not any(m["onderwerp"].startswith("Application received") for m in verstuurde_mails)
 
 
 def test_nieuwe_aanmelding_zonder_beheerder_bcc_valt_terug_op_email_bcc(tmp_path, monkeypatch, verstuurde_mails):
@@ -335,14 +364,14 @@ def test_nieuwe_aanmelding_zonder_beheerder_bcc_valt_terug_op_email_bcc(tmp_path
     data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
     client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
 
-    assert len(verstuurde_mails) == 1
-    assert verstuurde_mails[0]["aan"] == "jurian@example.com, justin@example.com"
+    melding = next(m for m in verstuurde_mails if m["onderwerp"].startswith("Nieuwe aanmelding"))
+    assert melding["aan"] == "jurian@example.com, justin@example.com"
 
 
 def test_nieuwe_aanmelding_mislukte_mail_breekt_de_aanmelding_niet(app_client, monkeypatch):
     import webapp.app as appmodule
 
-    def _falende_mailer(config, aan, onderwerp, tekst, bcc=None):
+    def _falende_mailer(config, aan, onderwerp, tekst, bcc=None, cc=None, **kwargs):
         raise MailError("SMTP tijdelijk niet bereikbaar")
 
     monkeypatch.setattr(appmodule, "verstuur_email", _falende_mailer)

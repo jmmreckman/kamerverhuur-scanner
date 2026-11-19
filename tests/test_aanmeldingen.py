@@ -1,6 +1,11 @@
 import pytest
 
-from webapp.aanmeldingen import AanmeldingFout, valideer_en_bouw
+from kamerverhuur_scanner.models import Pand
+from webapp.aanmeldingen import (
+    AanmeldingFout,
+    bouw_aanmelding_bevestigingsmail,
+    valideer_en_bouw,
+)
 
 VOLLEDIG_FORMULIER = {
     "full_name": "Jane Doe",
@@ -101,6 +106,17 @@ def test_niet_verplicht_maar_wel_student_vereist_studievelden_en_bewijs():
         valideer_en_bouw(zonder, heeft_bestand=True, studenten_verplicht=False)
     with pytest.raises(AanmeldingFout, match="Proof of study enrollment"):
         valideer_en_bouw(form, heeft_bestand=False, studenten_verplicht=False)
+
+
+def test_bevestigingsmail_naar_aanmelder():
+    aanmelding = valideer_en_bouw(VOLLEDIG_FORMULIER, heeft_bestand=True)
+    pand = Pand(slug="p", naam="Mahoniestraat 15", google_sheet_id="", google_sheet_worksheet="H",
+                history_worksheet="Hi", bunq_rekening_iban="NL00")
+    mail = bouw_aanmelding_bevestigingsmail(pand, "1", aanmelding)
+    assert "room 1" in mail["onderwerp"]
+    assert "Mahoniestraat 15" in mail["onderwerp"]
+    assert aanmelding.naam in mail["tekst"]  # persoonlijk aangesproken
+    assert "Mahoniestraat 15" in mail["tekst"]
 
 
 def test_student_verplicht_negeert_is_student_antwoord():

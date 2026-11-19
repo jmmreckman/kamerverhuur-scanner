@@ -90,6 +90,25 @@ def valideer_en_bouw(form, heeft_bestand: bool, studenten_verplicht: bool = True
     )
 
 
+def bouw_aanmelding_bevestigingsmail(pand: Pand, kamer_naam: str, aanmelding: Aanmelding) -> dict[str, str]:
+    """Bevestigingsmail naar de aanmelder zelf (Engels, want de aanbodpagina is
+    Engelstalig voor expats/studenten). Bewust neutraal geformuleerd - geen
+    harde reactietermijn beloven. De beheerder(s) gaan als CC mee (zie de
+    aanroep in webapp/app.py)."""
+    onderwerp = f"Application received - room {kamer_naam}, {pand.naam}"
+    tekst = (
+        f"Hi {aanmelding.naam},\n\n"
+        f"Thank you for your application for room {kamer_naam} at {pand.naam}. "
+        "We've received it and will review your details.\n\n"
+        "If your application matches what we're looking for, we'll get in touch to arrange a "
+        "viewing (in person or by video call). You're welcome to reply to this email if you "
+        "have any questions in the meantime.\n\n"
+        "Kind regards,\n"
+        "Steenhub"
+    )
+    return {"onderwerp": onderwerp, "tekst": tekst}
+
+
 def bouw_nieuwe_aanmelding_mail(pand: Pand, kamer_naam: str, aanmelding: Aanmelding, aanmeldingen_url: str) -> dict[str, str]:
     """Interne meldingsmail zodra er een nieuwe aanmelding via de publieke
     aanbodpagina binnenkomt - Nederlands, want dit is (in tegenstelling tot
