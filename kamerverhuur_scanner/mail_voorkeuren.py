@@ -38,9 +38,10 @@ NOTIFICATIE_TYPES: dict[str, tuple[str, str]] = {
         "Melding zodra iemand via de publieke aanbodpagina op een kamer reageert.",
     ),
     "aanmelding_bevestiging": (
-        "Bevestigingsmail naar aanmelders",
-        "Stuur een aanmelder automatisch een bevestiging dat zijn/haar reactie binnen is, met jou "
-        "in de CC. Uitgevinkt = er gaat geen bevestiging naar de aanmelder (en jij staat niet in de CC).",
+        "CC van de bevestigingsmail aan aanmelders",
+        "Elke aanmelder krijgt altijd automatisch een bevestiging dat zijn/haar reactie binnen is. "
+        "Dit bepaalt alleen of jij daarvan een CC krijgt - uitgevinkt = de aanmelder krijgt de "
+        "bevestiging nog steeds, maar jij staat er niet in de CC.",
     ),
     "betalingsstatus": (
         "\"Alles betaald\"-melding",

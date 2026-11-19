@@ -339,9 +339,9 @@ def test_aanmelder_krijgt_bevestigingsmail_met_beheerder_in_cc(app_client, verst
     assert bevestiging["bcc"] == []  # geen mede-eigenaren via standaard-BCC
 
 
-def test_bevestigingsmail_uit_als_beheerder_m_afmeldt(tmp_path, monkeypatch, verstuurde_mails):
-    # Beheerder vinkt de bevestigingsmail-voorkeur uit -> geen bevestiging naar
-    # de aanmelder (en de beheerder niet in CC), maar de interne melding blijft.
+def test_bevestigingsmail_blijft_naar_aanmelder_maar_zonder_cc_als_beheerder_m_afmeldt(tmp_path, monkeypatch, verstuurde_mails):
+    # Beheerder vinkt de voorkeur uit -> de aanmelder krijgt nog steeds de
+    # bevestiging, maar de beheerder staat niet meer in de CC.
     import json
     client = _bouw_app_client(tmp_path, monkeypatch)
     users_pad = tmp_path / "users.json"
@@ -354,7 +354,9 @@ def test_bevestigingsmail_uit_als_beheerder_m_afmeldt(tmp_path, monkeypatch, ver
     data["study_proof"] = (io.BytesIO(b"fake-pdf-bytes"), "enrollment.pdf")
     client.post("/aanbod/mahoniestraat/1/apply", data=data, content_type="multipart/form-data")
 
-    assert not any(m["onderwerp"].startswith("Application received") for m in verstuurde_mails)
+    bevestiging = next(m for m in verstuurde_mails if m["onderwerp"].startswith("Application received"))
+    assert bevestiging["aan"] == "jane@example.com"           # aanmelder krijgt 'm wél
+    assert "jmmreckman@gmail.com" not in (bevestiging["cc"] or [])  # beheerder niet in CC
 
 
 def test_nieuwe_aanmelding_zonder_beheerder_bcc_valt_terug_op_email_bcc(tmp_path, monkeypatch, verstuurde_mails):

@@ -4403,18 +4403,19 @@ def create_app(config: Config | None = None) -> Flask:
                     app.logger.exception(
                         "Melding van nieuwe aanmelding (kamer %s, pand %s) is mislukt.", kamer_naam, pand_slug
                     )
-            # Bevestigingsmail naar de aanmelder zelf, met de beheerder(s) in CC -
-            # alleen als minstens één beheerder deze mailvoorkeur aan heeft staan
-            # (uitvinken = geen bevestiging + niet in CC). Ook best-effort.
-            bevestiging_cc = _ontvangers(
-                pand_slug, "aanmelding_bevestiging", config.email_bcc_beheerder or config.email_bcc
-            )
-            if bevestiging_cc and aanmelding.email:
+            # Bevestigingsmail gaat ALTIJD naar de aanmelder zelf (best-effort).
+            # De mailvoorkeur "aanmelding_bevestiging" bepaalt alléén of de
+            # beheerder(s) een CC krijgen - uitvinken haalt je uit de CC, maar de
+            # aanmelder krijgt de bevestiging gewoon.
+            if aanmelding.email:
+                bevestiging_cc = _ontvangers(
+                    pand_slug, "aanmelding_bevestiging", config.email_bcc_beheerder or config.email_bcc
+                )
                 bevestiging = bouw_aanmelding_bevestigingsmail(g.pand, kamer_naam, aanmelding)
                 try:
                     verstuur_email(
                         config, aanmelding.email, bevestiging["onderwerp"], bevestiging["tekst"],
-                        cc=bevestiging_cc, bcc=[],
+                        cc=bevestiging_cc or None, bcc=[],
                     )
                 except MailError:
                     app.logger.exception(
