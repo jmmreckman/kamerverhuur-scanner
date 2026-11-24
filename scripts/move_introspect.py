@@ -92,7 +92,7 @@ def main() -> int:
     session = requests.Session()
     session.headers.update({"User-Agent": move_scrape._UA})
     try:
-        token = move_scrape._login(session, config.move_email, config.move_password)
+        token = move_scrape._verkrijg_access_token(session, config)
     except Exception as exc:  # noqa: BLE001
         print(f"Move-login mislukt: {exc}")
         return 1

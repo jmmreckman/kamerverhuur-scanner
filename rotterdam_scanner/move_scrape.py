@@ -13,17 +13,25 @@ alles via exact dezelfde pipeline loopt en op object_id ontdubbelt met Funda.
 from __future__ import annotations
 
 import base64
+import email
 import hashlib
+import imaplib
+import json
 import logging
 import os
 import re
 import secrets
+import time
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+from pathlib import Path
 
 import requests
 
 from .config import Config
 from .eigendom import classificeer_eigendom
-from .funda_mail import FundaListing, _maak_object_id
+from .funda_mail import FundaListing, _get_body, _maak_object_id
+from .jsonbestand import schrijf_json_atomisch
 from .verkoopstatus import categoriseer_verkoopstatus
 from .vve import classificeer_vve, parse_vve_bijdrage
 from .woningkenmerken import classificeer_woningtype
@@ -51,7 +59,6 @@ _UA = (
 _PAGE_SIZE = 50
 _MAX_PAGINAS = 60  # veiligheidsgrens: 60 x 50 = 3000 woningen
 
-_FORM_ACTION_RE = re.compile(r'<form[^>]+action="([^"]+)"', re.IGNORECASE)
 _PRIJS_RE = re.compile(r"([\d][\d.]*)")
 
 # De query is 1-op-1 die van de Move.nl-webapp (SearchDossierViewObjectsWithCursorQuery).
@@ -92,9 +99,157 @@ def _pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _login(session: requests.Session, email: str, password: str) -> str:
-    """Voer de Keycloak authorization-code + PKCE-flow uit en geef een access-token
-    terug. Gooit een RuntimeError met een duidelijke reden bij mislukking."""
+# ---------------------------------------------------------------------------
+# Inloggen. Move draait Keycloak met e-mail+wachtwoord en sinds kort een tweede stap:
+# een eenmalige code per e-mail (OTP). Daarom:
+#   1. we loggen één keer volledig in (wachtwoord + e-mailcode), en
+#   2. bewaren het refresh-token in het data-volume; elke volgende run verversen we
+#      stilletjes (geen code nodig). Pas als dat faalt doen we weer een verse login en
+#      lezen we de code automatisch uit het scanner-Gmail (hetzelfde postvak als de
+#      Funda-alerts). Geen handwerk, geen browser - puur requests + IMAP.
+
+_FORM_RE = re.compile(r"<form\b[^>]*>.*?</form>", re.IGNORECASE | re.DOTALL)
+_ACTION_RE = re.compile(r'<form\b[^>]*\baction="([^"]*)"', re.IGNORECASE)
+_INPUT_RE = re.compile(r"<input\b[^>]*>", re.IGNORECASE)
+_ATTR_NAAM_RE = re.compile(r'\bname="([^"]*)"', re.IGNORECASE)
+_ATTR_WAARDE_RE = re.compile(r'\bvalue="([^"]*)"', re.IGNORECASE)
+_ATTR_TYPE_RE = re.compile(r'\btype="([^"]*)"', re.IGNORECASE)
+# De code in de inlogmail is bv. "NMM424": enkele letters gevolgd door enkele cijfers.
+_OTP_RE = re.compile(r"\b([A-Z]{2,5}[0-9]{2,5})\b")
+_OTP_NUMERIEK_RE = re.compile(r"\b([0-9]{5,8})\b")
+_INVULBARE_TYPES = {"", "text", "email", "password", "number", "tel"}
+_VASTE_VELDEN = {"rememberme", "credentialid"}
+
+
+def _unescape(tekst: str) -> str:
+    return (
+        tekst.replace("&amp;", "&")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+    )
+
+
+def _parse_login_form(html_tekst: str) -> tuple[str, dict[str, tuple[str, str]]]:
+    """Zoek het eerste interactieve <form> (met een invulbaar veld) en geef
+    (action-URL, {veldnaam: (waarde, type)}) terug. Zo werkt dezelfde functie voor
+    zowel het wachtwoord- als het OTP-formulier, ongeacht de exacte veldnamen."""
+    for form in _FORM_RE.findall(html_tekst):
+        velden: dict[str, tuple[str, str]] = {}
+        invulbaar = False
+        for tag in _INPUT_RE.findall(form):
+            naam_m = _ATTR_NAAM_RE.search(tag)
+            if not naam_m:
+                continue
+            naam = naam_m.group(1)
+            waarde_m = _ATTR_WAARDE_RE.search(tag)
+            type_m = _ATTR_TYPE_RE.search(tag)
+            waarde = _unescape(waarde_m.group(1)) if waarde_m else ""
+            veldtype = type_m.group(1).lower() if type_m else ""
+            velden[naam] = (waarde, veldtype)
+            if veldtype in _INVULBARE_TYPES:
+                invulbaar = True
+        if not invulbaar:
+            continue
+        actie_m = _ACTION_RE.search(form)
+        actie = _unescape(actie_m.group(1)) if actie_m else ""
+        return actie, velden
+    raise RuntimeError("Move-login: geen invulbaar formulier gevonden (sjabloon gewijzigd?).")
+
+
+def _heeft_wachtwoordveld(velden: dict[str, tuple[str, str]]) -> bool:
+    return any(veldtype == "password" for _, veldtype in velden.values())
+
+
+def _kies_otp_veld(velden: dict[str, tuple[str, str]]) -> str:
+    """Welk veld de e-mailcode in moet: het eerste invulbare, lege veld dat geen vast
+    Keycloak-veld is (rememberMe/credentialId)."""
+    for naam, (waarde, veldtype) in velden.items():
+        if naam.lower() in _VASTE_VELDEN:
+            continue
+        if veldtype in _INVULBARE_TYPES and not waarde:
+            return naam
+    raise RuntimeError("Move-login: geen invoerveld voor de e-mailcode gevonden.")
+
+
+def _extract_otp_code(tekst: str) -> str | None:
+    """Haal de eenmalige code uit de tekst/HTML van de inlogmail."""
+    match = _OTP_RE.search(tekst)
+    if match:
+        return match.group(1)
+    match = _OTP_NUMERIEK_RE.search(tekst)
+    return match.group(1) if match else None
+
+
+def _bericht_datum(bericht) -> datetime | None:
+    ruwe = bericht.get("Date")
+    if not ruwe:
+        return None
+    try:
+        dt = parsedate_to_datetime(ruwe)
+    except (TypeError, ValueError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _lees_otp_code_uit_mail(
+    config: Config, na: datetime, pogingen: int = 10, interval: float = 3.0
+) -> str:
+    """Pollt het scanner-Gmail (hetzelfde postvak als de Funda-alerts) op de nieuwste
+    Move-inlogmail die ná `na` binnenkwam en geeft de code terug. Gooit een RuntimeError
+    als er binnen de pogingen geen code verschijnt."""
+    sinds = (na - timedelta(days=1)).strftime("%d-%b-%Y")
+    marge = na - timedelta(seconds=60)  # klok-/afrondingsmarge
+    laatste_fout = "geen verse Move-inlogmail gevonden"
+    for poging in range(pogingen):
+        try:
+            with imaplib.IMAP4_SSL(config.imap_host) as imap:
+                imap.login(config.gmail_address, config.gmail_app_password)
+                imap.select(config.funda_mail_folder)
+                status, data = imap.search(None, f'(SINCE "{sinds}" FROM "move")')
+                if status == "OK" and data and data[0]:
+                    beste_dt: datetime | None = None
+                    beste_code: str | None = None
+                    for msg_id in data[0].split():
+                        st, msg_data = imap.fetch(msg_id, "(RFC822)")
+                        if st != "OK" or not msg_data or msg_data[0] is None:
+                            continue
+                        bericht = email.message_from_bytes(msg_data[0][1])
+                        ontvangen = _bericht_datum(bericht)
+                        if ontvangen is not None and ontvangen < marge:
+                            continue  # oude code (van een eerdere login) overslaan
+                        code = _extract_otp_code(_get_body(bericht)) or _extract_otp_code(
+                            bericht.get("Subject") or ""
+                        )
+                        if code and (beste_dt is None or (ontvangen or na) >= beste_dt):
+                            beste_dt = ontvangen or na
+                            beste_code = code
+                    if beste_code:
+                        return beste_code
+        except Exception as exc:  # noqa: BLE001
+            laatste_fout = str(exc)
+        if poging < pogingen - 1:
+            time.sleep(interval)
+    raise RuntimeError(f"Move-login: geen e-mailcode ontvangen ({laatste_fout}).")
+
+
+def _token_endpoint(session: requests.Session, data: dict) -> dict:
+    resp = session.post(_TOKEN_URL, data={**data, "client_id": _CLIENT_ID}, timeout=30)
+    resp.raise_for_status()
+    tok = resp.json()
+    if not tok.get("access_token"):
+        raise RuntimeError("Move-login: tokenendpoint gaf geen access_token terug.")
+    return tok
+
+
+def _voer_oidc_flow(session: requests.Session, config: Config) -> dict:
+    """Volledige Keycloak authorization-code + PKCE-login, mét de e-mailcode-stap.
+    Geeft het hele tokenantwoord (access_token, refresh_token, ...) terug."""
     verifier, challenge = _pkce()
     auth_params = {
         "client_id": _CLIENT_ID,
@@ -109,41 +264,113 @@ def _login(session: requests.Session, email: str, password: str) -> str:
     }
     resp = session.get(_AUTH_URL, params=auth_params, timeout=30)
     resp.raise_for_status()
-    match = _FORM_ACTION_RE.search(resp.text)
-    if not match:
-        raise RuntimeError("Move-login: kon het Keycloak-inlogformulier niet vinden (sjabloon gewijzigd?).")
-    action = match.group(1).replace("&amp;", "&")
+    actie, velden = _parse_login_form(resp.text)
 
-    post = session.post(
-        action,
-        data={"username": email, "password": password, "credentialId": ""},
-        allow_redirects=False,
-        timeout=30,
+    data = {naam: waarde for naam, (waarde, _t) in velden.items()}
+    data["username"] = config.move_email
+    data["password"] = config.move_password
+    data["rememberMe"] = "on"  # langere Keycloak-sessie -> minder vaak opnieuw inloggen
+    post = session.post(actie, data=data, allow_redirects=False, timeout=30)
+
+    code = (
+        _code_uit_locatie(post.headers.get("Location", ""))
+        if post.status_code in (302, 303)
+        else None
     )
-    locatie = post.headers.get("Location", "")
-    if post.status_code not in (302, 303) or "code=" not in locatie:
-        # Keycloak toont bij foute inloggegevens weer het formulier (200) i.p.v. een redirect.
-        raise RuntimeError("Move-login: inloggen mislukt (verkeerde gegevens of 2FA op het account?).")
-    code = _code_uit_locatie(locatie)
-    if not code:
-        raise RuntimeError("Move-login: geen autorisatiecode in de redirect ontvangen.")
+    if code is None:
+        if post.status_code in (302, 303):
+            raise RuntimeError("Move-login: redirect zonder autorisatiecode.")
+        # 200 = of foute gegevens, of de tweede stap (e-mailcode).
+        na = datetime.now(timezone.utc)
+        otp_actie, otp_velden = _parse_login_form(post.text)
+        if _heeft_wachtwoordveld(otp_velden):
+            raise RuntimeError("Move-login: inloggen mislukt (verkeerde gegevens?).")
+        code_veld = _kies_otp_veld(otp_velden)
+        otp_code = _lees_otp_code_uit_mail(config, na)
+        otp_data = {naam: waarde for naam, (waarde, vt) in otp_velden.items() if vt != "submit"}
+        otp_data[code_veld] = otp_code
+        post2 = session.post(otp_actie, data=otp_data, allow_redirects=False, timeout=30)
+        code = (
+            _code_uit_locatie(post2.headers.get("Location", ""))
+            if post2.status_code in (302, 303)
+            else None
+        )
+        if code is None:
+            raise RuntimeError("Move-login: e-mailcode afgewezen of extra inlogstap vereist.")
 
-    token_resp = session.post(
-        _TOKEN_URL,
-        data={
+    return _token_endpoint(
+        session,
+        {
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": _REDIRECT_URI,
-            "client_id": _CLIENT_ID,
             "code_verifier": verifier,
         },
-        timeout=30,
     )
-    token_resp.raise_for_status()
-    token = token_resp.json().get("access_token")
-    if not token:
-        raise RuntimeError("Move-login: tokenendpoint gaf geen access_token terug.")
-    return token
+
+
+def _ververs_token(session: requests.Session, refresh_token: str) -> dict | None:
+    """Probeer een bewaarde sessie te verversen. None = mislukt (verlopen) -> verse login."""
+    try:
+        resp = session.post(
+            _TOKEN_URL,
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": _CLIENT_ID,
+            },
+            timeout=30,
+        )
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    tok = resp.json()
+    return tok if tok.get("access_token") else None
+
+
+def _token_pad(config: Config) -> Path:
+    return Path(config.state_path).parent / "move_token.json"
+
+
+def _laad_opgeslagen_token(pad: Path) -> dict:
+    try:
+        return json.loads(pad.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _bewaar_token(pad: Path, tok: dict) -> None:
+    schrijf_json_atomisch(
+        pad,
+        {
+            "access_token": tok.get("access_token"),
+            "refresh_token": tok.get("refresh_token"),
+            "expires_in": tok.get("expires_in"),
+            "refresh_expires_in": tok.get("refresh_expires_in"),
+            "obtained_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+
+
+def _verkrijg_access_token(session: requests.Session, config: Config) -> str:
+    """Geef een geldig access-token. Ververst eerst een bewaarde sessie; lukt dat niet,
+    dan een volledige login (met automatische e-mailcode). Bewaart het (vernieuwde)
+    refresh-token, zodat de volgende runs geen code meer nodig hebben."""
+    pad = _token_pad(config)
+    opgeslagen = _laad_opgeslagen_token(pad)
+    refresh_token = opgeslagen.get("refresh_token")
+    if refresh_token:
+        vernieuwd = _ververs_token(session, refresh_token)
+        if vernieuwd:
+            if not vernieuwd.get("refresh_token"):
+                vernieuwd["refresh_token"] = refresh_token  # niet geroteerd -> oude houden
+            _bewaar_token(pad, vernieuwd)
+            return vernieuwd["access_token"]
+        logger.info("Move: sessie verlopen, verse login met e-mailcode nodig.")
+    tok = _voer_oidc_flow(session, config)
+    _bewaar_token(pad, tok)
+    return tok["access_token"]
 
 
 def _code_uit_locatie(locatie: str) -> str | None:
@@ -308,7 +535,7 @@ def haal_move_woningen(config: Config) -> tuple[list[FundaListing], list[str]]:
     try:
         session = requests.Session()
         session.headers.update({"User-Agent": _UA})
-        token = _login(session, config.move_email, config.move_password)
+        token = _verkrijg_access_token(session, config)
 
         edges: list[dict] = []
         cursor: str | None = None
