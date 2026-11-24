@@ -157,3 +157,35 @@ def test_geen_verse_login_zonder_bewaard_token_gebeurt_via_flow(tmp_path, monkey
     )
     at = move_scrape._verkrijg_access_token(object(), config)
     assert at == "EERSTE_AT"
+
+
+def _dossier_id(kern: str, hash_: str) -> str:
+    import base64
+
+    return base64.b64encode(f"SearcherDossier:{kern}|{hash_}".encode()).decode()
+
+
+def test_stabiele_sleutel_negeert_roterende_hash():
+    oud = _dossier_id("25660341|905866|5689083", "061a74be")
+    nieuw = _dossier_id("25660341|905866|5689083", "3f64a900")
+    assert move_scrape._stabiele_sleutel(oud) == "25660341|905866|5689083"
+    assert move_scrape._stabiele_sleutel(oud) == move_scrape._stabiele_sleutel(nieuw)
+
+
+def test_kies_dossier_id_enkel_dossier():
+    assert move_scrape._kies_dossier_id(["ABC"], "") == "ABC"
+    assert move_scrape._kies_dossier_id(["ABC"], "iets-anders") == "ABC"
+
+
+def test_kies_dossier_id_leeg_valt_terug_op_config():
+    assert move_scrape._kies_dossier_id([], "CONFIG") == "CONFIG"
+    assert move_scrape._kies_dossier_id([], "") is None
+
+
+def test_kies_dossier_id_meerdere_matcht_op_kern():
+    a = _dossier_id("111|222|333", "HASHA")
+    b = _dossier_id("999|888|777", "HASHB")
+    config_oud = _dossier_id("999|888|777", "OUDEHASH")
+    assert move_scrape._kies_dossier_id([a, b], config_oud) == b
+    # geen bruikbare config -> eerste
+    assert move_scrape._kies_dossier_id([a, b], "") == a

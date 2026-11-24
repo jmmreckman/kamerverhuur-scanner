@@ -50,8 +50,14 @@ def main() -> int:
     if opgeslagen.get("refresh_expires_in"):
         print("  refresh-token geldig (s):", opgeslagen["refresh_expires_in"])
 
-    # Smoke test: eerste pagina van het dossier lezen om token + dossier-id te bevestigen.
-    data = move_scrape._query_pagina(session, token, config.move_dossier_id, None)
+    # Dossier-ID live ophalen (het roteert) en als smoke test de eerste pagina lezen.
+    ids = move_scrape._haal_dossier_ids(session, token)
+    dossier_id = move_scrape._kies_dossier_id(ids, config.move_dossier_id)
+    print(f"Zoekopdracht-dossiers gevonden: {len(ids)}.")
+    if not dossier_id:
+        print("Geen zoekopdracht-dossier op het account gevonden - maak er een op move.nl.")
+        return 1
+    data = move_scrape._query_pagina(session, token, dossier_id, None)
     found = (
         (((data.get("data") or {}).get("searchDossier") or {}).get("searcher") or {}).get("foundObjects")
         or {}

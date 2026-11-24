@@ -414,15 +414,67 @@ def _code_uit_locatie(locatie: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _gql_headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Origin": "https://move.nl",
+        "Referer": "https://move.nl/",
+        "x-move-client-version": _CLIENT_VERSION,
+    }
+
+
+def _haal_dossier_ids(session: requests.Session, token: str) -> list[str]:
+    """De huidige zoekopdracht-dossier-ID's van het account. We lezen ze elke run live
+    uit (`searchDossiers`) i.p.v. uit een vaste config-waarde, want het ID bevat een
+    roterende handtekening - zo breekt een gewijzigd ID de Move-bron nooit meer."""
+    resp = session.post(
+        _GRAPHQL_URL,
+        headers=_gql_headers(token),
+        json={"query": "{ searchDossiers { id } }"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("errors"):
+        raise RuntimeError(f"Move-GraphQL-fout (searchDossiers): {data['errors'][:1]}")
+    return [d["id"] for d in ((data.get("data") or {}).get("searchDossiers") or []) if d.get("id")]
+
+
+def _stabiele_sleutel(dossier_id: str) -> str:
+    """De niet-roterende kern van een dossier-ID (de getallen vóór de handtekening), om
+    een dossier te herkennen ook al wisselt zijn hash: base64 van
+    'SearcherDossier:a|b|c|<hash>' -> 'a|b|c'."""
+    tekst = dossier_id
+    try:
+        opgevuld = dossier_id + "=" * (-len(dossier_id) % 4)
+        tekst = base64.b64decode(opgevuld).decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - geen base64? dan de ruwe waarde vergelijken
+        tekst = dossier_id
+    kern = re.split(r"[:/]", tekst, maxsplit=1)[-1]
+    delen = kern.split("|")
+    return "|".join(delen[:-1]) if len(delen) > 1 else kern
+
+
+def _kies_dossier_id(ids: list[str], geconfigureerd: str = "") -> str | None:
+    """Kies het te gebruiken dossier-ID uit de live lijst: bij één dossier dat ene; bij
+    meerdere het dossier waarvan de stabiele kern matcht met de (optionele) config-
+    waarde, anders het eerste. Lege lijst -> val terug op de config-waarde."""
+    if not ids:
+        return geconfigureerd or None
+    if len(ids) == 1:
+        return ids[0]
+    if geconfigureerd:
+        doel = _stabiele_sleutel(geconfigureerd)
+        for dossier_id in ids:
+            if _stabiele_sleutel(dossier_id) == doel:
+                return dossier_id
+    return ids[0]
+
+
 def _query_pagina(session: requests.Session, token: str, dossier_id: str, cursor: str | None) -> dict:
     resp = session.post(
         _GRAPHQL_URL,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Origin": "https://move.nl",
-            "Referer": "https://move.nl/",
-            "x-move-client-version": _CLIENT_VERSION,
-        },
+        headers=_gql_headers(token),
         json={
             "operationName": "SearchDossierViewObjectsWithCursorQuery",
             "query": _QUERY,
@@ -564,7 +616,7 @@ def haal_move_woningen(config: Config) -> tuple[list[FundaListing], list[str]]:
 
     Geeft (woningen, waarschuwingen). Fail-safe: elke storing levert een lege lijst +
     een waarschuwing op (die in het dagrapport belandt), nooit een crash."""
-    if not (config.move_email and config.move_password and config.move_dossier_id):
+    if not (config.move_email and config.move_password):
         return [], []  # bron niet geconfigureerd -> stil overslaan
 
     waarschuwingen: list[str] = []
@@ -573,10 +625,16 @@ def haal_move_woningen(config: Config) -> tuple[list[FundaListing], list[str]]:
         session.headers.update({"User-Agent": _UA})
         token = _verkrijg_access_token(session, config)
 
+        # Het dossier-ID live ophalen (het roteert); config.move_dossier_id dient nog
+        # als optionele voorkeur bij meerdere dossiers / als terugval.
+        dossier_id = _kies_dossier_id(_haal_dossier_ids(session, token), config.move_dossier_id)
+        if not dossier_id:
+            return [], ["Move-bron: geen zoekopdracht-dossier op het account gevonden."]
+
         edges: list[dict] = []
         cursor: str | None = None
         for _ in range(_MAX_PAGINAS):
-            data = _query_pagina(session, token, config.move_dossier_id, cursor)
+            data = _query_pagina(session, token, dossier_id, cursor)
             found = (
                 (((data.get("data") or {}).get("searchDossier") or {}).get("searcher") or {}).get("foundObjects")
                 or {}
