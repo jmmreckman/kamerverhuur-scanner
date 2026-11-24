@@ -114,9 +114,13 @@ _INPUT_RE = re.compile(r"<input\b[^>]*>", re.IGNORECASE)
 _ATTR_NAAM_RE = re.compile(r'\bname="([^"]*)"', re.IGNORECASE)
 _ATTR_WAARDE_RE = re.compile(r'\bvalue="([^"]*)"', re.IGNORECASE)
 _ATTR_TYPE_RE = re.compile(r'\btype="([^"]*)"', re.IGNORECASE)
-# De code in de inlogmail is bv. "NMM424": enkele letters gevolgd door enkele cijfers.
-_OTP_RE = re.compile(r"\b([A-Z]{2,5}[0-9]{2,5})\b")
-_OTP_NUMERIEK_RE = re.compile(r"\b([0-9]{5,8})\b")
+# De code in de inlogmail is 5-8 tekens hoofdletters+cijfers door elkaar (bv. "PJ9U68",
+# "NMM424"). We eisen minstens één letter én één cijfer, zodat styling-rommel uit de
+# HTML-mail (een hex-kleur #404040, een los getal "10 minuten") nooit wordt aangezien
+# voor de code. Daarnaast lezen we bij voorkeur de schone text/plain-variant.
+_OTP_TOKEN_RE = re.compile(r"\b[A-Z0-9]{5,8}\b")
+_SCRIPT_STYLE_RE = re.compile(r"(?is)<(script|style)\b[^>]*>.*?</\1>")
+_TAG_RE = re.compile(r"(?s)<[^>]+>")
 _INVULBARE_TYPES = {"", "text", "email", "password", "number", "tel"}
 _VASTE_VELDEN = {"rememberme", "credentialid"}
 
@@ -173,13 +177,45 @@ def _kies_otp_veld(velden: dict[str, tuple[str, str]]) -> str:
     raise RuntimeError("Move-login: geen invoerveld voor de e-mailcode gevonden.")
 
 
+def _strip_html(tekst: str) -> str:
+    """Verwijder script/style-blokken + tags en zet entiteiten terug, zodat alleen de
+    zichtbare tekst overblijft (en dus geen CSS-kleuren o.i.d. in de code-zoektocht)."""
+    tekst = _SCRIPT_STYLE_RE.sub(" ", tekst)
+    tekst = _TAG_RE.sub(" ", tekst)
+    return _unescape(tekst)
+
+
+def _mail_tekst(bericht) -> str:
+    """De tekst van een mail om de code uit te halen: bij voorkeur de text/plain-variant
+    (schoon), anders de HTML ontdaan van tags. Valt terug op _get_body."""
+    platte: list[str] = []
+    html: list[str] = []
+    for part in bericht.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        try:
+            payload = part.get_payload(decode=True) or b""
+            inhoud = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+        except (LookupError, ValueError):
+            continue
+        if part.get_content_type() == "text/plain":
+            platte.append(inhoud)
+        elif part.get_content_type() == "text/html":
+            html.append(inhoud)
+    if platte:
+        return "\n".join(platte)
+    if html:
+        return _strip_html("\n".join(html))
+    return _get_body(bericht)
+
+
 def _extract_otp_code(tekst: str) -> str | None:
-    """Haal de eenmalige code uit de tekst/HTML van de inlogmail."""
-    match = _OTP_RE.search(tekst)
-    if match:
-        return match.group(1)
-    match = _OTP_NUMERIEK_RE.search(tekst)
-    return match.group(1) if match else None
+    """De eenmalige code uit de (platte of HTML-)inlogmail: het eerste 5-8-teken-token
+    van hoofdletters+cijfers met minstens één letter én één cijfer (bv. 'PJ9U68')."""
+    for token in _OTP_TOKEN_RE.findall(_strip_html(tekst)):
+        if any(c.isalpha() for c in token) and any(c.isdigit() for c in token):
+            return token
+    return None
 
 
 def _bericht_datum(bericht) -> datetime | None:
@@ -223,7 +259,7 @@ def _lees_otp_code_uit_mail(
                         ontvangen = _bericht_datum(bericht)
                         if ontvangen is not None and ontvangen < marge:
                             continue  # oude code (van een eerdere login) overslaan
-                        code = _extract_otp_code(_get_body(bericht)) or _extract_otp_code(
+                        code = _extract_otp_code(_mail_tekst(bericht)) or _extract_otp_code(
                             bericht.get("Subject") or ""
                         )
                         if code and (beste_dt is None or (ontvangen or na) >= beste_dt):

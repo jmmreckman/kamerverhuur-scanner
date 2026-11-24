@@ -54,17 +54,44 @@ def test_kies_otp_veld_slaat_vaste_velden_over():
     assert move_scrape._kies_otp_veld(velden) == "code"
 
 
-def test_extract_otp_code_alfanumeriek():
+def test_extract_otp_code_mixed_pj9u68():
+    # Zoals de echte Move-mail (text/plain): letters en cijfers door elkaar.
+    body = "Vul deze eenmalige code in op het inlogscherm.\r\n\r\nPJ9U68\r\n\r\nDe code is 10 minuten geldig."
+    assert move_scrape._extract_otp_code(body) == "PJ9U68"
+
+
+def test_extract_otp_code_letters_dan_cijfers():
     body = "Vul deze eenmalige code in op het inlogscherm.\n\nNMM424\n\nDe code is 10 minuten geldig."
     assert move_scrape._extract_otp_code(body) == "NMM424"
 
 
-def test_extract_otp_code_numeriek_fallback():
-    assert move_scrape._extract_otp_code("Uw inlogcode is 483920 (10 minuten geldig)") == "483920"
+def test_extract_otp_code_negeert_hexkleur_en_los_getal():
+    # De bug: de grijstint #404040 uit de HTML-styling werd als code gepakt.
+    html = (
+        '<html><head><style>.x{color:#404040}</style></head>'
+        '<body style="color:#404040"><p>Vul deze eenmalige code in.</p>'
+        '<h1>PJ9U68</h1><span>De code is 10 minuten geldig.</span></body></html>'
+    )
+    assert move_scrape._extract_otp_code(html) == "PJ9U68"
 
 
 def test_extract_otp_code_geen():
     assert move_scrape._extract_otp_code("Er staat hier geen code in.") is None
+
+
+def test_mail_tekst_prefereert_platte_tekst():
+    import email.message
+
+    msg = email.message.EmailMessage()
+    msg["Subject"] = "Je eenmalige inlogcode voor Move.nl"
+    msg.set_content("Vul deze eenmalige code in op het inlogscherm.\n\nPJ9U68\n\nDe code is 10 minuten geldig.")
+    msg.add_alternative(
+        '<html><body style="color:#404040">Inlogcode <b>PJ9U68</b> 10 minuten</body></html>',
+        subtype="html",
+    )
+    tekst = move_scrape._mail_tekst(msg)
+    assert "PJ9U68" in tekst
+    assert move_scrape._extract_otp_code(tekst) == "PJ9U68"
 
 
 def test_token_opslag_roundtrip(tmp_path):
