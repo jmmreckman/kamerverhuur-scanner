@@ -134,6 +134,32 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   in `rente_historie.json`.
 - `kansen_site/app.py`, `kansen_site/templates/berekening.html`,
   `kansen_site/static/berekening.js/.css`, `kansen_site/rapport_pdf.py` (PDF-export).
+- **Move.nl / NVM-bron** (`rotterdam_scanner/move_scrape.py`) — de volledige, altijd
+  actuele NVM-zoekopdracht (m², type, verkoopstatus). De dagelijkse scan logt in op Move's
+  Keycloak (OIDC authorization-code + PKCE) en leest het dossier via GraphQL
+  (`api.move.nl/graphql`), **gepagineerd tot het hele dossier binnen is** (50/pagina, cap
+  3000 via `_MAX_PAGINAS`) — dus niet alleen de eerste pagina. **Login sinds nov 2026 =
+  e-mail+wachtwoord PLUS een eenmalige e-mailcode (OTP)**; drie dingen die Move's verbouwing
+  brak zijn nu zelfhelend:
+  - (1) de **OTP-code** wordt automatisch uit het scanner-Gmail gelezen (hetzelfde postvak +
+    IMAP-creds als de Funda-alerts; de schone **text/plain**-variant → `_extract_otp_code`,
+    code = 5-8 tekens hoofdletters+cijfers mét minstens één letter én één cijfer, bv.
+    `PJ9U68` — zo wordt een hex-kleur/`#404040` uit de HTML-opmaak niet voor de code
+    aangezien);
+  - (2) het **refresh-token** (14 dgn geldig) staat in `<state_dir>/move_token.json` en wordt
+    elke run stil ververst (met `rememberMe`), dus na één bootstrap nooit meer een code nodig
+    (tenzij >14 dgn stil);
+  - (3) het **dossier-ID roteert** (een handtekening-hash achter `SearcherDossier:a|b|c|…`),
+    dus het wordt elke run **live** opgehaald via `searchDossiers { id }`
+    (`_haal_dossier_ids` + `_kies_dossier_id`, kiest bij meerdere op de niet-roterende kern)
+    i.p.v. uit `MOVE_DOSSIER_ID` — die env is nu optioneel (alleen voorkeur/terugval).
+
+  **Bootstrap** (eerste keer of na >14 dgn stilstand): op de VPS, vanuit de deploy-map,
+  `docker compose run --rm fundazoeker python3 -m scripts.move_login` (leest de code zelf;
+  `--opnieuw` forceert een verse login). Env-secrets: `MOVE_EMAIL`/`MOVE_PASSWORD`. Let op:
+  GraphQL-introspectie is grotendeels dichtgezet (`__schema.queryType`/`__type.fields` geven
+  FieldUndefined) — veld-**bestaan** is wel te toetsen via diezelfde FieldUndefined-fout
+  (zo zijn `searchDossiers`/`me` gevonden). Pure delen los getest (`tests/test_move_auth.py`).
 - **Move-kenmerkfilters (erfpacht/VvE/zelfbewoning).** De Move-**lijst**query levert de
   kenmerken al mee: `ExchangeObject.kenmerkSections` (secties met `label`/`value`-paren,
   bv. "Eigendomssituatie: Volle eigendom", "Bijdrage VVE p/m: € …", "Periodieke
