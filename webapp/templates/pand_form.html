@@ -58,15 +58,11 @@
       <input type="text" name="belasting_per_maand"
              value="{{ pand.belasting_per_maand|eur if pand and pand.belasting_per_maand is not none else '' }}">
     </label>
-    <label>Hypotheekrente per maand (optioneel - voedt het <strong>Huuroverzicht</strong>: netto = kale huur
-      − rente, en ICR = kale huur / rente. Leeg = dit pand telt niet mee in netto/ICR.)
+    <label>Hypotheeklast per maand (optioneel - je volledige maandlast; aflossingsvrij, dus gelijk aan de rente.
+      Voedt het <strong>Huuroverzicht</strong>: netto = kale huur − last, en ICR = kale huur / last. Leeg = dit pand
+      telt niet mee in netto/ICR.)
       <input type="text" name="hypotheek_rente_per_maand"
              value="{{ pand.hypotheek_rente_per_maand|eur if pand and pand.hypotheek_rente_per_maand is not none else '' }}">
-    </label>
-    <label>Totale hypotheeklast per maand (optioneel - rente + aflossing; staat puur ter info op het
-      Huuroverzicht, telt niet mee in de netto. Leeg = onbekend.)
-      <input type="text" name="hypotheek_last_per_maand"
-             value="{{ pand.hypotheek_last_per_maand|eur if pand and pand.hypotheek_last_per_maand is not none else '' }}">
     </label>
     <label>Openstaande hypotheekschuld (optioneel - de restschuld van dit pand; staat op het
       <strong>Huuroverzicht</strong> in het schuldenoverzicht per pand + het portefeuilletotaal. Leeg = onbekend.)

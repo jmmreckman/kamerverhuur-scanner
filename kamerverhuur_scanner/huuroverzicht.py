@@ -49,8 +49,7 @@ class PandHuur:
     slug: str
     naam: str
     regels: list[HuurRegel]
-    rente: Decimal | None  # hypotheekrente per maand (voor netto + ICR)
-    last: Decimal | None  # totale hypotheeklast per maand (rente + aflossing); alleen ter info
+    rente: Decimal | None  # hypotheeklast per maand (aflossingsvrij: rente = volledige maandlast); voedt netto + ICR
     schuld: Decimal | None = None  # openstaande hypotheekschuld (restschuld) van het pand
     aantal_eigenaren: int = 1
     # Gevuld als de Huurders-sheet niet gelezen kon worden; de handmatige regels
@@ -151,8 +150,7 @@ class Totalen:
     kale: Decimal
     service: Decimal
     totaal: Decimal
-    rente: Decimal  # som van de bekende rentes
-    last: Decimal  # som van de bekende maandlasten
+    rente: Decimal  # som van de bekende hypotheeklasten (= maandlasten)
     netto_vol: Decimal | None  # som van de per-pand netto (volledig)
     netto_eigen: Decimal | None  # som van jouw aandeel per pand
     icr: Decimal | None  # portefeuille-ICR: som kale (van panden mét rente) / som rente
@@ -169,7 +167,6 @@ def totaliseer(panden: list[PandHuur]) -> Totalen:
     kale = sum((p.kale_totaal for p in panden), Decimal("0"))
     service = sum((p.service_totaal for p in panden), Decimal("0"))
     rente = sum((p.rente for p in panden if p.rente is not None), Decimal("0"))
-    last = sum((p.last for p in panden if p.last is not None), Decimal("0"))
 
     met_netto = [p for p in panden if p.netto is not None]
     netto_vol = sum((p.netto for p in met_netto), Decimal("0")) if met_netto else None
@@ -185,7 +182,7 @@ def totaliseer(panden: list[PandHuur]) -> Totalen:
     schuld_eigen = sum((p.schuld_eigen for p in met_schuld), Decimal("0")) if met_schuld else None
 
     return Totalen(
-        kale=kale, service=service, totaal=kale + service, rente=rente, last=last,
+        kale=kale, service=service, totaal=kale + service, rente=rente,
         netto_vol=netto_vol, netto_eigen=netto_eigen, icr=icr, panden_met_rente=len(met_rente),
         schuld=schuld, schuld_eigen=schuld_eigen,
     )

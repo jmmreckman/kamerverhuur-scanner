@@ -19,65 +19,61 @@ def test_pand_totalen_en_netto():
     p = ho.PandHuur(
         slug="a", naam="A",
         regels=[_regel(300, 40), _regel(350, 60)],
-        rente=Decimal("200"), last=Decimal("500"), aantal_eigenaren=1,
+        rente=Decimal("200"), aantal_eigenaren=1,
     )
     assert p.kale_totaal == Decimal("650")
     assert p.service_totaal == Decimal("100")
     assert p.totaal == Decimal("750")
-    # netto = kale - rente (servicekosten tellen NIET mee)
+    # netto = kale - hypotheeklast (servicekosten tellen NIET mee)
     assert p.netto == Decimal("450")
     assert p.netto_eigen == Decimal("450")  # 1 eigenaar: geen deling
-    # ICR = kale / rente
+    # ICR = kale / last
     assert p.icr == Decimal("3.25")
     assert p.gedeeld is False
 
 
 def test_gedeeld_pand_deelt_netto_maar_niet_icr():
-    p = ho.PandHuur(
-        slug="b", naam="B", regels=[_regel(600)],
-        rente=Decimal("300"), last=None, aantal_eigenaren=2,
-    )
+    p = ho.PandHuur(slug="b", naam="B", regels=[_regel(600)], rente=Decimal("300"), aantal_eigenaren=2)
     assert p.gedeeld is True
-    assert p.netto == Decimal("300")          # volledig pand
+    assert p.netto == Decimal("300")           # volledig pand
     assert p.netto_eigen == Decimal("150.00")  # jouw helft
     assert p.icr == Decimal("2.00")            # ratio verandert niet door delen
 
 
 def test_geen_rente_geeft_geen_netto_of_icr():
-    p = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None, last=None)
+    p = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None)
     assert p.netto is None
     assert p.netto_eigen is None
     assert p.icr is None
 
 
 def test_nul_rente_geeft_geen_icr():
-    p = ho.PandHuur(slug="d", naam="D", regels=[_regel(500)], rente=Decimal("0"), last=None)
+    p = ho.PandHuur(slug="d", naam="D", regels=[_regel(500)], rente=Decimal("0"))
     assert p.icr is None
     assert p.netto == Decimal("500")  # kale - 0
 
 
 def test_totaliseer_mengt_panden_met_en_zonder_rente():
-    p1 = ho.PandHuur(slug="a", naam="A", regels=[_regel(600, 50)], rente=Decimal("300"), last=Decimal("450"), aantal_eigenaren=2)
-    p2 = ho.PandHuur(slug="b", naam="B", regels=[_regel(400, 30)], rente=Decimal("200"), last=Decimal("260"), aantal_eigenaren=1)
-    p3 = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None, last=None, aantal_eigenaren=1)
+    p1 = ho.PandHuur(slug="a", naam="A", regels=[_regel(600, 50)], rente=Decimal("300"), aantal_eigenaren=2)
+    p2 = ho.PandHuur(slug="b", naam="B", regels=[_regel(400, 30)], rente=Decimal("200"), aantal_eigenaren=1)
+    p3 = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None, aantal_eigenaren=1)
     t = ho.totaliseer([p1, p2, p3])
 
     assert t.kale == Decimal("1500")       # 600 + 400 + 500
     assert t.service == Decimal("80")
     assert t.totaal == Decimal("1580")
-    assert t.rente == Decimal("500")       # alleen p1 + p2
-    assert t.last == Decimal("710")
-    # netto volledig: (600-300) + (400-200) = 500 ; p3 telt niet mee (geen rente)
+    assert t.rente == Decimal("500")       # alleen p1 + p2 (hypotheeklasten)
+    # netto volledig: (600-300) + (400-200) = 500 ; p3 telt niet mee (geen last)
     assert t.netto_vol == Decimal("500")
     # jouw aandeel: 300/2 + 200/1 = 150 + 200 = 350
     assert t.netto_eigen == Decimal("350.00")
-    # portefeuille-ICR = kale van panden MET rente / som rente = (600+400)/500 = 2.00
+    # portefeuille-ICR = kale van panden MET last / som last = (600+400)/500 = 2.00
     assert t.icr == Decimal("2.00")
     assert t.panden_met_rente == 2
 
 
 def test_totaliseer_zonder_enige_rente():
-    p = ho.PandHuur(slug="x", naam="X", regels=[_regel(500)], rente=None, last=None)
+    p = ho.PandHuur(slug="x", naam="X", regels=[_regel(500)], rente=None)
     t = ho.totaliseer([p])
     assert t.icr is None
     assert t.netto_vol is None
@@ -90,6 +86,34 @@ def test_lege_portefeuille():
     assert t.kale == Decimal("0")
     assert t.icr is None
     assert t.netto_vol is None
+
+
+def test_pand_schuld_eigen():
+    p = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None,
+                    schuld=Decimal("300000"), aantal_eigenaren=2)
+    assert p.schuld == Decimal("300000")
+    assert p.schuld_eigen == Decimal("150000.00")  # jouw helft
+    # 1 eigenaar: volle schuld; geen schuld ingevuld: None
+    assert ho.PandHuur(slug="b", naam="B", regels=[_regel(600)], rente=None,
+                       schuld=Decimal("120000")).schuld_eigen == Decimal("120000")
+    assert ho.PandHuur(slug="c", naam="C", regels=[_regel(600)], rente=None).schuld_eigen is None
+
+
+def test_totaliseer_schuld_en_jouw_aandeel():
+    p1 = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None,
+                     schuld=Decimal("300000"), aantal_eigenaren=2)
+    p2 = ho.PandHuur(slug="b", naam="B", regels=[_regel(400)], rente=None,
+                     schuld=Decimal("150000"), aantal_eigenaren=1)
+    p3 = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None)  # geen schuld
+    t = ho.totaliseer([p1, p2, p3])
+    assert t.schuld == Decimal("450000")           # 300k + 150k; p3 telt niet mee
+    assert t.schuld_eigen == Decimal("300000.00")  # 150k + 150k
+
+
+def test_totaliseer_zonder_schuld_geeft_nul_en_none():
+    t = ho.totaliseer([ho.PandHuur(slug="x", naam="X", regels=[_regel(500)], rente=None)])
+    assert t.schuld == Decimal("0")
+    assert t.schuld_eigen is None
 
 
 def test_persoonlijke_lening_maandrente():
@@ -112,34 +136,6 @@ def test_som_maandrente():
     assert ho.som_maandrente([]) == Decimal("0")
 
 
-def test_pand_schuld_eigen():
-    p = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None, last=None,
-                    schuld=Decimal("300000"), aantal_eigenaren=2)
-    assert p.schuld == Decimal("300000")
-    assert p.schuld_eigen == Decimal("150000.00")  # jouw helft
-    # 1 eigenaar: volle schuld; geen schuld ingevuld: None
-    assert ho.PandHuur(slug="b", naam="B", regels=[_regel(600)], rente=None, last=None,
-                       schuld=Decimal("120000")).schuld_eigen == Decimal("120000")
-    assert ho.PandHuur(slug="c", naam="C", regels=[_regel(600)], rente=None, last=None).schuld_eigen is None
-
-
-def test_totaliseer_schuld_en_jouw_aandeel():
-    p1 = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None, last=None,
-                     schuld=Decimal("300000"), aantal_eigenaren=2)
-    p2 = ho.PandHuur(slug="b", naam="B", regels=[_regel(400)], rente=None, last=None,
-                     schuld=Decimal("150000"), aantal_eigenaren=1)
-    p3 = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None, last=None)  # geen schuld
-    t = ho.totaliseer([p1, p2, p3])
-    assert t.schuld == Decimal("450000")                     # 300k + 150k; p3 telt niet mee
-    assert t.schuld_eigen == Decimal("300000.00")            # 150k + 150k
-
-
-def test_totaliseer_zonder_schuld_geeft_nul_en_none():
-    t = ho.totaliseer([ho.PandHuur(slug="x", naam="X", regels=[_regel(500)], rente=None, last=None)])
-    assert t.schuld == Decimal("0")
-    assert t.schuld_eigen is None
-
-
 def test_som_leningbedrag():
     leningen = [
         ho.PersoonlijkeLening("a", Decimal("200000"), Decimal("6")),
@@ -150,7 +146,7 @@ def test_som_leningbedrag():
 
 
 def test_rentedekking_zonder_en_met_lening():
-    # kale huur 2500/maand, hypotheekrente 1500/maand -> 1.67
+    # kale huur 2500/maand, hypotheeklast 1500/maand -> 1.67
     assert ho.rentedekking(Decimal("2500"), Decimal("1500")) == Decimal("1.67")
     # met familielening-rente 1000 erbij -> 2500 / 2500 = 1.00
     assert ho.rentedekking(Decimal("2500"), Decimal("1500") + Decimal("1000")) == Decimal("1.00")

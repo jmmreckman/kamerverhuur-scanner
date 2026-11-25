@@ -677,7 +677,6 @@ def create_app(config: Config | None = None) -> Flask:
             "energiekosten_per_maand": form.get("energiekosten_per_maand", "").strip() or None,
             "belasting_per_maand": form.get("belasting_per_maand", "").strip() or None,
             "hypotheek_rente_per_maand": form.get("hypotheek_rente_per_maand", "").strip() or None,
-            "hypotheek_last_per_maand": form.get("hypotheek_last_per_maand", "").strip() or None,
             "hypotheek_schuld": form.get("hypotheek_schuld", "").strip() or None,
             "aantal_eigenaren": form.get("aantal_eigenaren", "").strip() or None,
             "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
@@ -1163,7 +1162,7 @@ def create_app(config: Config | None = None) -> Flask:
             ))
         return huuroverzicht.PandHuur(
             slug=pand.slug, naam=pand.naam, regels=regels,
-            rente=pand.hypotheek_rente_per_maand, last=pand.hypotheek_last_per_maand,
+            rente=pand.hypotheek_rente_per_maand,
             schuld=pand.hypotheek_schuld,
             aantal_eigenaren=_huur_aandeel(pand), fout=fout,
         )

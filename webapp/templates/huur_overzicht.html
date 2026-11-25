@@ -44,17 +44,6 @@
     <button type="button" class="btn btn-secondary print-knop" onclick="window.print()">Print / PDF</button>
   </div>
 </div>
-<p class="muted">
-  Per huurder de kale huur, servicekosten en totale huur — automatisch uit de huurcontracten/Huurders-sheet,
-  dus bijgewerkt zodra er een nieuw contract is. Plus de maandelijkse hypotheekrente per pand, de netto
-  (<strong>kale huur − hypotheekrente</strong>, bewust geen andere lasten), jouw aandeel daarvan, en de
-  <strong>ICR</strong> (kale huur / rente) — handig voor hypotheekverstrekkers. Ook de openstaande
-  <strong>hypotheekschuld</strong> per pand + het portefeuilletotaal (en de totale schuld incl. persoonlijke
-  leningen). Hypotheekbedragen, de schuld en het aantal eigenaren stel je per pand in bij
-  <a href="{{ url_for('panden_overzicht') }}">Panden beheren</a>. Met de schakelaar rechtsboven kies je of de
-  servicekosten in de totale huur meetellen — dat werkt ook door op de print/PDF.
-</p>
-
 {# ---- Portefeuilletotalen ---- #}
 <div class="card">
   <h2>Totaal alle panden</h2>
@@ -62,8 +51,7 @@
     <div class="huur-kencijfer"><div class="waarde">{{ totalen.kale|eur }}</div><div class="label">kale huur / maand</div></div>
     <div class="huur-kencijfer service-kol"><div class="waarde">{{ totalen.service|eur }}</div><div class="label">servicekosten / maand</div></div>
     <div class="huur-kencijfer"><div class="waarde"><span class="met-service">{{ totalen.totaal|eur }}</span><span class="zonder-service">{{ totalen.kale|eur }}</span></div><div class="label">totale huur / maand</div></div>
-    <div class="huur-kencijfer"><div class="waarde">{{ totalen.rente|eur }}</div><div class="label">hypotheekrente / maand</div></div>
-    <div class="huur-kencijfer"><div class="waarde">{{ totalen.last|eur }}</div><div class="label">hypotheeklast / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.rente|eur }}</div><div class="label">hypotheeklast / maand</div></div>
     {% if totalen.schuld and totalen.schuld > 0 %}
     <div class="huur-kencijfer"><div class="waarde">{{ totalen.schuld|eur }}</div><div class="label">hypotheekschuld totaal</div></div>
     {% if totalen.schuld_eigen is not none and totalen.schuld_eigen != totalen.schuld %}
@@ -75,7 +63,7 @@
     {% endif %}
     <div class="huur-kencijfer">
       <div class="waarde">{{ totalen.netto_vol|eur if totalen.netto_vol is not none else "-" }}</div>
-      <div class="label">netto (kale − rente)</div>
+      <div class="label">netto / maand</div>
     </div>
     <div class="huur-kencijfer">
       <div class="waarde">{{ totalen.netto_eigen|eur if totalen.netto_eigen is not none else "-" }}</div>
@@ -85,7 +73,7 @@
       <div class="waarde">
         {% if totalen.icr is not none %}<span class="{{ 'icr-goed' if totalen.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(totalen.icr) }}</span>{% else %}-{% endif %}
       </div>
-      <div class="label">ICR portefeuille (Domivest)</div>
+      <div class="label">ICR portefeuille</div>
     </div>
     {% if lening_rente and lening_rente > 0 %}
     <div class="huur-kencijfer"><div class="waarde">{{ lening_rente|eur }}</div><div class="label">persoonlijke lening / maand</div></div>
@@ -100,24 +88,11 @@
       </div>
     </div>
   </div>
-  <p class="muted" style="margin-top:0.5rem">
-    <strong>ICR portefeuille (Domivest)</strong> = kale huur ÷ hypotheekrente (zo toetst Domivest, norm ≥1,25;
-    voor kamerverhuur ≥1,5). Een familielening telt hier <em>niet</em> in mee — die is voor Domivest eigen middelen.
-    <strong>Totale rentedekking</strong> = al je kale huur ÷ ál je rentelasten (hypotheken + persoonlijke lening) —
-    jouw eigen check of je alles samen kunt dragen.
-    {% if totalen.icr is none %}<br>Vul bij minstens één pand de hypotheekrente in (Panden beheren) om netto en ICR te zien.{% endif %}
-  </p>
 </div>
 
 {# ---- Persoonlijke lening(en): familielening-check ---- #}
 <div class="card">
   <h2>Persoonlijke lening(en)</h2>
-  <p class="muted">
-    Bv. een familielening bij je vader. De maandrente (bedrag × rente ÷ 12) telt mee in de
-    <strong>totale rentedekking</strong> hierboven — speel met bedrag/rente om te zien waar je nog veilig zit.
-    Dit staat los van Domivest's ICR (daar is zo'n lening je eigen middelen, mits getekende overeenkomst + per bank;
-    ≥6% rente is fiscaal veilig tegen een schenking).
-  </p>
   {% if leningen %}
   <div class="tabel-scroll">
   <table class="huur-tabel">
@@ -185,15 +160,14 @@
   </div>
 
   <div class="pand-finance">
-    <div class="blok"><div class="waarde">{{ p.rente|eur if p.rente is not none else "—" }}</div><div class="label">hypotheekrente / maand</div></div>
-    <div class="blok"><div class="waarde">{{ p.last|eur if p.last is not none else "—" }}</div><div class="label">hypotheeklast / maand</div></div>
-    <div class="blok"><div class="waarde">{{ p.netto|eur if p.netto is not none else "—" }}</div><div class="label">netto (kale − rente)</div></div>
+    <div class="blok"><div class="waarde">{{ p.rente|eur if p.rente is not none else "—" }}</div><div class="label">hypotheeklast / maand</div></div>
+    <div class="blok"><div class="waarde">{{ p.netto|eur if p.netto is not none else "—" }}</div><div class="label">netto / maand</div></div>
     {% if p.gedeeld %}
     <div class="blok"><div class="waarde">{{ p.netto_eigen|eur if p.netto_eigen is not none else "—" }}</div><div class="label">jouw aandeel</div></div>
     {% endif %}
     <div class="blok">
       <div class="waarde">{% if p.icr is not none %}<span class="{{ 'icr-goed' if p.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(p.icr) }}</span>{% else %}—{% endif %}</div>
-      <div class="label">ICR (kale / rente)</div>
+      <div class="label">ICR</div>
     </div>
     <div class="blok"><div class="waarde">{{ p.schuld|eur if p.schuld is not none else "—" }}</div><div class="label">hypotheekschuld</div></div>
     {% if p.gedeeld and p.schuld is not none %}
