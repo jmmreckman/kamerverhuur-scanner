@@ -159,7 +159,7 @@
     {% for r in p.regels %}
     <tr{% if r.handmatig %} class="handmatig-regel"{% endif %}>
       <td>{{ r.kamer or "—" }}</td>
-      <td>{{ r.naam or "—" }}{% if r.handmatig %} <span class="muted" style="font-size:0.75em">(handmatig)</span>{% endif %}</td>
+      <td>{{ r.naam or "—" }}{% if r.handmatig %} <span class="muted" style="font-size:0.75em">(handmatig)</span>{% elif not r.naam %} <span class="muted" style="font-size:0.75em">(leeg — verwachte huur)</span>{% endif %}</td>
       <td class="num">{{ r.kale|eur }}</td>
       <td class="num service-kol">{{ r.servicekosten|eur }}</td>
       <td class="num"><span class="met-service">{{ r.totaal|eur }}</span><span class="zonder-service">{{ r.kale|eur }}</span></td>

@@ -1140,12 +1140,17 @@ def create_app(config: Config | None = None) -> Flask:
         fout = None
         try:
             for t in SheetClient(config, pand).get_kamers():
-                if not t.naam:
-                    continue  # lege kamer: geen huurder, geen huur
+                kale = t.kale_huurprijs or Decimal("0")
+                service = t.servicekosten or Decimal("0")
+                # Een kamer meenemen zodra er een huurder OF een (verwachte) huur is
+                # ingevuld. Zo tellen ook nog-lege kamers met een ingevulde huur mee in
+                # de totalen - handig voor een portefeuilleoverzicht (Domivest rekent de
+                # verwachte huur mee). Alleen een volledig lege kamer (geen naam én geen
+                # bedrag) slaan we over.
+                if not t.naam and kale == 0 and service == 0:
+                    continue
                 regels.append(huuroverzicht.HuurRegel(
-                    kamer=t.kamer, naam=t.naam,
-                    kale=t.kale_huurprijs or Decimal("0"),
-                    servicekosten=t.servicekosten or Decimal("0"),
+                    kamer=t.kamer, naam=t.naam, kale=kale, servicekosten=service,
                 ))
         except Exception:  # noqa: BLE001 - externe Google-fouten zijn divers
             logging.exception("Huurders-sheet lezen mislukt voor huuroverzicht pand %s", pand.slug)
