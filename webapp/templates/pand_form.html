@@ -68,6 +68,11 @@
       <input type="text" name="hypotheek_last_per_maand"
              value="{{ pand.hypotheek_last_per_maand|eur if pand and pand.hypotheek_last_per_maand is not none else '' }}">
     </label>
+    <label>Openstaande hypotheekschuld (optioneel - de restschuld van dit pand; staat op het
+      <strong>Huuroverzicht</strong> in het schuldenoverzicht per pand + het portefeuilletotaal. Leeg = onbekend.)
+      <input type="text" name="hypotheek_schuld"
+             value="{{ pand.hypotheek_schuld|eur if pand and pand.hypotheek_schuld is not none else '' }}">
+    </label>
     <label>Aantal eigenaren (optioneel - waarover de netto van dit pand verdeeld wordt bij "jouw aandeel"
       op het Huuroverzicht. Leeg = automatisch het aantal accounts met toegang tot dit pand.)
       <input type="number" name="aantal_eigenaren" min="1" step="1"

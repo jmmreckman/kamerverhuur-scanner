@@ -40,7 +40,7 @@ _PANDEN_TEKST_VELDEN = (
     "postcode", "plaats", "rekeninghouder_naam", "gedeelde_ruimtes",
     "bijzondere_bepalingen", "gemeente_meldpunt", "onderhoud_reserve_per_maand",
     "energiekosten_per_maand", "belasting_per_maand", "hypotheek_rente_per_maand",
-    "hypotheek_last_per_maand", "aantal_eigenaren", "kleur",
+    "hypotheek_last_per_maand", "hypotheek_schuld", "aantal_eigenaren", "kleur",
 )
 
 _SCHEMA = """
@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS panden (
     belasting_per_maand TEXT,
     hypotheek_rente_per_maand TEXT,
     hypotheek_last_per_maand TEXT,
+    hypotheek_schuld TEXT,
     aantal_eigenaren TEXT,
     sleutels TEXT NOT NULL DEFAULT '[]',
     kleur TEXT NOT NULL DEFAULT '',
@@ -209,12 +210,15 @@ def verbind(config: Config) -> sqlite3.Connection:
 # productie-database zichzelf bij de eerstvolgende start.
 _EXTRA_KOLOMMEN = {
     "huurders": [("studenten_verplicht", "INTEGER NOT NULL DEFAULT 1")],
+    "panden": [("hypotheek_schuld", "TEXT")],
 }
 
 
 def _migreer_kolommen(conn: sqlite3.Connection) -> None:
     for tabel, kolommen in _EXTRA_KOLOMMEN.items():
         bestaand = {r["name"] for r in conn.execute(f"PRAGMA table_info({tabel})")}
+        if not bestaand:
+            continue  # tabel bestaat (nog) niet -> niets te migreren
         for naam, definitie in kolommen:
             if naam not in bestaand:
                 conn.execute(f"ALTER TABLE {tabel} ADD COLUMN {naam} {definitie}")
@@ -319,7 +323,8 @@ def verwijder_pand(config: Config, slug: str) -> None:
 # pand_uit_dict ze als None (niet ingevuld) ziet.
 _OPTIONELE_TEKST = frozenset({
     "onderhoud_reserve_per_maand", "energiekosten_per_maand", "belasting_per_maand",
-    "hypotheek_rente_per_maand", "hypotheek_last_per_maand", "aantal_eigenaren",
+    "hypotheek_rente_per_maand", "hypotheek_last_per_maand", "hypotheek_schuld",
+    "aantal_eigenaren",
 })
 
 __all__ = ["db_pad", "verbind", "laad_panden", "zet_pand", "verwijder_pand", "find_pand"]

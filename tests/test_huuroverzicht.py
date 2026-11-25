@@ -112,6 +112,43 @@ def test_som_maandrente():
     assert ho.som_maandrente([]) == Decimal("0")
 
 
+def test_pand_schuld_eigen():
+    p = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None, last=None,
+                    schuld=Decimal("300000"), aantal_eigenaren=2)
+    assert p.schuld == Decimal("300000")
+    assert p.schuld_eigen == Decimal("150000.00")  # jouw helft
+    # 1 eigenaar: volle schuld; geen schuld ingevuld: None
+    assert ho.PandHuur(slug="b", naam="B", regels=[_regel(600)], rente=None, last=None,
+                       schuld=Decimal("120000")).schuld_eigen == Decimal("120000")
+    assert ho.PandHuur(slug="c", naam="C", regels=[_regel(600)], rente=None, last=None).schuld_eigen is None
+
+
+def test_totaliseer_schuld_en_jouw_aandeel():
+    p1 = ho.PandHuur(slug="a", naam="A", regels=[_regel(600)], rente=None, last=None,
+                     schuld=Decimal("300000"), aantal_eigenaren=2)
+    p2 = ho.PandHuur(slug="b", naam="B", regels=[_regel(400)], rente=None, last=None,
+                     schuld=Decimal("150000"), aantal_eigenaren=1)
+    p3 = ho.PandHuur(slug="c", naam="C", regels=[_regel(500)], rente=None, last=None)  # geen schuld
+    t = ho.totaliseer([p1, p2, p3])
+    assert t.schuld == Decimal("450000")                     # 300k + 150k; p3 telt niet mee
+    assert t.schuld_eigen == Decimal("300000.00")            # 150k + 150k
+
+
+def test_totaliseer_zonder_schuld_geeft_nul_en_none():
+    t = ho.totaliseer([ho.PandHuur(slug="x", naam="X", regels=[_regel(500)], rente=None, last=None)])
+    assert t.schuld == Decimal("0")
+    assert t.schuld_eigen is None
+
+
+def test_som_leningbedrag():
+    leningen = [
+        ho.PersoonlijkeLening("a", Decimal("200000"), Decimal("6")),
+        ho.PersoonlijkeLening("b", Decimal("50000"), Decimal("4")),
+    ]
+    assert ho.som_leningbedrag(leningen) == Decimal("250000")
+    assert ho.som_leningbedrag([]) == Decimal("0")
+
+
 def test_rentedekking_zonder_en_met_lening():
     # kale huur 2500/maand, hypotheekrente 1500/maand -> 1.67
     assert ho.rentedekking(Decimal("2500"), Decimal("1500")) == Decimal("1.67")

@@ -393,6 +393,7 @@ def test_pand_opslaan_en_laden(tmp_path):
         "postcode": "3000AA", "plaats": "Rotterdam",
         "verhuurders": [{"naam": "Jurian", "adres": "Ergens 1"}],
         "heeft_bold_slot": True, "hypotheek_rente_per_maand": "850,50",
+        "hypotheek_schuld": "200000",
         "aantal_eigenaren": "2", "sleutels": ["voordeur", "berging"], "kleur": "#1b7a43",
     }
     db.zet_pand(cfg, "mahoniestraat", gegevens)
@@ -405,6 +406,7 @@ def test_pand_opslaan_en_laden(tmp_path):
     assert p.extra_bcc == ["a@x.nl", "b@x.nl"]
     assert p.verhuurders[0].naam == "Jurian"
     assert p.hypotheek_rente_per_maand == Decimal("850.50")
+    assert p.hypotheek_schuld == Decimal("200000")
     assert p.aantal_eigenaren == 2
     assert p.sleutels == ["voordeur", "berging"]
     assert p.kleur == "#1b7a43"
@@ -432,10 +434,11 @@ def test_lege_optionele_bedragen_blijven_none(tmp_path):
     cfg = _config(tmp_path)
     db.zet_pand(cfg, "x", {
         "naam": "X", "google_sheet_id": "s", "bunq_rekening_iban": "NL00",
-        "hypotheek_rente_per_maand": None, "aantal_eigenaren": None,
+        "hypotheek_rente_per_maand": None, "aantal_eigenaren": None, "hypotheek_schuld": None,
     })
     p = db.laad_panden(cfg)[0]
     assert p.hypotheek_rente_per_maand is None
+    assert p.hypotheek_schuld is None
     assert p.aantal_eigenaren is None
 
 

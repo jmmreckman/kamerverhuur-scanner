@@ -678,6 +678,7 @@ def create_app(config: Config | None = None) -> Flask:
             "belasting_per_maand": form.get("belasting_per_maand", "").strip() or None,
             "hypotheek_rente_per_maand": form.get("hypotheek_rente_per_maand", "").strip() or None,
             "hypotheek_last_per_maand": form.get("hypotheek_last_per_maand", "").strip() or None,
+            "hypotheek_schuld": form.get("hypotheek_schuld", "").strip() or None,
             "aantal_eigenaren": form.get("aantal_eigenaren", "").strip() or None,
             "sleutels": [r.strip() for r in form.get("sleutels", "").splitlines() if r.strip()],
             # Alleen een kleur opslaan als het vinkje "eigen kleur" aanstaat; een
@@ -1158,6 +1159,7 @@ def create_app(config: Config | None = None) -> Flask:
         return huuroverzicht.PandHuur(
             slug=pand.slug, naam=pand.naam, regels=regels,
             rente=pand.hypotheek_rente_per_maand, last=pand.hypotheek_last_per_maand,
+            schuld=pand.hypotheek_schuld,
             aantal_eigenaren=_huur_aandeel(pand), fout=fout,
         )
 
@@ -1169,6 +1171,10 @@ def create_app(config: Config | None = None) -> Flask:
         totalen = huuroverzicht.totaliseer(overzichten)
         leningen = _persoonlijke_leningen()
         lening_rente = huuroverzicht.som_maandrente(leningen)
+        lening_bedrag = huuroverzicht.som_leningbedrag(leningen)
+        # Totale schuld = alle hypotheekschulden + de openstaande persoonlijke
+        # lening(en), zodat je in één oogopslag je totale schuldpositie ziet.
+        schuld_incl = totalen.schuld + lening_bedrag
         # Totale rentedekking = alle kale huur t.o.v. alle rentelasten (JOUW
         # huishoud-check, los van Domivest's per-pand-ICR): zonder en met de
         # persoonlijke lening(en), zodat de impact meteen zichtbaar is.
@@ -1176,7 +1182,8 @@ def create_app(config: Config | None = None) -> Flask:
         dekking_incl = huuroverzicht.rentedekking(totalen.kale, totalen.rente + lening_rente)
         return render_template(
             "huur_overzicht.html", overzichten=overzichten, totalen=totalen,
-            leningen=leningen, lening_rente=lening_rente,
+            leningen=leningen, lening_rente=lening_rente, lening_bedrag=lening_bedrag,
+            schuld_incl=schuld_incl,
             dekking_hyp=dekking_hyp, dekking_incl=dekking_incl,
         )
 

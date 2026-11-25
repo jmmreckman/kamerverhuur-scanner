@@ -127,6 +127,7 @@ def pand_uit_dict(item: dict) -> Pand:
         belasting_per_maand=_parse_optioneel_bedrag(item.get("belasting_per_maand")),
         hypotheek_rente_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_rente_per_maand")),
         hypotheek_last_per_maand=_parse_optioneel_bedrag(item.get("hypotheek_last_per_maand")),
+        hypotheek_schuld=_parse_optioneel_bedrag(item.get("hypotheek_schuld")),
         aantal_eigenaren=_parse_optioneel_int(item.get("aantal_eigenaren")),
         sleutels=_parse_sleutels(item.get("sleutels")),
         kleur=_normaliseer_kleur(item.get("kleur")),

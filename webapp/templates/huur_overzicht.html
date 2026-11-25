@@ -21,22 +21,38 @@
   .icr-goed { color:var(--ok); font-weight:700; }
   .icr-laag { color:var(--bad); font-weight:700; }
   .verwijder-knop { background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; }
+  .print-controls { display:flex; gap:0.7rem; align-items:center; flex-wrap:wrap; }
+  .service-toggle { font-size:0.85em; color:var(--muted); display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer; }
+  /* Servicekosten in-/uitschakelen (ook op de print/PDF): verberg de servicekosten-
+     kolom + -kencijfers en laat de totalen de kale huur tonen i.p.v. kale+service. */
+  .zonder-service { display:none; }
+  body.verberg-service .met-service { display:none; }
+  body.verberg-service .zonder-service { display:inline; }
+  body.verberg-service .service-kol { display:none !important; }
   @media print {
-    .mini-form, .verwijder-knop, .print-knop, nav, .flashes { display:none !important; }
+    .mini-form, .verwijder-knop, .print-knop, .print-controls, nav, .flashes { display:none !important; }
     .card { box-shadow:none; border:1px solid #ccc; }
   }
 </style>
 
 <div class="page-header">
   <h1>Huuroverzicht</h1>
-  <button type="button" class="btn btn-secondary print-knop" onclick="window.print()">Print / PDF</button>
+  <div class="print-controls">
+    <label class="service-toggle" title="Bepaalt of de servicekosten in de totale huur worden meegeteld — werkt ook door op de print/PDF">
+      <input type="checkbox" id="service-toggle" checked> Servicekosten meetellen in totaal
+    </label>
+    <button type="button" class="btn btn-secondary print-knop" onclick="window.print()">Print / PDF</button>
+  </div>
 </div>
 <p class="muted">
   Per huurder de kale huur, servicekosten en totale huur — automatisch uit de huurcontracten/Huurders-sheet,
   dus bijgewerkt zodra er een nieuw contract is. Plus de maandelijkse hypotheekrente per pand, de netto
   (<strong>kale huur − hypotheekrente</strong>, bewust geen andere lasten), jouw aandeel daarvan, en de
-  <strong>ICR</strong> (kale huur / rente) — handig voor hypotheekverstrekkers. Hypotheekbedragen en het aantal
-  eigenaren stel je per pand in bij <a href="{{ url_for('panden_overzicht') }}">Panden beheren</a>.
+  <strong>ICR</strong> (kale huur / rente) — handig voor hypotheekverstrekkers. Ook de openstaande
+  <strong>hypotheekschuld</strong> per pand + het portefeuilletotaal (en de totale schuld incl. persoonlijke
+  leningen). Hypotheekbedragen, de schuld en het aantal eigenaren stel je per pand in bij
+  <a href="{{ url_for('panden_overzicht') }}">Panden beheren</a>. Met de schakelaar rechtsboven kies je of de
+  servicekosten in de totale huur meetellen — dat werkt ook door op de print/PDF.
 </p>
 
 {# ---- Portefeuilletotalen ---- #}
@@ -44,10 +60,19 @@
   <h2>Totaal alle panden</h2>
   <div class="huur-kerncijfers">
     <div class="huur-kencijfer"><div class="waarde">{{ totalen.kale|eur }}</div><div class="label">kale huur / maand</div></div>
-    <div class="huur-kencijfer"><div class="waarde">{{ totalen.service|eur }}</div><div class="label">servicekosten / maand</div></div>
-    <div class="huur-kencijfer"><div class="waarde">{{ totalen.totaal|eur }}</div><div class="label">totale huur / maand</div></div>
+    <div class="huur-kencijfer service-kol"><div class="waarde">{{ totalen.service|eur }}</div><div class="label">servicekosten / maand</div></div>
+    <div class="huur-kencijfer"><div class="waarde"><span class="met-service">{{ totalen.totaal|eur }}</span><span class="zonder-service">{{ totalen.kale|eur }}</span></div><div class="label">totale huur / maand</div></div>
     <div class="huur-kencijfer"><div class="waarde">{{ totalen.rente|eur }}</div><div class="label">hypotheekrente / maand</div></div>
     <div class="huur-kencijfer"><div class="waarde">{{ totalen.last|eur }}</div><div class="label">hypotheeklast / maand</div></div>
+    {% if totalen.schuld and totalen.schuld > 0 %}
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.schuld|eur }}</div><div class="label">hypotheekschuld totaal</div></div>
+    {% if totalen.schuld_eigen is not none and totalen.schuld_eigen != totalen.schuld %}
+    <div class="huur-kencijfer"><div class="waarde">{{ totalen.schuld_eigen|eur }}</div><div class="label">jouw aandeel schuld</div></div>
+    {% endif %}
+    {% endif %}
+    {% if lening_bedrag and lening_bedrag > 0 %}
+    <div class="huur-kencijfer"><div class="waarde">{{ schuld_incl|eur }}</div><div class="label">totale schuld incl. lening(en)</div></div>
+    {% endif %}
     <div class="huur-kencijfer">
       <div class="waarde">{{ totalen.netto_vol|eur if totalen.netto_vol is not none else "-" }}</div>
       <div class="label">netto (kale − rente)</div>
@@ -130,14 +155,14 @@
 
   <div class="tabel-scroll">
   <table class="huur-tabel">
-    <tr><th>Kamer</th><th>Huurder</th><th class="num">Kale huur</th><th class="num">Servicekosten</th><th class="num">Totale huur</th><th></th></tr>
+    <tr><th>Kamer</th><th>Huurder</th><th class="num">Kale huur</th><th class="num service-kol">Servicekosten</th><th class="num">Totale huur</th><th></th></tr>
     {% for r in p.regels %}
     <tr{% if r.handmatig %} class="handmatig-regel"{% endif %}>
       <td>{{ r.kamer or "—" }}</td>
       <td>{{ r.naam or "—" }}{% if r.handmatig %} <span class="muted" style="font-size:0.75em">(handmatig)</span>{% endif %}</td>
       <td class="num">{{ r.kale|eur }}</td>
-      <td class="num">{{ r.servicekosten|eur }}</td>
-      <td class="num">{{ r.totaal|eur }}</td>
+      <td class="num service-kol">{{ r.servicekosten|eur }}</td>
+      <td class="num"><span class="met-service">{{ r.totaal|eur }}</span><span class="zonder-service">{{ r.kale|eur }}</span></td>
       <td class="num">
         {% if r.handmatig %}
         <form method="post" action="{{ url_for('huur_overzicht_regel_verwijderen', pand_slug=p.slug, regel_id=r.regel_id) }}" style="display:inline" onsubmit="return confirm('Deze handmatige regel verwijderen?')">
@@ -152,8 +177,8 @@
     <tr class="totaal-rij">
       <td colspan="2">Totaal</td>
       <td class="num">{{ p.kale_totaal|eur }}</td>
-      <td class="num">{{ p.service_totaal|eur }}</td>
-      <td class="num">{{ p.totaal|eur }}</td>
+      <td class="num service-kol">{{ p.service_totaal|eur }}</td>
+      <td class="num"><span class="met-service">{{ p.totaal|eur }}</span><span class="zonder-service">{{ p.kale_totaal|eur }}</span></td>
       <td></td>
     </tr>
   </table>
@@ -170,6 +195,10 @@
       <div class="waarde">{% if p.icr is not none %}<span class="{{ 'icr-goed' if p.icr >= 1.25 else 'icr-laag' }}">{{ '%.2f'|format(p.icr) }}</span>{% else %}—{% endif %}</div>
       <div class="label">ICR (kale / rente)</div>
     </div>
+    <div class="blok"><div class="waarde">{{ p.schuld|eur if p.schuld is not none else "—" }}</div><div class="label">hypotheekschuld</div></div>
+    {% if p.gedeeld and p.schuld is not none %}
+    <div class="blok"><div class="waarde">{{ p.schuld_eigen|eur }}</div><div class="label">jouw aandeel schuld</div></div>
+    {% endif %}
   </div>
 
   {# ---- Handmatige regel toevoegen (oude huurder / nog niet in de sheet) ---- #}
@@ -184,4 +213,17 @@
 {% else %}
 <div class="card"><p class="muted">Je hebt (nog) geen panden met toegang.</p></div>
 {% endfor %}
+
+<script>
+  // Servicekosten-schakelaar: zet een body-class die (via CSS) de servicekosten-kolom
+  // + -kencijfers verbergt en de totalen de kale huur laat tonen. De class blijft staan
+  // bij het printen, zodat de print/PDF de gekozen weergave volgt.
+  (function () {
+    var toggle = document.getElementById("service-toggle");
+    if (!toggle) return;
+    function pasToe() { document.body.classList.toggle("verberg-service", !toggle.checked); }
+    toggle.addEventListener("change", pasToe);
+    pasToe();
+  })();
+</script>
 {% endblock %}

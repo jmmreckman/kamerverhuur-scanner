@@ -180,6 +180,11 @@ class Pand:
     # Beide leeg = onbekend (pand telt dan niet mee in netto/ICR).
     hypotheek_rente_per_maand: Decimal | None = None
     hypotheek_last_per_maand: Decimal | None = None
+    # Openstaande hypotheekschuld (restschuld) van dit pand, voor het schulden-
+    # overzicht op het Huuroverzicht (totale schuld per pand + portefeuille). Puur
+    # informatief (telt niet mee in netto/ICR). Leeg = onbekend. Financiële data ->
+    # leeft in de DB op de VPS, NOOIT in git.
+    hypotheek_schuld: Decimal | None = None
     # Aantal eigenaren/beheerders dat de winst van dit pand deelt, voor "jouw
     # aandeel" op het Huuroverzicht. Leeg = val terug op het aantal accounts met
     # toegang tot dit pand (webapp/app.py: _aantal_beheerders()).

@@ -51,6 +51,7 @@ class PandHuur:
     regels: list[HuurRegel]
     rente: Decimal | None  # hypotheekrente per maand (voor netto + ICR)
     last: Decimal | None  # totale hypotheeklast per maand (rente + aflossing); alleen ter info
+    schuld: Decimal | None = None  # openstaande hypotheekschuld (restschuld) van het pand
     aantal_eigenaren: int = 1
     # Gevuld als de Huurders-sheet niet gelezen kon worden; de handmatige regels
     # (indien aanwezig) worden dan nog wél getoond, met deze waarschuwing erbij.
@@ -90,6 +91,16 @@ class PandHuur:
         return _cent(netto / self.aantal_eigenaren)
 
     @property
+    def schuld_eigen(self) -> Decimal | None:
+        """Jouw aandeel van de hypotheekschuld (schuld / aantal eigenaren). None als
+        de schuld niet is ingevuld."""
+        if self.schuld is None:
+            return None
+        if self.aantal_eigenaren <= 1:
+            return self.schuld
+        return _cent(self.schuld / self.aantal_eigenaren)
+
+    @property
     def icr(self) -> Decimal | None:
         """Kale huur / hypotheekrente. None als er geen (positieve) rente bekend is."""
         if not self.rente or self.rente <= 0:
@@ -121,6 +132,11 @@ def som_maandrente(leningen: list[PersoonlijkeLening]) -> Decimal:
     return sum((lening.maandrente for lening in leningen), Decimal("0"))
 
 
+def som_leningbedrag(leningen: list[PersoonlijkeLening]) -> Decimal:
+    """Som van de openstaande leningbedragen (voor het totale-schuldoverzicht)."""
+    return sum((lening.bedrag for lening in leningen), Decimal("0"))
+
+
 def rentedekking(kale_huur: Decimal, rentelast: Decimal | None) -> Decimal | None:
     """Totale rentedekking = kale huur / rentelast. None als er geen (positieve)
     rentelast is. Dit is JOUW huishoud-dekkingscheck (alle huur t.o.v. alle
@@ -141,6 +157,8 @@ class Totalen:
     netto_eigen: Decimal | None  # som van jouw aandeel per pand
     icr: Decimal | None  # portefeuille-ICR: som kale (van panden mét rente) / som rente
     panden_met_rente: int
+    schuld: Decimal  # som van de (ingevulde) hypotheekschulden per pand
+    schuld_eigen: Decimal | None  # som van jouw aandeel van de schuld per pand
 
 
 def totaliseer(panden: list[PandHuur]) -> Totalen:
@@ -162,7 +180,12 @@ def totaliseer(panden: list[PandHuur]) -> Totalen:
     rente_pos = sum((p.rente for p in met_rente), Decimal("0"))
     icr = _cent(kale_met_rente / rente_pos) if rente_pos > 0 else None
 
+    schuld = sum((p.schuld for p in panden if p.schuld is not None), Decimal("0"))
+    met_schuld = [p for p in panden if p.schuld is not None]
+    schuld_eigen = sum((p.schuld_eigen for p in met_schuld), Decimal("0")) if met_schuld else None
+
     return Totalen(
         kale=kale, service=service, totaal=kale + service, rente=rente, last=last,
         netto_vol=netto_vol, netto_eigen=netto_eigen, icr=icr, panden_met_rente=len(met_rente),
+        schuld=schuld, schuld_eigen=schuld_eigen,
     )
