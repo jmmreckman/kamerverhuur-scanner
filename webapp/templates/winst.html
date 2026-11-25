@@ -39,7 +39,7 @@
     {% for regel in overzicht.inkomsten_specificatie %}
     <tr>
       <td>{{ regel.kamer }}</td>
-      <td>{{ regel.naam }}</td>
+      <td>{{ regel.naam or "—" }}{% if not regel.naam %} <span class="muted" style="font-size:0.75em">(leeg — verwachte huur)</span>{% endif %}</td>
       <td>{{ regel.verwacht_bedrag|eur }}</td>
     </tr>
     {% endfor %}

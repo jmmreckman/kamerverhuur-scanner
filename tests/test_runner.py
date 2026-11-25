@@ -361,8 +361,28 @@ def test_verwachte_huurinkomsten_negeert_achterstand_of_extra_ontvangen_bedragen
     assert specificatie == [winst.Inkomst(kamer="1", naam="Henri", verwacht_bedrag=Decimal("650.00"))]
 
 
-def test_verwachte_huurinkomsten_leegstaande_kamer_telt_niet_mee():
+def test_verwachte_huurinkomsten_lege_kamer_met_ingevulde_huur_telt_mee():
+    # een nog-lege kamer waarvoor de (verwachte) huur al is ingevuld telt mee,
+    # zodat nog te verhuren kamers vast in het winstoverzicht meetellen.
     leeg = Tenant(row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("650.00"))
+    bewoond = Tenant(row_index=3, naam="Piet", kamer="2", verwacht_bedrag=Decimal("700.00"))
+    specificatie = runner.verwachte_huurinkomsten_specificatie([leeg, bewoond])
+    assert specificatie == [
+        winst.Inkomst(kamer="1", naam="", verwacht_bedrag=Decimal("650.00")),
+        winst.Inkomst(kamer="2", naam="Piet", verwacht_bedrag=Decimal("700.00")),
+    ]
+
+
+def test_verwachte_huurinkomsten_lege_kamer_valt_terug_op_kale_plus_service():
+    # geen apart 'verwacht bedrag', maar wel kale huur + servicekosten ingevuld
+    leeg = Tenant(row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("0"),
+                  kale_huurprijs=Decimal("500.00"), servicekosten=Decimal("75.00"))
+    specificatie = runner.verwachte_huurinkomsten_specificatie([leeg])
+    assert specificatie == [winst.Inkomst(kamer="1", naam="", verwacht_bedrag=Decimal("575.00"))]
+
+
+def test_verwachte_huurinkomsten_lege_kamer_zonder_bedrag_telt_niet_mee():
+    leeg = Tenant(row_index=2, naam="", kamer="1", verwacht_bedrag=Decimal("0"))
     bewoond = Tenant(row_index=3, naam="Piet", kamer="2", verwacht_bedrag=Decimal("700.00"))
     specificatie = runner.verwachte_huurinkomsten_specificatie([leeg, bewoond])
     assert specificatie == [winst.Inkomst(kamer="2", naam="Piet", verwacht_bedrag=Decimal("700.00"))]

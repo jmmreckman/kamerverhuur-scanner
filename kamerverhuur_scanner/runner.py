@@ -418,11 +418,24 @@ def verwachte_huurinkomsten_specificatie(tenants: list[Tenant]) -> list[winst.In
     maand daadwerkelijk is binnengekomen (dat kan vertekend zijn door een
     ingelopen achterstand, een instapmaand met extra borg, een net te laat
     betaalde maand, etc. - de betaalcontrole/Betalingen-pagina blijft de plek
-    om dát te volgen). Leegstaande kamers (geen huurder) tellen niet mee."""
-    return [
-        winst.Inkomst(kamer=t.kamer, naam=t.naam, verwacht_bedrag=t.verwacht_bedrag)
-        for t in tenants if t.naam
-    ]
+    om dát te volgen).
+
+    Een nog-LEGE kamer (geen huurder) telt mee zodra er een verwachte huur is
+    ingevuld - handig voor een portefeuille-/winstoverzicht met nog te verhuren
+    kamers (de verwachte huur telt dan al op). Het bedrag is dan het 'verwacht
+    bedrag', of - als dat niet apart is ingevuld - de kale huur + servicekosten.
+    Een kamer zonder huurder én zonder bedrag telt niet mee."""
+    regels: list[winst.Inkomst] = []
+    for t in tenants:
+        if t.naam:
+            regels.append(winst.Inkomst(kamer=t.kamer, naam=t.naam, verwacht_bedrag=t.verwacht_bedrag))
+            continue
+        verwacht = t.verwacht_bedrag if (t.verwacht_bedrag and t.verwacht_bedrag > 0) else (
+            (t.kale_huurprijs or Decimal("0")) + (t.servicekosten or Decimal("0"))
+        )
+        if verwacht > 0:
+            regels.append(winst.Inkomst(kamer=t.kamer, naam=t.naam, verwacht_bedrag=verwacht))
+    return regels
 
 
 def bereken_winstoverzicht(
