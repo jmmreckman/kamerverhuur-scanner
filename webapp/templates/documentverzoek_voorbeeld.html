@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_inbox %}
+{% block title %}Documenten verzoeken{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Documenten verzoeken</h1>
+  <p class="muted">{{ kandidaat_naam }} krijgt onderstaande mail met een unieke link waarop een kopie van
+     ID/paspoort en bewijs van inkomen/garantsteller geupload kan worden.</p>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('documentverzoek_versturen', pand_slug=huidig_pand.slug, sleutel=sleutel) }}"
+        onsubmit="return confirm('Documentverzoek nu versturen naar ' + {{ kandidaat_naam|tojson }} + '?');">
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ onderwerp }}" required>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="14" required>{{ tekst }}</textarea>
+    </label>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem">
+      <button class="btn" type="submit">{{ icon_inbox() }} Versturen</button>
+      <a class="btn btn-secondary" href="{{ annuleren_url if annuleren_url is defined and annuleren_url else url_for('bezichtigingen_overzicht', pand_slug=huidig_pand.slug) }}">Annuleren</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon_plus %}
+{% block title %}Panden{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Panden</h1>
+  <p class="muted">Welke panden zitten er in het systeem? Alle gegevens staan in de eigen database op de server.</p>
+</div>
+
+<div class="card">
+  <a class="btn" href="{{ url_for('pand_nieuw') }}">{{ icon_plus() }} Nieuw pand</a>
+</div>
+
+<div class="card">
+  <div class="tabel-scroll">
+  <table>
+    <tr><th>Naam</th><th>Slug</th><th>bunq IBAN</th><th></th></tr>
+    {% for pand in panden %}
+    <tr>
+      <td>
+        {% set pk = pand.kleur|hexkleur %}
+        {% if pk %}<span class="pand-kleurstip" style="background:{{ pk }}" title="Herkenningskleur"></span> {% endif %}
+        {{ pand.naam }}
+      </td>
+      <td><code>{{ pand.slug }}</code></td>
+      <td>{{ pand.bunq_rekening_iban }}</td>
+      <td>
+        <a href="{{ url_for('huurders_grid', pand_slug=pand.slug) }}">Huurders (grid)</a>
+        &middot; <a href="{{ url_for('pand_bewerken', slug=pand.slug) }}">Bewerken</a>
+        <form method="post" action="{{ url_for('pand_verwijderen', slug=pand.slug) }}" style="display:inline"
+              onsubmit="return confirm('Pand \'{{ pand.naam }}\' verwijderen? Dit verwijdert het pand en al zijn kamers/huurders uit de database. De Drive-documenten blijven staan.')">
+          <button class="btn-link-danger" type="submit">Verwijderen</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">Nog geen panden.</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+</div>
+{% endblock %}

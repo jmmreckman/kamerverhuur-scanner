@@ -1,0 +1,198 @@
+"""Lokale opslag (op de server zelf, in STATE_DIR) van aanbod-foto's/video's
+en bewijsstukken van aanmeldingen - in plaats van Google Drive.
+
+Waarom niet Drive: een Google *service account* (het soort inlog dat deze
+site gebruikt) heeft zelf 0 GB opslagruimte. Zodra de site probeert een
+bestand te UPLOADEN naar een gewone, persoonlijke Drive-map die alleen met
+dat account gedeeld is, weigert Google dat altijd met een
+"storageQuotaExceeded"-fout - ongeacht bestandsgrootte. Browsen/downloaden in
+de Documenten-module werkt wel (dat kost geen opslag van het account zelf),
+maar nieuwe foto's/video's/bewijsstukken uploaden dus niet. Lokale opslag op
+de server omzeilt dit probleem volledig.
+
+Bestanden staan onder `<state_dir>/media/<pand-slug>/<categorie>/<kamer>/` -
+dezelfde blijvend gekoppelde data-map die ook de betaalcontrole-cache
+gebruikt (STATE_DIR=/app/data op de VPS), dus overleeft een herbuild/deploy.
+Elk bestand krijgt een willekeurige (uuid) bestandsnaam op schijf, met een
+klein .meta-bestand ernaast voor de oorspronkelijke bestandsnaam en het
+mimetype.
+"""
+from __future__ import annotations
+
+import json
+import re
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+
+from .config import Config
+from .models import Pand
+
+
+@dataclass(frozen=True)
+class LokaalBestand:
+    id: str  # bestandsnaam op schijf (uuid + originele extensie)
+    naam: str  # oorspronkelijke bestandsnaam, voor weergave/download
+    mimetype: str
+    grootte: int
+
+
+def _veilig(tekst: str) -> str:
+    """Zet een vrije naam (kamer, pand-slug) om naar een veilig mapnaamdeel -
+    voorkomt path traversal (bv. "..") en rare tekens in bestandspaden."""
+    return re.sub(r"[^a-z0-9_-]+", "-", tekst.lower()).strip("-") or "onbekend"
+
+
+# De breedtes waarvoor de publieke aanbodpagina een snelle, verkleinde WebP-
+# variant serveert (thumb=500 voor de grids, web=1600 voor de detail/lightbox).
+# De namen in webapp/app.py:_MEDIA_BREEDTES moeten hiermee overeenkomen, en
+# scripts/warm_media_cache.py gebruikt deze lijst om bestaande foto's op te warmen.
+STANDAARD_VARIANT_BREEDTES = (500, 1600)
+
+
+class LokaleMediaClient:
+    def __init__(self, config: Config, pand: Pand, categorie: str):
+        """`categorie` is bv. "aanbod" of "aanmeldingen" - houdt de
+        mappenstructuur overzichtelijk en voorkomt naamsconflicten tussen
+        beide soorten uploads."""
+        self._categorie = categorie
+        self._basis = Path(config.state_dir) / "media" / _veilig(pand.slug) / _veilig(categorie)
+
+    def _kamer_map(self, kamer: str, maak_aan: bool = False) -> Path:
+        pad = self._basis / _veilig(kamer)
+        if maak_aan:
+            pad.mkdir(parents=True, exist_ok=True)
+        return pad
+
+    def _meta_pad(self, bestand_pad: Path) -> Path:
+        return bestand_pad.with_name(bestand_pad.name + ".meta")
+
+    def list_bestanden(self, kamer: str) -> list[LokaalBestand]:
+        pad = self._kamer_map(kamer)
+        if not pad.is_dir():
+            return []
+        bestanden = []
+        for bestand_pad in sorted(pad.iterdir()):
+            if not bestand_pad.is_file() or bestand_pad.suffix == ".meta":
+                continue
+            meta = self._lees_meta(bestand_pad)
+            bestanden.append(
+                LokaalBestand(
+                    id=bestand_pad.name,
+                    naam=meta.get("naam", bestand_pad.name),
+                    mimetype=meta.get("mimetype") or "application/octet-stream",
+                    grootte=bestand_pad.stat().st_size,
+                )
+            )
+        return bestanden
+
+    def upload_bestand(self, kamer: str, bestandsnaam: str, mimetype: str, inhoud: bytes) -> str:
+        pad = self._kamer_map(kamer, maak_aan=True)
+        extensie = Path(bestandsnaam).suffix
+        bestand_id = f"{uuid.uuid4().hex}{extensie}"
+        (pad / bestand_id).write_bytes(inhoud)
+        mimetype = mimetype or "application/octet-stream"
+        self._schrijf_meta(pad / bestand_id, bestandsnaam, mimetype)
+        # Voor aanbod-foto's meteen de verkleinde WebP-varianten aanmaken, zodat
+        # de allereerste bezoeker niet op de conversie hoeft te wachten (anders
+        # gebeurt dat lui bij de eerste weergave). Alleen voor afbeeldingen in de
+        # "aanbod"-categorie; een mislukte conversie mag de upload nooit breken
+        # (lees_variant vangt fouten zelf af en valt terug op het origineel).
+        if self._categorie == "aanbod" and mimetype.startswith("image/"):
+            for breedte in STANDAARD_VARIANT_BREEDTES:
+                try:
+                    self.lees_variant(kamer, bestand_id, breedte)
+                except Exception:  # noqa: BLE001 - upload nooit laten mislukken op het opwarmen
+                    pass
+        return bestand_id
+
+    def verwijder_bestand(self, kamer: str, bestand_id: str) -> None:
+        bestand_pad = self._kamer_map(kamer) / Path(bestand_id).name  # .name voorkomt path traversal
+        bestand_pad.unlink(missing_ok=True)
+        self._meta_pad(bestand_pad).unlink(missing_ok=True)
+        self._wis_varianten(bestand_pad)
+
+    # --- Verkleinde, snel-ladende varianten (voor de publieke aanbodpagina) ---
+    #
+    # Telefoonfoto's zijn al snel enkele MB's; die op volle grootte serveren terwijl
+    # ze op het scherm klein getoond worden maakt de pagina traag. We maken daarom per
+    # afbeelding een naar maxbreedte verkleinde WebP-variant en cachen die op schijf
+    # (in een verborgen .cache-map naast het origineel, zodat list_bestanden ze niet
+    # meetelt). De eerste aanvraag maakt de variant aan, daarna komt 'ie uit cache -
+    # dus bestaande foto's worden ook automatisch meegenomen, zonder migratie.
+
+    def _cache_map(self, kamer: str) -> Path:
+        return self._kamer_map(kamer) / ".cache"
+
+    def _wis_varianten(self, bestand_pad: Path) -> None:
+        cache = bestand_pad.parent / ".cache"
+        if cache.is_dir():
+            for variant in cache.glob(bestand_pad.name + ".*"):
+                variant.unlink(missing_ok=True)
+
+    def lees_variant(self, kamer: str, bestand_id: str, maxbreedte: int) -> tuple[str, bytes] | None:
+        """Geeft (mimetype, inhoud) van een naar `maxbreedte` px verkleinde WebP-variant
+        van een afbeelding, met schijf-cache. Een niet-afbeelding (of een conversie die
+        mislukt) valt netjes terug op het origineel. None als het bestand niet bestaat."""
+        bron = self._kamer_map(kamer) / Path(bestand_id).name
+        if not bron.is_file():
+            return None
+        meta = self._lees_meta(bron)
+        mimetype = meta.get("mimetype") or "application/octet-stream"
+        if not mimetype.startswith("image/"):
+            return mimetype, bron.read_bytes()  # video e.d.: ongewijzigd serveren
+
+        cache = self._cache_map(kamer)
+        variant = cache / f"{bron.name}.w{maxbreedte}.webp"
+        try:
+            if variant.is_file() and variant.stat().st_mtime >= bron.stat().st_mtime:
+                return "image/webp", variant.read_bytes()
+        except OSError:
+            pass
+
+        try:
+            from io import BytesIO
+
+            from PIL import Image, ImageOps
+
+            with Image.open(bron) as img:
+                img = ImageOps.exif_transpose(img)  # telefoon-rotatie uit EXIF toepassen
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
+                img.thumbnail((maxbreedte, maxbreedte * 4), Image.LANCZOS)  # alleen verkleinen
+                buffer = BytesIO()
+                img.save(buffer, format="WEBP", quality=80, method=4)
+                data = buffer.getvalue()
+            cache.mkdir(parents=True, exist_ok=True)
+            tmp = variant.with_suffix(variant.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(variant)  # atomisch, voorkomt een half geschreven cachebestand
+            return "image/webp", data
+        except Exception:  # noqa: BLE001 - nooit de weergave breken op een rare afbeelding
+            return mimetype, bron.read_bytes()
+
+    def lees_bestand(self, kamer: str, bestand_id: str) -> tuple[str, str, bytes] | None:
+        """Geeft (bestandsnaam, mimetype, inhoud) terug, of None als het
+        bestand niet bestaat."""
+        bestand_pad = self._kamer_map(kamer) / Path(bestand_id).name
+        if not bestand_pad.is_file():
+            return None
+        meta = self._lees_meta(bestand_pad)
+        naam = meta.get("naam", bestand_pad.name)
+        mimetype = meta.get("mimetype") or "application/octet-stream"
+        return naam, mimetype, bestand_pad.read_bytes()
+
+    @staticmethod
+    def _schrijf_meta(bestand_pad: Path, naam: str, mimetype: str) -> None:
+        meta_pad = bestand_pad.with_name(bestand_pad.name + ".meta")
+        meta_pad.write_text(json.dumps({"naam": naam, "mimetype": mimetype}))
+
+    @staticmethod
+    def _lees_meta(bestand_pad: Path) -> dict:
+        meta_pad = bestand_pad.with_name(bestand_pad.name + ".meta")
+        if not meta_pad.is_file():
+            return {}
+        try:
+            return json.loads(meta_pad.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Ingeplande bezichtigingen - {{ huidig_pand.naam }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Ingeplande bezichtigingen</h1>
+  <p class="muted">Iedere uitgenodigde krijgt in de bevestigingsmail een groene knop ("ik kom") en een rode knop
+     ("geen interesse meer"). Hieronder zie je per persoon de stand. Wie afzegt, zakt automatisch naar
+     <em>Afgezegd</em> onderaan - zo houd je een betrouwbaar beeld van wie er echt komt.</p>
+</div>
+
+<div class="card">
+  {% if actief %}
+  <form method="post" action="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}">
+    <div class="tabel-scroll">
+    <table>
+      <tr>
+        <th>Kies</th><th>Status</th><th>Datum</th><th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Manier</th>
+        <th>Bel nummer</th><th>Email</th>
+      </tr>
+      {% for b in actief %}
+      <tr>
+        <td><input type="checkbox" name="rijnummers" value="{{ b.id }}" style="width:auto"></td>
+        <td>
+          {% if b.reactie == REACTIE_BEVESTIGD %}
+          <span style="display:inline-block;padding:2px 9px;border-radius:999px;background:#e3f4e8;color:#1a7a3c;font-weight:600;font-size:.82rem;white-space:nowrap">&#10003; Bevestigd</span>
+          {% else %}
+          <span style="display:inline-block;padding:2px 9px;border-radius:999px;background:#eef0f3;color:#667;font-weight:600;font-size:.82rem;white-space:nowrap">Wacht op reactie</span>
+          {% endif %}
+        </td>
+        <td>{{ b.datum }}</td>
+        <td>{{ b.tijd_start }} - {{ b.tijd_eind }}</td>
+        <td>{{ b.naam }}</td>
+        <td>{{ b.kamer }}</td>
+        <td>{{ b.manier }}</td>
+        <td>{{ b.bel_nummer }}</td>
+        <td>{{ b.email }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <p class="muted" style="margin-top:0.75rem">Kandidaat gekozen? Vink diegene aan en klik op "Documenten
+       verzoeken" om een mail te sturen met een link om ID/paspoort en bewijs van inkomen/garantsteller aan
+       te leveren.</p>
+    <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+      <button class="btn" type="submit" formaction="{{ url_for('documentverzoek_voorbeeld', pand_slug=huidig_pand.slug) }}">Documenten verzoeken</button>
+      <button class="btn btn-secondary" type="submit"
+              formaction="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}"
+              onclick="return confirm('Aangevinkte bezichtiging(en) verwijderen? Dat tijdslot komt dan weer vrij.')">Verwijderen</button>
+      <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar aanmeldingen</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted">Nog geen bezichtigingen ingepland{% if afgezegd %} die nog actief zijn (zie "Afgezegd" hieronder){% endif %}.</p>
+  <a class="btn btn-secondary" href="{{ url_for('aanmeldingen_overzicht', pand_slug=huidig_pand.slug) }}">Terug naar aanmeldingen</a>
+  {% endif %}
+</div>
+
+{% if afgezegd %}
+<div class="card">
+  <h2 style="font-size:1.05rem">Afgezegd <span class="muted" style="font-weight:400">(geen interesse meer - via de rode knop)</span></h2>
+  <p class="muted">Deze mensen hebben zelf afgezegd en tellen niet meer mee als "komen kijken". Ze blijven hier
+     staan voor je overzicht; hun tijdslot is weer vrij. Verwijder ze gerust als je ze helemaal kwijt wilt.</p>
+  <form method="post" action="{{ url_for('bezichtigingen_verwijderen', pand_slug=huidig_pand.slug) }}">
+    <div class="tabel-scroll">
+    <table>
+      <tr><th>Kies</th><th>Afgezegd op</th><th>Datum</th><th>Tijdstip</th><th>Naam</th><th>Kamer</th><th>Email</th></tr>
+      {% for b in afgezegd %}
+      <tr style="color:#999">
+        <td><input type="checkbox" name="rijnummers" value="{{ b.id }}" style="width:auto"></td>
+        <td>{{ b.reactie_op }}</td>
+        <td style="text-decoration:line-through">{{ b.datum }}</td>
+        <td style="text-decoration:line-through">{{ b.tijd_start }} - {{ b.tijd_eind }}</td>
+        <td>{{ b.naam }}</td>
+        <td>{{ b.kamer }}</td>
+        <td>{{ b.email }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    <div style="margin-top:0.8rem">
+      <button class="btn btn-secondary" type="submit"
+              onclick="return confirm('Aangevinkte afgezegde bezichtiging(en) definitief verwijderen?')">Verwijderen</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+{% endblock %}
