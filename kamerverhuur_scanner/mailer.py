@@ -25,6 +25,7 @@ def verstuur_email(
     cc: list[str] | None = None,
     bijlagen: list[tuple[str, str, bytes]] | None = None,
     html: str | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> None:
     """Verstuurt de mail. `bcc` overschrijft (indien gegeven) config.email_bcc -
     zo kan de aanroeper per pand extra BCC-adressen toevoegen (bv. een
@@ -48,6 +49,11 @@ def verstuur_email(
     afzender = f"{config.smtp_from_naam} <{config.smtp_from_email}>" if config.smtp_from_naam else config.smtp_from_email
     msg["From"] = afzender
     msg["To"] = aan
+    # Threading-headers (In-Reply-To/References) bij een antwoord op een
+    # bestaande mail, zodat het bij de ontvanger netjes onder de thread hangt.
+    for sleutel, waarde in (extra_headers or {}).items():
+        if waarde:
+            msg[sleutel] = waarde
     if cc:
         msg["Cc"] = ", ".join(cc)
     bcc_adressen = bcc if bcc is not None else config.email_bcc

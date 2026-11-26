@@ -55,7 +55,7 @@ from kamerverhuur_scanner.utils import format_bedrag_nl, parse_bedrag
 
 from . import (
     ads, afwijzing, bezichtiging, communicatie_ai, communicatie_db, contracts,
-    documentverzoek, ondertekenen, tekenportaal, whatsapp_import, wwso,
+    documentverzoek, ondertekenen, postvak, tekenportaal, whatsapp_import, wwso,
 )
 from .aanmeldingen import (
     AanmeldingFout,
@@ -325,6 +325,7 @@ def create_app(config: Config | None = None) -> Flask:
             "eigen_panden": eigen_panden, "alle_panden": alle_panden, "huidig_pand": getattr(g, "pand", None),
             "pand_wissel_url": _pand_wissel_url,
             "huidig_jaar": date.today().year,
+            "postvak_beschikbaar": _mag_postvak() and postvak.creds_aanwezig(config),
         }
 
     def _kamer_of_404(sheet: SheetClient, kamer_naam: str) -> Tenant:
@@ -552,6 +553,138 @@ def create_app(config: Config | None = None) -> Flask:
             if leeg or aflopend:
                 uit.append({"slug": p.slug, "naam": p.naam, "leeg": leeg, "aflopend": aflopend})
         return jsonify(uit)
+
+    # --- Postvak info@ (webmail-achtig, alleen voor volledige-toegang beheerders) ---
+
+    def _mag_postvak() -> bool:
+        return current_user.is_authenticated and current_user.mag_gebruikers_beheren() and not current_user.is_test_account()
+
+    def _eis_postvak() -> None:
+        if not _mag_postvak():
+            abort(403)
+
+    def _met_postvak(func):
+        """Open een IMAP-verbinding naar info@, voer func(imap) uit en sluit altijd."""
+        imap = postvak.verbind(config)
+        try:
+            return func(imap)
+        finally:
+            try:
+                imap.logout()
+            except Exception:
+                pass
+
+    @app.route("/mail")
+    @login_required
+    def postvak_in():
+        _eis_postvak()
+        if not postvak.creds_aanwezig(config):
+            return render_template("postvak.html", mails=[], niet_ingesteld=True)
+        try:
+            mails = _met_postvak(lambda imap: postvak.lijst_recent(imap, aantal=50))
+        except Exception:
+            app.logger.exception("Postvak info@ laden mislukt.")
+            flash("Kon het info@-postvak niet laden - controleer of IMAP bij Strato aanstaat, of probeer het zo nog eens.")
+            return render_template("postvak.html", mails=[], fout=True)
+        return render_template("postvak.html", mails=mails)
+
+    @app.route("/mail/<uid>")
+    @login_required
+    def postvak_bericht(uid: str):
+        _eis_postvak()
+        try:
+            def _open(imap):
+                b = postvak.haal_bericht(imap, uid)
+                if b is not None and not b["gelezen"]:
+                    postvak.markeer_gelezen(imap, uid, True)
+                    b["gelezen"] = True
+                return b
+            bericht = _met_postvak(_open)
+        except Exception:
+            app.logger.exception("Mail %s openen mislukt.", uid)
+            flash("Kon deze mail niet openen.")
+            return redirect(url_for("postvak_in"))
+        if bericht is None:
+            flash("Deze mail bestaat niet (meer).")
+            return redirect(url_for("postvak_in"))
+        return render_template("postvak_bericht.html", b=bericht, antwoord=postvak.antwoord_velden(bericht))
+
+    @app.route("/mail/<uid>/markeer", methods=["POST"])
+    @login_required
+    def postvak_markeer(uid: str):
+        _eis_postvak()
+        actie = request.form.get("actie", "")
+        try:
+            def _doe(imap):
+                if actie == "gelezen":
+                    postvak.markeer_gelezen(imap, uid, True)
+                elif actie == "ongelezen":
+                    postvak.markeer_gelezen(imap, uid, False)
+                elif actie == "belangrijk":
+                    postvak.zet_belangrijk(imap, uid, True)
+                elif actie == "niet-belangrijk":
+                    postvak.zet_belangrijk(imap, uid, False)
+            _met_postvak(_doe)
+        except Exception:
+            app.logger.exception("Mail %s markeren (%s) mislukt.", uid, actie)
+            flash("Markeren mislukt - probeer het nog eens.")
+        return redirect(request.form.get("terug") or url_for("postvak_in"))
+
+    @app.route("/mail/<uid>/bijlage/<int:index>")
+    @login_required
+    def postvak_bijlage(uid: str, index: int):
+        _eis_postvak()
+        try:
+            bijlage = _met_postvak(lambda imap: postvak.haal_bijlage(imap, uid, index))
+        except Exception:
+            app.logger.exception("Bijlage ophalen mislukt (%s/%s).", uid, index)
+            abort(404)
+        if bijlage is None:
+            abort(404)
+        naam, mime, inhoud = bijlage
+        veilige_naam = re.sub(r'[\r\n"]', "", naam) or "bijlage"
+        return Response(inhoud, mimetype=mime, headers={
+            "Content-Disposition": f'attachment; filename="{veilige_naam}"',
+        })
+
+    @app.route("/mail/<uid>/beantwoorden", methods=["POST"])
+    @login_required
+    def postvak_beantwoorden(uid: str):
+        _eis_postvak()
+        aan = (request.form.get("aan") or "").strip()
+        onderwerp = (request.form.get("onderwerp") or "").strip()
+        tekst = (request.form.get("tekst") or "").strip()
+        in_reply_to = (request.form.get("in_reply_to") or "").strip()
+        if not aan or not tekst:
+            flash("Vul een ontvanger en een bericht in.")
+            return redirect(url_for("postvak_bericht", uid=uid))
+        headers = {"In-Reply-To": in_reply_to, "References": in_reply_to} if in_reply_to else {}
+        try:
+            # bcc=[] -> geen Reply-To-override: een reactie van de ontvanger komt
+            # gewoon weer bij info@ binnen (en dus in dit postvak).
+            verstuur_email(config, aan, onderwerp, tekst, bcc=[], extra_headers=headers)
+        except MailError as exc:
+            app.logger.exception("Antwoord vanuit postvak mislukt.")
+            flash(f"Antwoord versturen mislukt: {exc}")
+            return redirect(url_for("postvak_bericht", uid=uid))
+        flash(f"Antwoord verzonden naar {aan}.")
+        return redirect(url_for("postvak_in"))
+
+    @app.route("/aandacht/mail")
+    @login_required
+    def aandacht_mail():
+        """JSON {ongelezen, belangrijk} voor het info@-postvak - lui opgehaald door
+        de startpagina (IMAP is een netwerkcall, dus niet op het kritieke pad)."""
+        leeg = {"ongelezen": 0, "belangrijk": 0}
+        if not _mag_postvak() or not postvak.creds_aanwezig(config):
+            return jsonify(leeg)
+        try:
+            return jsonify(_met_postvak(
+                lambda imap: {"ongelezen": postvak.tel_ongelezen(imap), "belangrijk": postvak.tel_belangrijk(imap)}
+            ))
+        except Exception:
+            app.logger.exception("Postvak-aandachtsignaal mislukt.")
+            return jsonify(leeg)
 
     @app.route("/pand-volgorde", methods=["POST"])
     @login_required

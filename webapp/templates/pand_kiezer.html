@@ -33,7 +33,7 @@
         lijst.innerHTML = '<li class="muted">Niets dringends op dit moment.</li>';
       }
     }
-    fetch("{{ url_for('aandacht_sheet_signalen') }}")
+    var sheetKlaar = fetch("{{ url_for('aandacht_sheet_signalen') }}")
       .then(function (r) { return r.json(); })
       .then(function (panden) {
         var html = "";
@@ -48,9 +48,29 @@
           }
         });
         if (sheetLi) { sheetLi.outerHTML = html; }
-        klaar();
       })
-      .catch(function () { if (sheetLi) sheetLi.outerHTML = ""; klaar(); });
+      .catch(function () { if (sheetLi) sheetLi.outerHTML = ""; });
+
+    {% if postvak_beschikbaar %}
+    var mailKlaar = fetch("{{ url_for('aandacht_mail') }}")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!lijst || !d) return;
+        var delen = [];
+        if (d.ongelezen) { delen.push(d.ongelezen + " ongelezen"); }
+        if (d.belangrijk) { delen.push(d.belangrijk + " belangrijk"); }
+        if (delen.length) {
+          var li = document.createElement("li");
+          li.innerHTML = '<span class="pil pil-neutral">Mail</span> <a href="{{ url_for('postvak_in') }}">info@: ' + escapeHtml(delen.join(", ")) + '</a>';
+          lijst.insertBefore(li, lijst.firstChild);
+        }
+      })
+      .catch(function () {});
+    {% else %}
+    var mailKlaar = Promise.resolve();
+    {% endif %}
+
+    Promise.all([sheetKlaar, mailKlaar]).then(klaar).catch(klaar);
   })();
 </script>
 

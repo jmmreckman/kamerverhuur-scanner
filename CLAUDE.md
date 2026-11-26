@@ -162,6 +162,24 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   en wie afzegt zakt naar een aparte **Afgezegd**-sectie (blijft wél in de lijst,
   tijdslot weer vrij). `DbClient.get_bezichtigingen_rijk()` + `zet_reactie_via_token()`;
   `get_bezichtigingen()`/`groepeer_per_datum()` bleven 10-koloms (ongewijzigd).
+- **Postvak info@** (nov 2026): webmail-achtig postvak binnen de app voor de
+  `info@steenhub.nl`-mailbox (`webapp/postvak.py`, nav "Mail", routes `/mail*`).
+  **Alleen voor volledige-toegang beheerders** (`mag_gebruikers_beheren()` én geen
+  testaccount). **Live via IMAP, geen eigen DB/sync** (Strato = bron van waarheid;
+  lezen/gelezen-markeren/sterren werkt meteen door naar de webmail). Creds = de
+  bestaande `SMTP_USERNAME`/`SMTP_PASSWORD` (info@) op `STEENHUB_IMAP_HOST`
+  (imap.strato.com) — géén nieuwe env; vereist dat IMAP bij Strato aanstaat.
+  Hergebruikt `mail_inname.verbind`. Lezen (laatste 50, `BODY.PEEK`), openen
+  markeert gelezen (`\Seen`), ster = `\Flagged` ("belangrijk"), bijlagen
+  downloaden, en **beantwoorden vanaf info@** via de bestaande mailer
+  (`verstuur_email(..., extra_headers=)` zet In-Reply-To/References; `bcc=[]` zodat
+  reacties weer bij info@ binnenkomen). HTML-mail wordt **nooit rauw getoond** maar
+  naar veilige tekst gestript (`postvak.html_naar_tekst`). Op "Wat vraagt aandacht"
+  (pandkiezer) een lui-geladen seintje `ongelezen/belangrijk` via `/aandacht/mail`
+  (IMAP = netwerkcall, dus async, niet op het kritieke pad). **Geen boot-time IMAP**
+  (alle I/O pas bij een expliciete klik). Pure parse-laag los getest
+  (`tests/test_postvak.py`); routes draaien in CI. Nog open/vervolg: een eigen
+  "Verzonden"-weergave (nu zie je verzonden antwoorden alleen in de Strato-webmail).
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
 - `kamerverhuur_scanner/state.py` — kleine JSON-state in `state_dir` (laatste
   resultaat, verzonden mails, winst-geschiedenis, **pand-volgorde per gebruiker**,

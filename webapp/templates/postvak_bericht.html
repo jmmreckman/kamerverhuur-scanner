@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ b.onderwerp }} - Mail{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 style="font-size:1.25rem">{{ b.onderwerp }}</h1>
+  <p class="muted">Van <strong>{{ b.van_naam }}</strong> &lt;{{ b.van_adres }}&gt;{% if b.datum %} &middot; {{ b.datum }}{% endif %}</p>
+</div>
+
+{% set terug = url_for('postvak_bericht', uid=b.uid) %}
+<div class="card">
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem">
+    <a class="btn btn-secondary" href="{{ url_for('postvak_in') }}">&larr; Postvak</a>
+    {% if b.belangrijk %}
+    <form method="post" action="{{ url_for('postvak_markeer', uid=b.uid) }}" style="display:inline">
+      <input type="hidden" name="actie" value="niet-belangrijk"><input type="hidden" name="terug" value="{{ terug }}">
+      <button class="btn btn-secondary" type="submit">&#9733; Belangrijk uit</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ url_for('postvak_markeer', uid=b.uid) }}" style="display:inline">
+      <input type="hidden" name="actie" value="belangrijk"><input type="hidden" name="terug" value="{{ terug }}">
+      <button class="btn btn-secondary" type="submit">&#9734; Markeer belangrijk</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('postvak_markeer', uid=b.uid) }}" style="display:inline">
+      <input type="hidden" name="actie" value="ongelezen"><input type="hidden" name="terug" value="{{ url_for('postvak_in') }}">
+      <button class="btn btn-secondary" type="submit">Markeer ongelezen</button>
+    </form>
+  </div>
+
+  {% if b.bijlagen %}
+  <p class="muted" style="margin-bottom:0.3rem">Bijlagen:</p>
+  <ul style="margin-top:0">
+    {% for bij in b.bijlagen %}
+    <li><a href="{{ url_for('postvak_bijlage', uid=b.uid, index=bij.index) }}">{{ bij.naam }}</a>
+        <span class="muted">({{ (bij.grootte / 1024) | round(1) }} kB)</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <pre style="white-space:pre-wrap; word-wrap:break-word; font-family:inherit; margin:0; background:var(--kaart-bg, transparent); padding:0.5rem 0">{{ b.body }}</pre>
+</div>
+
+<div class="card">
+  <h2 style="font-size:1.05rem; margin-top:0">Beantwoorden</h2>
+  <form method="post" action="{{ url_for('postvak_beantwoorden', uid=b.uid) }}">
+    <input type="hidden" name="in_reply_to" value="{{ b.message_id }}">
+    <label>Aan
+      <input type="text" name="aan" value="{{ antwoord.aan }}" required>
+    </label>
+    <label>Onderwerp
+      <input type="text" name="onderwerp" value="{{ antwoord.onderwerp }}">
+    </label>
+    <label>Bericht
+      <textarea name="tekst" rows="8" required placeholder="Je antwoord..."></textarea>
+    </label>
+    <button class="btn js-busy" type="submit">Antwoord versturen vanaf info@steenhub.nl</button>
+  </form>
+  <p class="muted" style="margin-top:0.6rem">Het antwoord gaat uit vanaf info@steenhub.nl. Reacties komen weer
+     in dit postvak binnen. (Een eigen "Verzonden"-weergave in Steenhub komt mogelijk later; voor nu zie je
+     verzonden antwoorden nog in de Strato-webmail.)</p>
+</div>
+{% endblock %}
