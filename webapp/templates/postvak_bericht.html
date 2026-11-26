@@ -25,6 +25,10 @@
       <input type="hidden" name="actie" value="ongelezen"><input type="hidden" name="terug" value="{{ url_for('postvak_in') }}">
       <button class="btn btn-secondary" type="submit">Markeer ongelezen</button>
     </form>
+    <form method="post" action="{{ url_for('postvak_verwijderen', uid=b.uid) }}" style="display:inline; margin-left:auto"
+          onsubmit="return confirm('Deze mail naar de prullenbak verplaatsen?');">
+      <button class="btn-link-danger" type="submit" title="Naar prullenbak">&#128465; Verwijderen</button>
+    </form>
   </div>
 
   {% if b.bijlagen %}

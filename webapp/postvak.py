@@ -17,6 +17,7 @@ eromheen. Hergebruikt `webapp/mail_inname.py` voor de verbinding.
 """
 from __future__ import annotations
 
+import imaplib
 import re
 from email import message_from_bytes
 from email.header import decode_header, make_header
@@ -282,3 +283,74 @@ def tel_belangrijk(imap) -> int:
     if status != "OK" or not data or not data[0]:
         return 0
     return len(data[0].split())
+
+
+# --- Verwijderen (naar prullenbak, herstelbaar) ---------------------------
+
+# Namen die als prullenbak-map tellen als de server geen \Trash-special-use-vlag
+# meegeeft (Strato, en wat gangbare internationale varianten).
+_TRASH_NAMEN = {
+    "trash", "prullenbak", "prullenmand", "deleted", "deleted items",
+    "deleted messages", "gelöschte objekte", "gelöschte elemente", "corbeille",
+}
+_LIST_RE = re.compile(rb'^\(([^)]*)\)\s+(?:"[^"]*"|\S+)\s+("[^"]*"|.+?)\s*$')
+
+
+def _parse_list_regel(regel: bytes) -> tuple[set[str], str] | None:
+    """(vlaggen, mapnaam) uit één IMAP LIST-regel, of None als 'ie niet te
+    ontleden is. Robuust tegen quoting en een hierarchie-scheidingsteken."""
+    if isinstance(regel, tuple):  # literal-vorm: eerste element bevat de metadata
+        regel = regel[0]
+    if not isinstance(regel, (bytes, bytearray)):
+        return None
+    m = _LIST_RE.match(bytes(regel).strip())
+    if not m:
+        return None
+    vlaggen = set(m.group(1).decode(errors="replace").split())
+    naam = m.group(2).decode(errors="replace").strip().strip('"')
+    return vlaggen, naam
+
+
+def _vind_trash(imap) -> str | None:
+    """De prullenbak-map op de server: eerst op de \\Trash-special-use-vlag,
+    anders op een bekende naam. None als er geen te vinden is."""
+    status, data = imap.list()
+    if status != "OK" or not data:
+        return None
+    mappen = [p for p in (_parse_list_regel(r) for r in data) if p]
+    for vlaggen, naam in mappen:
+        if "\\Trash" in vlaggen:
+            return naam
+    for _vlaggen, naam in mappen:
+        kort = re.split(r"[/.]", naam)[-1].lower()
+        if naam.lower() in _TRASH_NAMEN or kort in _TRASH_NAMEN:
+            return naam
+    return None
+
+
+def _quote(naam: str) -> str:
+    return '"%s"' % naam.replace('"', "")
+
+
+def verwijder(imap, uid: str) -> bool:
+    """Verplaats de mail naar de prullenbak (herstelbaar, net als in de webmail).
+    Lukt dat niet (geen prullenbak-map gevonden), dan als laatste redmiddel hard
+    verwijderen (\\Deleted + expunge). Geeft True als er iets verwijderd is."""
+    imap.select("INBOX")
+    trash = _vind_trash(imap)
+    if trash and trash.lower() != "inbox":
+        caps = getattr(imap, "capabilities", ()) or ()
+        if "MOVE" in caps or b"MOVE" in caps:
+            st, _ = imap.uid("MOVE", uid, _quote(trash))
+            if st == "OK":
+                return True
+        # Geen MOVE (of mislukt): kopieer naar prullenbak, dan uit INBOX halen.
+        st, _ = imap.uid("COPY", uid, _quote(trash))
+        if st != "OK":
+            return False
+    imap.uid("STORE", uid, "+FLAGS", "(\\Deleted)")
+    try:
+        imap.uid("EXPUNGE", uid)  # UIDPLUS: alleen deze mail
+    except imaplib.IMAP4.error:
+        imap.expunge()
+    return True

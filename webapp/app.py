@@ -670,6 +670,18 @@ def create_app(config: Config | None = None) -> Flask:
         flash(f"Antwoord verzonden naar {aan}.")
         return redirect(url_for("postvak_in"))
 
+    @app.route("/mail/<uid>/verwijderen", methods=["POST"])
+    @login_required
+    def postvak_verwijderen(uid: str):
+        _eis_postvak()
+        try:
+            ok = _met_postvak(lambda imap: postvak.verwijder(imap, uid))
+        except Exception:
+            app.logger.exception("Mail %s verwijderen mislukt.", uid)
+            ok = False
+        flash("Mail naar de prullenbak verplaatst." if ok else "Verwijderen mislukt - probeer het nog eens.")
+        return redirect(url_for("postvak_in"))
+
     @app.route("/aandacht/mail")
     @login_required
     def aandacht_mail():

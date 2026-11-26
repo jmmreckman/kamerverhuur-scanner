@@ -83,3 +83,38 @@ def test_meta_haalt_uid_en_vlaggen():
     assert "\\Seen" in vlaggen and "\\Flagged" in vlaggen
     uid2, v2 = postvak._meta(rb"2 (UID 7 FLAGS () BODY[] {10}")
     assert uid2 == "7" and v2 == set()
+
+
+def test_parse_list_regel_quoted_en_speciale_vlag():
+    vlaggen, naam = postvak._parse_list_regel(rb'(\HasNoChildren \Trash) "/" "Trash"')
+    assert naam == "Trash" and "\\Trash" in vlaggen
+    vlaggen2, naam2 = postvak._parse_list_regel(rb'(\HasNoChildren) "." INBOX.Prullenbak')
+    assert naam2 == "INBOX.Prullenbak"
+
+
+class _FakeImap:
+    def __init__(self, regels):
+        self._regels = regels
+    def list(self):
+        return "OK", self._regels
+
+
+def test_vind_trash_via_special_use_vlag():
+    imap = _FakeImap([
+        rb'(\HasNoChildren) "/" "INBOX"',
+        rb'(\HasNoChildren \Trash) "/" "Deleted Items"',
+    ])
+    assert postvak._vind_trash(imap) == "Deleted Items"
+
+
+def test_vind_trash_via_naam_zonder_vlag():
+    imap = _FakeImap([
+        rb'(\HasNoChildren) "." INBOX',
+        rb'(\HasNoChildren) "." INBOX.Trash',
+    ])
+    assert postvak._vind_trash(imap) == "INBOX.Trash"
+
+
+def test_vind_trash_geen_match():
+    imap = _FakeImap([rb'(\HasNoChildren) "/" "INBOX"', rb'(\HasNoChildren) "/" "Archief"'])
+    assert postvak._vind_trash(imap) is None

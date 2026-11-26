@@ -24,7 +24,7 @@
 <div class="card">
   <div class="tabel-scroll">
   <table>
-    <tr><th></th><th>Afzender</th><th>Onderwerp</th><th>Datum</th></tr>
+    <tr><th></th><th>Afzender</th><th>Onderwerp</th><th>Datum</th><th></th></tr>
     {% for m in mails %}
     <tr style="{{ 'font-weight:700' if not m.gelezen }}">
       <td style="white-space:nowrap">
@@ -34,6 +34,12 @@
       <td><a href="{{ url_for('postvak_bericht', uid=m.uid) }}" title="{{ m.van_adres }}">{{ m.van_naam or m.van_adres or '(onbekend)' }}</a></td>
       <td><a href="{{ url_for('postvak_bericht', uid=m.uid) }}">{{ m.onderwerp }}</a></td>
       <td style="white-space:nowrap">{{ m.datum }}</td>
+      <td style="text-align:right">
+        <form method="post" action="{{ url_for('postvak_verwijderen', uid=m.uid) }}" style="display:inline"
+              onsubmit="return confirm('Deze mail naar de prullenbak verplaatsen?');">
+          <button class="btn-link-danger" type="submit" title="Naar prullenbak">&times;</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </table>

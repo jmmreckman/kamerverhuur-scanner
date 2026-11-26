@@ -171,7 +171,10 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   (imap.strato.com) — géén nieuwe env; vereist dat IMAP bij Strato aanstaat.
   Hergebruikt `mail_inname.verbind`. Lezen (laatste 50, `BODY.PEEK`), openen
   markeert gelezen (`\Seen`), ster = `\Flagged` ("belangrijk"), bijlagen
-  downloaden, en **beantwoorden vanaf info@** via de bestaande mailer
+  downloaden, **verwijderen naar de prullenbak** (`postvak.verwijder`: zoekt de
+  `\Trash`-map op via LIST en verplaatst via MOVE/COPY; hard-delete
+  \Deleted+EXPUNGE alleen als laatste redmiddel), en **beantwoorden vanaf info@**
+  via de bestaande mailer
   (`verstuur_email(..., extra_headers=)` zet In-Reply-To/References; `bcc=[]` zodat
   reacties weer bij info@ binnenkomen). HTML-mail wordt **nooit rauw getoond** maar
   naar veilige tekst gestript (`postvak.html_naar_tekst`). Op "Wat vraagt aandacht"
