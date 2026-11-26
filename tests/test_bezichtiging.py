@@ -7,8 +7,12 @@ import io
 import pytest
 
 from tests.test_aanbod_routes import VOLLEDIG_FORMULIER, _bouw_app_client, _fake_sheet_singleton
-from webapp.bezichtiging import bel_nummer, bereken_planning, parse_aanmelder, serialiseer_aanmelder, vind_dubbele_emails
-from datetime import time
+from webapp.bezichtiging import (
+    bel_nummer, bereken_planning, bouw_bevestigingsmail, parse_aanmelder,
+    serialiseer_aanmelder, vind_dubbele_emails,
+)
+from kamerverhuur_scanner.models import Pand
+from datetime import date, time
 
 
 @pytest.fixture
@@ -21,7 +25,9 @@ def verstuurde_mails(monkeypatch):
     verstuurd = []
 
     def _fake_verstuur_email(config, aan, onderwerp, tekst, bcc=None, **kwargs):
-        verstuurd.append({"aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc})
+        verstuurd.append({
+            "aan": aan, "onderwerp": onderwerp, "tekst": tekst, "bcc": bcc, "html": kwargs.get("html"),
+        })
 
     import webapp.app as appmodule
     monkeypatch.setattr(appmodule, "verstuur_email", _fake_verstuur_email)
@@ -91,6 +97,43 @@ def test_vind_dubbele_emails_zonder_overlap_geeft_lege_set():
 def test_vind_dubbele_emails_negeert_lege_adressen():
     afspraken = [{"email": ""}, {"email": ""}]
     assert vind_dubbele_emails(afspraken, set()) == set()
+
+
+def _mini_pand():
+    return Pand(
+        slug="x", naam="Teststraat 1", google_sheet_id="x",
+        google_sheet_worksheet="Huurders", history_worksheet="Historie",
+        bunq_rekening_iban="NL00TEST0000000000",
+    )
+
+
+def _mini_afspraak():
+    return {
+        "kamer": "1", "naam": "Jane", "email": "j@x.nl", "telefoon": "0612345678",
+        "bezichtiging": "In person", "videobel_nummer": "", "tijd_start": "14:00", "tijd_eind": "14:15",
+    }
+
+
+def test_bevestigingsmail_zonder_urls_blijft_platte_tekst():
+    mail = bouw_bevestigingsmail(_mini_pand(), _mini_afspraak(), date(2026, 8, 1))
+    assert mail["html"] is None
+    assert "Teststraat 1" in mail["tekst"]
+    assert "14:00 - 14:15" in mail["tekst"]
+
+
+def test_bevestigingsmail_met_urls_heeft_groene_en_rode_knop():
+    mail = bouw_bevestigingsmail(
+        _mini_pand(), _mini_afspraak(), date(2026, 8, 1),
+        "https://steenhub.nl/ja", "https://steenhub.nl/nee",
+    )
+    # HTML-variant met beide knoppen/links
+    assert mail["html"]
+    assert "https://steenhub.nl/ja" in mail["html"] and "https://steenhub.nl/nee" in mail["html"]
+    assert "confirm" in mail["html"].lower() and "no longer interested" in mail["html"].lower()
+    # groen (#1a9850) en rood (#d73027) in de knoppen
+    assert "#1a9850" in mail["html"] and "#d73027" in mail["html"]
+    # platte-tekst terugval heeft dezelfde twee links
+    assert "https://steenhub.nl/ja" in mail["tekst"] and "https://steenhub.nl/nee" in mail["tekst"]
 
 
 # --- Routes ---
@@ -447,6 +490,89 @@ def test_bezichtigingen_verwijderen_zonder_selectie_geeft_melding(app_client):
     )
     assert resp.status_code == 200
     assert "selecteer minstens 1" in resp.get_data(as_text=True).lower()
+
+
+# --- Bevestig/afzeg-knoppen in de mail + publieke reactie-pagina ---
+
+
+def test_bevestigingsmail_bevat_bevestig_en_afzeg_knoppen(app_client, verstuurde_mails):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    verstuurde_mails.clear()
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+
+    jane = next(m for m in verstuurde_mails if m["aan"] == "jane@example.com")
+    assert jane["html"]  # HTML-variant met knoppen
+    assert "/bezichtiging/" in jane["html"]
+    assert "/bevestigen" in jane["html"] and "/afzeggen" in jane["html"]
+    # platte-tekst terugval heeft dezelfde twee links
+    assert "/bevestigen" in jane["tekst"] and "/afzeggen" in jane["tekst"]
+
+
+def _tokens_van(pand_slug="mahoniestraat"):
+    sheet = _fake_sheet_singleton[pand_slug]
+    return {a["naam"]: a["token"] for _d, a in sheet.bezichtigingen}
+
+
+def test_afzeggen_haalt_persoon_uit_actieve_lijst_maar_houdt_in_lijst(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _dien_aanmelding_in(app_client, naam="John Smith", email="john@example.com")
+    _bevestig(app_client, "2026-08-01", [
+        "1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15",
+        "1|John Smith|john@example.com|+31611111111|In person||14:15|14:30",
+    ])
+    tok = _tokens_van()
+
+    # publieke pagina: uitloggen zodat het echt zonder login werkt
+    app_client.get("/logout")
+    r_af = app_client.get(f"/pand/mahoniestraat/bezichtiging/{tok['John Smith']}/afzeggen")
+    assert r_af.status_code == 200
+    assert "no longer interested" in r_af.get_data(as_text=True).lower()
+    r_ja = app_client.get(f"/pand/mahoniestraat/bezichtiging/{tok['Jane Doe']}/bevestigen")
+    assert r_ja.status_code == 200
+    assert "see you there" in r_ja.get_data(as_text=True).lower()
+
+    _login(app_client)
+    body = app_client.get("/pand/mahoniestraat/aanmeldingen/bezichtigingen").get_data(as_text=True)
+    # Beide blijven in de lijst, maar John staat in de Afgezegd-sectie en Jane is bevestigd+actief
+    assert "Jane Doe" in body and "John Smith" in body
+    assert "Bevestigd" in body
+    anchor = "via de rode knop"  # uniek voor de kop van de Afgezegd-sectie
+    assert anchor in body
+    assert body.index("John Smith") > body.index(anchor)  # John alleen in de afgezegd-sectie
+    assert body.index("Jane Doe") < body.index(anchor)    # Jane in het actieve deel erboven
+
+
+def test_reactie_laatste_klik_wint(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    tok = _tokens_van()["Jane Doe"]
+
+    app_client.get("/logout")
+    app_client.get(f"/pand/mahoniestraat/bezichtiging/{tok}/afzeggen")
+    # van gedachten veranderd: toch komen
+    r = app_client.get(f"/pand/mahoniestraat/bezichtiging/{tok}/bevestigen")
+    assert "see you there" in r.get_data(as_text=True).lower()
+
+    sheet = _fake_sheet_singleton["mahoniestraat"]
+    assert sheet.get_bezichtigingen_rijk()[0]["reactie"] == "bevestigd"
+
+
+def test_reactie_met_onbekende_token_geeft_nette_melding(app_client):
+    resp = app_client.get("/pand/mahoniestraat/bezichtiging/bestaat-niet/bevestigen")
+    assert resp.status_code == 404
+    assert "no longer valid" in resp.get_data(as_text=True).lower()
+
+
+def test_reactie_met_ongeldige_actie_geeft_404(app_client):
+    _login(app_client)
+    _dien_aanmelding_in(app_client, naam="Jane Doe", email="jane@example.com")
+    _bevestig(app_client, "2026-08-01", ["1|Jane Doe|jane@example.com|+31612345678|In person||14:00|14:15"])
+    tok = _tokens_van()["Jane Doe"]
+    resp = app_client.get(f"/pand/mahoniestraat/bezichtiging/{tok}/iets-anders")
+    assert resp.status_code == 404
 
 
 # --- Afwijzing sturen ---

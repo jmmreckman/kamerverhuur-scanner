@@ -24,6 +24,7 @@ def verstuur_email(
     bcc: list[str] | None = None,
     cc: list[str] | None = None,
     bijlagen: list[tuple[str, str, bytes]] | None = None,
+    html: str | None = None,
 ) -> None:
     """Verstuurt de mail. `bcc` overschrijft (indien gegeven) config.email_bcc -
     zo kan de aanroeper per pand extra BCC-adressen toevoegen (bv. een
@@ -31,7 +32,11 @@ def verstuur_email(
     `cc` is (in tegenstelling tot bcc) zichtbaar voor de ontvanger - gebruikt
     bv. bij het mailen van een concept-huurcontract, waar de beheerders bewust
     zichtbaar meegenomen worden. `bijlagen` is een lijst van
-    (bestandsnaam, mimetype, inhoud)-tuples."""
+    (bestandsnaam, mimetype, inhoud)-tuples. `html` (optioneel) voegt een
+    HTML-variant toe náást de platte tekst (multipart/alternative) - bv. voor
+    de bevestig/afzeg-knoppen in de bezichtigingsmail; mailprogramma's die geen
+    HTML tonen vallen terug op `tekst`, dus de platte tekst moet zelfstandig
+    leesbaar blijven."""
     if not (config.smtp_host and config.smtp_username and config.smtp_password and config.smtp_from_email):
         raise MailError(
             "E-mail versturen is nog niet ingesteld - vul SMTP_HOST, SMTP_PORT, "
@@ -53,6 +58,8 @@ def verstuur_email(
         # alleen in de info@-mailbox belanden, die niemand dagelijks leest.
         msg["Reply-To"] = ", ".join(bcc_adressen)
     msg.set_content(tekst)
+    if html:
+        msg.add_alternative(html, subtype="html")
     for naam, mimetype, inhoud in bijlagen or []:
         hoofdtype, _, subtype = mimetype.partition("/")
         msg.add_attachment(inhoud, maintype=hoofdtype or "application", subtype=subtype or "octet-stream", filename=naam)

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Viewing - {{ pand.naam if pand else "Steenhub" }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:560px;margin:2rem auto;text-align:center">
+  {% if onbekend %}
+  <h1 style="font-size:1.3rem">Link no longer valid</h1>
+  <p class="muted">This viewing link is not valid (anymore). The viewing may have been cancelled or removed.
+     If you think this is a mistake, just reply to our email and we'll help you out.</p>
+  {% elif bevestigd %}
+  <div style="font-size:2.4rem;line-height:1">&#9989;</div>
+  <h1 style="font-size:1.3rem;color:#1a7a3c">Thanks{% if bez.naam %}, {{ bez.naam }}{% endif %}! See you there.</h1>
+  <p>Your attendance is confirmed for the viewing of <strong>room {{ bez.kamer }}</strong>
+     at <strong>{{ pand.naam }}</strong>:</p>
+  <p style="font-size:1.05rem"><strong>{{ bez.datum }}</strong> &middot; {{ bez.tijd_start }} - {{ bez.tijd_eind }}</p>
+  <p class="muted" style="margin-top:1.5rem">Changed your mind? You can still
+     <a href="{{ url_for('bezichtiging_reactie', pand_slug=pand.slug, token=token, actie='afzeggen') }}">let us know you're no longer interested</a>.</p>
+  {% else %}
+  <div style="font-size:2.4rem;line-height:1">&#128075;</div>
+  <h1 style="font-size:1.3rem">Thanks for letting us know</h1>
+  <p>We've noted that you're <strong>no longer interested</strong> in the viewing of
+     room {{ bez.kamer }} at {{ pand.naam }}. No worries - we won't expect you, and your
+     spot is freed up for someone else.</p>
+  <p class="muted" style="margin-top:1.5rem">Changed your mind? You can still
+     <a href="{{ url_for('bezichtiging_reactie', pand_slug=pand.slug, token=token, actie='bevestigen') }}">confirm you'll attend after all</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -147,6 +147,21 @@ funda-scraper, waarschijnlijk voorloper van kansen). `main` = basis.
   verrijkt daarmee het verse concept (`contracts.werk_metadata_bij`). Voor bv. een gemeente die een
   handtekening < 3 maanden oud eist voor de inschrijving.
 - `kamerverhuur_scanner/models.py` — dataclasses (`Pand`, `Tenant`, …).
+- **Bezichtiging-bevestiging (groene/rode knop)** (nov 2026): de Engelstalige
+  bevestigingsmail (`webapp/bezichtiging.py: bouw_bevestigingsmail`) bevat nu een
+  groene knop "Yes, I confirm and will attend" en rode knop "No longer interested"
+  (HTML-variant + platte-tekst-terugval met dezelfde links; `mailer.verstuur_email`
+  kreeg een `html=`-parameter). Elke bezichtiging krijgt bij het inplannen een
+  niet te raden `token` (nieuwe kolommen `token`/`reactie`/`reactie_op` op de
+  `bezichtigingen`-tabel, via `_EXTRA_KOLOMMEN`-migratie). De publieke route
+  `/pand/<slug>/bezichtiging/<token>/<bevestigen|afzeggen>` (geen login) zet de
+  reactie — idempotent, **laatste klik wint**, met de tegengestelde knop op de
+  landingspagina zodat een mis-klik/mail-scanner-prefetch te corrigeren is
+  (`bezichtiging_reactie.html`). Op het Ingeplande-bezichtigingen-overzicht staan
+  bevestigde/onbeantwoorde bezichtigingen in het **actieve** deel (met status-badge),
+  en wie afzegt zakt naar een aparte **Afgezegd**-sectie (blijft wél in de lijst,
+  tijdslot weer vrij). `DbClient.get_bezichtigingen_rijk()` + `zet_reactie_via_token()`;
+  `get_bezichtigingen()`/`groepeer_per_datum()` bleven 10-koloms (ongewijzigd).
 - `kamerverhuur_scanner/utils.py` — o.a. `is_bunq_iban()`.
 - `kamerverhuur_scanner/state.py` — kleine JSON-state in `state_dir` (laatste
   resultaat, verzonden mails, winst-geschiedenis, **pand-volgorde per gebruiker**,

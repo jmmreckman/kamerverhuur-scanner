@@ -12,6 +12,7 @@ import json
 import logging
 import mimetypes
 import re
+import secrets
 import threading
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -2444,9 +2445,40 @@ def create_app(config: Config | None = None) -> Flask:
     @login_required
     def bezichtigingen_overzicht(pand_slug: str):
         sheet = SheetClient(config, g.pand)
-        rijen = sheet.get_bezichtigingen_met_rijnummer()
-        rijen.sort(key=lambda item: (item[1][0], item[1][1]))  # datum, tijd_start
-        return render_template("bezichtigingen_overzicht.html", rijen=rijen)
+        alle = sheet.get_bezichtigingen_rijk()
+        alle.sort(key=lambda b: (b["datum"], b["tijd_start"]))
+        # Wie "geen interesse meer" aanklikte (rode knop) valt uit het actieve
+        # overzicht, maar blijft - apart getoond - wél in de lijst staan.
+        actief = [b for b in alle if b["reactie"] != bezichtiging.REACTIE_AFGEZEGD]
+        afgezegd = [b for b in alle if b["reactie"] == bezichtiging.REACTIE_AFGEZEGD]
+        return render_template(
+            "bezichtigingen_overzicht.html", actief=actief, afgezegd=afgezegd,
+            REACTIE_BEVESTIGD=bezichtiging.REACTIE_BEVESTIGD,
+        )
+
+    @app.route("/pand/<pand_slug>/bezichtiging/<token>/<actie>")
+    def bezichtiging_reactie(pand_slug: str, token: str, actie: str):
+        """Publieke (geen login) landingspagina van de groene/rode knop uit de
+        bevestigingsmail: de aanmelder bevestigt zijn komst of geeft aan geen
+        interesse meer te hebben. Idempotent, laatste klik wint - de pagina toont
+        ook de tegenovergestelde knop zodat een per ongeluk (of door een mail-
+        scanner) ingedrukte knop te corrigeren is. `g.pand` is al gezet door
+        _laad_pand_en_check_toegang (404 bij een onbekend pand)."""
+        if actie not in ("bevestigen", "afzeggen"):
+            abort(404)
+        reactie = bezichtiging.REACTIE_BEVESTIGD if actie == "bevestigen" else bezichtiging.REACTIE_AFGEZEGD
+        sheet = SheetClient(config, g.pand)
+        try:
+            bez = sheet.zet_reactie_via_token(token, reactie)
+        except Exception:
+            app.logger.exception("Reactie op bezichtiging verwerken mislukt (pand %s).", pand_slug)
+            bez = None
+        if bez is None:
+            return render_template("bezichtiging_reactie.html", pand=g.pand, onbekend=True), 404
+        return render_template(
+            "bezichtiging_reactie.html", pand=g.pand, bez=bez, token=token,
+            bevestigd=(reactie == bezichtiging.REACTIE_BEVESTIGD),
+        )
 
     @app.route("/pand/<pand_slug>/aanmeldingen/bezichtigingen/verwijderen", methods=["POST"])
     @login_required
@@ -3039,17 +3071,30 @@ def create_app(config: Config | None = None) -> Flask:
         datum_iso = datum.isoformat()
         for afspraak in afspraken:
             afspraak["bel_nummer"] = bezichtiging.bel_nummer(afspraak)
+            # Niet te raden sleutel voor de bevestig/afzeg-knoppen in de mail.
+            afspraak["token"] = secrets.token_urlsafe(24)
             try:
-                sheet.add_bezichtiging(datum_iso, afspraak)
+                sheet.add_bezichtiging(datum_iso, afspraak, token=afspraak["token"])
             except Exception:
                 app.logger.exception("Bezichtiging wegschrijven naar de sheet mislukt voor %s.", afspraak["naam"])
 
         beheerder_bcc = _ontvangers(g.pand.slug, "bezichtigingen", config.email_bcc_beheerder or config.email_bcc)
         mislukt = []
         for afspraak in afspraken:
-            mail = bezichtiging.bouw_bevestigingsmail(g.pand, afspraak, datum)
+            bevestig_url = url_for(
+                "bezichtiging_reactie", pand_slug=pand_slug, token=afspraak["token"],
+                actie="bevestigen", _external=True,
+            )
+            afzeg_url = url_for(
+                "bezichtiging_reactie", pand_slug=pand_slug, token=afspraak["token"],
+                actie="afzeggen", _external=True,
+            )
+            mail = bezichtiging.bouw_bevestigingsmail(g.pand, afspraak, datum, bevestig_url, afzeg_url)
             try:
-                verstuur_email(config, afspraak["email"], mail["onderwerp"], mail["tekst"], bcc=beheerder_bcc)
+                verstuur_email(
+                    config, afspraak["email"], mail["onderwerp"], mail["tekst"],
+                    bcc=beheerder_bcc, html=mail.get("html"),
+                )
             except MailError:
                 app.logger.exception("Bevestigingsmail bezichtiging mislukt voor %s.", afspraak["email"])
                 mislukt.append(afspraak["naam"])

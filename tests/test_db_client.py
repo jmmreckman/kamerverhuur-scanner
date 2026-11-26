@@ -335,6 +335,42 @@ def test_bezichtigingen_toevoegen_lezen_verwijderen(client):
     assert [rij[4] for _id, rij in resterend] == ["Lisa"]
 
 
+def test_bezichtiging_reactie_via_token(client):
+    c, _ = client
+    c.add_bezichtiging("2026-08-10", _afspraak("Kees"), token="kees-token")
+    c.add_bezichtiging("2026-08-10", _afspraak("Lisa"), token="lisa-token")
+
+    # vers = nog geen reactie
+    rijk = {b["naam"]: b for b in c.get_bezichtigingen_rijk()}
+    assert rijk["Kees"]["reactie"] == "" and rijk["Kees"]["token"] == "kees-token"
+
+    # Kees bevestigt, Lisa zegt af
+    bevestigd = c.zet_reactie_via_token("kees-token", "bevestigd")
+    assert bevestigd["naam"] == "Kees" and bevestigd["reactie"] == "bevestigd"
+    assert bevestigd["reactie_op"]  # tijdstempel gezet
+    assert c.zet_reactie_via_token("lisa-token", "afgezegd")["reactie"] == "afgezegd"
+
+    rijk = {b["naam"]: b for b in c.get_bezichtigingen_rijk()}
+    assert rijk["Kees"]["reactie"] == "bevestigd"
+    assert rijk["Lisa"]["reactie"] == "afgezegd"
+
+    # laatste klik wint (van gedachten veranderd)
+    assert c.zet_reactie_via_token("lisa-token", "bevestigd")["reactie"] == "bevestigd"
+
+    # onbekende token -> None
+    assert c.zet_reactie_via_token("bestaat-niet", "bevestigd") is None
+    assert c.zet_reactie_via_token("", "bevestigd") is None
+
+
+def test_bezichtiging_token_is_pandgebonden(client, tmp_path):
+    c, cfg = client
+    c.add_bezichtiging("2026-08-10", _afspraak("Kees"), token="gedeelde-token")
+    # een ander pand mag met dezelfde token niets kunnen wijzigen
+    ander = DbClient(cfg, _pand(slug="ander-pand"))
+    assert ander.zet_reactie_via_token("gedeelde-token", "afgezegd") is None
+    assert c.get_bezichtigingen_rijk()[0]["reactie"] == ""
+
+
 # --- Vertrokken huurders --------------------------------------------------
 
 def test_archiveer_en_lees_vertrokken(client):

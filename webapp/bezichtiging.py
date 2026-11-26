@@ -14,6 +14,13 @@ from kamerverhuur_scanner.models import Pand
 _AANMELDER_VELDEN = ("kamer", "naam", "email", "telefoon", "bezichtiging", "videobel_nummer")
 _AFSPRAAK_VELDEN = _AANMELDER_VELDEN + ("tijd_start", "tijd_eind")
 
+# Mogelijke reacties van een aanmelder op de bevestigingsmail (groene/rode knop).
+# Leeg = nog geen reactie (uitgenodigd). Afgezegde bezichtigingen blijven in de
+# lijst staan, maar vallen uit het "actieve" overzicht (zie app.py:
+# bezichtigingen_overzicht() en templates/bezichtigingen_overzicht.html).
+REACTIE_BEVESTIGD = "bevestigd"
+REACTIE_AFGEZEGD = "afgezegd"
+
 
 class BezichtigingFout(ValueError):
     pass
@@ -88,9 +95,19 @@ def vind_dubbele_emails(afspraken: list[dict], bestaande_emails: set[str]) -> se
     return {email for email, aantal in tellingen.items() if aantal > 1 or email in bestaand_genormaliseerd}
 
 
-def bouw_bevestigingsmail(pand: Pand, afspraak: dict, datum: date) -> dict[str, str]:
+def bouw_bevestigingsmail(
+    pand: Pand, afspraak: dict, datum: date,
+    bevestig_url: str | None = None, afzeg_url: str | None = None,
+) -> dict[str, str | None]:
     """De (Engelstalige) bevestigingsmail naar de aanmelder zelf, met locatie,
-    datum, tijdstip en manier van bezichtigen."""
+    datum, tijdstip en manier van bezichtigen.
+
+    Zijn `bevestig_url`/`afzeg_url` meegegeven, dan bevat de mail een duidelijke
+    groene knop ("Yes, I'll be there") en rode knop ("No longer interested") -
+    de HTML-variant onder "html", met in de platte tekst dezelfde twee links als
+    terugval. Zo krijgt de verhuurder een betrouwbaar beeld van wie er echt komt:
+    wie op de rode knop drukt, valt uit het actieve bezichtigingenoverzicht
+    (zie app.py)."""
     adres = f"{pand.naam}, {pand.plaats}" if pand.plaats else pand.naam
     manier = (
         f"a video call - we will call you at {bel_nummer(afspraak)}"
@@ -104,10 +121,64 @@ def bouw_bevestigingsmail(pand: Pand, afspraak: dict, datum: date) -> dict[str, 
         f"Date: {datum.strftime('%d-%m-%Y')}\n"
         f"Time: {afspraak['tijd_start']} - {afspraak['tijd_eind']}\n"
         f"How: {manier}\n\n"
-        "If anything changes on your end, just let us know by replying to this email.\n\n"
-        "Kind regards,\nSteenhub"
     )
-    return {"onderwerp": onderwerp, "tekst": tekst}
+    html = None
+    if bevestig_url and afzeg_url:
+        tekst += (
+            "Please let us know whether you'll be there:\n\n"
+            f"  YES, I confirm and will attend: {bevestig_url}\n"
+            f"  NO, I'm no longer interested: {afzeg_url}\n\n"
+            "(You can change your answer later by clicking the other link.)\n\n"
+            "Kind regards,\nSteenhub"
+        )
+        html = _bevestigingsmail_html(pand, afspraak, datum, manier, bevestig_url, afzeg_url)
+    else:
+        tekst += (
+            "If anything changes on your end, just let us know by replying to this email.\n\n"
+            "Kind regards,\nSteenhub"
+        )
+    return {"onderwerp": onderwerp, "tekst": tekst, "html": html}
+
+
+def _bevestigingsmail_html(
+    pand: Pand, afspraak: dict, datum: date, manier: str, bevestig_url: str, afzeg_url: str,
+) -> str:
+    """HTML-variant van de bevestigingsmail met een groene bevestig- en een rode
+    afzeg-knop. Bewust simpele, inline-gestylede opmaak (geen externe CSS/
+    afbeeldingen) zodat het in zoveel mogelijk mailprogramma's goed oogt."""
+    from markupsafe import escape
+
+    naam = escape(afspraak["naam"])
+    kamer = escape(afspraak["kamer"])
+    pandnaam = escape(pand.naam)
+    tijd = f"{escape(afspraak['tijd_start'])} - {escape(afspraak['tijd_eind'])}"
+    datum_str = datum.strftime("%d-%m-%Y")
+    manier_html = escape(manier)
+    knop = (
+        "display:inline-block;padding:14px 26px;margin:6px 0;border-radius:8px;"
+        "font-weight:700;font-size:16px;text-decoration:none;color:#ffffff;"
+    )
+    return (
+        '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#1a1a1a;'
+        'max-width:520px;margin:0 auto;line-height:1.5">'
+        f"<p>Dear {naam},</p>"
+        f"<p>Your viewing for <strong>room {kamer}</strong> at <strong>{pandnaam}</strong> "
+        "has been scheduled:</p>"
+        '<table style="border-collapse:collapse;margin:0 0 20px">'
+        f'<tr><td style="padding:2px 10px 2px 0;color:#666">Date</td><td><strong>{datum_str}</strong></td></tr>'
+        f'<tr><td style="padding:2px 10px 2px 0;color:#666">Time</td><td><strong>{tijd}</strong></td></tr>'
+        f'<tr><td style="padding:2px 10px 2px 0;color:#666">How</td><td>{manier_html}</td></tr>'
+        "</table>"
+        '<p style="margin:0 0 10px;font-weight:700">Please let us know whether you\'ll be there:</p>'
+        f'<p style="margin:0 0 6px"><a href="{bevestig_url}" '
+        f'style="{knop}background:#1a9850">&#10003;&nbsp; Yes, I confirm and will attend</a></p>'
+        f'<p style="margin:0 0 18px"><a href="{afzeg_url}" '
+        f'style="{knop}background:#d73027">&#10007;&nbsp; No, I\'m no longer interested</a></p>'
+        '<p style="color:#666;font-size:13px">You can change your answer later by clicking the '
+        "other button. If anything else changes, just reply to this email.</p>"
+        "<p>Kind regards,<br>Steenhub</p>"
+        "</div>"
+    )
 
 
 def bouw_huurders_inlichten_mail(datum: date, tijd_vanaf: str, tijd_tot: str) -> dict[str, str]:

@@ -431,17 +431,22 @@ class DbClient:
 
     # --- Bezichtigingen ----------------------------------------------------
 
-    def add_bezichtiging(self, datum_iso: str, afspraak: dict) -> None:
+    def add_bezichtiging(self, datum_iso: str, afspraak: dict, token: str | None = None) -> None:
+        """Logt een ingeplande bezichtiging. `token` (optioneel) is de niet te
+        raden sleutel uit de bevestig/afzeg-knoppen in de bevestigingsmail;
+        hiermee kan de aanmelder later via zet_reactie_via_token() aangeven of
+        hij komt ('bevestigd') of afziet ('afgezegd')."""
         conn = self._verbind()
         try:
             conn.execute(
-                f"""INSERT INTO bezichtigingen (pand_slug, {', '.join(_BEZICHTIGINGEN_KOLOMMEN)})
-                    VALUES (?, {', '.join('?' for _ in _BEZICHTIGINGEN_KOLOMMEN)})""",
+                f"""INSERT INTO bezichtigingen (pand_slug, {', '.join(_BEZICHTIGINGEN_KOLOMMEN)}, token)
+                    VALUES (?, {', '.join('?' for _ in _BEZICHTIGINGEN_KOLOMMEN)}, ?)""",
                 (
                     self._slug, datum_iso, afspraak["tijd_start"], afspraak["tijd_eind"],
                     afspraak["kamer"], afspraak["naam"], afspraak["email"], afspraak["telefoon"],
                     afspraak["bezichtiging"], afspraak["bel_nummer"],
                     nu_amsterdam().strftime("%d-%m-%Y %H:%M"),
+                    token,
                 ),
             )
             conn.commit()
@@ -460,6 +465,54 @@ class DbClient:
         finally:
             conn.close()
         return [(row["id"], [str(row[k] or "") for k in _BEZICHTIGINGEN_KOLOMMEN]) for row in rows]
+
+    def get_bezichtigingen_rijk(self) -> list[dict]:
+        """Als get_bezichtigingen_met_rijnummer(), maar als dicts met óók de
+        reactie van de aanmelder (bevestig/afzeg-knop): 'reactie' is '' (nog
+        geen reactie / uitgenodigd), 'bevestigd' (komt) of 'afgezegd' (geen
+        interesse meer). Gebruikt door het bezichtigingen-overzicht om de
+        afgezegde bezichtigingen apart te tonen (ze blijven wél in de lijst)."""
+        conn = self._verbind()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM bezichtigingen WHERE pand_slug = ? ORDER BY id", (self._slug,)
+            ).fetchall()
+        finally:
+            conn.close()
+        return [self._bezichtiging_dict(row) for row in rows]
+
+    @staticmethod
+    def _bezichtiging_dict(row) -> dict:
+        d = {"id": row["id"]}
+        d.update({k: str(row[k] or "") for k in _BEZICHTIGINGEN_KOLOMMEN})
+        d["token"] = str(row["token"] or "")
+        d["reactie"] = str(row["reactie"] or "")
+        d["reactie_op"] = str(row["reactie_op"] or "")
+        return d
+
+    def zet_reactie_via_token(self, token: str, reactie: str) -> dict | None:
+        """Zet de reactie ('bevestigd'/'afgezegd') van een aanmelder op basis van
+        de niet te raden token uit zijn bevestigingsmail. Idempotent, laatste
+        klik wint (zo kan een per ongeluk ingedrukte knop nog gecorrigeerd
+        worden). Geeft de bijgewerkte bezichtiging terug, of None als de token
+        onbekend is (of niet bij dit pand hoort)."""
+        if not token:
+            return None
+        conn = self._verbind()
+        try:
+            cur = conn.execute(
+                "UPDATE bezichtigingen SET reactie = ?, reactie_op = ? WHERE pand_slug = ? AND token = ?",
+                (reactie, nu_amsterdam().strftime("%d-%m-%Y %H:%M"), self._slug, token),
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return None
+            row = conn.execute(
+                "SELECT * FROM bezichtigingen WHERE pand_slug = ? AND token = ?", (self._slug, token)
+            ).fetchone()
+        finally:
+            conn.close()
+        return self._bezichtiging_dict(row) if row else None
 
     def verwijder_bezichtiging(self, rijnummer: int) -> None:
         conn = self._verbind()

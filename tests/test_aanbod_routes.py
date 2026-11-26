@@ -94,8 +94,12 @@ class FakeSheetClient:
     def wis_aanmeldingen(self):
         self.aanmeldingen = []
 
-    def add_bezichtiging(self, datum_iso, afspraak):
-        self.bezichtigingen.append((datum_iso, dict(afspraak)))
+    def add_bezichtiging(self, datum_iso, afspraak, token=None):
+        rij = dict(afspraak)
+        rij.setdefault("reactie", "")
+        rij.setdefault("reactie_op", "")
+        rij["token"] = token
+        self.bezichtigingen.append((datum_iso, rij))
 
     def get_bezichtigingen(self):
         return [
@@ -108,6 +112,28 @@ class FakeSheetClient:
 
     def get_bezichtigingen_met_rijnummer(self):
         return list(enumerate(self.get_bezichtigingen(), start=2))
+
+    def get_bezichtigingen_rijk(self):
+        rijk = []
+        for idx, (datum_iso, a) in enumerate(self.bezichtigingen, start=2):
+            rijk.append({
+                "id": idx, "datum": datum_iso, "tijd_start": a["tijd_start"], "tijd_eind": a["tijd_eind"],
+                "kamer": a["kamer"], "naam": a["naam"], "email": a["email"], "telefoon": a["telefoon"],
+                "manier": a["bezichtiging"], "bel_nummer": a["bel_nummer"], "bevestigd_op": "10-07-2026 12:00",
+                "token": a.get("token") or "", "reactie": a.get("reactie") or "",
+                "reactie_op": a.get("reactie_op") or "",
+            })
+        return rijk
+
+    def zet_reactie_via_token(self, token, reactie):
+        if not token:
+            return None
+        for idx, (_datum_iso, a) in enumerate(self.bezichtigingen, start=2):
+            if a.get("token") == token:
+                a["reactie"] = reactie
+                a["reactie_op"] = "10-07-2026 12:30"
+                return next(r for r in self.get_bezichtigingen_rijk() if r["id"] == idx)
+        return None
 
     def verwijder_bezichtiging(self, rijnummer):
         del self.bezichtigingen[rijnummer - 2]

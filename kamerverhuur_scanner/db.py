@@ -164,9 +164,13 @@ CREATE TABLE IF NOT EXISTS bezichtigingen (
     telefoon TEXT NOT NULL DEFAULT '',
     manier TEXT NOT NULL DEFAULT '',
     bel_nummer TEXT NOT NULL DEFAULT '',
-    bevestigd_op TEXT NOT NULL DEFAULT ''
+    bevestigd_op TEXT NOT NULL DEFAULT '',
+    token TEXT,
+    reactie TEXT NOT NULL DEFAULT '',
+    reactie_op TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_bezichtigingen_pand ON bezichtigingen(pand_slug, id);
+CREATE INDEX IF NOT EXISTS idx_bezichtigingen_token ON bezichtigingen(token);
 
 CREATE TABLE IF NOT EXISTS vertrokken (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -211,6 +215,11 @@ def verbind(config: Config) -> sqlite3.Connection:
 _EXTRA_KOLOMMEN = {
     "huurders": [("studenten_verplicht", "INTEGER NOT NULL DEFAULT 1")],
     "panden": [("hypotheek_schuld", "TEXT")],
+    "bezichtigingen": [
+        ("token", "TEXT"),
+        ("reactie", "TEXT NOT NULL DEFAULT ''"),
+        ("reactie_op", "TEXT NOT NULL DEFAULT ''"),
+    ],
 }
 
 
