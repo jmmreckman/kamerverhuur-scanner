@@ -362,6 +362,42 @@ def test_bezichtiging_reactie_via_token(client):
     assert c.zet_reactie_via_token("", "bevestigd") is None
 
 
+def test_verbind_migreert_oude_bezichtigingen_tabel_zonder_token(tmp_path):
+    """Regressie: een DB die vóór de token/reactie-kolommen is aangemaakt heeft
+    een bezichtigingen-tabel zonder die kolommen. verbind() moet die migreren
+    zónder te crashen - niet een index/schema-statement draaien dat een nog-niet-
+    bestaande kolom aanspreekt (dat sloopte de prod-app bij het opstarten)."""
+    import sqlite3
+
+    cfg = _config(tmp_path)
+    pad = db.db_pad(cfg)
+    Path(pad).parent.mkdir(parents=True, exist_ok=True)
+    # Bouw met de hand de "oude" tabel na: 10 kolommen, geen token/reactie/reactie_op.
+    oud = sqlite3.connect(pad)
+    oud.executescript(
+        """CREATE TABLE bezichtigingen (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, pand_slug TEXT NOT NULL,
+            datum TEXT NOT NULL DEFAULT '', tijd_start TEXT NOT NULL DEFAULT '',
+            tijd_eind TEXT NOT NULL DEFAULT '', kamer TEXT NOT NULL DEFAULT '',
+            naam TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+            telefoon TEXT NOT NULL DEFAULT '', manier TEXT NOT NULL DEFAULT '',
+            bel_nummer TEXT NOT NULL DEFAULT '', bevestigd_op TEXT NOT NULL DEFAULT '');
+        INSERT INTO bezichtigingen (pand_slug, naam) VALUES ('menkemaborgstraat', 'Oude Klaas');"""
+    )
+    oud.commit()
+    oud.close()
+
+    # Mag niet crashen op "no such column: token"
+    db.verbind(cfg).close()
+
+    # De kolommen zijn nu toegevoegd en de reactie-flow werkt op de oude rij.
+    c = DbClient(cfg, _pand())
+    c.add_bezichtiging("2026-08-10", _afspraak("Nieuwe Kees"), token="kees-token")
+    namen = {b["naam"]: b for b in c.get_bezichtigingen_rijk()}
+    assert "Oude Klaas" in namen and namen["Oude Klaas"]["reactie"] == ""
+    assert c.zet_reactie_via_token("kees-token", "bevestigd")["reactie"] == "bevestigd"
+
+
 def test_bezichtiging_token_is_pandgebonden(client, tmp_path):
     c, cfg = client
     c.add_bezichtiging("2026-08-10", _afspraak("Kees"), token="gedeelde-token")

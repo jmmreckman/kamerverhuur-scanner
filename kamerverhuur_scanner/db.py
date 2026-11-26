@@ -170,7 +170,6 @@ CREATE TABLE IF NOT EXISTS bezichtigingen (
     reactie_op TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_bezichtigingen_pand ON bezichtigingen(pand_slug, id);
-CREATE INDEX IF NOT EXISTS idx_bezichtigingen_token ON bezichtigingen(token);
 
 CREATE TABLE IF NOT EXISTS vertrokken (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
