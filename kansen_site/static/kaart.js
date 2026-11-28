@@ -32,6 +32,9 @@ const lijstEl = document.getElementById("lijst");
 const aantalTekstEl = document.getElementById("aantal-tekst");
 const statusTekstEl = document.getElementById("status-tekst");
 const filterWijkEl = document.getElementById("filter-wijk");
+const filterSluitWijkenEl = document.getElementById("filter-sluit-wijken");
+const filterVraagprijsMinEl = document.getElementById("filter-vraagprijs-min");
+const filterVraagprijsMaxEl = document.getElementById("filter-vraagprijs-max");
 const filterEigenInlegEl = document.getElementById("filter-eigen-inleg");
 const filterWinstEl = document.getElementById("filter-winst");
 const filterM2MinEl = document.getElementById("filter-m2-min");
@@ -181,6 +184,10 @@ function vulWijkFilter(kansen) {
 
 function gefilterd() {
   const wijk = filterWijkEl.value;
+  // Vraagprijs-bereik (op k.prijs) + snelknop om Pernis/Hoogvliet/Rozenburg te verbergen.
+  const minVraagprijs = filterVraagprijsMinEl ? parseFloat(filterVraagprijsMinEl.value) : NaN;
+  const maxVraagprijs = filterVraagprijsMaxEl ? parseFloat(filterVraagprijsMaxEl.value) : NaN;
+  const sluitWijken = filterSluitWijkenEl ? filterSluitWijkenEl.checked : false;
   const maxEigenInleg = parseFloat(filterEigenInlegEl.value);
   const maxSchakelgeld = parseFloat(filterSchakelgeldEl.value);
   const minWinst = parseFloat(filterWinstEl.value);
@@ -203,6 +210,15 @@ function gefilterd() {
     const c = kansCijfers(k);
     if (stad && (k.stad || "rotterdam") !== stad) return false;
     if (wijk && k.wijknaam !== wijk) return false;
+    // Pernis/Hoogvliet/Rozenburg verbergen (substring, dekt ook Hoogvliet Noord/Zuid).
+    // Onbekende wijknaam blijft staan (kunnen we niet bevestigen dat 'ie in die wijken ligt).
+    if (sluitWijken && k.wijknaam && /pernis|hoogvliet|rozenburg/i.test(k.wijknaam)) return false;
+    // Vraagprijs-bereik op k.prijs; zonder prijs weg zodra er een grens staat.
+    if (!isNaN(minVraagprijs) || !isNaN(maxVraagprijs)) {
+      if (k.prijs === null || k.prijs === undefined) return false;
+      if (!isNaN(minVraagprijs) && k.prijs < minVraagprijs) return false;
+      if (!isNaN(maxVraagprijs) && k.prijs > maxVraagprijs) return false;
+    }
     if (!isNaN(maxEigenInleg) && (c.eigenInleg === null || c.eigenInleg > maxEigenInleg)) return false;
     if (!isNaN(maxSchakelgeld) && (c.schakelgeld === null || c.schakelgeld > maxSchakelgeld)) return false;
     if (!isNaN(minWinst) && (c.winst === null || c.winst < minWinst)) return false;
@@ -1038,13 +1054,15 @@ if (toon3kamerEl) {
   });
 }
 
-for (const el of [filterWijkEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
+for (const el of [filterWijkEl, filterVraagprijsMinEl, filterVraagprijsMaxEl,
+                  filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
                   filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterVveMaxEl, filterZoekEl,
                   filterDagenEl, filterStadEl, filterInvesteerdersEl, filterSorteerEl]) {
   if (el) el.addEventListener("input", renderAlles);
 }
 for (const el of [filterStadEl, filterInvesteerdersEl, filterSorteerEl, filterWoningtypeEl,
-                  filterEigendomEl, filterVveEl, filterZelfbewoningEl, filterVerkoopstatusEl]) {
+                  filterEigendomEl, filterVveEl, filterZelfbewoningEl, filterVerkoopstatusEl,
+                  filterSluitWijkenEl]) {
   if (el) el.addEventListener("change", renderAlles);
 }
 
@@ -1057,6 +1075,9 @@ function verzamelFilters() {
     "toon-oude-vergunningen": toonOudeVergunningenEl ? toonOudeVergunningenEl.checked : undefined,
     "filter-stad": filterStadEl ? filterStadEl.value : undefined,
     "filter-wijk": filterWijkEl ? filterWijkEl.value : undefined,
+    "filter-sluit-wijken": filterSluitWijkenEl ? filterSluitWijkenEl.checked : undefined,
+    "filter-vraagprijs-min": filterVraagprijsMinEl ? filterVraagprijsMinEl.value : undefined,
+    "filter-vraagprijs-max": filterVraagprijsMaxEl ? filterVraagprijsMaxEl.value : undefined,
     "filter-investeerders": filterInvesteerdersEl ? filterInvesteerdersEl.value : undefined,
     "filter-eigen-inleg": filterEigenInlegEl ? filterEigenInlegEl.value : undefined,
     "filter-schakelgeld": filterSchakelgeldEl ? filterSchakelgeldEl.value : undefined,
@@ -1084,6 +1105,9 @@ function pasFiltersToe(f) {
   zetCheck(toon3kamerEl, f["toon-3kamer"]);
   zetWaarde(filterStadEl, f["filter-stad"]);
   zetWaarde(filterWijkEl, f["filter-wijk"]);  // alleen effectief als de wijk-optie al bestaat
+  zetCheck(filterSluitWijkenEl, f["filter-sluit-wijken"]);
+  zetWaarde(filterVraagprijsMinEl, f["filter-vraagprijs-min"]);
+  zetWaarde(filterVraagprijsMaxEl, f["filter-vraagprijs-max"]);
   zetWaarde(filterInvesteerdersEl, f["filter-investeerders"]);
   zetWaarde(filterEigenInlegEl, f["filter-eigen-inleg"]);
   zetWaarde(filterSchakelgeldEl, f["filter-schakelgeld"]);
@@ -1125,6 +1149,7 @@ function slaFiltersOp() {
 
 // Elke wijziging aan een filter opslaan (gedebounced).
 for (const el of [toonKansenEl, toonVergunningenEl, toon3kamerEl, toonOudeVergunningenEl, filterStadEl, filterWijkEl,
+                  filterSluitWijkenEl, filterVraagprijsMinEl, filterVraagprijsMaxEl,
                   filterInvesteerdersEl, filterEigenInlegEl, filterSchakelgeldEl, filterWinstEl,
                   filterM2MinEl, filterM2MaxEl, filterPrijsM2MaxEl, filterWoningtypeEl,
                   filterZoekEl, filterDagenEl, filterSorteerEl]) {

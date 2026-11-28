@@ -64,6 +64,7 @@ def _te_koop_func_voor(config):
 # De sleutels die de kaart-filters mag opslaan (zie kaart.html/kaart.js).
 _FILTER_SLEUTELS = {
     "toon-kansen", "toon-vergunningen", "toon-3kamer", "filter-stad", "filter-wijk",
+    "filter-sluit-wijken", "filter-vraagprijs-min", "filter-vraagprijs-max",
     "filter-investeerders", "filter-eigen-inleg", "filter-schakelgeld", "filter-winst",
     "filter-m2-min", "filter-m2-max", "filter-prijs-m2-max",
     "filter-woningtype", "toon-oude-vergunningen",
